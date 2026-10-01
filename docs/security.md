@@ -60,8 +60,9 @@ only through tauri-plugin-updater (`deny.toml` bans them from every other crate)
   in the background, then shows **Restart to update**: nothing is installed until the user
   restarts for it, or until the next start finds the same version again (remembered in
   `update-ready.json` in the data directory); a newer version than the remembered one waits for
-  the user again, so a release the user has not been shown is never installed unattended. This is
-  Voltip's design (`crates/lockra-core/src/update.rs`, `crates/lockra-core/src/tests/update.rs`).
+  the user again, so a release the user has not been shown is never installed unattended. 0.2.0's
+  check-only switch (`auto_check_updates`) is not carried over: agreeing to checks was not agreeing
+  to downloads. This is Voltip's design (`crates/lockra-core/src/update.rs`, `crates/lockra-core/src/tests/update.rs`).
 - **From Rust, not the webview.** The webview sends `update_check` / `update_install` through the
   same dispatcher as every command and has no permission for the updater plugin; the CSP still
   grants no remote host. The requests go to `https://github.com/sunerpy/lockra/releases/latest/download/latest.json`
