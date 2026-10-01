@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/sunerpy/lockra/compare/v0.1.0...v0.1.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **desktop:** Windows 原生构建不再重复链接 UCRT ([#5](https://github.com/sunerpy/lockra/issues/5)) ([d15b801](https://github.com/sunerpy/lockra/commit/d15b801cfa8997bb6de01d06990827313cae95c6))
+
 ## 0.1.0 (2026-10-01)
 
 
