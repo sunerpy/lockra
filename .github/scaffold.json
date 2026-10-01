@@ -8,7 +8,6 @@
     "RUST_TOOLCHAIN": "1.98.0"
   },
   "drift_allow": [
-    ".github/scripts/tauri-release.py",
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
     ".oxfmtignore",
