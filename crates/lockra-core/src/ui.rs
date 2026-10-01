@@ -78,6 +78,84 @@ pub struct UiState {
     pub restore: Option<RestoreView>,
     /// When the vault locks itself if nothing happens, Unix milliseconds.
     pub auto_lock_at_ms: Option<u64>,
+    /// The in-app update.
+    pub update: UpdateView,
+}
+
+/// How this copy of Lockra was installed, which is how an update installs: the package format the
+/// bundler built it into.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InstallMethod {
+    /// A Debian package (installing asks for an administrator's password).
+    Deb,
+    /// An RPM package (installing asks for an administrator's password).
+    Rpm,
+    /// An AppImage, replaced in place.
+    Appimage,
+    /// The Windows setup program.
+    Nsis,
+    /// The Windows installer package.
+    Msi,
+    /// The macOS app, replaced in place.
+    App,
+}
+
+/// The in-app update, as Settings › About shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UpdateView {
+    /// How an update installs here; absent when this copy cannot update itself (it was not
+    /// installed from a package, or the build has no update key).
+    pub method: Option<InstallMethod>,
+    /// What the updater is doing.
+    pub status: UpdateStatus,
+}
+
+/// Where the in-app update is.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum UpdateStatus {
+    /// Nothing asked since start.
+    Idle,
+    /// Asking for a newer release.
+    Checking,
+    /// This is the newest release.
+    UpToDate {
+        /// When it was asked, Unix milliseconds.
+        checked_at_ms: u64,
+    },
+    /// A newer release is out.
+    Available {
+        /// Its version.
+        version: String,
+        /// Its release notes (Markdown), when there are any.
+        notes: Option<String>,
+        /// When it was published (RFC 3339), when the release says.
+        date: Option<String>,
+        /// When it was found, Unix milliseconds.
+        checked_at_ms: u64,
+    },
+    /// Downloading it.
+    Downloading {
+        /// Its version.
+        version: String,
+        /// Bytes so far.
+        received: u64,
+        /// Its size, when the server says.
+        total: Option<u64>,
+    },
+    /// Installing it; Lockra restarts next.
+    Installing {
+        /// Its version.
+        version: String,
+    },
+    /// The last check or install failed.
+    Failed {
+        /// Why.
+        code: ErrorCode,
+        /// When, Unix milliseconds.
+        at_ms: u64,
+    },
 }
 
 /// The unlock screen's facts.
@@ -377,6 +455,11 @@ pub enum Notice {
     /// Changing the master password could not keep "remember on this device" (the keychain key
     /// was unreadable); it is off now.
     DeviceUnlockTurnedOff,
+    /// The automatic check found a newer release (once per version).
+    UpdateAvailable {
+        /// Its version.
+        version: String,
+    },
 }
 
 /// One event on [`UI_EVENT_NAME`].

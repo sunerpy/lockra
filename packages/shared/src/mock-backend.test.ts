@@ -310,6 +310,55 @@ describe("MockBackend", () => {
     );
   });
 
+  it("updates the way the core does", async () => {
+    const none = new MockBackend();
+    expect((await none.getState()).update).toEqual({ method: null, status: { state: "idle" } });
+    expect(await errorCode(none.dispatch({ command: "update_check" }))).toBe("update_unavailable");
+
+    const backend = new MockBackend({ updateMethod: "rpm", now: () => 1_790_000_000_000 });
+    const seen: string[] = [];
+    backend.on((event: UiEvent) => {
+      if (event.type === "state") seen.push(event.state.update.status.state);
+    });
+    await backend.dispatch({ command: "update_install" });
+    expect((await backend.getState()).update.status).toEqual({
+      state: "up_to_date",
+      checked_at_ms: 1_790_000_000_000,
+    });
+    backend.setRelease({ version: "0.2.0", notes: "## notes", date: null, size: 100 });
+    await backend.dispatch({ command: "update_check" });
+    await backend.dispatch({ command: "update_install" });
+    expect(seen).toEqual([
+      "checking",
+      "up_to_date",
+      "checking",
+      "available",
+      "checking",
+      "downloading",
+      "downloading",
+      "downloading",
+      "installing",
+    ]);
+    expect(await errorCode(backend.dispatch({ command: "update_check" }))).toBe("update_busy");
+
+    const failing = new MockBackend({
+      updateMethod: "app",
+      release: { version: "0.2.0", notes: null, date: null, size: 1 },
+      updateFailure: { step: "install", code: "update_cancelled" },
+    });
+    await failing.dispatch({ command: "update_install" });
+    expect((await failing.getState()).update.status).toMatchObject({
+      state: "failed",
+      code: "update_cancelled",
+    });
+    const notices: Notice[] = [];
+    failing.on((event: UiEvent) => {
+      if (event.type === "notice") notices.push(event.notice);
+    });
+    failing.announceUpdate("0.2.0");
+    expect(notices).toEqual([{ type: "update_available", version: "0.2.0" }]);
+  });
+
   it("stand-in codes are stable and padded", () => {
     expect(fakeCode("A", 1, 6)).toBe(fakeCode("A", 1, 6));
     expect(fakeCode("A", 1, 8)).toMatch(/^\d{8}$/);

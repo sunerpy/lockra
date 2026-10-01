@@ -1,19 +1,21 @@
 //! Lockra desktop shell: Tauri commands → `lockra-bridge` → `lockra-core`.
 //!
-//! The shell owns wiring only: the keychain and clipboard adapters, the native file dialogs, the
-//! code stream channel, the event forwarding, drag and drop, and screen-capture protection. Every
+//! The shell owns wiring only: the keychain, clipboard and updater adapters, the native file
+//! dialogs, the code stream channel, the event forwarding, drag and drop, and screen-capture
+//! protection. Every
 //! command is `async` (a sync command runs on the main thread and would freeze the webview while
 //! Argon2 works). Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs`
 //! drives the real command layer on `tauri::test::MockRuntime` without a window.
 
 pub mod clipboard;
 pub mod keychain;
+pub mod updater;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use lockra_bridge::{UiCommand, dispatch};
-use lockra_core::ports::{Clipboard, CodeSink, MemorySecretStore, NoSecretStore, PortError, SecretStore, SystemClock};
+use lockra_core::ports::{Clipboard, CodeSink, MemorySecretStore, NoSecretStore, NoUpdater, PortError, SecretStore, SystemClock, Updater};
 use lockra_core::ui::{CodesFrame, Phase, Platform, UI_EVENT_NAME, UiEvent};
 use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports};
 use serde_json::Value;
@@ -56,11 +58,26 @@ pub struct ShellOptions {
     pub kdf: KdfCost,
     /// Refuse a second process (off in the mock-runtime tests: the plugin talks to D-Bus on Linux).
     pub single_instance: bool,
+    /// The update source (default: tauri-plugin-updater with [`Self::plugin_updates`], otherwise
+    /// none).
+    pub updater: Option<Arc<dyn Updater>>,
+    /// Register tauri-plugin-updater, which needs `plugins.updater` in the context: `run` does; the
+    /// mock-runtime tests' context has none.
+    pub plugin_updates: bool,
 }
 
 impl Default for ShellOptions {
     fn default() -> Self {
-        Self { secrets: None, clipboard: None, data_dir: None, config_dir: None, kdf: KdfCost::DEFAULT, single_instance: true }
+        Self {
+            secrets: None,
+            clipboard: None,
+            data_dir: None,
+            config_dir: None,
+            kdf: KdfCost::DEFAULT,
+            single_instance: true,
+            updater: None,
+            plugin_updates: false,
+        }
     }
 }
 
@@ -260,6 +277,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
     } else {
         builder
     };
+    let builder = if options.plugin_updates { builder.plugin(tauri_plugin_updater::Builder::new().build()) } else { builder };
     builder
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -285,7 +303,12 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let clipboard = options.clipboard.clone().unwrap_or_else(|| Arc::new(clipboard::ArboardClipboard::spawn()));
             let config =
                 CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
-            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock) };
+            let updater: Arc<dyn Updater> = match options.updater.clone() {
+                Some(updater) => updater,
+                None if options.plugin_updates => Arc::new(updater::PluginUpdater::new(app.handle().clone(), updater::install_method())),
+                None => Arc::new(NoUpdater),
+            };
+            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());
@@ -304,7 +327,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
 pub fn run() {
     let _ =
         tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "lockra=info".into())).try_init();
-    let app = build_app(tauri::Builder::default(), ShellOptions::default()).run(tauri::generate_context!());
+    let options = ShellOptions { plugin_updates: true, ..ShellOptions::default() };
+    let app = build_app(tauri::Builder::default(), options).run(tauri::generate_context!());
     if let Err(error) = app {
         tracing::error!(%error, "Lockra could not start");
         std::process::exit(1);

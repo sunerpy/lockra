@@ -31,7 +31,8 @@
           "enabled": false,
           "dir": null,
           "keep": 10
-        }
+        },
+        "auto_check_updates": false
       },
       "import": null,
       "backup": {
@@ -40,7 +41,16 @@
         "last_auto_error": null
       },
       "restore": null,
-      "auto_lock_at_ms": null
+      "auto_lock_at_ms": null,
+      "update": {
+        "method": "nsis",
+        "status": {
+          "state": "downloading",
+          "version": "0.2.0",
+          "received": 4194304,
+          "total": 11508084
+        }
+      }
     }
   },
   {
@@ -127,6 +137,13 @@
     "type": "notice",
     "notice": {
       "type": "device_unlock_turned_off"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "update_available",
+      "version": "0.2.0"
     }
   }
 ]

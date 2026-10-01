@@ -3,7 +3,8 @@
 # oxfmt over TS, JSON, YAML, TOML and Markdown), clippy, the Rust tests (the IPC contract fixtures
 # are compared byte for byte there), the crates' line coverage floor, the web packages' lint,
 # types and tests with their own coverage floors, the release configuration, no colour literal in
-# a component, a release bundle free of development code, cargo-deny, actionlint and shellcheck.
+# a component, a release bundle free of development code, cargo-deny, actionlint, shellcheck and
+# the one-line installers (offline).
 # The desktop smoke test and the packages are separate (make pre-ci): they need a display server
 # stack and the cross toolchain. Usage: scripts/verify-all.sh   (make check)
 set -euo pipefail
@@ -36,4 +37,10 @@ step "release bundle";   scripts/check-web-bundle.sh
 step "cargo-deny";       cargo deny check licenses bans sources
 step "actionlint";       actionlint
 step "shellcheck";       shellcheck scripts/*.sh .github/scripts/*.sh
+step "install scripts";  scripts/test-install.sh
+if command -v pwsh >/dev/null; then
+  pwsh -NoProfile -File scripts/test-install.ps1
+else
+  echo "verify: pwsh is not installed here; scripts/install.ps1 is tested in CI"
+fi
 printf '\nverify: all gates passed\n'

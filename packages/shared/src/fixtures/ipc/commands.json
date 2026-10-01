@@ -144,6 +144,7 @@
           "enabled": true,
           "keep": 7
         },
+        "auto_check_updates": true,
         "auto_lock_minutes": 10,
         "clipboard_clear_seconds": 20,
         "density": "compact",
@@ -158,6 +159,12 @@
     },
     {
       "command": "activity"
+    },
+    {
+      "command": "update_check"
+    },
+    {
+      "command": "update_install"
     }
   ],
   "shell_commands": [

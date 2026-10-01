@@ -153,5 +153,77 @@ describe("SettingsDialog", () => {
     expect(dialog.getByText("Apache-2.0")).toBeInTheDocument();
     expect(dialog.getByText(/SIL OFL 1\.1/)).toBeInTheDocument();
     expect(dialog.getByText(/Voltip/)).toBeInTheDocument();
+    // The sample core cannot update itself: no check, no automatic check, a pointer elsewhere.
+    expect(dialog.getByTestId("update")).toHaveTextContent("不是通过安装包安装的");
+    expect(dialog.queryByTestId("update-check")).not.toBeInTheDocument();
+    expect(dialog.queryByTestId("update-auto")).not.toBeInTheDocument();
+  });
+
+  it("checks for an update, shows what changed and installs it", async () => {
+    const { user, backend } = renderApp({ mock: { updateMethod: "deb" } });
+    await ready();
+    const dialog = await openSettings(user, "关于");
+    const row = within(dialog.getByTestId("update"));
+    expect(row.getByText("尚未检查")).toBeInTheDocument();
+    await user.click(row.getByRole("button", { name: "检查更新" }));
+    expect(backend.calls.at(-1)).toEqual({ command: "update_check" });
+    expect(await row.findByText("已是最新版本")).toBeInTheDocument();
+    expect(row.getByText(/上次检查/)).toBeInTheDocument();
+
+    backend.setRelease({
+      version: "0.2.0",
+      notes:
+        "## [0.2.0](https://github.com/sunerpy/lockra/compare/v0.1.1...v0.2.0) (2026-10-02)\n\n### Features\n\n* **update:** install updates ([#9](https://github.com/sunerpy/lockra/issues/9))\n",
+      date: "2026-10-02T08:00:00Z",
+      size: 2048,
+    });
+    await user.click(row.getByRole("button", { name: "检查更新" }));
+    expect(await row.findByText(/新版本 0\.2\.0 可用/)).toBeInTheDocument();
+    expect(row.getByText(/安装时系统会要求输入管理员密码/)).toBeInTheDocument();
+    const notes = dialog.getByTestId("update-notes");
+    expect(notes).toHaveTextContent("Features");
+    expect(notes).toHaveTextContent("• update: install updates");
+    expect(notes).not.toHaveTextContent("https://");
+    expect(notes.querySelector("a")).toBeNull();
+
+    await user.click(row.getByRole("button", { name: "下载并安装" }));
+    expect(backend.calls.at(-1)).toEqual({ command: "update_install" });
+    expect(await row.findByText(/正在安装 0\.2\.0/)).toBeInTheDocument();
+    expect(row.getByRole("progressbar")).toBeInTheDocument();
+  });
+
+  it("shows why an update failed and offers a retry", async () => {
+    const { user, backend } = renderApp({
+      mock: {
+        updateMethod: "nsis",
+        release: { version: "0.2.0", notes: null, date: null, size: 10 },
+        updateFailure: { step: "download", code: "update_signature" },
+      },
+    });
+    await ready();
+    const dialog = await openSettings(user, "关于");
+    const row = within(dialog.getByTestId("update"));
+    await user.click(row.getByRole("button", { name: "检查更新" }));
+    expect(await row.findByText("新版本 0.2.0 可用")).toBeInTheDocument();
+    expect(dialog.queryByTestId("update-notes")).not.toBeInTheDocument();
+    await user.click(row.getByRole("button", { name: "下载并安装" }));
+    expect(await row.findByText("安装包未使用 Lockra 的密钥签名，已拒绝安装")).toBeInTheDocument();
+    await user.click(row.getByRole("button", { name: "重试" }));
+    expect(backend.calls.at(-1)).toEqual({ command: "update_check" });
+  });
+
+  it("turns automatic update checks on and off", async () => {
+    const { user, backend } = renderApp({ mock: { updateMethod: "appimage" } });
+    await ready();
+    const dialog = await openSettings(user, "关于");
+    const toggle = dialog.getByRole("switch", { name: "自动检查更新" });
+    expect(toggle).not.toBeChecked();
+    expect(dialog.getByTestId("update-auto")).toHaveTextContent("仅连接 GitHub");
+    await user.click(toggle);
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "settings_set",
+      settings: { auto_check_updates: true },
+    });
+    expect(dialog.getByRole("switch", { name: "自动检查更新" })).toBeChecked();
   });
 });

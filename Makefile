@@ -65,6 +65,10 @@ deny: ## Licences, bans and sources of the dependency graph
 smoke-desktop: ## Drive the real app under Xvfb; screenshots to docs/acceptance/screens/desktop
 	scripts/smoke-desktop-linux.sh
 
+.PHONY: smoke-update
+smoke-update: ## An AppImage updates itself from a local manifest (two release builds, a throwaway key)
+	scripts/smoke-update-linux.sh
+
 .PHONY: showcase
 showcase: ## Screenshot the component showcase in the four themes
 	scripts/screenshot-showcase.sh

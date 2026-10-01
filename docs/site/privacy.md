@@ -1,6 +1,6 @@
 # Privacy
 
-This page lists what Lockra stores, where, and what it sends: nothing.
+This page lists what Lockra stores, where, and what it sends: nothing but an update check.
 
 ## What Lockra stores
 
@@ -16,9 +16,13 @@ system.
 
 ## What Lockra sends
 
-Nothing. Lockra makes no network connections: there is no account, no sync, no update check, no
-crash report and no telemetry. Fonts, images and icons ship inside the app. Accounts leave the
-computer only when you export them or save a backup to a place that synchronises.
+Only an update check. When you choose **Settings › About › Check for updates**, or once a day if
+you turned automatic checks on, Lockra asks GitHub for the newest version, and downloads it when
+you choose to install it. Nothing from your accounts, your vault or your settings goes with these
+requests; GitHub sees the request and the address it came from, as for any download
+([Updating](/guide/updates#updating)). There is no account, no sync, no crash report and no
+telemetry. Fonts, images and icons ship inside the app. Accounts leave the computer only when you
+export them or save a backup to a place that synchronises.
 
 ## The clipboard and the screen
 

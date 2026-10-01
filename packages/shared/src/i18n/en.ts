@@ -430,7 +430,39 @@ export const en: Messages = {
       fontsValue: "Instrument Sans, JetBrains Mono, Noto Sans SC (SIL OFL 1.1)",
       credits: "Credits",
       creditsValue: "Interface design derived from Voltip (Apache-2.0)",
-      privacy: "Lockra never goes online and collects nothing.",
+      privacy: "Lockra goes online only to check for updates, and collects nothing.",
+      update: {
+        label: "Updates",
+        check: "Check for updates",
+        checking: "Checking…",
+        idle: "Not checked yet",
+        upToDate: "Lockra is up to date",
+        checkedAt: "Checked {when}",
+        available: "Version {version} is available",
+        publishedOn: "Published {date}",
+        notes: "What changed",
+        install: "Download and install",
+        downloading: "Downloading {version}: {percent}%",
+        downloadingSize: "Downloading {version}: {received}",
+        installing: "Installing {version}; Lockra restarts by itself",
+        failed: "{error}",
+        retry: "Try again",
+        unavailable:
+          "This copy cannot update itself: it was not installed from a package. Update it with the install script or a package.",
+        method: {
+          deb: "Installed from the .deb: installing asks for an administrator's password.",
+          rpm: "Installed from the .rpm: installing asks for an administrator's password.",
+          appimage: "Replaces this AppImage file, then restarts.",
+          nsis: "The installer closes Lockra and opens it again when it is done.",
+          msi: "The installer closes Lockra and opens it again when it is done.",
+          app: "Replaces the app, then restarts.",
+        },
+        auto: "Check for updates automatically",
+        autoHint:
+          "Checks 10 seconds after start, then once a day; it only tells you, and never downloads or installs by itself.",
+        network:
+          "Checking connects to GitHub only and sends nothing from your accounts or the vault; a package not signed with Lockra's key is never installed.",
+      },
     },
   },
   error: {
@@ -466,6 +498,13 @@ export const en: Messages = {
     backup_dir_missing: "Choose a backup folder first",
     backup_dir_unavailable: "The backup folder cannot be written",
     io_failed: "Reading or writing a file failed",
+    update_unavailable: "This copy cannot update itself",
+    update_busy: "An update check or install is already running",
+    update_network: "The update server could not be reached",
+    update_invalid: "The update information is invalid or has no package for this computer",
+    update_signature: "The package is not signed with Lockra's key and was not installed",
+    update_install_failed: "Installing the update failed",
+    update_cancelled: "The administrator prompt was cancelled; nothing was installed",
     internal: "An internal error occurred",
   },
   reject: {
@@ -511,6 +550,7 @@ export const en: Messages = {
     exportExpired: "The QR codes expired and were hidden",
     deviceUnlockTurnedOff:
       "The keychain key was unreadable, so remembering is off; turn it on again",
+    updateAvailable: "Version {version} is available: install it in Settings › About",
   },
   showcase: {
     title: "Component showcase (development only)",

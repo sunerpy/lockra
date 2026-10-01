@@ -34,6 +34,12 @@ tauri = { version = "=2.11.6", features = [] }
 tauri-plugin-dialog = "=2.7.3"
 # One process writes the vault: a second start focuses the first window instead.
 tauri-plugin-single-instance = { version = "=2.4.3", default-features = false }
+# In-app updates, driven from Rust only when the user asks (src/updater.rs): the webview has no
+# permission for the plugin. rustls with the operating system's roots; the system proxy is honoured.
+tauri-plugin-updater = { version = "=2.12.0", default-features = false, features = [
+  "rustls-tls",
+  "system-proxy",
+] }
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true

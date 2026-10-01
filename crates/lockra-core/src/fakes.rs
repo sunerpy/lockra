@@ -7,8 +7,11 @@ use parking_lot::Mutex;
 use tokio::time::Instant;
 use zeroize::Zeroizing;
 
-use crate::ports::{Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, MemorySecretStore, PortError, SecretStore};
-use crate::ui::CodesFrame;
+use crate::ports::{
+    Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, MemorySecretStore, PortError, Release, SecretStore, UpdateFailure, UpdateFuture,
+    UpdateProgress, Updater,
+};
+use crate::ui::{CodesFrame, InstallMethod};
 
 /// Wall-clock time that moves with tokio's clock, so `tokio::time::advance` under
 /// `start_paused` moves both the timers and the codes.
@@ -153,5 +156,98 @@ impl CodeSink for RecordingSink {
         }
         self.frames.lock().push(frame.clone());
         Ok(())
+    }
+}
+
+/// An update source the test scripts: what `check`, `download` and `install` answer, the
+/// progress the download reports, and every call in order.
+#[derive(Debug)]
+pub struct FakeUpdater {
+    /// How an update installs; `None`: this copy cannot update itself.
+    pub method: Mutex<Option<InstallMethod>>,
+    /// What `check` answers.
+    pub check: Mutex<Result<Option<Release>, UpdateFailure>>,
+    /// The progress `download` reports, in order.
+    pub progress: Mutex<Vec<(u64, Option<u64>)>>,
+    /// What `download` answers.
+    pub download: Mutex<Result<(), UpdateFailure>>,
+    /// What `install` answers.
+    pub install: Mutex<Result<(), UpdateFailure>>,
+    /// Every call so far: `check`, `download`, `install`.
+    pub calls: Mutex<Vec<&'static str>>,
+    /// Make `check` wait for [`Self::resume`], to watch a run in flight.
+    pub hold: AtomicBool,
+    resume: tokio::sync::Notify,
+}
+
+impl Default for FakeUpdater {
+    fn default() -> Self {
+        Self {
+            method: Mutex::new(None),
+            check: Mutex::new(Ok(None)),
+            progress: Mutex::new(Vec::new()),
+            download: Mutex::new(Ok(())),
+            install: Mutex::new(Ok(())),
+            calls: Mutex::new(Vec::new()),
+            hold: AtomicBool::new(false),
+            resume: tokio::sync::Notify::new(),
+        }
+    }
+}
+
+impl FakeUpdater {
+    /// A copy installed by `method`, with nothing newer out.
+    pub fn installed(method: InstallMethod) -> Self {
+        Self { method: Mutex::new(Some(method)), ..Self::default() }
+    }
+
+    /// A release with notes and a date.
+    pub fn release(version: &str) -> Release {
+        Release { version: version.to_owned(), notes: Some(format!("## {version}\n\n- What changed")), date: Some("2026-10-02T08:00:00Z".to_owned()) }
+    }
+
+    /// Let a held `check` answer.
+    pub fn resume(&self) {
+        self.resume.notify_one();
+    }
+
+    /// The calls so far.
+    pub fn calls(&self) -> Vec<&'static str> {
+        self.calls.lock().clone()
+    }
+}
+
+impl Updater for FakeUpdater {
+    fn method(&self) -> Option<InstallMethod> {
+        *self.method.lock()
+    }
+
+    fn check(&self) -> UpdateFuture<'_, Option<Release>> {
+        Box::pin(async move {
+            self.calls.lock().push("check");
+            if self.hold.load(Ordering::SeqCst) {
+                self.resume.notified().await;
+            }
+            self.check.lock().clone()
+        })
+    }
+
+    fn download(&self, mut progress: UpdateProgress) -> UpdateFuture<'_, ()> {
+        Box::pin(async move {
+            self.calls.lock().push("download");
+            let steps = self.progress.lock().clone();
+            for (received, total) in steps {
+                progress(received, total);
+                tokio::task::yield_now().await;
+            }
+            *self.download.lock()
+        })
+    }
+
+    fn install(&self) -> UpdateFuture<'_, ()> {
+        Box::pin(async move {
+            self.calls.lock().push("install");
+            *self.install.lock()
+        })
     }
 }

@@ -68,6 +68,17 @@ KIND_SUFFIXES = {
     "nsis": ("-setup.exe",),
     "msi": (".msi",),
 }
+# Bundle kind -> the installer tauri-plugin-updater names in its `{os}-{arch}-{installer}` platform
+# key (read from the bundle type the bundler patches into each package's binary). A dmg is not an
+# updater format.
+UPDATER_INSTALLERS = {
+    "deb": "deb",
+    "rpm": "rpm",
+    "appimage": "appimage",
+    "nsis": "nsis",
+    "msi": "msi",
+    "app": "app",
+}
 # Arch token Tauri itself uses in dmg/nsis/msi file names, reused when a bundle
 # name would otherwise collide across targets (macOS `.app.tar.gz`).
 ARCH_FILE_TOKEN = {"x86_64": "x64", "aarch64": "aarch64", "i686": "x86", "armv7": "armv7"}
@@ -607,6 +618,17 @@ def cmd_updater_json(args: argparse.Namespace) -> None:
     if args.targets_file is not None:
         expected_platforms = {entry["updater_platform"] for entry in load_targets(args.targets_file)}
 
+    def platform_entry(key: str, name: str) -> dict:
+        signature_path = args.dist / f"{name}.sig"
+        if not signature_path.is_file():
+            raise Failure(f"{key}: signature file {name}.sig is missing")
+        decode_signature(signature_path)
+        return {
+            "signature": signature_path.read_text(encoding="utf-8").strip(),
+            "url": f"https://github.com/{args.repo}/releases/download/{args.tag}/"
+            + quote(name, safe=""),
+        }
+
     platforms: dict[str, dict] = {}
     for record in evidence:
         updater = record["updater"]
@@ -619,15 +641,26 @@ def cmd_updater_json(args: argparse.Namespace) -> None:
             raise Failure(f"duplicate updater platform {key}")
         if key != updater_platform_for(record["target"]):
             raise Failure(f"{record['target']}: evidence updater_platform {key} is wrong")
-        signature_path = args.dist / updater["signature"]
-        if not signature_path.is_file():
-            raise Failure(f"{key}: signature file {updater['signature']} is missing")
-        decode_signature(signature_path)
-        platforms[key] = {
-            "signature": signature_path.read_text(encoding="utf-8").strip(),
-            "url": f"https://github.com/{args.repo}/releases/download/{args.tag}/"
-            + quote(updater["name"], safe=""),
-        }
+        if updater["signature"] != f"{updater['name']}.sig":
+            raise Failure(f"{key}: updater signature {updater['signature']} does not belong to {updater['name']}")
+        platforms[key] = platform_entry(key, updater["name"])
+        # tauri-plugin-updater asks for `{os}-{arch}-{installer}` first, where the installer is the
+        # one the bundler wrote into this package's binary, and falls back to `{os}-{arch}`: without
+        # these keys a copy installed from the .deb, the .rpm or the .msi would download the
+        # updater bundle above and refuse it as the wrong format.
+        per_kind: dict[str, str] = {}
+        for item in record["files"]:
+            installer = UPDATER_INSTALLERS.get(item["kind"])
+            if installer is None or not item["signature"]:
+                continue
+            if installer in per_kind:
+                raise Failure(
+                    f"{record['target']}: two signed {item['kind']} packages "
+                    f"({per_kind[installer]}, {item['name']}); an installed copy could be either"
+                )
+            per_kind[installer] = item["name"]
+        for installer, name in sorted(per_kind.items()):
+            platforms[f"{key}-{installer}"] = platform_entry(f"{key}-{installer}", name)
 
     if not platforms:
         raise Failure("no updater platforms collected; refusing to write an empty latest.json")

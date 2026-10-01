@@ -3,6 +3,39 @@
 This page explains how to download and install Lockra on Windows, macOS and Linux, and how to
 check that a download is genuine.
 
+## Install with one command
+
+The install script picks the package for your computer, checks it against the release's
+`SHA256SUMS` and installs nothing when the checksum does not match. Run the same command again to
+install a newer version.
+
+Linux and macOS, in a terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sunerpy/lockra/main/scripts/install.sh | sh
+```
+
+Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/sunerpy/lockra/main/scripts/install.ps1 | iex
+```
+
+| Your system                                  | What the script installs                                                |
+| -------------------------------------------- | ----------------------------------------------------------------------- |
+| Linux with apt (Debian, Ubuntu)              | the `.deb`, through apt                                                 |
+| Linux with dnf, zypper or yum (Fedora, SUSE) | the `.rpm`                                                              |
+| Other Linux                                  | the AppImage, in `~/.local/bin`, with an entry in the applications menu |
+| macOS                                        | the app from the dmg, in `/Applications` (or `~/Applications`)          |
+| Windows                                      | the installer, for your user account only, without administrator rights |
+
+On Linux the system asks for your password to install the `.deb` or the `.rpm`. On macOS the app
+opens without the "unidentified developer" prompt described below: the script clears the flag a
+browser download would carry. The script reads three settings: `LOCKRA_VERSION=0.2.0` installs
+that release instead of the latest, `LOCKRA_PACKAGE=appimage` (or `deb`, `rpm`) another Linux
+package, and `LOCKRA_INSTALL_DIR` another folder for the AppImage or the app. In PowerShell, set
+`$env:LOCKRA_VERSION = "0.2.0"` before the command.
+
 ## Download
 
 Every release is on the [releases page](https://github.com/sunerpy/lockra/releases), with the

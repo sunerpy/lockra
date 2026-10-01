@@ -3,6 +3,7 @@ import { createTranslator } from "./i18n";
 import {
   entryLabel,
   errorText,
+  formatBytes,
   groupCode,
   incompatibleText,
   noticeIsProblem,
@@ -11,6 +12,7 @@ import {
   parametersText,
   rejectText,
   relativeTime,
+  releaseNotesLines,
   statusText,
   themeName,
   themeSubtitle,
@@ -82,5 +84,40 @@ describe("labels", () => {
     expect(entryLabel("GitHub", "octocat")).toBe("GitHub: octocat");
     expect(entryLabel("", "octocat")).toBe("octocat");
     expect(entryLabel("GitHub", "")).toBe("GitHub");
+  });
+
+  it("release notes read as plain lines, without links or references", () => {
+    const notes = [
+      "## [0.2.0](https://github.com/sunerpy/lockra/compare/v0.1.1...v0.2.0) (2026-10-02)",
+      "",
+      "",
+      "### Features",
+      "",
+      "* **update:** check for updates and install them ([#9](https://github.com/sunerpy/lockra/issues/9)) ([28d87eb](https://github.com/sunerpy/lockra/commit/28d87eb))",
+      "* install scripts for every platform",
+      "",
+      "### Bug Fixes",
+      "",
+      "- keep the [docs](https://firlab.app/lockra/) in step",
+      "",
+    ].join("\n");
+    expect(releaseNotesLines(notes)).toEqual([
+      "Features",
+      "",
+      "• update: check for updates and install them",
+      "• install scripts for every platform",
+      "",
+      "Bug Fixes",
+      "",
+      "• keep the docs in step",
+    ]);
+    expect(releaseNotesLines("")).toEqual([]);
+    expect(releaseNotesLines("Just a sentence.\r\n")).toEqual(["Just a sentence."]);
+  });
+
+  it("sizes read in KB and MB", () => {
+    expect(formatBytes(0)).toBe("0 KB");
+    expect(formatBytes(512 * 1024)).toBe("512 KB");
+    expect(formatBytes(4 * 1024 * 1024 + 100_000)).toBe("4.1 MB");
   });
 });

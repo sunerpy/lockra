@@ -19,8 +19,8 @@
 ---
 
 Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号保存在本机的一个加密文件中，Lockra
-本身不联网。它可以从 Google 身份验证器和 Microsoft Authenticator 导入账号，也可以导出给它们，并把加密
-备份写入你选择的文件夹。
+只在检查更新时联网。它可以从 Google 身份验证器和 Microsoft Authenticator 导入账号，也可以导出给它们，并把
+加密备份写入你选择的文件夹。
 
 ![Lockra 的验证码页](../acceptance/screens/desktop/codes-1280-light.png)
 
@@ -37,11 +37,26 @@ Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号
   Google Drive 或 iCloud 的同步文件夹均可），只保留最近几份。恢复时可以合并，也可以整体替换。
 - **安全**：Argon2id 与 XChaCha20-Poly1305，可选用系统钥匙串解锁，自动锁定，显示密钥时阻止截屏（Windows 和
   macOS）。
+- **更新**：「设置 › 关于」在你检查时（或开启自动检查后每天一次）查找新版本，只安装带有 Lockra 签名的安装包，
+  并通过 Lockra 原来的安装方式（deb、rpm、AppImage、Windows 安装程序或 macOS 应用）完成安装。
 - **界面**：四套主题、八种强调色，中英文界面，命令面板（`Ctrl K`），全程可用键盘操作。
 
 ## 安装
 
-1. **下载安装包**：在[发布页](https://github.com/sunerpy/lockra/releases)选择 Windows 安装程序（x64 与 ARM64）、
+1. **一键安装**：脚本会为当前电脑选择对应的安装包，用该版本的 `SHA256SUMS` 校验后安装
+   （[安装指南](https://firlab.app/lockra/zh/guide/install#一键安装)）。
+
+   ```bash
+   # Linux 和 macOS
+   curl -fsSL https://raw.githubusercontent.com/sunerpy/lockra/main/scripts/install.sh | sh
+   ```
+
+   ```powershell
+   # Windows（PowerShell）
+   irm https://raw.githubusercontent.com/sunerpy/lockra/main/scripts/install.ps1 | iex
+   ```
+
+2. **下载安装包**：在[发布页](https://github.com/sunerpy/lockra/releases)选择 Windows 安装程序（x64 与 ARM64）、
    适用于 Apple 芯片或 Intel Mac 的 dmg，或适用于 Linux（x64 与 ARM64）的 deb、rpm、AppImage。每个版本都附带
    `SHA256SUMS` 和构建证明：
 
@@ -53,7 +68,9 @@ Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号
    安装包目前尚未签名，首次启动时 Windows SmartScreen 和 macOS Gatekeeper 会提示确认
    （[平台说明](https://firlab.app/lockra/zh/reference/platforms)）。
 
-2. **从源码构建**（见[开发](#开发)）。
+3. **从源码构建**（见[开发](#开发)）。
+
+从 0.2.0 起，Lockra 可以自行更新：「设置 › 关于 › 检查更新」（[更新说明](https://firlab.app/lockra/zh/guide/updates)）。
 
 ## 快速开始
 

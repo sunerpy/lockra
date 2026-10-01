@@ -129,6 +129,9 @@ pub struct Settings {
     pub sort: SortOrder,
     /// Automatic backups.
     pub auto_backup: AutoBackup,
+    /// Look for an update 10 seconds after start and then once a day. Off: Lockra goes online only
+    /// when the user asks it to check.
+    pub auto_check_updates: bool,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -157,6 +160,7 @@ impl Default for Settings {
             hide_codes: false,
             sort: SortOrder::default(),
             auto_backup: AutoBackup::default(),
+            auto_check_updates: false,
         }
     }
 }
@@ -290,5 +294,17 @@ mod tests {
         assert_eq!(json["locale"], "system");
         assert_eq!(serde_json::to_value(LocaleSetting::ZhCn).unwrap(), "zh-cn");
         assert_eq!(json["auto_backup"]["keep"], 10);
+        assert_eq!(json["auto_check_updates"], false);
+    }
+
+    #[test]
+    fn automatic_update_checks_stay_off_until_turned_on() {
+        let dir = tempfile::tempdir().unwrap();
+        // A settings file from before the setting existed.
+        fs::write(dir.path().join("settings.json"), r#"{"theme":"dark","auto_lock_minutes":15}"#).unwrap();
+        let store = SettingsStore::new(dir.path());
+        assert!(!store.load().auto_check_updates);
+        store.save(&Settings { auto_check_updates: true, ..Settings::default() }).unwrap();
+        assert!(store.load().auto_check_updates);
     }
 }

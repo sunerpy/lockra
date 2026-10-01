@@ -11,11 +11,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lockra_bridge::{COMMANDS, SHELL_COMMANDS, UiCommand, dispatch};
-use lockra_core::fakes::{FakeClipboard, FakeClock, FakeKeychain, RecordingSink};
+use lockra_core::fakes::{FakeClipboard, FakeClock, FakeKeychain, FakeUpdater, RecordingSink};
 use lockra_core::settings::{AccentId, AutoBackup, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
     BackupFailure, BackupView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded, ExportPage, ExportStarted,
-    ExportTarget, GoogleBatchView, ImportSource, ImportView, LockView, Notice, Phase, Platform, RestoreView, Revealed, UiEvent, UiState,
+    ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView, Revealed, UiEvent, UiState,
+    UpdateStatus, UpdateView,
 };
 use lockra_core::{Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
@@ -114,7 +115,28 @@ fn settings() -> Settings {
         hide_codes: true,
         sort: SortOrder::Recent,
         auto_backup: AutoBackup { enabled: true, dir: Some("/home/user/Backups/Lockra".into()), keep: 7 },
+        auto_check_updates: true,
     }
+}
+
+/// Every update status, in the order a run goes through them.
+fn update_statuses() -> Vec<UpdateStatus> {
+    vec![
+        UpdateStatus::Idle,
+        UpdateStatus::Checking,
+        UpdateStatus::UpToDate { checked_at_ms: T0 - 30_000 },
+        UpdateStatus::Available {
+            version: "0.2.0".into(),
+            notes: Some("## [0.2.0](https://github.com/sunerpy/lockra/compare/v0.1.1...v0.2.0) (2026-10-02)\n\n### Features\n\n* **update:** check for updates and install them\n".into()),
+            date: Some("2026-10-02T08:00:00Z".into()),
+            checked_at_ms: T0 - 30_000,
+        },
+        UpdateStatus::Available { version: "0.2.1".into(), notes: None, date: None, checked_at_ms: T0 },
+        UpdateStatus::Downloading { version: "0.2.0".into(), received: 0, total: None },
+        UpdateStatus::Downloading { version: "0.2.0".into(), received: 4_194_304, total: Some(11_508_084) },
+        UpdateStatus::Installing { version: "0.2.0".into() },
+        UpdateStatus::Failed { code: ErrorCode::UpdateSignature, at_ms: T0 - 5_000 },
+    ]
 }
 
 fn import_view() -> ImportView {
@@ -190,6 +212,11 @@ fn state(phase: Phase) -> UiState {
             created_at_ms: T0 - 864_000_000,
         }),
         auto_lock_at_ms: unlocked.then_some(T0 + 600_000),
+        update: match phase {
+            Phase::Unlocked => UpdateView { method: Some(InstallMethod::Deb), status: update_statuses()[3].clone() },
+            Phase::Locked => UpdateView { method: Some(InstallMethod::Nsis), status: update_statuses()[6].clone() },
+            Phase::NoVault => UpdateView { method: None, status: UpdateStatus::Idle },
+        },
     }
 }
 
@@ -207,6 +234,7 @@ fn notices() -> Vec<Notice> {
         Notice::AutoLocked,
         Notice::ExportExpired { session: id(100) },
         Notice::DeviceUnlockTurnedOff,
+        Notice::UpdateAvailable { version: "0.2.0".into() },
     ]
 }
 
@@ -247,12 +275,25 @@ fn commands() -> Vec<Value> {
         json!({"command": "restore_cancel"}),
         json!({"command": "settings_set", "settings": serde_json::to_value(settings()).unwrap()}),
         json!({"command": "activity"}),
+        json!({"command": "update_check"}),
+        json!({"command": "update_install"}),
     ]
 }
 
 #[test]
 fn state_fixtures() {
     check("state.json", &json!({ "unlocked": state(Phase::Unlocked), "locked": state(Phase::Locked), "no_vault": state(Phase::NoVault) }));
+}
+
+#[test]
+fn update_fixtures() {
+    let methods = [InstallMethod::Deb, InstallMethod::Rpm, InstallMethod::Appimage, InstallMethod::Nsis, InstallMethod::Msi, InstallMethod::App];
+    let views: Vec<UpdateView> = update_statuses()
+        .into_iter()
+        .zip(methods.iter().copied().map(Some).chain([None]).cycle())
+        .map(|(status, method)| UpdateView { method, status })
+        .collect();
+    check("update.json", &views);
 }
 
 #[test]
@@ -361,7 +402,10 @@ async fn dispatch_answers_and_leaks_nothing() {
         kdf: KdfCost::FAST_INSECURE,
         platform: Platform::Linux,
     };
-    let core = Core::start(config, Ports { secrets: keychain, clipboard: clipboard.clone(), clock: Arc::new(FakeClock::new(T0)) });
+    let updater = Arc::new(FakeUpdater::installed(InstallMethod::Deb));
+    *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));
+    let ports = Ports { secrets: keychain, clipboard: clipboard.clone(), clock: Arc::new(FakeClock::new(T0)), updater: updater.clone() };
+    let core = Core::start(config, ports);
     let mut events = core.subscribe();
     let sink = Arc::new(RecordingSink::default());
     core.subscribe_codes(sink.clone());
@@ -406,6 +450,15 @@ async fn dispatch_answers_and_leaks_nothing() {
     ok(run(json!({"command": "export_close", "session": started["session"]})).await, &mut answers);
     let settings = run(json!({"command": "app_state"})).await.unwrap()["settings"].clone();
     ok(run(json!({"command": "settings_set", "settings": settings})).await, &mut answers);
+    // The update runs in the background: its states join the events scanned below.
+    for command in [json!({"command": "update_check"}), json!({"command": "update_install"})] {
+        ok(run(command).await, &mut answers);
+        for _ in 0..50 {
+            tokio::task::yield_now().await;
+        }
+    }
+    assert_eq!(updater.calls(), ["check", "check", "download", "install"]);
+    assert_eq!(run(json!({"command": "app_state"})).await.unwrap()["update"]["status"]["state"], "installing");
     assert_eq!(run(json!({"command": "restore_commit", "password": "x", "mode": "merge"})).await.unwrap_err().code, ErrorCode::NoRestore);
     assert_eq!(run(json!({"command": "backup_auto_now"})).await.unwrap_err().code, ErrorCode::BackupDirMissing);
     let mut texts = answers;

@@ -17,14 +17,13 @@ one workflow run builds, verifies and publishes everything.
      against the version (`.github/scripts/tauri-release.py check-config --expect-version`) and
      renders the matrix from `.github/release-targets.json`;
    - `bundle` builds each target with the lockfile's Tauri CLI: `tauri build --no-bundle` without
-     any secret, then `tauri bundle` (deb, rpm and AppImage on Linux x64 and arm64; app and dmg for
-     Apple silicon and Intel; NSIS and MSI on Windows x64, NSIS on Windows arm64);
-   - `updater` collects every leg, writes `SHA256SUMS`, attests the files (SLSA build provenance)
-     and attaches them to the draft. Lockra has no in-app updater (`bundle.createUpdaterArtifacts`
-     is not set), so there is no `latest.json`, and macOS ships its dmg alone: without the updater
-     Tauri does not archive the `.app`, which the dmg carries. `tauri-release.py collect` checks
-     that the `.app` was built and publishes nothing for it, and
-     `.github/scripts/test-tauri-release.py` checks every leg against the manifest;
+     any secret, then `tauri bundle` with the update signing key (deb, rpm and AppImage on Linux x64
+     and arm64; the app archive and the dmg for Apple silicon and Intel; NSIS and MSI on Windows
+     x64, NSIS on Windows arm64), which signs every package for the in-app update;
+   - `updater` collects every leg, verifies every signature against the public key in
+     `tauri.conf.json`, writes `latest.json` (below) and `SHA256SUMS`, attests the files (SLSA
+     build provenance) and attaches them to the draft. `.github/scripts/test-tauri-release.py`
+     checks every leg and the manifest's keys against the target manifest;
    - `publish-release` re-verifies every remote asset against `SHA256SUMS` and flips the draft to
      public, marking it latest unless it is a prerelease.
 4. A failed leg leaves the draft unpublished. Rebuild it after a fix of the workflow or an outage
@@ -129,6 +128,7 @@ gh run list --repo $R --branch release-please--branches--main--components--lockr
 | Secret                                                                                        | Needed for                              | Notes                                                                                                              |
 | --------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | none                                                                                          | releases                                | `GITHUB_TOKEN` creates the tag, the draft and the assets                                                           |
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`                             | releases (the in-app update)            | the minisign key every package is signed with; `preflight` fails without it (below)                                |
 | `FIRLAB_DOCS_TOKEN`                                                                           | `publish-site.yml`                      | a fine-grained token for `sunerpy/firlab` only, Contents read and write; see [docs/site/README.md](site/README.md) |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_*`    | optional macOS signing and notarization | without them the app is unsigned and Gatekeeper warns                                                              |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` with `bundle.windows.signCommand` | optional Windows signing                | without them SmartScreen warns                                                                                     |
@@ -147,6 +147,47 @@ gh secret set FIRLAB_DOCS_TOKEN --repo sunerpy/lockra   # paste the value at the
 The next run that has something to push proves the new token; a run with nothing new to publish
 stops before it uses the token.
 
+## In-app updates
+
+From 0.2.0 every release carries what the app's updater reads (`docs/security.md`, "Updates"):
+
+- `bundle.createUpdaterArtifacts: true` makes `tauri bundle` sign every package with
+  `TAURI_SIGNING_PRIVATE_KEY`; the signature's trusted comment records the version
+  (`file:Lockra_0.2.0_amd64.deb	version:0.2.0`), which `plugins.updater.requireSignedVersion`
+  makes the app check. Do not turn that off: it is what refuses an older package offered as new.
+- `latest.json` names the version, the release notes (the Release's body) and one entry per
+  platform key, each a URL pinned to this release's asset and that asset's signature: an
+  `{os}-{arch}-{installer}` key for every signed package (`linux-x86_64-deb`, `linux-x86_64-rpm`,
+  `linux-x86_64-appimage`, `windows-x86_64-nsis`, `windows-x86_64-msi`, `darwin-aarch64-app`, …)
+  and an `{os}-{arch}` key for the updater bundle of each target. The app asks for the key of the
+  way it was installed first, so a copy installed from the `.deb` updates through a `.deb`.
+- The app asks `https://github.com/sunerpy/lockra/releases/latest/download/latest.json`
+  (`plugins.updater.endpoints`): only the release marked latest reaches installed copies, so a
+  prerelease never does.
+
+**The key.** It was generated with `pnpm tauri signer generate` (password protected) on
+2026-10-01; its public half is `plugins.updater.pubkey` in `tauri.conf.json`, the private key and
+its password are the two secrets above, and the maintainer keeps an offline copy of both.
+Installed copies trust only this key: **losing it ends updates** (each copy would need a reinstall of a build with a new
+public key), and replacing it takes one release signed with the old key that ships the new public
+key. Keep the offline copy outside GitHub.
+
+Local packages (`make linux-x64`, `make windows-x64`, `make pre-ci`) are built without the key and
+therefore unsigned: the scripts pass `--config '{"bundle":{"createUpdaterArtifacts":false}}'` when
+`TAURI_SIGNING_PRIVATE_KEY` is not set. A packaged build checks for updates against the real
+manifest; `apps/desktop/src-tauri/tests/update.rs` checks the updater against a local manifest
+instead, and `docs/acceptance/updates.md` is the update checked by hand on each system.
+
+## The install scripts
+
+`scripts/install.sh` (Linux, macOS) and `scripts/install.ps1` (Windows) install the latest release
+from its assets, by the names the release workflow gives them, after checking `SHA256SUMS`; the
+documentation prints them as `curl … | sh` and `irm … | iex` from `main`. Change them together
+with any asset name. `scripts/test-install.sh` and `scripts/test-install.ps1` test them offline
+(CI's repository gates, `make check`); `.github/workflows/install-scripts.yml` runs them against
+the real latest release on Linux (apt, dnf, AppImage), macOS and Windows (x64 and ARM64) when they
+change and every week.
+
 ## Checking a release
 
 ```bash
@@ -155,6 +196,7 @@ gh release view vX.Y.Z --json isDraft,isLatest,assets --jq '{isDraft, isLatest, 
 gh release download vX.Y.Z --pattern SHA256SUMS && sha256sum -c SHA256SUMS --ignore-missing
 gh attestation verify Lockra_X.Y.Z_x64-setup.exe --repo sunerpy/lockra \
   --signer-workflow sunerpy/lockra/.github/workflows/release.yml
+gh release download vX.Y.Z --pattern latest.json --output - | jq '.version, (.platforms | keys)'
 ```
 
 Every bundle leg must appear by its target name; a green run with a skipped leg is not a release.

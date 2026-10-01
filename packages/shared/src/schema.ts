@@ -62,6 +62,7 @@ export const settingsSchema = z.object({
   hide_codes: z.boolean(),
   sort: sortOrderSchema,
   auto_backup: autoBackupSchema,
+  auto_check_updates: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -80,6 +81,7 @@ export function defaultSettings(): Settings {
     hide_codes: false,
     sort: "name",
     auto_backup: { enabled: false, dir: null, keep: 10 },
+    auto_check_updates: false,
   };
 }
 
@@ -241,6 +243,13 @@ export const ERROR_CODES = [
   "backup_dir_missing",
   "backup_dir_unavailable",
   "io_failed",
+  "update_unavailable",
+  "update_busy",
+  "update_network",
+  "update_invalid",
+  "update_signature",
+  "update_install_failed",
+  "update_cancelled",
   "internal",
 ] as const;
 export const errorCodeSchema = z.enum(ERROR_CODES);
@@ -260,6 +269,42 @@ export const restoreViewSchema = z.object({
   created_at_ms: msSchema,
 });
 export type RestoreView = z.infer<typeof restoreViewSchema>;
+
+// ---- the in-app update -----------------------------------------------------------------------
+
+/** How this copy was installed, which is how an update installs (lockra-core `InstallMethod`). */
+export const INSTALL_METHODS = ["deb", "rpm", "appimage", "nsis", "msi", "app"] as const;
+export const installMethodSchema = z.enum(INSTALL_METHODS);
+export type InstallMethod = z.infer<typeof installMethodSchema>;
+
+export const updateStatusSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("idle") }),
+  z.object({ state: z.literal("checking") }),
+  z.object({ state: z.literal("up_to_date"), checked_at_ms: msSchema }),
+  z.object({
+    state: z.literal("available"),
+    version: z.string(),
+    notes: z.string().nullable(),
+    date: z.string().nullable(),
+    checked_at_ms: msSchema,
+  }),
+  z.object({
+    state: z.literal("downloading"),
+    version: z.string(),
+    received: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative().nullable(),
+  }),
+  z.object({ state: z.literal("installing"), version: z.string() }),
+  z.object({ state: z.literal("failed"), code: errorCodeSchema, at_ms: msSchema }),
+]);
+export type UpdateStatus = z.infer<typeof updateStatusSchema>;
+
+export const updateViewSchema = z.object({
+  /** Absent when this copy cannot update itself. */
+  method: installMethodSchema.nullable(),
+  status: updateStatusSchema,
+});
+export type UpdateView = z.infer<typeof updateViewSchema>;
 
 // ---- state and events ------------------------------------------------------------------------
 
@@ -282,6 +327,7 @@ export const uiStateSchema = z.object({
   backup: backupViewSchema,
   restore: restoreViewSchema.nullable(),
   auto_lock_at_ms: msSchema.nullable(),
+  update: updateViewSchema,
 });
 export type UiState = z.infer<typeof uiStateSchema>;
 
@@ -306,6 +352,7 @@ export const noticeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("auto_locked") }),
   z.object({ type: z.literal("export_expired"), session: idSchema }),
   z.object({ type: z.literal("device_unlock_turned_off") }),
+  z.object({ type: z.literal("update_available"), version: z.string() }),
 ]);
 export type Notice = z.infer<typeof noticeSchema>;
 
@@ -450,6 +497,8 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("restore_cancel") }),
   z.object({ command: z.literal("settings_set"), settings: settingsSchema }),
   z.object({ command: z.literal("activity") }),
+  z.object({ command: z.literal("update_check") }),
+  z.object({ command: z.literal("update_install") }),
 ]);
 export type UiCommand = z.infer<typeof uiCommandSchema>;
 export type CommandName = UiCommand["command"];

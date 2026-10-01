@@ -22,7 +22,8 @@ make pre-ci    # optional, Linux: the real app under Xvfb, the deb, the cross-bu
 ```
 
 `make check` needs, besides the set-up above, Python ≥ 3.9, cargo-llvm-cov, cargo-deny, actionlint
-and shellcheck; it names any that is missing before the first gate.
+and shellcheck; it names any that is missing before the first gate. With PowerShell 7 (`pwsh`)
+installed it also tests `scripts/install.ps1`; without it, CI does.
 
 - Write the test first for any change in behaviour, and see it fail for the right reason.
 - Never weaken, skip or delete a test to get green; fix the code.

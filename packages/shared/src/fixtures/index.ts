@@ -4,5 +4,6 @@ import commands from "./ipc/commands.json";
 import events from "./ipc/events.json";
 import responses from "./ipc/responses.json";
 import state from "./ipc/state.json";
+import update from "./ipc/update.json";
 
-export const ipcFixtures = { commands, events, responses, state } as const;
+export const ipcFixtures = { commands, events, responses, state, update } as const;

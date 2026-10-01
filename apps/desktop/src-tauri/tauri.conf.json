@@ -41,9 +41,18 @@
     "publisher": "Lockra",
     "category": "Utility",
     "shortDescription": "A local, encrypted two-factor authenticator",
-    "longDescription": "Lockra keeps TOTP and HOTP secrets in an encrypted vault on your own computer, imports from Google Authenticator and Microsoft Authenticator, exports back to them, and backs up to a folder you choose. It never goes online.",
+    "longDescription": "Lockra keeps TOTP and HOTP secrets in an encrypted vault on your own computer, imports from Google Authenticator and Microsoft Authenticator, exports back to them, and backs up to a folder you choose. It goes online only to look for an update, when you ask or after you turn automatic checks on.",
     "copyright": "Copyright 2026 The Lockra Authors",
     "license": "Apache-2.0",
-    "windows": { "nsis": { "installMode": "currentUser" } }
+    "windows": { "nsis": { "installMode": "currentUser" } },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwMjZGRjA2Qzg4RDc1NQpSV1JWMTRoczhHOENDR0tLeDBnTFpYeXVEZU84VmcrM0xvcU9zYUloUmpwRjcyYkFodXRzbDdtSAo=",
+      "endpoints": ["https://github.com/sunerpy/lockra/releases/latest/download/latest.json"],
+      "requireSignedVersion": true,
+      "windows": { "installMode": "passive" }
+    }
   }
 }

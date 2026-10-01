@@ -28,6 +28,7 @@
         "enabled": false,
         "keep": 10
       },
+      "auto_check_updates": false,
       "auto_lock_minutes": 5,
       "clipboard_clear_seconds": 30,
       "density": "default",
@@ -38,6 +39,15 @@
       "reduce_motion": false,
       "sort": "name",
       "theme": "light"
+    },
+    "update": {
+      "method": "nsis",
+      "status": {
+        "received": 4194304,
+        "state": "downloading",
+        "total": 11508084,
+        "version": "0.2.0"
+      }
     }
   },
   "no_vault": {
@@ -73,6 +83,7 @@
         "enabled": false,
         "keep": 10
       },
+      "auto_check_updates": false,
       "auto_lock_minutes": 5,
       "clipboard_clear_seconds": 30,
       "density": "default",
@@ -83,6 +94,12 @@
       "reduce_motion": false,
       "sort": "name",
       "theme": "light"
+    },
+    "update": {
+      "method": null,
+      "status": {
+        "state": "idle"
+      }
     }
   },
   "unlocked": {
@@ -364,6 +381,7 @@
         "enabled": true,
         "keep": 7
       },
+      "auto_check_updates": true,
       "auto_lock_minutes": 10,
       "clipboard_clear_seconds": 20,
       "density": "compact",
@@ -374,6 +392,16 @@
       "reduce_motion": true,
       "sort": "recent",
       "theme": "dark"
+    },
+    "update": {
+      "method": "deb",
+      "status": {
+        "checked_at_ms": 1789999970000,
+        "date": "2026-10-02T08:00:00Z",
+        "notes": "## [0.2.0](https://github.com/sunerpy/lockra/compare/v0.1.1...v0.2.0) (2026-10-02)\n\n### Features\n\n* **update:** check for updates and install them\n",
+        "state": "available",
+        "version": "0.2.0"
+      }
     }
   }
 }

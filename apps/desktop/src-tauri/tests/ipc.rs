@@ -8,8 +8,9 @@ use std::sync::Arc;
 
 use lockra_bridge::SHELL_COMMANDS;
 use lockra_core::KdfCost;
-use lockra_core::fakes::FakeClipboard;
-use lockra_core::ports::MemorySecretStore;
+use lockra_core::fakes::{FakeClipboard, FakeUpdater};
+use lockra_core::ports::{MemorySecretStore, Updater};
+use lockra_core::ui::InstallMethod;
 use lockra_desktop_lib::{COMMANDS, ShellOptions, build_app, dev_memory_store_requested};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
@@ -27,6 +28,11 @@ struct Shell {
 }
 
 fn shell() -> Shell {
+    shell_with(None)
+}
+
+/// The shell with `updater` as its update source (none: this copy cannot update itself).
+fn shell_with(updater: Option<Arc<dyn Updater>>) -> Shell {
     let dir = tempfile::tempdir().unwrap();
     let options = ShellOptions {
         secrets: Some(Arc::new(MemorySecretStore::default())),
@@ -35,6 +41,8 @@ fn shell() -> Shell {
         config_dir: Some(dir.path().join("config")),
         kdf: KdfCost::FAST_INSECURE,
         single_instance: false,
+        updater,
+        plugin_updates: false,
     };
     let mut app = build_app(mock_builder(), options).build(mock_context(noop_assets())).unwrap();
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
@@ -124,6 +132,31 @@ fn the_password_is_checked_before_a_plain_export_opens_its_dialog() {
     shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
     let error = shell.invoke("export_otpauth_file", json!({ "entryIds": [], "password": "wrong password" })).unwrap_err();
     assert_eq!(error["code"], "wrong_password");
+}
+
+#[test]
+fn the_update_commands_run_through_lockra_dispatch() {
+    // A build without an update source refuses, with the core's code.
+    let shell = shell();
+    let state = shell.dispatch(json!({ "command": "app_state" })).unwrap();
+    assert_eq!(state["update"], json!({ "method": null, "status": { "state": "idle" } }));
+    assert_eq!(shell.dispatch(json!({ "command": "update_check" })).unwrap_err(), json!({ "code": "update_unavailable" }));
+
+    let updater = Arc::new(FakeUpdater::installed(InstallMethod::Msi));
+    *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));
+    let shell = shell_with(Some(updater.clone()));
+    assert_eq!(shell.dispatch(json!({ "command": "update_check" })).unwrap(), Value::Null);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let update = loop {
+        let update = shell.dispatch(json!({ "command": "app_state" })).unwrap()["update"].clone();
+        if update["status"]["state"] == "available" || std::time::Instant::now() > deadline {
+            break update;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    };
+    assert_eq!(update["method"], "msi");
+    assert_eq!(update["status"]["version"], "0.2.0");
+    assert_eq!(updater.calls(), ["check"]);
 }
 
 #[test]

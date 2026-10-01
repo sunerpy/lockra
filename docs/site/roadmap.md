@@ -12,7 +12,7 @@ features are scheduled; suggestions are welcome in the
 
 ## Deliberately left out
 
-- **Syncing between devices.** Lockra keeps the vault on one computer and never goes online; move
+- **Syncing between devices.** Lockra keeps the vault on one computer and syncs nothing; move
   accounts with an export or a backup.
 - **Phone apps.** Lockra exports to the authenticator on your phone instead.
 - **A browser extension or filling in codes.** Copy a code and paste it.

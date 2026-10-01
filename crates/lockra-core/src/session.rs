@@ -24,12 +24,13 @@ use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_name};
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
-use crate::ports::{Clipboard, Clock, CodeSink, KeychainStatus, SecretStore};
+use crate::ports::{Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, Updater};
 use crate::settings::{Settings, SettingsStore};
 use crate::ui::{
     BackupFailure, BackupView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource, LockView, Notice, Phase,
-    Platform, RestoreView, Revealed, UiEvent, UiState,
+    Platform, RestoreView, Revealed, UiEvent, UiState, UpdateStatus, UpdateView,
 };
+use crate::update::{CHECK_INTERVAL, CHECK_RETRY, ProgressGate, UpdateRun, UpdateState, failure_code};
 
 /// The vault's file name in the data directory.
 pub const VAULT_FILE: &str = "vault.lockra";
@@ -67,6 +68,8 @@ pub struct Ports {
     pub clipboard: Arc<dyn Clipboard>,
     /// Wall-clock time.
     pub clock: Arc<dyn Clock>,
+    /// The in-app update.
+    pub updater: Arc<dyn Updater>,
 }
 
 /// How a backup is restored into an unlocked vault.
@@ -112,6 +115,7 @@ struct State {
     auto_backup_at: Option<Instant>,
     restore: Option<Restore>,
     last_activity: Instant,
+    update: UpdateState,
 }
 
 enum PhaseState {
@@ -147,6 +151,7 @@ impl Core {
             },
             Err(_) => (PhaseState::NoVault, None, false),
         };
+        let update = UpdateState::new(settings.auto_check_updates && ports.updater.method().is_some());
         let state = State {
             phase,
             settings,
@@ -163,6 +168,7 @@ impl Core {
             auto_backup_at: None,
             restore: None,
             last_activity: Instant::now(),
+            update,
         };
         let (events, _) = broadcast::channel(64);
         let shared = Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new() });
@@ -920,6 +926,11 @@ impl Core {
             if !settings.auto_backup.enabled {
                 st.auto_backup_at = None;
             }
+            if !settings.auto_check_updates {
+                st.update.next_check = None;
+            } else if !st.settings.auto_check_updates && self.shared.ports.updater.method().is_some() {
+                st.update.next_check = Some(Instant::now());
+            }
             st.settings = settings;
             if backup_turned_on {
                 self.schedule_auto_backup(&mut st);
@@ -945,6 +956,107 @@ impl Core {
     /// Stop streaming code frames.
     pub fn unsubscribe_codes(&self) {
         self.lock().codes = None;
+    }
+
+    // ---- updates --------------------------------------------------------------------------
+
+    /// Look for a newer release now; the answer arrives in the state (`update.status`).
+    pub fn update_check(&self) -> CoreResult<()> {
+        self.start_update(UpdateRun::Check { automatic: false })
+    }
+
+    /// Look for the newest release, download it, verify it and install it, then restart; the
+    /// progress arrives in the state. With nothing newer the run ends up to date.
+    pub fn update_install(&self) -> CoreResult<()> {
+        self.start_update(UpdateRun::Install)
+    }
+
+    /// One run at a time, in the background.
+    fn start_update(&self, run: UpdateRun) -> CoreResult<()> {
+        if self.shared.ports.updater.method().is_none() {
+            return Err(ErrorCode::UpdateUnavailable.into());
+        }
+        {
+            let mut st = self.lock();
+            if st.update.busy {
+                return Err(ErrorCode::UpdateBusy.into());
+            }
+            st.update.busy = true;
+        }
+        let core = self.clone();
+        tokio::spawn(async move { core.run_update(run).await });
+        Ok(())
+    }
+
+    async fn run_update(&self, run: UpdateRun) {
+        let outcome = self.update_steps(run).await;
+        let now = self.now_ms();
+        let announce = {
+            let mut st = self.lock();
+            st.update.busy = false;
+            let mut announce = None;
+            let failed = outcome.is_err();
+            match outcome {
+                Ok(Some(status)) => {
+                    if let (UpdateRun::Check { automatic: true }, UpdateStatus::Available { version, .. }) = (run, &status)
+                        && st.update.announced.as_deref() != Some(version.as_str())
+                    {
+                        st.update.announced = Some(version.clone());
+                        announce = Some(version.clone());
+                    }
+                    st.update.status = status;
+                }
+                // Installed: the shell restarts Lockra.
+                Ok(None) => {}
+                Err(failure) => st.update.status = UpdateStatus::Failed { code: failure_code(failure), at_ms: now },
+            }
+            if run == (UpdateRun::Check { automatic: true }) && st.settings.auto_check_updates {
+                st.update.next_check = Some(Instant::now() + if failed { CHECK_RETRY } else { CHECK_INTERVAL });
+            }
+            announce
+        };
+        if let Some(version) = announce {
+            self.notice(Notice::UpdateAvailable { version });
+        }
+        self.changed();
+    }
+
+    /// The run's steps; the status it ends on, or `None` once the package is installed.
+    async fn update_steps(&self, run: UpdateRun) -> Result<Option<UpdateStatus>, crate::ports::UpdateFailure> {
+        let updater = Arc::clone(&self.shared.ports.updater);
+        self.set_update(UpdateStatus::Checking);
+        let checked_at_ms = self.now_ms();
+        let Some(release) = updater.check().await? else { return Ok(Some(UpdateStatus::UpToDate { checked_at_ms })) };
+        if run != UpdateRun::Install {
+            return Ok(Some(UpdateStatus::Available { version: release.version, notes: release.notes, date: release.date, checked_at_ms }));
+        }
+        let version = release.version;
+        self.set_update(UpdateStatus::Downloading { version: version.clone(), received: 0, total: None });
+        let core = self.clone();
+        let downloading = version.clone();
+        let mut gate = ProgressGate::default();
+        updater
+            .download(Box::new(move |received, total| {
+                if gate.step(received, total) {
+                    core.set_update(UpdateStatus::Downloading { version: downloading.clone(), received, total });
+                }
+            }))
+            .await?;
+        // The process ends with the install: a change still inside the backup debounce is backed
+        // up first.
+        if self.lock().auto_backup_at.is_some() {
+            let _ = self.run_auto_backup();
+        }
+        self.set_update(UpdateStatus::Installing { version });
+        updater.install().await?;
+        Ok(None)
+    }
+
+    /// Record an intermediate status and send the state (no code frame: nothing about the codes
+    /// changed).
+    fn set_update(&self, status: UpdateStatus) {
+        self.lock().update.status = status;
+        let _ = self.shared.events.send(UiEvent::State { state: Box::new(self.state()) });
     }
 
     // ---- internals ------------------------------------------------------------------------
@@ -1074,6 +1186,7 @@ impl Core {
             backup: BackupView { last_backup_ms: st.last_backup_ms, last_auto_file: st.last_auto_file.clone(), last_auto_error: st.last_auto_error },
             restore: st.restore.as_ref().map(|r| r.view.clone()),
             auto_lock_at_ms,
+            update: UpdateView { method: self.shared.ports.updater.method(), status: st.update.status.clone() },
         }
     }
 
@@ -1145,14 +1258,19 @@ impl Core {
             deadlines.extend(st.auto_backup_at);
         }
         deadlines.extend(st.clipboard.as_ref().map(|(_, at)| *at));
+        deadlines.extend(st.update.next_check);
         deadlines.into_iter().min()
     }
 
     /// Everything that is due.
     fn on_timer(&self) {
         let now = Instant::now();
-        let (auto_lock, clear, backup, expired) = {
+        let (auto_lock, clear, backup, expired, update_check) = {
             let mut st = self.lock();
+            let update_check = st.update.next_check.is_some_and(|at| now >= at);
+            if update_check {
+                st.update.next_check = None;
+            }
             let auto_lock = matches!(st.phase, PhaseState::Unlocked(_))
                 && st.settings.auto_lock_minutes > 0
                 && now >= st.last_activity + Duration::from_secs(u64::from(st.settings.auto_lock_minutes) * 60);
@@ -1169,7 +1287,7 @@ impl Core {
                     keep
                 });
             }
-            (auto_lock, clear, backup, expired)
+            (auto_lock, clear, backup, expired, update_check)
         };
         if let Some(code) = clear
             && self.shared.ports.clipboard.clear_if(&code).unwrap_or(false)
@@ -1185,6 +1303,13 @@ impl Core {
         if auto_lock {
             self.lock_vault();
             self.notice(Notice::AutoLocked);
+        }
+        if update_check && self.start_update(UpdateRun::Check { automatic: true }).is_err() {
+            // A check or an install the user started is running: it answers the same question.
+            let mut st = self.lock();
+            if st.settings.auto_check_updates {
+                st.update.next_check = Some(now + CHECK_INTERVAL);
+            }
         }
         self.push_codes();
     }

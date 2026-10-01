@@ -16,6 +16,7 @@ import {
   uiCommandSchema,
   uiEventSchema,
   uiStateSchema,
+  updateViewSchema,
 } from "./schema";
 import { TauriBackend, type TauriTransport } from "./tauri-backend";
 
@@ -50,7 +51,26 @@ describe("IPC fixtures", () => {
       const parsed = uiEventSchema.parse(event);
       if (parsed.type === "notice") kinds.add(parsed.notice.type);
     }
-    expect(kinds.size).toBe(11);
+    expect(kinds.size).toBe(12);
+  });
+
+  it("every update view parses, each state and each install method once at least", () => {
+    const views = ipcFixtures.update.map((view) => updateViewSchema.parse(view));
+    expect(new Set(views.map((v) => v.status.state))).toEqual(
+      new Set([
+        "idle",
+        "checking",
+        "up_to_date",
+        "available",
+        "downloading",
+        "installing",
+        "failed",
+      ]),
+    );
+    expect(new Set(views.map((v) => v.method))).toEqual(
+      new Set(["deb", "rpm", "appimage", "nsis", "msi", "app", null]),
+    );
+    expect(uiStateSchema.parse(ipcFixtures.state.unlocked).update.status.state).toBe("available");
   });
 
   it("every answer parses with its schema", () => {

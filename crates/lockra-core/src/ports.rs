@@ -3,12 +3,14 @@
 //! runtime's critical path.
 
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::Mutex;
 use zeroize::Zeroizing;
 
-use crate::ui::CodesFrame;
+use crate::ui::{CodesFrame, InstallMethod};
 
 /// A port failed; the core maps it to a code.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -70,6 +72,76 @@ pub trait Clock: Send + Sync {
 pub trait CodeSink: Send + Sync {
     /// Deliver one frame; `Err` means the receiver is gone and the subscription ends.
     fn send(&self, frame: &CodesFrame) -> Result<(), PortError>;
+}
+
+/// A newer release the update source announces.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Release {
+    /// Its version (SemVer, without a `v`).
+    pub version: String,
+    /// Its release notes (Markdown), when the release has any.
+    pub notes: Option<String>,
+    /// When it was published (RFC 3339), when the release says.
+    pub date: Option<String>,
+}
+
+/// Why an update step failed; the core turns it into an error code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UpdateFailure {
+    /// The update server could not be reached, or answered with an error.
+    Network,
+    /// The answer could not be read, or has no package for this computer.
+    Invalid,
+    /// The package is not signed with the key built into the app (or for another version).
+    Signature,
+    /// The package could not be installed.
+    Install,
+    /// The user cancelled the administrator prompt.
+    Cancelled,
+}
+
+/// An update step that waits on the network or on an installer.
+pub type UpdateFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, UpdateFailure>> + Send + 'a>>;
+
+/// Download progress: bytes so far, and the size when the server says.
+pub type UpdateProgress = Box<dyn FnMut(u64, Option<u64>) + Send>;
+
+/// The update source: the shell's tauri-plugin-updater, which reads the release manifest and
+/// checks every package against the public key built into the app. Nothing here runs unless the
+/// core asks, and the core asks only when the user does (or turned automatic checks on).
+pub trait Updater: Send + Sync {
+    /// How this copy installs an update; `None` when it cannot update itself.
+    fn method(&self) -> Option<InstallMethod>;
+    /// Ask for a newer release; `None` when this is the newest.
+    fn check(&self) -> UpdateFuture<'_, Option<Release>>;
+    /// Download the release the last `check` found and verify its signature.
+    fn download(&self, progress: UpdateProgress) -> UpdateFuture<'_, ()>;
+    /// Install the downloaded package and restart Lockra. On Windows the installer takes over and
+    /// this does not return.
+    fn install(&self) -> UpdateFuture<'_, ()>;
+}
+
+/// A copy that cannot update itself: the tests' default, and the shell's when the build has no
+/// update key or was not installed from a package.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoUpdater;
+
+impl Updater for NoUpdater {
+    fn method(&self) -> Option<InstallMethod> {
+        None
+    }
+
+    fn check(&self) -> UpdateFuture<'_, Option<Release>> {
+        Box::pin(async { Err(UpdateFailure::Invalid) })
+    }
+
+    fn download(&self, _progress: UpdateProgress) -> UpdateFuture<'_, ()> {
+        Box::pin(async { Err(UpdateFailure::Invalid) })
+    }
+
+    fn install(&self) -> UpdateFuture<'_, ()> {
+        Box::pin(async { Err(UpdateFailure::Install) })
+    }
 }
 
 /// The system clock.
@@ -160,5 +232,14 @@ mod tests {
     #[test]
     fn the_system_clock_is_after_2025() {
         assert!(SystemClock.now_ms() > 1_735_689_600_000);
+    }
+
+    #[tokio::test]
+    async fn no_updater_cannot_update() {
+        let updater = NoUpdater;
+        assert_eq!(updater.method(), None);
+        assert_eq!(updater.check().await, Err(UpdateFailure::Invalid));
+        assert_eq!(updater.download(Box::new(|_, _| {})).await, Err(UpdateFailure::Invalid));
+        assert_eq!(updater.install().await, Err(UpdateFailure::Install));
     }
 }
