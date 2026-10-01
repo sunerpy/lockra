@@ -21,7 +21,7 @@
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
-gh attestation verify Lockra_0.1.0_amd64.deb --repo sunerpy/lockra
+gh attestation verify Lockra_*_amd64.deb --repo sunerpy/lockra
 ```
 
 ## Windows
@@ -39,8 +39,8 @@ gh attestation verify Lockra_0.1.0_amd64.deb --repo sunerpy/lockra
 安装适合你所用发行版的安装包，例如：
 
 ```bash
-sudo apt install ./Lockra_0.1.0_amd64.deb      # Debian、Ubuntu
-sudo dnf install ./Lockra-0.1.0-1.x86_64.rpm    # Fedora
+sudo apt install ./Lockra_*_amd64.deb      # Debian、Ubuntu
+sudo dnf install ./Lockra-*-1.x86_64.rpm    # Fedora
 ```
 
 AppImage 无需安装：添加可执行权限后直接运行。Lockra 需要 WebKitGTK 4.1，deb 和 rpm 安装包会自动安装它。要使用「在本机记住」，桌面环境需要提供 Secret Service 钥匙串，例如 GNOME 钥匙圈或 KWallet。

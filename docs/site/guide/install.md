@@ -24,7 +24,7 @@ build attestation that proves it was built from the release's source by its rele
 
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
-gh attestation verify Lockra_0.1.0_amd64.deb --repo sunerpy/lockra
+gh attestation verify Lockra_*_amd64.deb --repo sunerpy/lockra
 ```
 
 ## Windows
@@ -48,8 +48,8 @@ message about Lockra and choose **Open Anyway**. Later starts open normally.
 Install the package for your distribution, for example:
 
 ```bash
-sudo apt install ./Lockra_0.1.0_amd64.deb      # Debian, Ubuntu
-sudo dnf install ./Lockra-0.1.0-1.x86_64.rpm    # Fedora
+sudo apt install ./Lockra_*_amd64.deb      # Debian, Ubuntu
+sudo dnf install ./Lockra-*-1.x86_64.rpm    # Fedora
 ```
 
 The AppImage runs without installing: make it executable and start it. Lockra needs WebKitGTK 4.1,

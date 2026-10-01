@@ -47,7 +47,7 @@ Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号
 
    ```bash
    sha256sum -c SHA256SUMS --ignore-missing
-   gh attestation verify Lockra_0.1.0_amd64.deb --repo sunerpy/lockra
+   gh attestation verify Lockra_*_amd64.deb --repo sunerpy/lockra
    ```
 
    安装包目前尚未签名，首次启动时 Windows SmartScreen 和 macOS Gatekeeper 会提示确认

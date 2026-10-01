@@ -53,7 +53,7 @@ folder you choose.
 
    ```bash
    sha256sum -c SHA256SUMS --ignore-missing
-   gh attestation verify Lockra_0.1.0_amd64.deb --repo sunerpy/lockra
+   gh attestation verify Lockra_*_amd64.deb --repo sunerpy/lockra
    ```
 
    The packages are not code-signed yet: Windows SmartScreen and macOS Gatekeeper ask before the
