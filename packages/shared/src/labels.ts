@@ -90,32 +90,7 @@ export function noticeText(t: TFunction, notice: Notice): string {
       return t("notice.exportExpired");
     case "device_unlock_turned_off":
       return t("notice.deviceUnlockTurnedOff");
-    case "update_available":
-      return t("notice.updateAvailable", { version: notice.version });
   }
-}
-
-/**
- * A release's notes as plain lines: the Markdown release-please writes, without the link syntax,
- * the emphasis, the pull request and commit references, or the heading that repeats the version.
- * The interface renders the lines as text, never as HTML.
- */
-export function releaseNotesLines(markdown: string): string[] {
-  return markdown
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => !/^#+\s*\[?v?\d+\.\d+\.\d+/.test(line))
-    .map((line) =>
-      line
-        .replace(/\s*\(\[[^\]]*\]\([^)]*\)\)/g, "")
-        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/^#+\s*/, "")
-        .replace(/^[*-]\s+/, "• ")
-        .trim(),
-    )
-    .filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== ""))
-    .filter((line, index, lines) => !(line === "" && (index === 0 || index === lines.length - 1)));
 }
 
 /** `512 KB`, `4.0 MB`: a download's size for people. */

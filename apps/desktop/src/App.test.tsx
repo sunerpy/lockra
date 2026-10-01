@@ -27,6 +27,9 @@ describe("App", () => {
   it("turns core notices into toasts", async () => {
     const { backend } = renderApp();
     await screen.findByTestId("page-codes");
+    // The page appears in the render that switches to Chinese; the notice listener follows the
+    // translator in the effects after it. Let them run, or the toast can still be in English.
+    await act(async () => {});
     act(() => backend.emitNotice({ type: "auto_locked" }));
     expect(screen.getByText("长时间没有操作，保险库已自动锁定")).toBeInTheDocument();
   });

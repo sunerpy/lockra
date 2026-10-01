@@ -81,14 +81,17 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
 - Grid tracks use `minmax(0, 1fr)`, never bare `1fr` (a bare track takes its widest content's
   width and overflows a narrow window).
 - The sidebar brand row and the title bar form one 40 px drag strip (`data-tauri-drag-region`).
+  The title bar's right slot holds the update note (Voltip's `UpdateBadge`: an accent-soft pill,
+  `新版本 0.3.0` / `下载中 36%` / `重启以更新`), which opens the update dialog; it is absent when
+  there is nothing to update.
 - Overlays (`overlay-stack`): dialogs, the command palette, the QR viewer and toasts stack over
   the shell with a 28 % scrim; Esc closes only the top one.
 - Page body: max content width 1040 px, 24 px horizontal padding, 16 px between cards.
 
 ## 3. Primitives
 
-Ported from Voltip (same anatomy and props, Voltip-only options removed): `Icon Lamp Eyebrow
-Card Panel Badge Chip Button IconButton Toggle Segmented Input Select Menu Popover Keycap(s)
+Ported from Voltip (same anatomy and props, Voltip-only options removed): `Icon Lamp LampText
+Eyebrow Card Panel Badge Chip Button IconButton Toggle Segmented Input Select Menu Popover Keycap(s)
 Banner StatusRow SettingsLayout EmptyState Progress Table ThemeTile ThemeSwitch Dialog Toast
 CommandPalette Sidebar Toolbar TitleBar OptionCard`, plus `Logo` (Voltip's navy plate with a
 pale lock body and an orange countdown arc).

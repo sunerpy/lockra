@@ -115,7 +115,7 @@ fn settings() -> Settings {
         hide_codes: true,
         sort: SortOrder::Recent,
         auto_backup: AutoBackup { enabled: true, dir: Some("/home/user/Backups/Lockra".into()), keep: 7 },
-        auto_check_updates: true,
+        auto_update: true,
     }
 }
 
@@ -134,6 +134,7 @@ fn update_statuses() -> Vec<UpdateStatus> {
         UpdateStatus::Available { version: "0.2.1".into(), notes: None, date: None, checked_at_ms: T0 },
         UpdateStatus::Downloading { version: "0.2.0".into(), received: 0, total: None },
         UpdateStatus::Downloading { version: "0.2.0".into(), received: 4_194_304, total: Some(11_508_084) },
+        UpdateStatus::Ready { version: "0.2.0".into() },
         UpdateStatus::Installing { version: "0.2.0".into() },
         UpdateStatus::Failed { code: ErrorCode::UpdateSignature, at_ms: T0 - 5_000 },
     ]
@@ -234,7 +235,6 @@ fn notices() -> Vec<Notice> {
         Notice::AutoLocked,
         Notice::ExportExpired { session: id(100) },
         Notice::DeviceUnlockTurnedOff,
-        Notice::UpdateAvailable { version: "0.2.0".into() },
     ]
 }
 
@@ -457,7 +457,7 @@ async fn dispatch_answers_and_leaks_nothing() {
             tokio::task::yield_now().await;
         }
     }
-    assert_eq!(updater.calls(), ["check", "check", "download", "install"]);
+    assert_eq!(updater.calls(), ["check", "download", "install"], "the install goes on from what the check found");
     assert_eq!(run(json!({"command": "app_state"})).await.unwrap()["update"]["status"]["state"], "installing");
     assert_eq!(run(json!({"command": "restore_commit", "password": "x", "mode": "merge"})).await.unwrap_err().code, ErrorCode::NoRestore);
     assert_eq!(run(json!({"command": "backup_auto_now"})).await.unwrap_err().code, ErrorCode::BackupDirMissing);

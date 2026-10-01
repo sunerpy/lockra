@@ -6,6 +6,7 @@ export * from "./hooks/useNow";
 export * from "./hooks/useClock";
 export * from "./components/Icon";
 export * from "./components/Lamp";
+export * from "./components/LampText";
 export * from "./components/Logo";
 export * from "./components/Eyebrow";
 export * from "./components/Card";

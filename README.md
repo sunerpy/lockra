@@ -19,7 +19,7 @@
 ---
 
 Lockra is a TOTP/HOTP authenticator for Windows, macOS and Linux. Your accounts live in one
-encrypted file on your computer, and Lockra goes online only to check for updates. It imports from
+encrypted file on your computer, and Lockra goes online only for its updates. It imports from
 Google Authenticator and Microsoft Authenticator, exports back to them, and keeps encrypted backups
 in a folder you choose.
 
@@ -42,9 +42,11 @@ in a folder you choose.
   newest few. Restore by merging or by replacing.
 - **Security**: Argon2id and XChaCha20-Poly1305, optional unlock with the system keychain,
   auto-lock, and screen-capture protection while a secret is shown (Windows and macOS).
-- **Updates**: Settings › About checks for a new version when you ask (or once a day, if you turn
-  that on) and installs it only when the package carries Lockra's signature, through the package
-  Lockra was installed from (deb, rpm, AppImage, the Windows installer or the macOS app).
+- **Updates**: the title bar tells you when a new version is out and opens the update dialog
+  (its notes, the download with its speed, the restart); with automatic updates on, Lockra
+  downloads it at start and installs it when you restart. A package is installed only when it
+  carries Lockra's signature, through the package Lockra was installed from (deb, rpm, AppImage,
+  the Windows installer or the macOS app).
 - **Interface**: four themes, eight accents, Chinese and English, a command palette (`Ctrl K`) and
   keyboard shortcuts throughout.
 
@@ -78,8 +80,8 @@ in a folder you choose.
 
 3. **Build from source** ([Development](#development)).
 
-From 0.2.0, Lockra updates itself: **Settings › About › Check for updates**
-([updates](https://firlab.app/lockra/guide/updates)).
+From 0.2.0, Lockra updates itself: **Settings › General › Check for updates**, or the note in the
+title bar ([updates](https://firlab.app/lockra/guide/updates)).
 
 ## Quick start
 

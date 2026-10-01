@@ -7,7 +7,7 @@ description: Lockra keeps your two-factor codes in one encrypted file on your co
 hero:
   name: Lockra
   text: Two-factor codes that stay on your computer.
-  tagline: An encrypted authenticator for Windows, macOS and Linux. Move your accounts from Google Authenticator or Microsoft Authenticator, keep encrypted backups where you choose, and go online only to check for updates.
+  tagline: An encrypted authenticator for Windows, macOS and Linux. Move your accounts from Google Authenticator or Microsoft Authenticator, keep encrypted backups where you choose, and go online only for updates.
   actions:
     - theme: brand
       text: Download
@@ -24,7 +24,7 @@ home:
     - term: Runs on
       text: Windows 10 and 11, macOS 11 or later (Apple silicon and Intel), and Linux, on x64 and ARM64.
     - term: Your accounts
-      text: In one encrypted file on this computer. Lockra connects to nothing but GitHub, and only to check for updates.
+      text: In one encrypted file on this computer. Lockra connects to nothing but GitHub, and only for updates.
 
   visual:
     home:
@@ -107,7 +107,7 @@ home:
             status: available
             link: /security/#secrets-on-screen
           - title: Signed updates
-            body: Settings › About looks for a new version when you ask, or once a day if you turn that on, and installs only a package that carries Lockra's signature.
+            body: The title bar tells you when a new version is out, or downloads it at start if you turn on automatic updates, and Lockra installs only a package that carries its signature.
             status: available
             link: /guide/updates#updating
 
@@ -200,8 +200,8 @@ home:
         value: Where you save them
         detail: Encrypted the same way. Automatic backups go only to the folder you chose; if that folder syncs, the encrypted file syncs with it.
       - name: The network
-        value: Only to check for updates
-        detail: Lockra asks GitHub for the newest version when you check, or once a day if you turn that on; nothing from your accounts goes with it. There is no account, no sync and no telemetry, and fonts and images ship with the app.
+        value: Only for updates
+        detail: Lockra asks GitHub for the newest version when you check, or at start if you turn on automatic updates; nothing from your accounts goes with it. There is no account, no sync and no telemetry, and fonts and images ship with the app.
 
   scope:
     title: Deliberately left out

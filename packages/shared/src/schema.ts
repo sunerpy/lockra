@@ -62,7 +62,7 @@ export const settingsSchema = z.object({
   hide_codes: z.boolean(),
   sort: sortOrderSchema,
   auto_backup: autoBackupSchema,
-  auto_check_updates: z.boolean(),
+  auto_update: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -81,7 +81,7 @@ export function defaultSettings(): Settings {
     hide_codes: false,
     sort: "name",
     auto_backup: { enabled: false, dir: null, keep: 10 },
-    auto_check_updates: false,
+    auto_update: false,
   };
 }
 
@@ -294,6 +294,7 @@ export const updateStatusSchema = z.discriminatedUnion("state", [
     received: z.number().int().nonnegative(),
     total: z.number().int().nonnegative().nullable(),
   }),
+  z.object({ state: z.literal("ready"), version: z.string() }),
   z.object({ state: z.literal("installing"), version: z.string() }),
   z.object({ state: z.literal("failed"), code: errorCodeSchema, at_ms: msSchema }),
 ]);
@@ -352,7 +353,6 @@ export const noticeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("auto_locked") }),
   z.object({ type: z.literal("export_expired"), session: idSchema }),
   z.object({ type: z.literal("device_unlock_turned_off") }),
-  z.object({ type: z.literal("update_available"), version: z.string() }),
 ]);
 export type Notice = z.infer<typeof noticeSchema>;
 

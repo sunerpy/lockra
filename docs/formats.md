@@ -81,8 +81,14 @@ with it) and starts over; nothing is deleted.
 `settings.json` in the app config directory, plain JSON without secrets: theme, follow the system
 theme, accent, density, font size (12–18 px), reduce motion, locale (`system`, `zh-cn`, `en`),
 auto-lock minutes (0 = never; default 5), clipboard clearing seconds (0 = never; default 30), hide
-codes, code order (`name`, `added`, `recent`) and automatic backup `{enabled, dir, keep}` (keep
-3–50, default 10). Unknown or missing fields take their defaults.
+codes, code order (`name`, `added`, `recent`), automatic backup `{enabled, dir, keep}` (keep
+3–50, default 10) and automatic updates (`auto_update`, default off; 0.2.0 wrote it as
+`auto_check_updates`, which is still read). Unknown or missing fields take their defaults.
+
+`update-ready.json` in the data directory, next to the vault: `{"version": "0.3.0"}`, the release
+the automatic update downloaded and has not installed yet; the next start installs that version
+at once. It is removed when a check finds nothing newer or the update is installed, and a file
+that does not parse counts as none.
 
 ## 4. Backups
 

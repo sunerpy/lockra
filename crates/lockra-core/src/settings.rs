@@ -129,9 +129,11 @@ pub struct Settings {
     pub sort: SortOrder,
     /// Automatic backups.
     pub auto_backup: AutoBackup,
-    /// Look for an update 10 seconds after start and then once a day. Off: Lockra goes online only
-    /// when the user asks it to check.
-    pub auto_check_updates: bool,
+    /// Update automatically: 10 seconds after start look for a newer release and download it in the
+    /// background; it installs when the user restarts Lockra for it, or at the next start. Off:
+    /// Lockra goes online only when the user checks. 0.2.0 wrote it as `auto_check_updates`
+    /// ([`LEGACY_KEYS`]).
+    pub auto_update: bool,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -160,7 +162,7 @@ impl Default for Settings {
             hide_codes: false,
             sort: SortOrder::default(),
             auto_backup: AutoBackup::default(),
-            auto_check_updates: false,
+            auto_update: false,
         }
     }
 }
@@ -217,9 +219,22 @@ impl SettingsStore {
     }
 }
 
+/// Fields an earlier release wrote under another name: (old, current). The file is read under the
+/// current name when it has no field of that name.
+pub const LEGACY_KEYS: [(&str, &str); 1] = [("auto_check_updates", "auto_update")];
+
 /// Settings from a JSON object field by field: a field that does not parse keeps its default
 /// instead of discarding the whole file.
-fn lenient(value: serde_json::Value) -> Settings {
+fn lenient(mut value: serde_json::Value) -> Settings {
+    if let Some(given) = value.as_object_mut() {
+        for (old, current) in LEGACY_KEYS {
+            if !given.contains_key(current)
+                && let Some(old_value) = given.remove(old)
+            {
+                given.insert(current.to_owned(), old_value);
+            }
+        }
+    }
     let defaults = serde_json::to_value(Settings::default()).unwrap_or_default();
     let (Some(defaults), Some(given)) = (defaults.as_object(), value.as_object()) else { return Settings::default() };
     let mut merged = defaults.clone();
@@ -294,17 +309,21 @@ mod tests {
         assert_eq!(json["locale"], "system");
         assert_eq!(serde_json::to_value(LocaleSetting::ZhCn).unwrap(), "zh-cn");
         assert_eq!(json["auto_backup"]["keep"], 10);
-        assert_eq!(json["auto_check_updates"], false);
+        assert_eq!(json["auto_update"], false);
+        assert!(json.get("auto_check_updates").is_none(), "written under its new name only");
     }
 
     #[test]
-    fn automatic_update_checks_stay_off_until_turned_on() {
+    fn automatic_updates_stay_off_until_turned_on() {
         let dir = tempfile::tempdir().unwrap();
         // A settings file from before the setting existed.
         fs::write(dir.path().join("settings.json"), r#"{"theme":"dark","auto_lock_minutes":15}"#).unwrap();
         let store = SettingsStore::new(dir.path());
-        assert!(!store.load().auto_check_updates);
-        store.save(&Settings { auto_check_updates: true, ..Settings::default() }).unwrap();
-        assert!(store.load().auto_check_updates);
+        assert!(!store.load().auto_update);
+        store.save(&Settings { auto_update: true, ..Settings::default() }).unwrap();
+        assert!(store.load().auto_update);
+        // 0.2.0 wrote the switch as `auto_check_updates`: whoever turned it on keeps it on.
+        fs::write(dir.path().join("settings.json"), r#"{"auto_check_updates":true}"#).unwrap();
+        assert!(store.load().auto_update);
     }
 }

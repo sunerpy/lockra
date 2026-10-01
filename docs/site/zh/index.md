@@ -7,7 +7,7 @@ description: Lockra 把两步验证码保存在本机的一个加密文件中。
 hero:
   name: Lockra
   text: 两步验证码，留在你自己的电脑上。
-  tagline: 适用于 Windows、macOS 和 Linux 的加密验证器。从 Google 身份验证器或 Microsoft Authenticator 迁入账号，把加密备份放在你选择的位置，只在检查更新时联网。
+  tagline: 适用于 Windows、macOS 和 Linux 的加密验证器。从 Google 身份验证器或 Microsoft Authenticator 迁入账号，把加密备份放在你选择的位置，只为更新联网。
   actions:
     - theme: brand
       text: 下载
@@ -24,7 +24,7 @@ home:
     - term: 支持平台
       text: Windows 10 和 11、macOS 11 及以上（Apple 芯片与 Intel）、Linux，均支持 x64 和 ARM64。
     - term: 你的账号
-      text: 保存在本机的一个加密文件中。Lockra 只连接 GitHub，而且只在检查更新时连接。
+      text: 保存在本机的一个加密文件中。Lockra 只连接 GitHub，而且只为更新连接。
 
   visual:
     home:
@@ -107,7 +107,7 @@ home:
             status: available
             link: /zh/security/#屏幕上的密钥
           - title: 经过签名校验的更新
-            body: 「设置 › 关于」在你检查时，或开启自动检查后每天一次，查找新版本，并且只安装带有 Lockra 签名的安装包。
+            body: 有新版本时，标题栏会提示；开启自动更新后，Lockra 在启动时下载新版本，并且只安装带有 Lockra 签名的安装包。
             status: available
             link: /zh/guide/updates#更新
 
@@ -200,8 +200,8 @@ home:
         value: 你保存的位置
         detail: 以同样的方式加密。自动备份只写入你选择的文件夹；如果这个文件夹会同步，加密文件也会随之同步。
       - name: 网络
-        value: 仅用于检查更新
-        detail: 你检查更新时，或开启自动检查后每天一次，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。没有账户、同步或遥测，字体和图片都随应用提供。
+        value: 仅用于更新
+        detail: 你检查更新时，或开启自动更新后每次启动时，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。没有账户、同步或遥测，字体和图片都随应用提供。
 
   scope:
     title: 有意不做的功能

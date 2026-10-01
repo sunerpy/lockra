@@ -13,6 +13,7 @@ import { IconButton } from "./IconButton";
 import { Input, Textarea } from "./Input";
 import { Keycap, Keycaps, splitKeys } from "./Keycap";
 import { Lamp } from "./Lamp";
+import { LampText } from "./LampText";
 import { Panel } from "./Panel";
 import { Segmented } from "./Segmented";
 import { Select } from "./Select";
@@ -55,6 +56,23 @@ describe("Lamp / Badge / Chip", () => {
     expect(screen.getByRole("img", { name: "就绪" })).toHaveClass("bg-ok");
     expect(container.querySelector('[data-tone="idle"]')).toHaveClass("border-fg-subtle");
     expect(container.querySelector('[data-tone="off"]')).toHaveClass("bg-border");
+  });
+
+  it("lamp text pairs a dot with its words and an optional readout", () => {
+    const { container } = render(
+      <>
+        <LampText tone="ok">已是最新</LampText>
+        <LampText tone="accent" size="sm" mono pulse readout="36%">
+          正在下载
+        </LampText>
+      </>,
+    );
+    expect(screen.getByText("已是最新").parentElement).toHaveClass("text-[12px]");
+    const small = screen.getByText("正在下载").parentElement;
+    expect(small).toHaveClass("text-[11px]", "mono");
+    expect(screen.getByText("36%")).toHaveClass("mono");
+    expect(container.querySelector('[data-tone="accent"]')).toHaveStyle({ width: "6px" });
+    expect(container.querySelector('[data-tone="ok"]')).toHaveStyle({ width: "8px" });
   });
 
   it("badge ok = neutral surface + green dot, ink = primary fill", () => {

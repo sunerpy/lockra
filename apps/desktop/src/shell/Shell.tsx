@@ -27,6 +27,7 @@ import { type PageId, ShellStateProvider, isPageId, useShell } from "../app/shel
 import { useShortcuts } from "../app/shortcuts";
 import { EntryDialogs } from "../features/entries/EntryDialogs";
 import { ExportViewer } from "../features/export/ExportViewer";
+import { UpdateBadge, UpdateDialog } from "../features/update/UpdateDialog";
 import { Backup } from "../pages/Backup";
 import { Codes } from "../pages/Codes";
 import { Export } from "../pages/Export";
@@ -188,7 +189,8 @@ function ShellLayout() {
         title={pageTitle}
         platform={state.platform}
         readouts={readouts}
-        onSearch={() => shell.setPaletteOpen(true)}>
+        onSearch={() => shell.setPaletteOpen(true)}
+        right={<UpdateBadge onOpen={() => shell.setUpdateOpen(true)} />}>
         <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]">
           <main className="relative min-h-0 overflow-y-auto" data-testid="page-body">
             <div className="mx-auto w-full max-w-[1040px] px-6 py-5">
@@ -240,6 +242,7 @@ function ShellLayout() {
       <EntryDialogs />
       {shell.overlay?.type === "export" && <ExportViewer started={shell.overlay.started} />}
       {shell.overlay?.type === "settings" && <SettingsDialog section={shell.overlay.section} />}
+      <UpdateDialog open={shell.updateOpen} onClose={() => shell.setUpdateOpen(false)} />
     </div>
   );
 }

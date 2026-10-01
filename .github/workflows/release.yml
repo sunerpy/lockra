@@ -27,8 +27,10 @@
 # workspace sits at the repository root, so TAURI_PROJECT_PATH names the shell crate in
 # apps/desktop/src-tauri and rust-cache restores the root target/ (". -> target");
 # `pnpm tauri` is the root script that runs the desktop package's pinned Tauri CLI. The
-# updater is off (bundle.createUpdaterArtifacts is not set: no in-app updates), so the
-# updater job writes SHA256SUMS and attestations without a latest.json.
+# updater is on (bundle.createUpdaterArtifacts and plugins.updater in tauri.conf.json): every
+# package is signed, and the updater job writes latest.json with a key per target and per
+# installer, verifies every signature against the configured pubkey, and writes SHA256SUMS and
+# the attestations.
 name: Release
 
 on:
@@ -314,9 +316,9 @@ jobs:
 
       # Copies dmg/nsis/msi/deb/rpm/AppImage (+ .sig) into dist/ with
       # collision-free names and records name/size/sha256 per file; macOS ships
-      # its dmg alone, since only an updater build archives the .app (Lockra has
-      # no updater). Fails when a bundle is missing, or when the updater bundle
-      # of an updater build has no .sig. `python3` is the one interpreter name
+      # its dmg and the .app.tar.gz (+ .sig) the updater installs. Fails when a
+      # bundle is missing, or when a signed bundle of this updater build has no
+      # .sig. `python3` is the one interpreter name
       # present on every hosted image (Ubuntu python-is-python3, Homebrew Python
       # on macOS, the python3.exe symlink in the Windows toolcache); bare
       # `python` is not on PATH on macos-15.

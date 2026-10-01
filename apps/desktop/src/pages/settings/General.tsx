@@ -1,11 +1,21 @@
 import { LOCALE_SETTINGS, SORT_ORDERS } from "@lockra/shared";
-import { Segmented, SettingsPane, SettingsRows, StatusRow, useT, useUiState } from "@lockra/ui";
+import {
+  Segmented,
+  SettingsPane,
+  SettingsRows,
+  StatusRow,
+  Toggle,
+  useT,
+  useUiState,
+} from "@lockra/ui";
 import { useUpdateSettings } from "../../app/settings";
+import { UpdateControls } from "../../features/update/UpdateControls";
 
-/** Settings › General: the interface language and the order of the codes. */
+/** Settings › General: the interface language, the order of the codes, and automatic updates with
+ *  the updater's status and its one action (as Voltip's 通用 pane has them). */
 export function General() {
   const t = useT();
-  const { settings } = useUiState();
+  const { settings, update: updater } = useUiState();
   const update = useUpdateSettings();
   return (
     <SettingsPane title={t("settings.section.general")} lede={t("settings.general.lede")}>
@@ -31,6 +41,20 @@ export function General() {
             options={SORT_ORDERS.map((value) => ({ value, label: t(`codes.sort.${value}`) }))}
           />
         </StatusRow>
+        <StatusRow
+          label={t("settings.general.autoUpdate")}
+          help={t("settings.general.autoUpdateHelp")}
+          data-testid="update-auto">
+          <Toggle
+            checked={settings.auto_update}
+            disabled={updater.method === null}
+            onChange={(auto_update) => update({ auto_update })}
+            ariaLabel={t("settings.general.autoUpdate")}
+          />
+        </StatusRow>
+        <div className="py-4" data-testid="update-section">
+          <UpdateControls />
+        </div>
       </SettingsRows>
     </SettingsPane>
   );

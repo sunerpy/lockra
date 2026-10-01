@@ -30,4 +30,4 @@ pub use export::EXPORT_IDLE;
 pub use import::{Choice, Outcome};
 pub use lockra_vault::KdfCost;
 pub use session::{AUTO_BACKUP_DEBOUNCE, Core, CoreConfig, FREE_ATTEMPTS, MAX_IMPORT_BYTES, MIN_PASSWORD_CHARS, Ports, RestoreMode, VAULT_FILE};
-pub use update::{CHECK_INTERVAL, CHECK_RETRY, PROGRESS_MIN_STEP, STARTUP_CHECK_DELAY};
+pub use update::{MARKER_FILE as UPDATE_MARKER_FILE, PROGRESS_MIN_STEP, STARTUP_CHECK_DELAY};

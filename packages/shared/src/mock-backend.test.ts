@@ -327,16 +327,17 @@ describe("MockBackend", () => {
     });
     backend.setRelease({ version: "0.2.0", notes: "## notes", date: null, size: 100 });
     await backend.dispatch({ command: "update_check" });
+    // The install goes on from what the check found: no second check.
     await backend.dispatch({ command: "update_install" });
     expect(seen).toEqual([
       "checking",
       "up_to_date",
       "checking",
       "available",
-      "checking",
       "downloading",
       "downloading",
       "downloading",
+      "ready",
       "installing",
     ]);
     expect(await errorCode(backend.dispatch({ command: "update_check" }))).toBe("update_busy");
@@ -351,12 +352,46 @@ describe("MockBackend", () => {
       state: "failed",
       code: "update_cancelled",
     });
-    const notices: Notice[] = [];
-    failing.on((event: UiEvent) => {
-      if (event.type === "notice") notices.push(event.notice);
+  });
+
+  it("turning automatic updates on downloads to ready and installs on the restart", async () => {
+    const backend = new MockBackend({
+      updateMethod: "nsis",
+      release: { version: "0.3.0", notes: null, date: null, size: 10 },
     });
-    failing.announceUpdate("0.2.0");
-    expect(notices).toEqual([{ type: "update_available", version: "0.2.0" }]);
+    const seen: string[] = [];
+    backend.on((event: UiEvent) => {
+      if (event.type === "state") seen.push(event.state.update.status.state);
+    });
+    const settings = (await backend.getState()).settings;
+    await backend.dispatch({
+      command: "settings_set",
+      settings: { ...settings, auto_update: true },
+    });
+    expect((await backend.getState()).update.status).toEqual({ state: "ready", version: "0.3.0" });
+    await backend.dispatch({ command: "update_install" });
+    expect(seen.filter((state, i) => state !== seen[i - 1])).toEqual([
+      "idle",
+      "checking",
+      "available",
+      "downloading",
+      "ready",
+      "installing",
+    ]);
+    // A test can put the updater anywhere a run goes.
+    backend.simulateUpdate({ state: "failed", code: "update_network", at_ms: 1 });
+    expect((await backend.getState()).update.status).toEqual({
+      state: "failed",
+      code: "update_network",
+      at_ms: 1,
+    });
+    // Left off, the switch goes nowhere.
+    const off = new MockBackend({ updateMethod: "deb" });
+    await off.dispatch({
+      command: "settings_set",
+      settings: { ...(await off.getState()).settings, auto_update: false },
+    });
+    expect((await off.getState()).update.status).toEqual({ state: "idle" });
   });
 
   it("stand-in codes are stable and padded", () => {
