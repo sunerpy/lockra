@@ -185,6 +185,11 @@ impl Settings {
     }
 }
 
+/// The version `settings.json` is written at: 2 from 0.3.2, since `auto_update` means downloading.
+/// A file without it (0.2.0 to 0.3.1) cannot say the user agreed to that: its `auto_update` is read
+/// as off, until the switch is turned on again.
+pub const SETTINGS_SCHEMA: u64 = 2;
+
 /// Loads and saves `settings.json`.
 #[derive(Debug, Clone)]
 pub struct SettingsStore {
@@ -197,11 +202,20 @@ impl SettingsStore {
         Self { path: config_dir.join("settings.json") }
     }
 
-    /// The saved settings; defaults when the file is missing or unreadable.
+    /// The saved settings; defaults when the file is missing or unreadable. A file from before
+    /// [`SETTINGS_SCHEMA`] has automatic updates off.
     pub fn load(&self) -> Settings {
         let Ok(bytes) = fs::read(&self.path) else { return Settings::default() };
         match serde_json::from_slice::<serde_json::Value>(&bytes) {
-            Ok(value) => lenient(value).normalized(),
+            Ok(value) => {
+                let schema = value.get("schema").and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let mut settings = lenient(value).normalized();
+                if schema < SETTINGS_SCHEMA && settings.auto_update {
+                    tracing::info!("automatic updates were saved before 0.3.2 (possibly carried over from 0.2.0's checks): off until turned on again");
+                    settings.auto_update = false;
+                }
+                settings
+            }
             Err(error) => {
                 tracing::warn!(%error, "settings.json is not JSON; using defaults");
                 Settings::default()
@@ -209,12 +223,18 @@ impl SettingsStore {
         }
     }
 
-    /// Write the settings (atomically, like the vault).
+    /// Write the settings (atomically, like the vault), with [`SETTINGS_SCHEMA`] first.
     pub fn save(&self, settings: &Settings) -> std::io::Result<()> {
         if let Some(dir) = self.path.parent() {
             fs::create_dir_all(dir)?;
         }
-        let bytes = serde_json::to_vec_pretty(settings).map_err(std::io::Error::other)?;
+        #[derive(Serialize)]
+        struct File<'a> {
+            schema: u64,
+            #[serde(flatten)]
+            settings: &'a Settings,
+        }
+        let bytes = serde_json::to_vec_pretty(&File { schema: SETTINGS_SCHEMA, settings }).map_err(std::io::Error::other)?;
         lockra_vault::write_atomic(&self.path, &bytes)
     }
 }
@@ -312,6 +332,26 @@ mod tests {
         // 0.2.0's `auto_check_updates` only ever checked: its yes is not a yes to downloading
         // and installing, so it is not carried over.
         fs::write(dir.path().join("settings.json"), r#"{"auto_check_updates":true}"#).unwrap();
+        assert!(!store.load().auto_update);
+    }
+
+    #[test]
+    fn automatic_updates_saved_before_0_3_2_are_off_until_turned_on_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(dir.path());
+        // 0.3.0 carried 0.2.0's check-only switch over and saved it under the new name, without a
+        // schema: such a file cannot say the user agreed to downloads.
+        fs::write(dir.path().join("settings.json"), r#"{"theme":"dark","auto_update":true}"#).unwrap();
+        let loaded = store.load();
+        assert!(!loaded.auto_update);
+        assert_eq!(loaded.theme, ThemeId::Dark, "everything else is read as it was");
+        // Turned on again, the file says so with its schema, and it stays on.
+        store.save(&Settings { auto_update: true, ..loaded }).unwrap();
+        let written: serde_json::Value = serde_json::from_slice(&fs::read(dir.path().join("settings.json")).unwrap()).unwrap();
+        assert_eq!(written["schema"], SETTINGS_SCHEMA);
+        assert!(store.load().auto_update);
+        // A schema from before the change counts as none.
+        fs::write(dir.path().join("settings.json"), r#"{"schema":1,"auto_update":true}"#).unwrap();
         assert!(!store.load().auto_update);
     }
 }
