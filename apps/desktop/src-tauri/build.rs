@@ -13,12 +13,15 @@ fn main() {
             println!("cargo:rustc-link-arg-tests={}", resource.display());
         }
     }
-    // Static CRT (.cargo/config.toml `+crt-static`): Rust std and the bundled SQLite then need the
-    // static UCRT. `cargo xwin build` adds it by itself, but the Tauri CLI runs `cargo-xwin build …`,
-    // where that step does not run, and its hybrid-CRT `/DEFAULTLIB:ucrt.lib` resolves nothing under
-    // lld-link: the link failed on `strlen` and `round` (measured 2026-10-01). Naming the archive works
-    // in both forms and with MSVC's own link.exe, because the ucrt lib directory is on the link path.
-    if target_os == "windows" && std::env::var("CARGO_CFG_TARGET_FEATURE").is_ok_and(|f| f.split(',').any(|x| x == "crt-static")) {
+    // Static CRT (.cargo/config.toml `+crt-static`) and the Tauri CLI's hybrid CRT on top of it: the
+    // vcruntime static, the UCRT from Windows (`/DEFAULTLIB:ucrt.lib`). MSVC's link.exe on Windows takes
+    // that as it is. A Linux host cross-building with cargo-xwin links with lld-link, where the hybrid
+    // `/DEFAULTLIB:ucrt.lib` resolves nothing (the link failed on `strlen` and `round`), so only there
+    // the static UCRT is named. Naming it on Windows as well defines the UCRT twice: link.exe stopped
+    // with LNK2005 on `__p___argc` in the v0.1.0 release run (2026-10-01).
+    let cross_from_unix = std::env::var("HOST").is_ok_and(|host| !host.contains("windows"));
+    let crt_static = std::env::var("CARGO_CFG_TARGET_FEATURE").is_ok_and(|f| f.split(',').any(|x| x == "crt-static"));
+    if target_os == "windows" && crt_static && cross_from_unix {
         println!("cargo:rustc-link-arg=libucrt.lib");
     }
 }
