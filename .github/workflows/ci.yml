@@ -217,10 +217,20 @@ jobs:
       - name: Install dependencies (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
+      # install-action has no actionlint manifest (it would look for a crate of that name), so
+      # the release archive is fetched and checked against the SHA-256 the release publishes.
       - name: Install actionlint
-        uses: taiki-e/install-action@a2a5f6e99e1a31540baa0468acfa302cff0f359f # v2.86.4
-        with:
-          tool: actionlint@${{ env.ACTIONLINT_VERSION }}
+        env:
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSL --retry 3 -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/actionlint"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/actionlint" actionlint
+          echo "$RUNNER_TEMP/actionlint" >>"$GITHUB_PATH"
 
       - name: No colour literals in components
         run: scripts/check-no-literal-colors.sh

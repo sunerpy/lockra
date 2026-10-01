@@ -33,11 +33,13 @@ one workflow run builds, verifies and publishes everything.
 
 Versions: `package.json` is the only source (`tauri.conf.json` points at it, `Cargo.toml` stays at
 `0.0.0`). `.release-please-manifest.json` holds the last released version, `0.0.0` until the first
-release.
+release. The first release is `0.1.0` (`initial-version` in `release-please-config.json`): with no
+earlier release tag, release-please would otherwise start at `1.0.0`.
 
-## Before the first release
+## Repository setup
 
-The repository does not exist on GitHub yet. Once:
+The repository was created and configured on 2026-10-01 with these commands. They double as the
+audit list: read a setting back with the same path and `GET`.
 
 ```bash
 gh repo create sunerpy/lockra --public --source . --remote origin \
@@ -50,12 +52,12 @@ gh repo edit sunerpy/lockra \
   --add-topic google-authenticator --add-topic microsoft-authenticator
 ```
 
-Then the settings that make the pipeline fail closed (each is a decision; read the current value
-first with the same path and `GET`):
+The settings that make the pipeline fail closed:
 
 ```bash
 R=sunerpy/lockra
-# Squash only, the pull request title as the subject, branches deleted after the merge.
+# Squash only: the pull request title as the subject, its commits' messages as the body, branches
+# deleted after the merge.
 gh api -X PATCH repos/$R -F allow_squash_merge=true -F allow_merge_commit=false \
   -F allow_rebase_merge=false -F delete_branch_on_merge=true -f squash_merge_commit_title=PR_TITLE
 # A read-only default token; release-please may still open its pull request.
@@ -66,29 +68,61 @@ gh api -X PUT repos/$R/actions/permissions -F enabled=true -f allowed_actions=al
 # Pull requests from outside contributors wait for approval before they run.
 gh api -X PUT repos/$R/actions/permissions/fork-pr-contributor-approval \
   -f approval_policy=all_external_contributors
-# Only the release workflow (the GitHub Actions app, 15368) may create, move or delete v* tags.
+# v* tags cannot be moved or deleted, by anyone. Creating one stays open: release-please creates
+# the tag with GITHUB_TOKEN, and a repository owned by a user, not an organisation, cannot name the
+# GitHub Actions app as the only actor allowed to.
 gh api -X POST repos/$R/rulesets --input - <<'JSON'
 {
   "name": "release tags",
   "target": "tag",
   "enforcement": "active",
   "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
-  "rules": [{ "type": "creation" }, { "type": "update" }, { "type": "deletion" }],
-  "bypass_actors": [{ "actor_type": "Integration", "actor_id": 15368, "bypass_mode": "always" }]
+  "rules": [{ "type": "update" }, { "type": "deletion" }],
+  "bypass_actors": []
 }
 JSON
+# main: pull requests only, squash-merged, with CI Success from GitHub Actions on an up-to-date
+# branch; no deletion, no force push, nobody on the bypass list. The release job refuses to run
+# unless main is protected. Created before the first push; the checks do not apply to creating it.
+gh api -X POST repos/$R/rulesets --input - <<'JSON'
+{
+  "name": "main",
+  "target": "branch",
+  "enforcement": "active",
+  "conditions": { "ref_name": { "include": ["refs/heads/main"], "exclude": [] } },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    { "type": "pull_request", "parameters": {
+        "required_approving_review_count": 0, "dismiss_stale_reviews_on_push": false,
+        "require_code_owner_review": false, "require_last_push_approval": false,
+        "required_review_thread_resolution": false, "allowed_merge_methods": ["squash"] } },
+    { "type": "required_status_checks", "parameters": {
+        "strict_required_status_checks_policy": true, "do_not_enforce_on_create": true,
+        "required_status_checks": [{ "context": "CI Success", "integration_id": 15368 }] } }
+  ],
+  "bypass_actors": []
+}
+JSON
+# The release environment deploys from main only.
+gh api -X PUT repos/$R/environments/release --input - <<'JSON'
+{ "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true } }
+JSON
+gh api -X POST repos/$R/environments/release/deployment-branch-policies -f name=main -f type=branch
+# Private vulnerability reporting (SECURITY.md), Dependabot alerts, immutable releases.
+gh api -X PUT repos/$R/private-vulnerability-reporting
+gh api -X PUT repos/$R/vulnerability-alerts
+gh api -X PUT repos/$R/immutable-releases
 ```
 
-In the web interface:
+release-please opens its pull request with `GITHUB_TOKEN`, so the CI and PR Title runs on it wait
+in `action_required` until approved; nothing else starts them:
 
-- **Branch ruleset for `main`**: require a pull request, and require the status check
-  `CI Success` with the GitHub Actions app as its source. The release job refuses to run unless
-  `main` is protected.
-- **Settings › General › Releases**: enable immutable releases.
-- **Settings › Environments › `release`** (created by the first release run): deployment branches
-  limited to `main`.
-- **Settings › Code security**: enable private vulnerability reporting (`SECURITY.md`) and
-  Dependabot alerts.
+```bash
+gh run list --repo $R --branch release-please--branches--main--components--lockra-workspace \
+  --json databaseId,status,conclusion --jq '.[] | select(.conclusion == "action_required") | .databaseId' |
+  xargs -I{} gh api -X POST repos/$R/actions/runs/{}/approve
+```
 
 ## Secrets
 

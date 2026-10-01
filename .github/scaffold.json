@@ -11,6 +11,7 @@
     ".github/scripts/tauri-release.py",
     ".github/workflows/ci.yml",
     ".github/workflows/release.yml",
-    ".oxfmtignore"
+    ".oxfmtignore",
+    "release-please-config.json"
   ]
 }
