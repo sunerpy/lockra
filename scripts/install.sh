@@ -79,11 +79,15 @@ esac
 if [ -n "${LOCKRA_VERSION:-}" ]; then
 	version=$(printf '%s' "$LOCKRA_VERSION" | sed 's/^v//')
 else
+	# The latest release's SHA256SUMS through GitHub's latest-release redirect, and the version
+	# from the package names in it: no API call, so no rate limit (an address many computers share
+	# runs out of anonymous API calls within the hour).
 	info "finding the latest release"
-	tag=$(fetch "https://api.github.com/repos/${REPO}/releases/latest" |
-		sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
-	[ -n "$tag" ] || err "could not find the latest release"
-	version=$(printf '%s' "$tag" | sed 's/^v//')
+	latest=$(fetch "https://github.com/${REPO}/releases/latest/download/${CHECKSUM_FILE}") ||
+		err "could not find the latest release"
+	version=$(printf '%s\n' "$latest" |
+		sed -n 's/^[0-9a-fA-F]\{64\}[[:space:]][[:space:]]*\*\{0,1\}Lockra_\([0-9][^_]*\)_.*/\1/p' | head -1)
+	[ -n "$version" ] || err "could not find the latest release"
 fi
 # The version goes into URLs and file names: digits and dots, and an optional pre-release tail.
 printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' ||

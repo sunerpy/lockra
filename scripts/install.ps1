@@ -41,11 +41,20 @@ $Arch = switch ($Machine) {
 if ($env:LOCKRA_VERSION) {
   $Version = $env:LOCKRA_VERSION -replace '^v', ''
 } else {
+  # The latest release's SHA256SUMS through GitHub's latest-release redirect, and the version from
+  # the package names in it: no API call, so no rate limit (an address many computers share runs
+  # out of anonymous API calls within the hour).
   Say "finding the latest release"
-  $Release = Invoke-RestMethod -UseBasicParsing `
-    -Uri "https://api.github.com/repos/$Repo/releases/latest" `
-    -Headers @{ "User-Agent" = "lockra-install" }
-  $Version = $Release.tag_name -replace '^v', ''
+  try {
+    $Latest = (Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/$Repo/releases/latest/download/$ChecksumFile").Content
+  } catch {
+    Stop-Install "could not find the latest release"
+  }
+  # Windows PowerShell 5.1 hands an octet-stream body over as bytes.
+  if ($Latest -is [byte[]]) { $Latest = [System.Text.Encoding]::UTF8.GetString($Latest) }
+  $Found = [Regex]::Match([string]$Latest, '(?m)^[0-9a-fA-F]{64}\s+\*?Lockra_([0-9][^_\s]*)_')
+  if (-not $Found.Success) { Stop-Install "could not find the latest release" }
+  $Version = $Found.Groups[1].Value
 }
 # The version goes into URLs and file names: digits and dots, and an optional pre-release tail.
 if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$') {

@@ -17,6 +17,9 @@ function Write-Sums {
     "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 -Path $_.FullName).Hash.ToLowerInvariant(), $_.Name
   }
   Set-Content -Path (Join-Path $Release "SHA256SUMS") -Value $Lines
+  # GitHub's latest-release redirect serves the newest release's assets.
+  $Latest = New-Item -ItemType Directory -Force -Path (Join-Path $Tmp "latest/download")
+  Copy-Item (Join-Path $Release "SHA256SUMS") (Join-Path $Latest "SHA256SUMS")
 }
 Write-Sums
 
@@ -34,11 +37,16 @@ function Invoke-RestMethod {
 
 function Invoke-WebRequest {
   param($Uri, $OutFile, [switch]$UseBasicParsing)
-  $Path = $Uri -replace '^https://github\.com/sunerpy/lockra/releases/download/', ''
+  $Path = $Uri -replace '^https://github\.com/sunerpy/lockra/releases/(download/)?', ''
   $Source = Join-Path $global:LockraTestRoot $Path
-  if (-not (Test-Path $Source)) { throw "404 $Uri" }
-  Copy-Item $Source $OutFile
   $global:LockraTestCalls.Add("get $Path")
+  if (-not (Test-Path $Source)) { throw "404 $Uri" }
+  if ($OutFile) {
+    Copy-Item $Source $OutFile
+  } else {
+    # An asset's body, as Windows PowerShell 5.1 hands an octet-stream over: bytes.
+    [pscustomobject]@{ Content = [System.IO.File]::ReadAllBytes($Source) }
+  }
 }
 
 function Get-Process {
@@ -86,7 +94,8 @@ function Install-Lockra($Name, $Arch, $Wow = $null, $LockraVersion = $null) {
 try {
   $Error1 = Install-Lockra "x64" "AMD64"
   Check "x64 installs" ($null -eq $Error1)
-  Check "x64 asks for the latest release" ($global:LockraTestCalls -contains "api https://api.github.com/repos/sunerpy/lockra/releases/latest")
+  Check "x64 finds the latest release from its checksums" ($global:LockraTestCalls -contains "get latest/download/SHA256SUMS")
+  Check "x64 asks no rate-limited API" (-not ($global:LockraTestCalls | Where-Object { $_ -like "api *" }))
   Check "x64 downloads its installer" ($global:LockraTestCalls -contains "get v$Version/Lockra_${Version}_x64-setup.exe")
   Check "x64 runs it silently" ($global:LockraTestCalls -contains "start Lockra_${Version}_x64-setup.exe /S")
   Check "x64 starts Lockra" ($global:LockraTestCalls -contains "start lockra-desktop.exe")
@@ -94,10 +103,15 @@ try {
   $Error2 = Install-Lockra "arm64" "ARM64" -LockraVersion "v$Version"
   Check "ARM64 installs a given version" ($null -eq $Error2)
   Check "ARM64 takes the ARM64 installer" ($global:LockraTestCalls -contains "start Lockra_${Version}_arm64-setup.exe /S")
-  Check "a given version asks no API" (-not ($global:LockraTestCalls | Where-Object { $_ -like "api *" }))
+  Check "a given version does not look up the latest" (-not ($global:LockraTestCalls | Where-Object { $_ -like "*latest*" }))
 
   $Error3 = Install-Lockra "wow" "x86" -Wow "ARM64" -LockraVersion $Version
   Check "a 32-bit shell on ARM64 takes the ARM64 installer" (($null -eq $Error3) -and ($global:LockraTestCalls -contains "start Lockra_${Version}_arm64-setup.exe /S"))
+
+  Set-Content -Path (Join-Path $Tmp "latest/download/SHA256SUMS") -Value "not a checksum list"
+  $ErrorLatest = Install-Lockra "no-latest" "AMD64"
+  Check "a latest release without packages is refused" ($ErrorLatest -like "*could not find the latest release*")
+  Write-Sums
 
   $Error4 = Install-Lockra "x86" "x86"
   Check "32-bit Windows is refused" ($Error4 -like "*64-bit Windows on x64 and ARM64 only*")

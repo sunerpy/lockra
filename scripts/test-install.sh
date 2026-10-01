@@ -33,7 +33,9 @@ if [ "\${1:-}" = --appimage-extract ]; then mkdir -p "squashfs-root/\$(dirname "
 EOF
 done
 (cd "$release" && sha256sum Lockra* >SHA256SUMS)
-printf '{"url": "https://api.github.com/repos/sunerpy/lockra/releases/1", "tag_name": "v%s"}\n' "$VERSION" >"$tmp/release/latest.json"
+# GitHub's latest-release redirect serves the newest release's assets.
+mkdir -p "$tmp/release/latest/download"
+cp "$release/SHA256SUMS" "$tmp/release/latest/download/SHA256SUMS"
 
 # ---- the commands ---------------------------------------------------------------------------
 fake="$tmp/fake"
@@ -52,7 +54,7 @@ while [ \$# -gt 0 ]; do
 done
 echo "curl \$url" >>"$log"
 case "\$url" in
-https://api.github.com/repos/sunerpy/lockra/releases/latest) src="$tmp/release/latest.json" ;;
+https://github.com/sunerpy/lockra/releases/latest/download/*) src="$tmp/release/latest/download/\${url#https://github.com/sunerpy/lockra/releases/latest/download/}" ;;
 https://github.com/sunerpy/lockra/releases/download/*) src="$tmp/release/\${url#https://github.com/sunerpy/lockra/releases/download/}" ;;
 *) echo "curl: unexpected URL \$url" >&2; exit 2 ;;
 esac
@@ -155,7 +157,9 @@ logged() {
 # ---- Linux ----------------------------------------------------------------------------------
 run apt Linux x86_64 apt-get
 expect_ok "x64 with apt"
-logged "x64 with apt" "curl https://api.github.com/repos/sunerpy/lockra/releases/latest"
+logged "x64 with apt" "curl https://github.com/sunerpy/lockra/releases/latest/download/SHA256SUMS"
+logged "x64 with apt" "curl https://github.com/sunerpy/lockra/releases/download/v${VERSION}/Lockra_${VERSION}_amd64.deb"
+if grep -q "api.github.com" "$log"; then fail "the latest release is found without the rate-limited API"; fi
 logged "x64 with apt" "sudo apt-get update -qq"
 logged "x64 with apt" "apt-get install -y"
 logged "x64 with apt" "package: package Lockra_${VERSION}_amd64.deb"
@@ -183,7 +187,13 @@ grep -qx "Icon=lockra" "$entry" || fail "the menu entry has no icon"
 run forced Linux aarch64 apt-get LOCKRA_PACKAGE=appimage LOCKRA_INSTALL_DIR="$tmp/apps" LOCKRA_VERSION="v$VERSION"
 expect_ok "LOCKRA_PACKAGE=appimage on apt"
 grep -q "AppImage aarch64" "$tmp/apps/Lockra.AppImage" || fail "the ARM64 AppImage was not installed into LOCKRA_INSTALL_DIR"
-if grep -q -e "apt-get" -e "releases/latest" "$log"; then fail "a given version and package: no apt and no API call"; fi
+if grep -q -e "apt-get" -e "releases/latest" "$log"; then fail "a given version and package: no apt and no lookup of the latest"; fi
+
+mv "$tmp/release/latest/download/SHA256SUMS" "$tmp/sums.latest"
+printf 'not a checksum list\n' >"$tmp/release/latest/download/SHA256SUMS"
+run no-latest Linux x86_64 apt-get
+expect_failure "a latest release without packages" "could not find the latest release"
+mv "$tmp/sums.latest" "$tmp/release/latest/download/SHA256SUMS"
 
 run bad-package Linux x86_64 apt-get LOCKRA_PACKAGE=snap
 expect_failure "an unknown package" "must be deb, rpm or appimage"
