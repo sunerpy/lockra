@@ -37,8 +37,19 @@ xvfb_pid=""
 driver_pid=""
 app_pid=""
 cleanup() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    # What the driver and the app said before the failure: a crash of the app or of
+    # WebKitWebDriver shows here (the app's output goes to the driver's log).
+    for log in "$work/driver.log" "$work/app.log"; do
+      if [ -s "$log" ]; then
+        echo "smoke: the end of $(basename "$log"):"
+        tail -n 60 "$log"
+      fi
+    done
+  fi
   for pid in "$app_pid" "$driver_pid" "$xvfb_pid"; do
-    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+    if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi
   done
   rm -rf "$work"
 }
