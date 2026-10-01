@@ -82,8 +82,9 @@ with it) and starts over; nothing is deleted.
 theme, accent, density, font size (12–18 px), reduce motion, locale (`system`, `zh-cn`, `en`),
 auto-lock minutes (0 = never; default 5), clipboard clearing seconds (0 = never; default 30), hide
 codes, code order (`name`, `added`, `recent`), automatic backup `{enabled, dir, keep}` (keep
-3–50, default 10) and automatic updates (`auto_update`, default off). 0.2.0's `auto_check_updates` is not
-read: it only checked, and automatic downloads need the new switch. Unknown or missing fields take their defaults.
+3–50, default 10) and automatic updates (`auto_update`, default off). From 0.3.2 the file also carries `schema: 2`;
+a file without it (0.2.0 to 0.3.1) has `auto_update` read as off, because 0.3.0 could have carried
+0.2.0's check-only `auto_check_updates` over into it, and 0.2.0's field itself is not read. Unknown or missing fields take their defaults.
 
 `update-ready.json` in the data directory, next to the vault: `{"version": "0.3.0"}`, the release
 the automatic update downloaded and has not installed yet; the next start installs that version

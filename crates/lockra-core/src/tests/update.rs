@@ -276,6 +276,20 @@ async fn at_start_the_automatic_update_downloads_and_waits_for_the_restart() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_switch_saved_before_0_3_2_neither_checks_nor_installs_at_start() {
+    // 0.2.0 (checks only) → 0.3.0 saved `auto_update: true` without a schema → this version.
+    let h = harness();
+    fs::create_dir_all(h.dir.path().join("config")).unwrap();
+    fs::write(h.dir.path().join("config/settings.json"), r#"{"auto_update":true}"#).unwrap();
+    remember(&h, "0.2.0");
+    let updater = release_out(InstallMethod::Deb, "0.2.0");
+    let core = start(h.dir.path(), Arc::clone(&h.keychain), Arc::clone(&h.clipboard), Arc::clone(&updater));
+    assert!(!core.state().settings.auto_update);
+    advance(STARTUP_CHECK_DELAY * 10).await;
+    assert!(updater.calls().is_empty(), "nothing goes online until the switch is turned on again");
+}
+
+#[tokio::test(start_paused = true)]
 async fn the_next_start_installs_the_version_it_downloaded_before() {
     // The user quit instead of restarting: the same release is installed at the next start.
     let h = harness();

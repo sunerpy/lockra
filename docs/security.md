@@ -62,7 +62,8 @@ only through tauri-plugin-updater (`deny.toml` bans them from every other crate)
   `update-ready.json` in the data directory); a newer version than the remembered one waits for
   the user again, so a release the user has not been shown is never installed unattended. 0.2.0's
   check-only switch (`auto_check_updates`) is not carried over: agreeing to checks was not agreeing
-  to downloads. This is Voltip's design (`crates/lockra-core/src/update.rs`, `crates/lockra-core/src/tests/update.rs`).
+  to downloads. 0.3.0 did carry it over and saved it as `auto_update`, so from 0.3.2 the settings
+  file has a schema and an `auto_update` saved before it reads as off until turned on again. This is Voltip's design (`crates/lockra-core/src/update.rs`, `crates/lockra-core/src/tests/update.rs`).
 - **From Rust, not the webview.** The webview sends `update_check` / `update_install` through the
   same dispatcher as every command and has no permission for the updater plugin; the CSP still
   grants no remote host. The requests go to `https://github.com/sunerpy/lockra/releases/latest/download/latest.json`
