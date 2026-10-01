@@ -131,8 +131,8 @@ pub struct Settings {
     pub auto_backup: AutoBackup,
     /// Update automatically: 10 seconds after start look for a newer release and download it in the
     /// background; it installs when the user restarts Lockra for it, or at the next start. Off:
-    /// Lockra goes online only when the user checks. 0.2.0 wrote it as `auto_check_updates`
-    /// ([`LEGACY_KEYS`]).
+    /// Lockra goes online only when the user checks. 0.2.0's `auto_check_updates` only checked, so
+    /// it is not read: automatic downloads need this switch turned on.
     pub auto_update: bool,
 }
 
@@ -219,22 +219,9 @@ impl SettingsStore {
     }
 }
 
-/// Fields an earlier release wrote under another name: (old, current). The file is read under the
-/// current name when it has no field of that name.
-pub const LEGACY_KEYS: [(&str, &str); 1] = [("auto_check_updates", "auto_update")];
-
 /// Settings from a JSON object field by field: a field that does not parse keeps its default
 /// instead of discarding the whole file.
-fn lenient(mut value: serde_json::Value) -> Settings {
-    if let Some(given) = value.as_object_mut() {
-        for (old, current) in LEGACY_KEYS {
-            if !given.contains_key(current)
-                && let Some(old_value) = given.remove(old)
-            {
-                given.insert(current.to_owned(), old_value);
-            }
-        }
-    }
+fn lenient(value: serde_json::Value) -> Settings {
     let defaults = serde_json::to_value(Settings::default()).unwrap_or_default();
     let (Some(defaults), Some(given)) = (defaults.as_object(), value.as_object()) else { return Settings::default() };
     let mut merged = defaults.clone();
@@ -322,8 +309,9 @@ mod tests {
         assert!(!store.load().auto_update);
         store.save(&Settings { auto_update: true, ..Settings::default() }).unwrap();
         assert!(store.load().auto_update);
-        // 0.2.0 wrote the switch as `auto_check_updates`: whoever turned it on keeps it on.
+        // 0.2.0's `auto_check_updates` only ever checked: its yes is not a yes to downloading
+        // and installing, so it is not carried over.
         fs::write(dir.path().join("settings.json"), r#"{"auto_check_updates":true}"#).unwrap();
-        assert!(store.load().auto_update);
+        assert!(!store.load().auto_update);
     }
 }

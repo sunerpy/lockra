@@ -41,7 +41,8 @@ starts, Lockra looks for a newer version and downloads it in the background; the
 **Restart to update**. Nothing is installed until you choose it, or until the next start: if you
 quit Lockra instead, it installs the downloaded version when it starts again, then restarts. A
 version newer than the downloaded one waits for you again. Turning the switch on looks for a new
-version and downloads it at once.
+version and downloads it at once. Lockra 0.2.0's **Check for updates automatically** only checked,
+so it is not carried over: turn on **Automatic updates** if you want them.
 
 ### What a check sends
 
