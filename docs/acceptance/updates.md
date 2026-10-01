@@ -33,6 +33,37 @@ the manifest lookup, the download, the signature and its version, the replacemen
 the restart from it. The `.deb` and `.rpm` paths differ only in the installer the plugin runs
 (`pkexec dpkg -i`, `pkexec rpm -U`), which needs an administrator prompt this run cannot answer.
 
+## After the 0.2.0 release
+
+Checked on 2026-10-01 against the published release (release.yml run 36863249429 on 92d4438):
+
+- `https://github.com/sunerpy/lockra/releases/latest/download/latest.json` is the release's
+  `latest.json` byte for byte: version 0.2.0 and 17 keys, each pointing at a v0.2.0 asset listed
+  in `SHA256SUMS` and carrying that asset's `.sig`. The packages downloaded here (both `.deb`,
+  both `.rpm`, both Windows setup programs) match `SHA256SUMS` and verify with `minisign` against
+  the key in `tauri.conf.json`, with the trusted comment `version:0.2.0`; one changed byte is
+  refused. `gh attestation verify` traces those six packages, `latest.json` and `SHA256SUMS` to
+  `release.yml` on `main` at 92d4438.
+- The install scripts on real runners (install-scripts.yml run 36865836191): apt and the AppImage
+  on Linux x64 and ARM64, dnf on Fedora, the dmg on macOS, and the setup program on Windows x64 and
+  ARM64 each installed Lockra 0.2.0.
+- The update from GitHub itself, under Xvfb: an AppImage built from `main` as 0.1.99 with the
+  shipped updater settings (the release key, the GitHub endpoint), started the way
+  `scripts/smoke-update-linux.sh` starts it and driven with `scripts/smoke/update.py`:
+
+```sh
+(cd apps/desktop && pnpm exec tauri build --ci --bundles appimage \
+  --config '{"version":"0.1.99","bundle":{"createUpdaterArtifacts":false}}')
+```
+
+```text
+smoke-update: Lockra 0.1.99, installed as an AppImage
+smoke-update: the check found 0.2.0 (2026-10-01T12:49:44Z)
+smoke-update: install started; the app replaces its AppImage and restarts
+live-update: the AppImage on disk is now the published 0.2.0 (sha256 3d130234263e9856b72f75af6c7ea11585c504d7a28306bfd61c1971af3c890d)
+live-update: OK, 0.1.99 updated itself to the published 0.2.0 from GitHub and restarted
+```
+
 ## By hand, on each system
 
 Install the release before the one being tested with the install script, open **Settings ›
