@@ -68,6 +68,28 @@ live-update: the AppImage on disk is now the published 0.2.0 (sha256 3d130234263
 live-update: OK, 0.1.99 updated itself to the published 0.2.0 from GitHub and restarted
 ```
 
+## After the 0.3.0 release
+
+Checked on 2026-10-01 against the published release (release.yml run 36888648394 on cd1b1f9,
+the update after Voltip's design):
+
+- `releases/latest/download/latest.json` is the release's `latest.json` byte for byte: version
+  0.3.0 and 17 keys, each a v0.3.0 asset listed in `SHA256SUMS` and carrying that asset's `.sig`.
+- The install scripts on real runners (install-scripts.yml run 36890026126) installed 0.3.0 with
+  apt and the AppImage on Linux x64 and ARM64, dnf on Fedora, the dmg on macOS and the setup
+  program on Windows x64 and ARM64.
+- The path a user takes: the published 0.2.0 AppImage (sha256 `3d1302…890d`, as in 0.2.0's
+  `SHA256SUMS`), under Xvfb and driven with 0.2.0's own `scripts/smoke/update.py`, checked GitHub,
+  found 0.3.0, downloaded it, verified it with the release key, replaced itself and restarted:
+
+```text
+smoke-update: Lockra 0.2.0, installed as an AppImage
+smoke-update: the check found 0.3.0 (2026-10-01T16:08:17Z)
+smoke-update: install started; the app replaces its AppImage and restarts
+live-update: the AppImage on disk is now the published 0.3.0 (sha256 1d440f46347d958f1510c2e7efb6e924cc0c435c8c638aa425e4dcdec5329b9b)
+live-update: OK, the published 0.2.0 updated itself to the published 0.3.0 from GitHub and restarted
+```
+
 ## By hand, on each system
 
 Install the release before the one being tested with the install script (from 0.3.0: the title
