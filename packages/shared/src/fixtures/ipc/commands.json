@@ -1,0 +1,173 @@
+{
+  "commands": [
+    {
+      "command": "app_state"
+    },
+    {
+      "command": "vault_create",
+      "password": "correct horse battery"
+    },
+    {
+      "command": "vault_unlock",
+      "password": "correct horse battery"
+    },
+    {
+      "command": "vault_unlock_device"
+    },
+    {
+      "command": "vault_lock"
+    },
+    {
+      "command": "vault_change_password",
+      "current": "correct horse battery",
+      "new": "a new password"
+    },
+    {
+      "command": "vault_reset"
+    },
+    {
+      "command": "device_unlock_enable"
+    },
+    {
+      "command": "device_unlock_disable",
+      "password": "a new password"
+    },
+    {
+      "command": "entry_add_uri",
+      "uri": "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"
+    },
+    {
+      "command": "entry_add_manual",
+      "draft": {
+        "account": "me@example.com",
+        "algorithm": "sha256",
+        "digits": 8,
+        "group": "Work",
+        "issuer": "Mail",
+        "kind": {
+          "period": 30,
+          "type": "totp"
+        },
+        "secret": "GEZD GNBV GY3T QOJQ"
+      }
+    },
+    {
+      "command": "entry_update",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "patch": {
+        "favorite": true,
+        "group": "",
+        "issuer": "GitHub Enterprise"
+      }
+    },
+    {
+      "command": "entry_delete",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+    },
+    {
+      "command": "entry_hotp_next",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+    },
+    {
+      "command": "entry_copy",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+    },
+    {
+      "command": "entry_reveal",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "password": "a new password"
+    },
+    {
+      "command": "import_text",
+      "text": "otpauth://totp/A:b?secret=GEZDGNBV"
+    },
+    {
+      "command": "import_clipboard"
+    },
+    {
+      "command": "import_backup_password",
+      "password": "backup password"
+    },
+    {
+      "choices": [
+        {
+          "action": "replace",
+          "id": 2
+        },
+        {
+          "action": "skip",
+          "id": 1
+        }
+      ],
+      "command": "import_commit"
+    },
+    {
+      "command": "import_cancel"
+    },
+    {
+      "command": "export_start",
+      "entry_ids": [
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+      ],
+      "password": "a new password",
+      "target": "google"
+    },
+    {
+      "command": "export_page",
+      "index": 0,
+      "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064"
+    },
+    {
+      "command": "export_close",
+      "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064"
+    },
+    {
+      "command": "secret_view_closed"
+    },
+    {
+      "command": "backup_auto_now"
+    },
+    {
+      "command": "restore_commit",
+      "mode": "replace",
+      "password": "a new password"
+    },
+    {
+      "command": "restore_cancel"
+    },
+    {
+      "command": "settings_set",
+      "settings": {
+        "accent": "green",
+        "auto_backup": {
+          "dir": "/home/user/Backups/Lockra",
+          "enabled": true,
+          "keep": 7
+        },
+        "auto_lock_minutes": 10,
+        "clipboard_clear_seconds": 20,
+        "density": "compact",
+        "follow_system_theme": false,
+        "font_size_px": 13,
+        "hide_codes": true,
+        "locale": "zh-cn",
+        "reduce_motion": true,
+        "sort": "recent",
+        "theme": "dark"
+      }
+    },
+    {
+      "command": "activity"
+    }
+  ],
+  "shell_commands": [
+    "lockra_dispatch",
+    "codes_subscribe",
+    "codes_unsubscribe",
+    "import_pick_files",
+    "backup_save",
+    "backup_pick_dir",
+    "restore_pick",
+    "export_otpauth_file"
+  ]
+}

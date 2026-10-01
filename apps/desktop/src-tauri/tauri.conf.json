@@ -1,0 +1,49 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Lockra",
+  "version": "../../../package.json",
+  "identifier": "dev.lockra.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lockra",
+        "width": 1152,
+        "height": 720,
+        "minWidth": 960,
+        "minHeight": 600,
+        "decorations": false,
+        "shadow": true,
+        "visible": false,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "publisher": "Lockra",
+    "category": "Utility",
+    "shortDescription": "A local, encrypted two-factor authenticator",
+    "longDescription": "Lockra keeps TOTP and HOTP secrets in an encrypted vault on your own computer, imports from Google Authenticator and Microsoft Authenticator, exports back to them, and backs up to a folder you choose. It never goes online.",
+    "copyright": "Copyright 2026 The Lockra Authors",
+    "license": "Apache-2.0",
+    "windows": { "nsis": { "installMode": "currentUser" } }
+  }
+}

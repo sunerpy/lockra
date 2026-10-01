@@ -1,0 +1,31 @@
+[package]
+name = "lockra-vault"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The encrypted container shared by the vault and its backups."
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+# Cheap Argon2 parameters for the test suites of the crates above this one; never enabled by a
+# normal build (the dev-dependency feature is only activated for test targets).
+test-kdf = []
+
+[dependencies]
+argon2.workspace = true
+chacha20poly1305.workspace = true
+data-encoding.workspace = true
+getrandom.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

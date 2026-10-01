@@ -1,0 +1,132 @@
+[
+  {
+    "type": "state",
+    "state": {
+      "app_version": "0.1.0",
+      "platform": "linux",
+      "phase": "locked",
+      "data_dir": "/home/user/.local/share/dev.lockra.desktop",
+      "lock": {
+        "device_unlock": {
+          "available": true,
+          "enabled": true
+        },
+        "failed_attempts": 4,
+        "retry_at_ms": 1790000002000
+      },
+      "entries": [],
+      "settings": {
+        "theme": "light",
+        "follow_system_theme": true,
+        "accent": "default",
+        "density": "default",
+        "font_size_px": 14,
+        "reduce_motion": false,
+        "locale": "system",
+        "auto_lock_minutes": 5,
+        "clipboard_clear_seconds": 30,
+        "hide_codes": false,
+        "sort": "name",
+        "auto_backup": {
+          "enabled": false,
+          "dir": null,
+          "keep": 10
+        }
+      },
+      "import": null,
+      "backup": {
+        "last_backup_ms": null,
+        "last_auto_file": null,
+        "last_auto_error": null
+      },
+      "restore": null,
+      "auto_lock_at_ms": null
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "copied",
+      "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "clear_after_s": 30
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "copied",
+      "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "clear_after_s": null
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "clipboard_cleared"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "imported",
+      "added": 3,
+      "replaced": 1,
+      "skipped": 2
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "file_unrecognized",
+      "name": "notes.bin"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "file_unreadable",
+      "name": "huge.png"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "backup_written",
+      "file_name": "lockra-auto-20260921-134640.lockrabackup",
+      "automatic": true
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "backup_failed",
+      "code": "backup_dir_unavailable"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "restored",
+      "entries": 12
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "auto_locked"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "export_expired",
+      "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "device_unlock_turned_off"
+    }
+  }
+]

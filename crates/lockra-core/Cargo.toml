@@ -1,0 +1,38 @@
+[package]
+name = "lockra-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The application core: session, entries, import, export, backup and settings."
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+# The fakes behind the ports (clock, clipboard, keychain, code sink) for the test suites of the
+# bridge and the desktop shell.
+fakes = []
+
+[dependencies]
+lockra-otp.workspace = true
+lockra-transfer.workspace = true
+lockra-vault.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+image.workspace = true
+lockra-vault = { workspace = true, features = ["test-kdf"] }
+qrcode = { workspace = true, features = ["image"] }
+rusqlite.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

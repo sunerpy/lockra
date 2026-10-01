@@ -1,0 +1,83 @@
+# Lockra workspace: the Rust core (crates/) and the Tauri desktop shell (apps/desktop/src-tauri).
+[workspace]
+resolver = "3"
+members = [
+  "crates/lockra-otp",
+  "crates/lockra-vault",
+  "crates/lockra-transfer",
+  "crates/lockra-core",
+  "crates/lockra-bridge",
+  "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+# Static on purpose: the version is the root package.json's, which tauri.conf.json points at and
+# release-please bumps (release-please-config.json). Cargo.toml and Cargo.lock never change on a
+# release commit, so `--locked` builds of the release tag stay valid.
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.98"
+license = "Apache-2.0"
+repository = "https://github.com/sunerpy/lockra"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+
+[workspace.dependencies]
+# Key derivation for the master password (docs/formats.md): Argon2id, RFC 9106.
+argon2 = { version = "=0.6.0", default-features = false, features = ["alloc", "zeroize"] }
+# The clipboard: codes are written with the "exclude from history" hints (docs/security.md).
+arboard = { version = "=3.6.1", default-features = false, features = [
+  "wayland-data-control",
+  "image-data",
+] }
+# AEAD for the vault and the backups: XChaCha20-Poly1305 with random 192-bit nonces.
+chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc"] }
+# Base64 in its standard and URL-safe forms (Google's migration payload, Microsoft's secrets).
+data-encoding = "=2.11.1"
+getrandom = "=0.3.4"
+hmac = "=0.13.0"
+# Screenshots and photos of export QR codes: decoding only, PNG / JPEG / WebP.
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+keyring = "=4.2.0"
+parking_lot = "=0.12.5"
+percent-encoding = "=2.3.2"
+proptest = "=1.11.0"
+# Google Authenticator's migration payload is a protobuf; the messages are written by hand with
+# `#[derive(prost::Message)]`, so there is no protoc and no build script.
+prost = { version = "=0.14.4", default-features = false, features = ["derive", "std"] }
+qrcode = { version = "=0.14.1", default-features = false, features = ["svg"] }
+rxing = { version = "=0.9.3", default-features = false, features = [
+  "decoders",
+  "qrcode",
+  "multi_barcode_readers",
+  "encoding_rs",
+] }
+# Microsoft Authenticator's PhoneFactor database; `bundled` builds SQLite from C on every target.
+rusqlite = { version = "=0.40.2", features = ["bundled"] }
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
+sha1 = "=0.11.0"
+sha2 = "=0.11.0"
+tempfile = "=3.27.0"
+thiserror = "=2.0.21"
+tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tracing = "=0.1.44"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+uuid = { version = "=1.26.1", features = ["v4", "serde"] }
+zeroize = { version = "=1.9.0", features = ["derive", "serde"] }
+
+lockra-otp = { path = "crates/lockra-otp" }
+lockra-vault = { path = "crates/lockra-vault" }
+lockra-transfer = { path = "crates/lockra-transfer" }
+lockra-core = { path = "crates/lockra-core" }
+lockra-bridge = { path = "crates/lockra-bridge" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

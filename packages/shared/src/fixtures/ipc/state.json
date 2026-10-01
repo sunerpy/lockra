@@ -1,0 +1,379 @@
+{
+  "locked": {
+    "app_version": "0.1.0",
+    "auto_lock_at_ms": null,
+    "backup": {
+      "last_auto_error": null,
+      "last_auto_file": null,
+      "last_backup_ms": null
+    },
+    "data_dir": "/home/user/.local/share/dev.lockra.desktop",
+    "entries": [],
+    "import": null,
+    "lock": {
+      "device_unlock": {
+        "available": true,
+        "enabled": true
+      },
+      "failed_attempts": 4,
+      "retry_at_ms": 1790000002000
+    },
+    "phase": "locked",
+    "platform": "linux",
+    "restore": null,
+    "settings": {
+      "accent": "default",
+      "auto_backup": {
+        "dir": null,
+        "enabled": false,
+        "keep": 10
+      },
+      "auto_lock_minutes": 5,
+      "clipboard_clear_seconds": 30,
+      "density": "default",
+      "follow_system_theme": true,
+      "font_size_px": 14,
+      "hide_codes": false,
+      "locale": "system",
+      "reduce_motion": false,
+      "sort": "name",
+      "theme": "light"
+    }
+  },
+  "no_vault": {
+    "app_version": "0.1.0",
+    "auto_lock_at_ms": null,
+    "backup": {
+      "last_auto_error": null,
+      "last_auto_file": null,
+      "last_backup_ms": null
+    },
+    "data_dir": "/home/user/.local/share/dev.lockra.desktop",
+    "entries": [],
+    "import": null,
+    "lock": {
+      "device_unlock": {
+        "available": true,
+        "enabled": false
+      },
+      "failed_attempts": 0,
+      "retry_at_ms": null
+    },
+    "phase": "no_vault",
+    "platform": "linux",
+    "restore": {
+      "created_at_ms": 1789136000000,
+      "file_name": "restore-me.lockrabackup",
+      "kind": "backup"
+    },
+    "settings": {
+      "accent": "default",
+      "auto_backup": {
+        "dir": null,
+        "enabled": false,
+        "keep": 10
+      },
+      "auto_lock_minutes": 5,
+      "clipboard_clear_seconds": 30,
+      "density": "default",
+      "follow_system_theme": true,
+      "font_size_px": 14,
+      "hide_codes": false,
+      "locale": "system",
+      "reduce_motion": false,
+      "sort": "name",
+      "theme": "light"
+    }
+  },
+  "unlocked": {
+    "app_version": "0.1.0",
+    "auto_lock_at_ms": 1790000600000,
+    "backup": {
+      "last_auto_error": {
+        "at_ms": 1789999940000,
+        "code": "backup_dir_unavailable"
+      },
+      "last_auto_file": "lockra-auto-20260921-114640.lockrabackup",
+      "last_backup_ms": 1789992800000
+    },
+    "data_dir": "/home/user/.local/share/dev.lockra.desktop",
+    "entries": [
+      {
+        "account": "octocat",
+        "algorithm": "sha1",
+        "created_at_ms": 1789913600000,
+        "digits": 6,
+        "export": {
+          "google": null,
+          "microsoft": null
+        },
+        "favorite": true,
+        "group": "Work",
+        "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+        "issuer": "GitHub",
+        "kind": {
+          "period": 30,
+          "type": "totp"
+        },
+        "last_used_at_ms": 1789999940000,
+        "origin": "uri",
+        "updated_at_ms": 1789996400000
+      },
+      {
+        "account": "me@outlook.com",
+        "algorithm": "sha1",
+        "created_at_ms": 1789913600000,
+        "digits": 8,
+        "export": {
+          "google": null,
+          "microsoft": "digits_not_6"
+        },
+        "favorite": false,
+        "group": null,
+        "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000002",
+        "issuer": "Microsoft",
+        "kind": {
+          "period": 30,
+          "type": "totp"
+        },
+        "last_used_at_ms": null,
+        "origin": "microsoft",
+        "updated_at_ms": 1789996400000
+      },
+      {
+        "account": "1234",
+        "algorithm": "sha256",
+        "created_at_ms": 1789913600000,
+        "digits": 6,
+        "export": {
+          "google": null,
+          "microsoft": "hotp_not_supported"
+        },
+        "favorite": false,
+        "group": null,
+        "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000003",
+        "issuer": "Bank",
+        "kind": {
+          "counter": 7,
+          "type": "hotp"
+        },
+        "last_used_at_ms": null,
+        "origin": "manual",
+        "updated_at_ms": 1789996400000
+      },
+      {
+        "account": "player",
+        "algorithm": "sha512",
+        "created_at_ms": 1789913600000,
+        "digits": 7,
+        "export": {
+          "google": "period_not_30",
+          "microsoft": "period_not_30"
+        },
+        "favorite": false,
+        "group": null,
+        "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000004",
+        "issuer": "Game",
+        "kind": {
+          "period": 60,
+          "type": "totp"
+        },
+        "last_used_at_ms": null,
+        "origin": "google",
+        "updated_at_ms": 1789996400000
+      }
+    ],
+    "import": {
+      "awaiting_password": "other.lockrabackup",
+      "candidates": [
+        {
+          "account": "octocat",
+          "algorithm": "sha1",
+          "default_action": "skip",
+          "digits": 6,
+          "id": 0,
+          "issuer": "GitHub",
+          "kind": {
+            "period": 30,
+            "type": "totp"
+          },
+          "line": null,
+          "origin": "google",
+          "source": {
+            "name": "google-1.png",
+            "type": "file"
+          },
+          "status": {
+            "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+            "type": "exists"
+          }
+        },
+        {
+          "account": "me@example.com",
+          "algorithm": "sha1",
+          "default_action": "add",
+          "digits": 6,
+          "id": 1,
+          "issuer": "Mail",
+          "kind": {
+            "period": 30,
+            "type": "totp"
+          },
+          "line": null,
+          "origin": "google",
+          "source": {
+            "name": "google-1.png",
+            "type": "file"
+          },
+          "status": {
+            "type": "new"
+          }
+        },
+        {
+          "account": "me@outlook.com",
+          "algorithm": "sha1",
+          "default_action": "add",
+          "digits": 6,
+          "id": 2,
+          "issuer": "Microsoft",
+          "kind": {
+            "period": 30,
+            "type": "totp"
+          },
+          "line": null,
+          "origin": "microsoft",
+          "source": {
+            "name": "PhoneFactor",
+            "type": "file"
+          },
+          "status": {
+            "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000002",
+            "type": "conflict"
+          }
+        },
+        {
+          "account": "me@example.com",
+          "algorithm": "sha1",
+          "default_action": "skip",
+          "digits": 6,
+          "id": 3,
+          "issuer": "Mail",
+          "kind": {
+            "period": 30,
+            "type": "totp"
+          },
+          "line": null,
+          "origin": "microsoft",
+          "source": {
+            "name": "PhoneFactor",
+            "type": "file"
+          },
+          "status": {
+            "type": "duplicate"
+          }
+        },
+        {
+          "account": "",
+          "algorithm": null,
+          "default_action": "skip",
+          "digits": null,
+          "id": 4,
+          "issuer": "",
+          "kind": null,
+          "line": 3,
+          "origin": "uri",
+          "source": {
+            "type": "text"
+          },
+          "status": {
+            "reason": "not_otpauth",
+            "type": "unsupported"
+          }
+        },
+        {
+          "account": "card",
+          "algorithm": "sha1",
+          "default_action": "add",
+          "digits": 6,
+          "id": 5,
+          "issuer": "Bank",
+          "kind": {
+            "counter": 0,
+            "type": "hotp"
+          },
+          "line": null,
+          "origin": "uri",
+          "source": {
+            "type": "clipboard"
+          },
+          "status": {
+            "type": "new"
+          }
+        },
+        {
+          "account": "account",
+          "algorithm": "sha1",
+          "default_action": "add",
+          "digits": 6,
+          "id": 6,
+          "issuer": "Old",
+          "kind": {
+            "period": 30,
+            "type": "totp"
+          },
+          "line": null,
+          "origin": "backup",
+          "source": {
+            "name": "mine.lockrabackup",
+            "type": "file"
+          },
+          "status": {
+            "type": "new"
+          }
+        }
+      ],
+      "google_batches": [
+        {
+          "id": 412337,
+          "missing": [
+            1
+          ],
+          "received": [
+            0,
+            2
+          ],
+          "size": 3
+        }
+      ]
+    },
+    "lock": {
+      "device_unlock": {
+        "available": true,
+        "enabled": true
+      },
+      "failed_attempts": 0,
+      "retry_at_ms": null
+    },
+    "phase": "unlocked",
+    "platform": "linux",
+    "restore": null,
+    "settings": {
+      "accent": "green",
+      "auto_backup": {
+        "dir": "/home/user/Backups/Lockra",
+        "enabled": true,
+        "keep": 7
+      },
+      "auto_lock_minutes": 10,
+      "clipboard_clear_seconds": 20,
+      "density": "compact",
+      "follow_system_theme": false,
+      "font_size_px": 13,
+      "hide_codes": true,
+      "locale": "zh-cn",
+      "reduce_motion": true,
+      "sort": "recent",
+      "theme": "dark"
+    }
+  }
+}

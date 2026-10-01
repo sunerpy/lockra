@@ -1,0 +1,354 @@
+# CI for Lockra: a Tauri v2 desktop app with the Cargo workspace at the repository root (five
+# crates plus the shell in apps/desktop/src-tauri) and three pnpm packages.
+#
+# Rendered from the github-project-scaffold tauri profile (ci-tauri.yml) and adapted, so the file
+# is in .github/scaffold.json "drift_allow". What differs from the template, and why:
+# - `rust` covers the whole workspace; the crates' line-coverage floor (make coverage, 90 %)
+#   replaces the plain test run because it runs the same tests, and the shell's own tests
+#   (tests/ipc.rs on Tauri's mock runtime) run beside it.
+# - `frontend` runs the tests with each package's coverage floor (vitest thresholds, 85 %).
+# - `repo` runs the repository's static gates: no colour literals in components, a release web
+#   bundle without development code, actionlint and shellcheck.
+# - `deny` checks licences, bans, sources and RustSec advisories of the shipped graph.
+# - `smoke` drives the real app under Xvfb (scripts/smoke-desktop-linux.sh): it types a master
+#   password, imports from the clipboard, compares a copied code with RFC 6238, decodes the
+#   export QR code and closes the window with its own button.
+# - `windows-check` is the template's optional early warning, enabled: the shell and the
+#   clipboard adapter carry Windows-only code.
+# There are still no macOS or Windows test legs: the release bundle matrix is the native proof.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # npm | pnpm | bun. Scripts fmt:check, lint, test, build are the contract.
+  PACKAGE_MANAGER: pnpm
+  TAURI_PROJECT_PATH: apps/desktop/src-tauri
+  RELEASE_TARGETS_FILE: .github/release-targets.json
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: "1"
+  # Cargo subcommands and tools the gates use, pinned (the Rust toolchain comes from
+  # rust-toolchain.toml through the toolchain step below).
+  CARGO_LLVM_COV_VERSION: 0.8.7
+  CARGO_DENY_VERSION: 0.19.9
+  ACTIONLINT_VERSION: 1.7.12
+  TAURI_DRIVER_VERSION: 2.0.6
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Bun
+        if: env.PACKAGE_MANAGER == 'bun'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Set up pnpm
+        if: env.PACKAGE_MANAGER == 'pnpm'
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: package.json
+
+      - name: Set up Node.js
+        if: env.PACKAGE_MANAGER != 'bun'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: ${{ env.PACKAGE_MANAGER }}
+
+      - name: Install dependencies (frozen lockfile)
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$PACKAGE_MANAGER" in
+            npm) npm ci ;;
+            pnpm) pnpm install --frozen-lockfile ;;
+            bun) bun install --frozen-lockfile ;;
+            *) echo "::error::unsupported PACKAGE_MANAGER '$PACKAGE_MANAGER'"; exit 1 ;;
+          esac
+
+      - name: Format check
+        run: '"$PACKAGE_MANAGER" run fmt:check'
+
+      - name: Lint
+        run: '"$PACKAGE_MANAGER" run lint'
+
+      # The tests, failing under each package's line-coverage floor (vitest.config.ts).
+      - name: Test with coverage floors
+        run: '"$PACKAGE_MANAGER" run test:coverage'
+
+      - name: Build
+        run: '"$PACKAGE_MANAGER" run build'
+
+  rust:
+    name: Rust (Linux)
+    # ubuntu-22.04 is the glibc floor Tauri documents for Linux bundles; keep CI
+    # on the same image so linker and webkit versions match the release leg.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Tauri Linux dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # tauri::generate_context! embeds build.frontendDist when the app is built with the
+      # custom protocol; build it first so every target below compiles the same way.
+      - name: Build frontend for embedding
+        run: pnpm run build
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08-21
+        with:
+          toolchain: 1.98.0
+          components: rustfmt,clippy,llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@a2a5f6e99e1a31540baa0468acfa302cff0f359f # v2.86.4
+        with:
+          tool: cargo-llvm-cov@${{ env.CARGO_LLVM_COV_VERSION }}
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: tauri-ci
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      # Runs every crate's tests and fails under the 90 % line floor (Makefile, CRATE_COVERAGE_MIN).
+      - name: Crate tests with the coverage floor
+        run: make coverage
+
+      # The shell is outside the crates' floor; its IPC tests run on Tauri's mock runtime.
+      - name: Shell tests
+        run: cargo test --locked -p lockra-desktop --all-targets
+
+  config:
+    name: Release config
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check tauri.conf.json, package.json and updater pubkey
+        run: >-
+          python3 .github/scripts/tauri-release.py check-config
+          --project "$TAURI_PROJECT_PATH" --targets-file "$RELEASE_TARGETS_FILE"
+
+      - name: Validate the release target manifest
+        run: python3 .github/scripts/tauri-release.py matrix --file "$RELEASE_TARGETS_FILE"
+
+      # Every leg's collect step against the real manifest with the updater off (no
+      # bundle.createUpdaterArtifacts): the macOS legs ship their dmg, missing bundles fail.
+      - name: Test bundle collection
+        run: python3 .github/scripts/test-tauri-release.py
+
+  repo:
+    name: Repository gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Install actionlint
+        uses: taiki-e/install-action@a2a5f6e99e1a31540baa0468acfa302cff0f359f # v2.86.4
+        with:
+          tool: actionlint@${{ env.ACTIONLINT_VERSION }}
+
+      - name: No colour literals in components
+        run: scripts/check-no-literal-colors.sh
+
+      # Builds the release web bundle and fails on development code or a remote URL in it.
+      - name: Release web bundle
+        run: scripts/check-web-bundle.sh
+
+      - name: actionlint
+        run: actionlint
+
+      - name: shellcheck
+        run: shellcheck scripts/*.sh .github/scripts/*.sh
+
+  deny:
+    name: Dependency policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@a2a5f6e99e1a31540baa0468acfa302cff0f359f # v2.86.4
+        with:
+          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }}
+
+      # Licences, bans (no network stack) and sources (deny.toml); advisories need the RustSec
+      # database, which only the network has.
+      - name: cargo deny
+        run: cargo deny check licenses bans sources advisories
+
+  smoke:
+    name: Desktop smoke (Xvfb)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the app's and the display stack's dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils \
+            xvfb x11-utils xdotool xclip webkit2gtk-driver
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08-21
+        with:
+          toolchain: 1.98.0
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: tauri-smoke
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
+
+      - name: Drive the app (make smoke-desktop)
+        run: make smoke-desktop
+
+      - name: Screenshots of the run
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-screens
+          path: docs/acceptance/screens/desktop
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The template's optional early warning for Windows-only compile breaks (about 6-10 minutes with
+  # a warm cache; a full Windows bundle leg is 15-36 minutes).
+  windows-check:
+    name: Windows cargo check
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master 2026-08-21
+        with:
+          toolchain: 1.98.0
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: tauri-ci-windows-check
+      - name: Create an empty frontendDist so generate_context! compiles
+        shell: bash
+        run: mkdir -p apps/desktop/dist
+      - name: Cargo check
+        shell: bash
+        run: cargo check --locked --workspace --all-targets
+
+  ci-success:
+    name: CI Success
+    needs: [frontend, rust, config, repo, deny, smoke, windows-check]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every CI job to succeed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          jq -e 'all(.[]; .result == "success")' <<<"$NEEDS_JSON"

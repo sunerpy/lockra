@@ -1,0 +1,75 @@
+{
+  "codes_frame": {
+    "at_ms": 1790000000000,
+    "codes": [
+      {
+        "code": "492039",
+        "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+        "next_code": "114415",
+        "valid_from_ms": 1789999980000,
+        "valid_until_ms": 1790000010000
+      },
+      {
+        "code": "287082",
+        "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000003",
+        "next_code": null,
+        "valid_from_ms": null,
+        "valid_until_ms": null
+      }
+    ]
+  },
+  "codes_frame_locked": {
+    "at_ms": 1790000000000,
+    "codes": []
+  },
+  "entry_added": {
+    "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000005"
+  },
+  "errors": [
+    {
+      "code": "wrong_password"
+    },
+    {
+      "code": "rate_limited",
+      "retry_at_ms": 1790000004000
+    },
+    {
+      "code": "export_expired"
+    },
+    {
+      "code": "internal"
+    }
+  ],
+  "export_page": {
+    "entry_ids": [
+      "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "0f3f1a1e-8d4b-4c8e-9f7a-000000000002"
+    ],
+    "index": 1,
+    "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064",
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+    "total": 2
+  },
+  "export_started": {
+    "excluded": [
+      {
+        "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000004",
+        "reason": "period_not_30"
+      }
+    ],
+    "pages": 2,
+    "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064",
+    "target": "google"
+  },
+  "import_outcome": {
+    "added": 3,
+    "replaced": 1,
+    "skipped": 2
+  },
+  "revealed": {
+    "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+    "secret": "JBSW Y3DP EHPK 3PXP",
+    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+    "uri": "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30"
+  }
+}

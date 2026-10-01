@@ -1,0 +1,55 @@
+[package]
+name = "lockra-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Lockra desktop shell (Windows, macOS, Linux)."
+publish = false
+
+[lints]
+workspace = true
+
+[lib]
+name = "lockra_desktop_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+tauri-codegen = "=2.6.3"
+
+[dependencies]
+# The clipboard lives on its own thread: on Linux the process that set the clipboard serves it.
+arboard.workspace = true
+keyring.workspace = true
+lockra-bridge.workspace = true
+lockra-core.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# CVE-2026-42184 / GHSA-7gmj-67g7-phm9 (remote pages reaching local-only IPC) is fixed from 2.11.1.
+tauri = { version = "=2.11.6", features = [] }
+# Native file dialogs, called from Rust only: the webview never holds a path (docs/security.md).
+tauri-plugin-dialog = "=2.7.3"
+# One process writes the vault: a second start focuses the first window instead.
+tauri-plugin-single-instance = { version = "=2.4.3", default-features = false }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+# Not used from Rust: pinned so that a `cargo update` cannot pull tauri 2.12's runtime under tauri
+# 2.11.6 (measured 2026-10-01: tauri-runtime 2.12.0 changed `primary_monitor()` to return a Result
+# and tauri 2.11.6 no longer compiles against it). Move them together with `tauri` when upgrading.
+tauri-runtime = "=2.11.3"
+tauri-runtime-wry = "=2.11.4"
+tauri-utils = "=2.9.3"
+wry = { version = "=0.55.1", default-features = false }
+tao = { version = "=0.35.3", default-features = false }
+
+[dev-dependencies]
+lockra-core = { workspace = true, features = ["fakes"] }
+lockra-vault = { workspace = true, features = ["test-kdf"] }
+tauri = { version = "=2.11.6", features = ["test"] }
+tempfile.workspace = true

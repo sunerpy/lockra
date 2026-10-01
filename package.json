@@ -1,0 +1,31 @@
+{
+  "name": "lockra-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lockra web workspace: UI kit, IPC contract and the desktop webview.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @lockra/desktop dev",
+    "tauri": "pnpm --filter @lockra/desktop tauri",
+    "build": "pnpm -r run build",
+    "fmt": "oxfmt --write --no-error-on-unmatched-pattern --ignore-path .gitignore --ignore-path .oxfmtignore .",
+    "fmt:check": "oxfmt --check --no-error-on-unmatched-pattern --ignore-path .gitignore --ignore-path .oxfmtignore .",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "test": "pnpm -r run test",
+    "test:coverage": "pnpm -r run test:coverage",
+    "check": "pnpm run fmt:check && pnpm run lint && pnpm run test:coverage && pnpm run build"
+  },
+  "devDependencies": {
+    "oxfmt": "0.70.0",
+    "oxlint": "1.85.0",
+    "oxlint-tsgolint": "7.0.2003",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=20.19.0",
+    "pnpm": ">=9"
+  },
+  "packageManager": "pnpm@9.15.9"
+}
