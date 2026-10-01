@@ -39,8 +39,10 @@ app_pid=""
 cleanup() {
   status=$?
   if [ "$status" -ne 0 ]; then
-    # What the driver and the app said before the failure: a crash of the app or of
-    # WebKitWebDriver shows here (the app's output goes to the driver's log).
+    # Which of the driver, WebKitWebDriver, the app and its web process are still running, and
+    # what the driver and the app said before the failure (the app's output goes to the driver's log).
+    echo "smoke: processes at the failure:"
+    pgrep -a -f 'tauri-driver|WebKitWebDriver|WebKitWebProcess|lockra-desktop' || echo "  none"
     for log in "$work/driver.log" "$work/app.log"; do
       if [ -s "$log" ]; then
         echo "smoke: the end of $(basename "$log"):"

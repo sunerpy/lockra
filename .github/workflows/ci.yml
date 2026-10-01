@@ -322,6 +322,12 @@ jobs:
       - name: Drive the app (make smoke-desktop)
         run: make smoke-desktop
 
+      # A process that dies mid-session (the app, its web process or WebKitWebDriver) leaves a
+      # segfault or an OOM kill here, which no log of the run shows.
+      - name: Kernel messages after a failure
+        if: failure()
+        run: sudo dmesg --ctime | grep -iE 'segfault|killed process|out of memory|general protection|traps:' | tail -n 40 || true
+
       - name: Screenshots of the run
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -59,15 +59,27 @@ class Session:
 
     def call(self, method, path, body=None):
         data = None if body is None else json.dumps(body).encode()
-        req = urllib.request.Request(self.base + path, method=method, data=data, headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                return json.loads(r.read() or b'{"value": null}')["value"]
-        except urllib.error.HTTPError as e:
-            payload = json.loads(e.read() or b"{}").get("value", {})
-            if payload.get("error") == "no such element":
-                raise NoSuchElement(path) from None
-            raise SystemExit(f"smoke: {method} {path}: {e.code} {payload}") from None
+        for attempt in range(1, 4):
+            req = urllib.request.Request(self.base + path, method=method, data=data, headers={"Content-Type": "application/json"})
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    return json.loads(r.read() or b'{"value": null}')["value"]
+            except urllib.error.HTTPError as e:
+                payload = json.loads(e.read() or b"{}").get("value", {})
+                if payload.get("error") == "no such element":
+                    raise NoSuchElement(path) from None
+                raise SystemExit(f"smoke: {method} {path}: {e.code} {payload}") from None
+            except (ConnectionResetError, urllib.error.URLError) as e:
+                reset = isinstance(e, ConnectionResetError) or isinstance(getattr(e, "reason", None), ConnectionResetError)
+                if not reset or attempt == 3:
+                    raise SystemExit(f"smoke: {method} {path}: {e}") from None
+                # tauri-driver drops a request when the pooled connection it forwards on was reset by
+                # WebKitWebDriver ("client error (SendRequest) ... Connection reset by peer" in its log),
+                # while every process keeps running (measured on CI, 2026-10-01). The request did not
+                # reach the browser, so it is sent again; a command that did run would fail loudly the
+                # second time rather than pass.
+                print(f"smoke: the driver dropped {method} {path} ({e}); sending it again", file=sys.stderr)
+                time.sleep(0.5)
 
     def s(self, path):
         return f"/session/{self.id}{path}"
