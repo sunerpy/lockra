@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/sunerpy/lockra/compare/v0.3.0...v0.3.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* **update:** 不再把 0.2.0 的自动检查开关沿用为自动更新 ([#15](https://github.com/sunerpy/lockra/issues/15)) ([54eb1de](https://github.com/sunerpy/lockra/commit/54eb1deacc10de4b70018011a4d593fa9f172fcf))
+
 ## [0.3.0](https://github.com/sunerpy/lockra/compare/v0.2.0...v0.3.0) (2026-10-01)
 
 
