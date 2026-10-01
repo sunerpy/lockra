@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/sunerpy/lockra/compare/v0.2.0...v0.3.0) (2026-10-01)
+
+
+### Features
+
+* **update:** 照 Voltip 的设计重做应用内更新与升级界面 ([#12](https://github.com/sunerpy/lockra/issues/12)) ([a34b8c1](https://github.com/sunerpy/lockra/commit/a34b8c11f5fbabf917e0a2209cf914ab9e76e515))
+
 ## [0.2.0](https://github.com/sunerpy/lockra/compare/v0.1.1...v0.2.0) (2026-10-01)
 
 
