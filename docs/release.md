@@ -22,8 +22,8 @@ one workflow run builds, verifies and publishes everything.
    - `updater` collects every leg, writes `SHA256SUMS`, attests the files (SLSA build provenance)
      and attaches them to the draft. Lockra has no in-app updater (`bundle.createUpdaterArtifacts`
      is not set), so there is no `latest.json`, and macOS ships its dmg alone: without the updater
-     Tauri does not archive the `.app`, which the dmg carries. `tauri-release.py collect` carries
-     that one change from the scaffold's template (`drift_allow` in `.github/scaffold.json`), and
+     Tauri does not archive the `.app`, which the dmg carries. `tauri-release.py collect` checks
+     that the `.app` was built and publishes nothing for it, and
      `.github/scripts/test-tauri-release.py` checks every leg against the manifest;
    - `publish-release` re-verifies every remote asset against `SHA256SUMS` and flips the draft to
      public, marking it latest unless it is a prerelease.
@@ -132,6 +132,20 @@ gh run list --repo $R --branch release-please--branches--main--components--lockr
 | `FIRLAB_DOCS_TOKEN`                                                                           | `publish-site.yml`                      | a fine-grained token for `sunerpy/firlab` only, Contents read and write; see [docs/site/README.md](site/README.md) |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_*`    | optional macOS signing and notarization | without them the app is unsigned and Gatekeeper warns                                                              |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` with `bundle.windows.signCommand` | optional Windows signing                | without them SmartScreen warns                                                                                     |
+
+`FIRLAB_DOCS_TOKEN` is the owner's fine-grained token `lockra-docs-sync` (Settings, Developer
+settings, Fine-grained tokens): repository access `sunerpy/firlab` only, permission Contents read
+and write. It expires on 2027-10-01. After that `publish-site.yml` fails at its push with an
+authentication error and publishes nothing. To renew it, open the token, choose **Regenerate
+token** with a new expiry (the old value stops working at once), and store the new value without
+printing it:
+
+```bash
+gh secret set FIRLAB_DOCS_TOKEN --repo sunerpy/lockra   # paste the value at the prompt
+```
+
+The next run that has something to push proves the new token; a run with nothing new to publish
+stops before it uses the token.
 
 ## Checking a release
 
