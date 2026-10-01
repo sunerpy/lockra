@@ -45,8 +45,9 @@ next change, or **Run automatic backup now**, writes a new backup.
 
 ## Does Lockra work offline?
 
-Always: Lockra never goes online. Codes are calculated on the computer from each account's secret
-and the time.
+Always: codes are calculated on the computer from each account's secret and the time, with no
+network. Lockra goes online only to check for an update, when you ask or after you turn automatic
+checks on.
 
 ## Where are my accounts stored?
 

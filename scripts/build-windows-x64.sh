@@ -15,7 +15,14 @@ rustup target list --installed | grep -q '^x86_64-pc-windows-msvc$' || { echo "b
 out=${1:-dist/windows-x64}
 
 scripts/check-web-bundle.sh
-(cd apps/desktop && pnpm exec tauri build --ci --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis)
+# The release signs every package for the in-app update (bundle.createUpdaterArtifacts); a local
+# build without the release key (TAURI_SIGNING_PRIVATE_KEY) builds the same packages unsigned.
+unsigned=()
+if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+  unsigned=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
+  echo "build-windows-x64: no TAURI_SIGNING_PRIVATE_KEY; the packages are not signed for the updater"
+fi
+(cd apps/desktop && pnpm exec tauri build --ci "${unsigned[@]}" --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis)
 
 version=$(node -p 'require("./package.json").version')
 release=target/x86_64-pc-windows-msvc/release

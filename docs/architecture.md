@@ -35,6 +35,7 @@ cheap handle; the shell injects the ports:
 | `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard) | `FakeClipboard`                     |
 | `Clock`                     | `SystemClock`                                                                 | `FakeClock`                         |
 | `CodeSink` (code frames)    | a Tauri `Channel`                                                             | `RecordingSink`                     |
+| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy    | `FakeUpdater`, `NoUpdater`          |
 
 State machine: **NoVault → Locked → Unlocked**. Create or restore leads from NoVault to Unlocked;
 unlock (password or device key) from Locked; lock, auto-lock and closing return to Locked; reset
@@ -42,9 +43,20 @@ returns from Locked to NoVault. Only Unlocked holds decrypted entries, the impor
 export sessions; leaving it drops them.
 
 Argon2 and file I/O run on `spawn_blocking`. One **scheduler task** owns every timer — the next
-code window, auto-lock, clipboard clearing, the automatic backup debounce, export expiry — sleeps
-until the earliest deadline, and is woken through a `Notify` whenever the state changes, so
-nothing polls. Core tests run on tokio's paused clock with the fakes.
+code window, auto-lock, clipboard clearing, the automatic backup debounce, export expiry, the
+automatic update check — sleeps until the earliest deadline, and is woken through a `Notify`
+whenever the state changes, so nothing polls. Core tests run on tokio's paused clock with the
+fakes.
+
+The in-app update is a run in the background, one at a time: `update_check` asks the `Updater`
+for a newer release (`UiState.update` goes `checking` → `up_to_date` / `available` / `failed`);
+`update_install` asks again, downloads with progress (the port verifies the signature), writes a
+pending automatic backup, then installs and lets the shell restart. With
+`Settings.auto_check_updates` (off by default) the scheduler checks 10 s after start and daily, and
+announces each newer version once (`Notice::UpdateAvailable`); it never downloads by itself. The
+port reports how this copy installs (`deb`, `rpm`, `appimage`, `nsis`, `msi`, `app`), read from the
+bundle type the bundler patched into the executable; a build from the tree has none and cannot
+update itself (`docs/security.md`, "Updates").
 
 ## The bridge and the shell
 
@@ -91,12 +103,12 @@ code stream in development (both fixed, both covered by tests).
 
 ## Tests
 
-| Layer    | How                                                                                                                      |
-| -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| crates   | unit tests and RFC vectors; core scenarios on fakes and a paused tokio clock; line coverage ≥ 90 % (`make coverage`)     |
-| contract | Rust fixtures ⇄ zod schemas, secret-leak assertions                                                                      |
-| shell    | `tests/ipc.rs` on `tauri::test::MockRuntime`: the registered commands, dispatch, typed errors, no path, the code channel |
-| web      | vitest + Testing Library on `MockBackend`, line coverage ≥ 85 % per package                                              |
-| app      | `make smoke-desktop`: the real app under Xvfb driven over WebDriver and X input (`docs/acceptance/visual-qa.md`)         |
+| Layer    | How                                                                                                                                                                                                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| crates   | unit tests and RFC vectors; core scenarios on fakes and a paused tokio clock; line coverage ≥ 90 % (`make coverage`)                                                                                                                 |
+| contract | Rust fixtures ⇄ zod schemas, secret-leak assertions                                                                                                                                                                                  |
+| shell    | `tests/ipc.rs` on `tauri::test::MockRuntime`: the registered commands, dispatch, typed errors, no path, the code channel; `tests/update.rs`: the real updater plugin against a local manifest (signature, signed version, tampering) |
+| web      | vitest + Testing Library on `MockBackend`, line coverage ≥ 85 % per package                                                                                                                                                          |
+| app      | `make smoke-desktop`: the real app under Xvfb driven over WebDriver and X input (`docs/acceptance/visual-qa.md`)                                                                                                                     |
 
 `make verify` runs every gate; `make linux-x64` and `make windows-x64` build the packages.

@@ -253,6 +253,14 @@ jobs:
       - name: shellcheck
         run: shellcheck scripts/*.sh .github/scripts/*.sh
 
+      # The one-line installers, offline: a fake GitHub and fake package managers for install.sh,
+      # and PowerShell 7 with the cmdlets that reach the network or the registry replaced for
+      # install.ps1. install-scripts.yml runs them for real on each system.
+      - name: Install scripts
+        run: |
+          scripts/test-install.sh
+          pwsh -NoProfile -File scripts/test-install.ps1
+
   deny:
     name: Dependency policy
     runs-on: ubuntu-latest

@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 
 const here = resolve(import.meta.dirname, "..");
 
-/** Lockra never goes online: every asset ships in the bundle and the CSP grants no remote host. */
+/** The webview never goes online (only the Rust updater does, when asked): every asset ships in the
+ *  bundle and the CSP grants no remote host. */
 describe("offline assets", () => {
   it("index.html references nothing remote", () => {
     const html = readFileSync(resolve(here, "index.html"), "utf8");

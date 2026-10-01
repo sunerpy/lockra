@@ -50,25 +50,37 @@ multiple-versions = "warn"
 wildcards = "warn"
 allow-wildcard-paths = true
 
-# Lockra never goes online (docs/security.md): no HTTP client or TLS stack belongs in a desktop build.
+# Lockra goes online for one thing only, the in-app update, and only when the user asks or has
+# turned automatic checks on (docs/security.md, "Network"). The HTTP client and the TLS stack may
+# come in through tauri-plugin-updater and nothing else: any other crate that pulls one into the
+# desktop graph is a design change, not a dependency bump.
 [[bans.deny]]
 name = "reqwest"
-reason = "Lockra makes no network requests; an HTTP client in the desktop graph is a design change, not a dependency bump."
+wrappers = ["tauri-plugin-updater"]
+reason = "The update check is Lockra's only network access; another HTTP client in the desktop graph is a design change."
 [[bans.deny]]
 name = "hyper"
-reason = "Lockra makes no network requests."
+wrappers = ["reqwest", "hyper-util", "hyper-rustls"]
+reason = "HTTP only for the update check, through reqwest."
 [[bans.deny]]
 name = "ureq"
-reason = "Lockra makes no network requests."
+reason = "The update check is Lockra's only network access."
 [[bans.deny]]
 name = "rustls"
-reason = "No TLS in an offline application."
+wrappers = [
+  "tauri-plugin-updater",
+  "reqwest",
+  "hyper-rustls",
+  "tokio-rustls",
+  "rustls-platform-verifier",
+]
+reason = "TLS only for the update check."
 [[bans.deny]]
 name = "native-tls"
-reason = "No TLS in an offline application."
+reason = "The update check uses rustls; no second TLS stack."
 [[bans.deny]]
 name = "openssl-sys"
-reason = "No TLS in an offline application."
+reason = "The update check uses rustls; no second TLS stack."
 
 [advisories]
 version = 2

@@ -27,6 +27,7 @@ import {
   type GoogleBatchView,
   type ImportOutcome,
   type Incompatible,
+  type InstallMethod,
   type Notice,
   type OtpKind,
   type Platform,
@@ -55,6 +56,21 @@ export interface MockOptions {
   /** Text the clipboard import reads. */
   clipboard?: string;
   now?: () => number;
+  /** How this copy installs an update; `null`: it cannot update itself (the default). */
+  updateMethod?: InstallMethod | null;
+  /** The newer release an update check finds; `null` (the default): nothing newer. */
+  release?: MockRelease | null;
+  /** Make the update fail at this step with `code`. */
+  updateFailure?: { step: "check" | "download" | "install"; code: ErrorCode };
+}
+
+/** A release the mock's update check announces. */
+export interface MockRelease {
+  version: string;
+  notes: string | null;
+  date: string | null;
+  /** The package size, for the download progress. */
+  size: number;
 }
 
 export const MOCK_PASSWORD = "correct horse battery";
@@ -225,6 +241,8 @@ export class MockBackend implements Backend {
   private restoreEntries: MockEntry[] | null = null;
   private clipboard: string | undefined;
   private readonly now: () => number;
+  private release: MockRelease | null;
+  private updateFailure: MockOptions["updateFailure"];
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -232,6 +250,8 @@ export class MockBackend implements Backend {
     this.now = options.now ?? (() => Date.now());
     this.password = options.password ?? MOCK_PASSWORD;
     this.clipboard = options.clipboard;
+    this.release = options.release ?? null;
+    this.updateFailure = options.updateFailure;
     const entries = options.entries ?? [];
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
     const phase = options.phase ?? (entries.length > 0 ? "unlocked" : "no_vault");
@@ -254,6 +274,7 @@ export class MockBackend implements Backend {
       backup: { last_backup_ms: null, last_auto_file: null, last_auto_error: null },
       restore: null,
       auto_lock_at_ms: null,
+      update: { method: options.updateMethod ?? null, status: { state: "idle" } },
     };
     this.lockedEntries = phase === "unlocked" ? [] : entries.map((e) => e.view);
     this.refreshAutoLock();
@@ -594,7 +615,57 @@ export class MockBackend implements Backend {
       case "activity":
         this.refreshAutoLock();
         return null;
+      case "update_check":
+        return this.runUpdate(false);
+      case "update_install":
+        return this.runUpdate(true);
     }
+  }
+
+  /** The core's update run, at once: each status it passes through is published in turn. */
+  private runUpdate(install: boolean): null {
+    if (this.state.update.method === null) throw new LockraError("update_unavailable");
+    const busy = ["checking", "downloading", "installing"];
+    if (busy.includes(this.state.update.status.state)) throw new LockraError("update_busy");
+    const step = (status: UiState["update"]["status"]) => {
+      this.state.update = { ...this.state.update, status };
+      this.publish();
+    };
+    const failed = (at: "check" | "download" | "install") => {
+      if (this.updateFailure?.step !== at) return false;
+      step({ state: "failed", code: this.updateFailure.code, at_ms: this.now() });
+      return true;
+    };
+    step({ state: "checking" });
+    if (failed("check")) return null;
+    const checked_at_ms = this.now();
+    const release = this.release;
+    if (release === null) {
+      step({ state: "up_to_date", checked_at_ms });
+      return null;
+    }
+    const { version, notes, date, size } = release;
+    if (!install) {
+      step({ state: "available", version, notes, date, checked_at_ms });
+      return null;
+    }
+    for (const received of [0, Math.round(size / 2), size]) {
+      step({ state: "downloading", version, received, total: size });
+    }
+    if (failed("download")) return null;
+    step({ state: "installing", version });
+    failed("install");
+    return null;
+  }
+
+  /** Test hook: what the next update check finds. */
+  setRelease(release: MockRelease | null): void {
+    this.release = release;
+  }
+
+  /** Test hook: the automatic check announced `version`. */
+  announceUpdate(version: string): void {
+    this.notice({ type: "update_available", version });
   }
 
   private unlock(password: string): null {

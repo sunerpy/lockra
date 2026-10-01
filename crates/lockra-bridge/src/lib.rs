@@ -153,11 +153,15 @@ pub enum UiCommand {
     },
     /// The user did something.
     Activity,
+    /// Look for a newer release (the answer arrives in the state).
+    UpdateCheck,
+    /// Download, verify and install the newest release, then restart.
+    UpdateInstall,
 }
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 30] = [
+pub const COMMANDS: [&str; 32] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -188,6 +192,8 @@ pub const COMMANDS: [&str; 30] = [
     "restore_cancel",
     "settings_set",
     "activity",
+    "update_check",
+    "update_install",
 ];
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
@@ -255,6 +261,8 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
             core.activity();
             Value::Null
         }
+        UiCommand::UpdateCheck => unit(core.update_check())?,
+        UiCommand::UpdateInstall => unit(core.update_install())?,
     })
 }
 

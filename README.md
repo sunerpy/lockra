@@ -19,9 +19,9 @@
 ---
 
 Lockra is a TOTP/HOTP authenticator for Windows, macOS and Linux. Your accounts live in one
-encrypted file on your computer, and Lockra never goes online. It imports from Google
-Authenticator and Microsoft Authenticator, exports back to them, and keeps encrypted backups in a
-folder you choose.
+encrypted file on your computer, and Lockra goes online only to check for updates. It imports from
+Google Authenticator and Microsoft Authenticator, exports back to them, and keeps encrypted backups
+in a folder you choose.
 
 ![Lockra's codes page](./docs/acceptance/screens/desktop/codes-1280-light.png)
 
@@ -42,12 +42,29 @@ folder you choose.
   newest few. Restore by merging or by replacing.
 - **Security**: Argon2id and XChaCha20-Poly1305, optional unlock with the system keychain,
   auto-lock, and screen-capture protection while a secret is shown (Windows and macOS).
+- **Updates**: Settings › About checks for a new version when you ask (or once a day, if you turn
+  that on) and installs it only when the package carries Lockra's signature, through the package
+  Lockra was installed from (deb, rpm, AppImage, the Windows installer or the macOS app).
 - **Interface**: four themes, eight accents, Chinese and English, a command palette (`Ctrl K`) and
   keyboard shortcuts throughout.
 
 ## Install
 
-1. **Download a package** from the [releases page](https://github.com/sunerpy/lockra/releases):
+1. **One command**: the script picks the package for your computer, checks it against the
+   release's `SHA256SUMS` and installs it
+   ([install guide](https://firlab.app/lockra/guide/install#install-with-one-command)).
+
+   ```bash
+   # Linux and macOS
+   curl -fsSL https://raw.githubusercontent.com/sunerpy/lockra/main/scripts/install.sh | sh
+   ```
+
+   ```powershell
+   # Windows (PowerShell)
+   irm https://raw.githubusercontent.com/sunerpy/lockra/main/scripts/install.ps1 | iex
+   ```
+
+2. **Download a package** from the [releases page](https://github.com/sunerpy/lockra/releases):
    the Windows installer (x64 and ARM64), a dmg for Apple silicon or Intel Macs, or a deb, rpm or
    AppImage for Linux (x64 and ARM64). Every release carries `SHA256SUMS` and build attestations:
 
@@ -59,7 +76,10 @@ folder you choose.
    The packages are not code-signed yet: Windows SmartScreen and macOS Gatekeeper ask before the
    first start ([platform notes](https://firlab.app/lockra/reference/platforms)).
 
-2. **Build from source** ([Development](#development)).
+3. **Build from source** ([Development](#development)).
+
+From 0.2.0, Lockra updates itself: **Settings › About › Check for updates**
+([updates](https://firlab.app/lockra/guide/updates)).
 
 ## Quick start
 

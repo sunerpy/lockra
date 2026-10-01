@@ -13,7 +13,7 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::fakes::{FakeClipboard, FakeClock, FakeKeychain, RecordingSink};
+use crate::fakes::{FakeClipboard, FakeClock, FakeKeychain, FakeUpdater, RecordingSink};
 use crate::ports::{ClipboardImage, SecretStore};
 use crate::settings::{AutoBackup, Settings, ThemeId};
 use crate::ui::{CandidateAction, CandidateStatus, ExportTarget, Notice, Phase, Platform, UiEvent};
@@ -24,10 +24,13 @@ const T0: u64 = 1_790_000_000_000;
 const MASTER: &str = "correct horse battery";
 const SECRET: &str = "JBSWY3DPEHPK3PXP";
 
+mod update;
+
 struct Harness {
     core: Core,
     keychain: Arc<FakeKeychain>,
     clipboard: Arc<FakeClipboard>,
+    updater: Arc<FakeUpdater>,
     events: broadcast::Receiver<UiEvent>,
     dir: tempfile::TempDir,
 }
@@ -43,7 +46,7 @@ impl Harness {
 
     /// A second core on the same directories, as after a restart.
     fn restart(&self) -> Core {
-        start(self.dir.path(), Arc::clone(&self.keychain), Arc::clone(&self.clipboard))
+        start(self.dir.path(), Arc::clone(&self.keychain), Arc::clone(&self.clipboard), Arc::clone(&self.updater))
     }
 
     /// Every notice received since the last call.
@@ -64,7 +67,7 @@ impl Harness {
     }
 }
 
-fn start(root: &Path, keychain: Arc<FakeKeychain>, clipboard: Arc<FakeClipboard>) -> Core {
+fn start(root: &Path, keychain: Arc<FakeKeychain>, clipboard: Arc<FakeClipboard>, updater: Arc<FakeUpdater>) -> Core {
     let config = CoreConfig {
         data_dir: root.join("data"),
         config_dir: root.join("config"),
@@ -72,16 +75,22 @@ fn start(root: &Path, keychain: Arc<FakeKeychain>, clipboard: Arc<FakeClipboard>
         kdf: KdfCost::FAST_INSECURE,
         platform: Platform::Linux,
     };
-    Core::start(config, Ports { secrets: keychain, clipboard, clock: Arc::new(FakeClock::new(T0)) })
+    Core::start(config, Ports { secrets: keychain, clipboard, clock: Arc::new(FakeClock::new(T0)), updater })
 }
 
 fn harness() -> Harness {
+    harness_with(FakeUpdater::default())
+}
+
+/// A core whose update source is `updater`.
+fn harness_with(updater: FakeUpdater) -> Harness {
     let dir = tempfile::tempdir().unwrap();
     let keychain = Arc::new(FakeKeychain::default());
     let clipboard = Arc::new(FakeClipboard::default());
-    let core = start(dir.path(), Arc::clone(&keychain), Arc::clone(&clipboard));
+    let updater = Arc::new(updater);
+    let core = start(dir.path(), Arc::clone(&keychain), Arc::clone(&clipboard), Arc::clone(&updater));
     let events = core.subscribe();
-    Harness { core, keychain, clipboard, events, dir }
+    Harness { core, keychain, clipboard, updater, events, dir }
 }
 
 fn pw(text: &str) -> Zeroizing<String> {

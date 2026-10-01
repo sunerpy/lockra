@@ -68,6 +68,20 @@ pub enum ErrorCode {
     BackupDirUnavailable,
     /// A file could not be read or written.
     IoFailed,
+    /// This copy cannot update itself (not installed from a package, or no update key).
+    UpdateUnavailable,
+    /// A check or an update is already running.
+    UpdateBusy,
+    /// The update server could not be reached, or answered with an error.
+    UpdateNetwork,
+    /// The update information could not be read, or has no package for this computer.
+    UpdateInvalid,
+    /// The downloaded package is not signed with Lockra's key (or for the version announced).
+    UpdateSignature,
+    /// The package could not be installed.
+    UpdateInstallFailed,
+    /// The administrator password prompt was cancelled.
+    UpdateCancelled,
     /// Anything else (a bug); details are in the log.
     Internal,
 }

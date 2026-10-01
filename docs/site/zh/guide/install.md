@@ -2,6 +2,32 @@
 
 本页介绍如何在 Windows、macOS 和 Linux 上下载并安装 Lockra，以及如何确认下载的文件未被篡改。
 
+## 一键安装
+
+安装脚本会为当前电脑选择对应的安装包，用该版本的 `SHA256SUMS` 校验，校验不一致时不安装任何内容。再次运行同一条命令即可安装更新的版本。
+
+在 Linux 和 macOS 的终端中运行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sunerpy/lockra/main/scripts/install.sh | sh
+```
+
+在 Windows 的 PowerShell 中运行：
+
+```powershell
+irm https://raw.githubusercontent.com/sunerpy/lockra/main/scripts/install.ps1 | iex
+```
+
+| 系统                                             | 脚本安装的内容                                            |
+| ------------------------------------------------ | --------------------------------------------------------- |
+| 使用 apt 的 Linux（Debian、Ubuntu）              | `.deb`，通过 apt 安装                                     |
+| 使用 dnf、zypper 或 yum 的 Linux（Fedora、SUSE） | `.rpm`                                                    |
+| 其他 Linux                                       | AppImage，放在 `~/.local/bin`，并添加到应用程序菜单       |
+| macOS                                            | dmg 中的应用，放在 `/Applications`（或 `~/Applications`） |
+| Windows                                          | 安装程序，仅为当前用户安装，无需管理员权限                |
+
+在 Linux 上安装 `.deb` 或 `.rpm` 时，系统会要求输入密码。在 macOS 上，应用打开时不会出现下文所述的“来自身份不明的开发者”提示：脚本会清除浏览器下载时附带的标记。脚本读取三个设置：`LOCKRA_VERSION=0.2.0` 安装指定版本而不是最新版本，`LOCKRA_PACKAGE=appimage`（或 `deb`、`rpm`）选择其他 Linux 安装包，`LOCKRA_INSTALL_DIR` 指定 AppImage 或应用的其他目录。在 PowerShell 中，请在运行命令前设置 `$env:LOCKRA_VERSION = "0.2.0"`。
+
 ## 下载
 
 每个版本都发布在[发布页](https://github.com/sunerpy/lockra/releases)，包含各平台的安装包：

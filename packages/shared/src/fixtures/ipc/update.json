@@ -1,0 +1,74 @@
+[
+  {
+    "method": "deb",
+    "status": {
+      "state": "idle"
+    }
+  },
+  {
+    "method": "rpm",
+    "status": {
+      "state": "checking"
+    }
+  },
+  {
+    "method": "appimage",
+    "status": {
+      "state": "up_to_date",
+      "checked_at_ms": 1789999970000
+    }
+  },
+  {
+    "method": "nsis",
+    "status": {
+      "state": "available",
+      "version": "0.2.0",
+      "notes": "## [0.2.0](https://github.com/sunerpy/lockra/compare/v0.1.1...v0.2.0) (2026-10-02)\n\n### Features\n\n* **update:** check for updates and install them\n",
+      "date": "2026-10-02T08:00:00Z",
+      "checked_at_ms": 1789999970000
+    }
+  },
+  {
+    "method": "msi",
+    "status": {
+      "state": "available",
+      "version": "0.2.1",
+      "notes": null,
+      "date": null,
+      "checked_at_ms": 1790000000000
+    }
+  },
+  {
+    "method": "app",
+    "status": {
+      "state": "downloading",
+      "version": "0.2.0",
+      "received": 0,
+      "total": null
+    }
+  },
+  {
+    "method": null,
+    "status": {
+      "state": "downloading",
+      "version": "0.2.0",
+      "received": 4194304,
+      "total": 11508084
+    }
+  },
+  {
+    "method": "deb",
+    "status": {
+      "state": "installing",
+      "version": "0.2.0"
+    }
+  },
+  {
+    "method": "rpm",
+    "status": {
+      "state": "failed",
+      "code": "update_signature",
+      "at_ms": 1789999995000
+    }
+  }
+]
