@@ -25,18 +25,19 @@ screenshot against `DESIGN.md` and Voltip's reference screens. Reproduce with `m
 
 ## Results (2026-10-01)
 
-| Check (DESIGN.md)                                                                                                         | Result                                                         |
-| ------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| §1 palettes, accents, type, radii: the four themes and the accent swatches                                                | pass (showcase, settings › appearance)                         |
-| §1 green only for 8 px lamps; warning tone in a code's last five seconds, with the next code                              | pass (`codes-long-1280-light`)                                 |
-| §1 codes in mono, 3-3 / 4-4 / 3-4 groups; HOTP rows with "next" instead of a ring                                         | pass                                                           |
-| §2 fixed sidebar and title bar, 28 px footer, only the page body scrolls                                                  | pass after fix 2 below (`codes-960-*`, `codes-200-1280-light`) |
-| §2 tracks `minmax(0, 1fr)`; content width 1040 px, 24 px padding                                                          | pass                                                           |
-| §3 every primitive's states, four themes                                                                                  | pass after fix 1 (`showcase-*`)                                |
-| §4 empty, partial (Google batch with a missing code), unsupported rows, overflow (truncation with ellipsis), 200 accounts | pass                                                           |
-| §5 focus visible, keyboard paths (palette, arrows in the list, Enter copies, Esc closes the top overlay)                  | pass (unit tests and the smoke run's keyboard steps)           |
-| Window chrome: frameless title bar, window buttons, drag strip, close exits with 0                                        | pass                                                           |
-| Chinese copy throughout; product names keep their case                                                                    | pass after fix 3                                               |
+| Check (DESIGN.md)                                                                                                           | Result                                                                                                       |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| §1 palettes, accents, type, radii: the four themes and the accent swatches                                                  | pass (showcase, settings › appearance)                                                                       |
+| §1 green only for 8 px lamps; warning tone in a code's last five seconds, with the next code                                | pass (`codes-long-1280-light`)                                                                               |
+| §1 codes in mono, 3-3 / 4-4 / 3-4 groups; HOTP rows with "next" instead of a ring                                           | pass                                                                                                         |
+| §2 fixed sidebar and title bar, 28 px footer, only the page body scrolls                                                    | pass after fix 2 below (`codes-960-*`, `codes-200-1280-light`)                                               |
+| §2 tracks `minmax(0, 1fr)`; content width 1040 px, 24 px padding                                                            | pass                                                                                                         |
+| §3 every primitive's states, four themes                                                                                    | pass after fix 1 (`showcase-*`)                                                                              |
+| §4 empty, partial (Google batch with a missing code), unsupported rows, overflow (truncation with ellipsis), 200 accounts   | pass                                                                                                         |
+| §5 focus visible, keyboard paths (palette, arrows in the list, Enter copies, Esc closes the top overlay)                    | pass (unit tests and the smoke run's keyboard steps)                                                         |
+| Window chrome: frameless title bar, window buttons, drag strip, close exits with 0                                          | pass                                                                                                         |
+| Chinese copy throughout; product names keep their case                                                                      | pass after fix 3                                                                                             |
+| The in-app update after Voltip's: the title bar note, Settings › General's switch and status line, the dialog over Settings | pass (`update-badge-light`, `update-settings-light`, `update-dialog-light`, `make smoke-update`, 2026-10-01) |
 
 Problems found by looking, and fixed:
 

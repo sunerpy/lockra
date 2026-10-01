@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # The in-app update end to end on Linux, with real AppImages: two release builds (9.0.0 and
 # 9.0.1) signed with a throwaway key, both trusting that key and asking a manifest on 127.0.0.1;
-# the manifest served here; 9.0.0 started under Xvfb and driven over WebDriver to check and to
-# install (scripts/smoke/update.py). Then the AppImage on disk must be the 9.0.1 package, and a
-# Lockra must be running from it again. The release key and GitHub are never involved.
-# Usage: scripts/smoke-update-linux.sh   (make smoke-update; docs/acceptance/updates.md)
+# the manifest served here; 9.0.0 started under Xvfb and driven over WebDriver to check, then
+# through the title bar's note and the update dialog to install (scripts/smoke/update.py), with
+# screenshots of both. Then the AppImage on disk must be the 9.0.1 package, and a Lockra must be
+# running from it again. The release key and GitHub are never involved.
+# Usage: scripts/smoke-update-linux.sh [out-dir]   (make smoke-update; docs/acceptance/updates.md)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+out=${1:-docs/acceptance/screens/desktop}
 for tool in Xvfb xdpyinfo tauri-driver WebKitWebDriver python3 pnpm curl sha256sum pgrep; do
   command -v "$tool" >/dev/null || { echo "smoke-update: $tool not installed"; exit 2; }
 done
@@ -87,7 +89,7 @@ tauri-driver --port "$driver_port" --native-port "$((driver_port + 1))" >"$work/
 pids+=($!)
 timeout 30 sh -c "until curl -sf http://127.0.0.1:$driver_port/status >/dev/null; do sleep 0.5; done"
 
-python3 scripts/smoke/update.py --driver "http://127.0.0.1:$driver_port" --app "$installed" --from-version "$from" --to-version "$to"
+python3 scripts/smoke/update.py --driver "http://127.0.0.1:$driver_port" --app "$installed" --from-version "$from" --to-version "$to" --out "$out"
 
 if ! timeout 120 sh -c "until [ \"\$(sha256sum <'$installed' | cut -d' ' -f1)\" = '$new_sum' ]; do sleep 1; done"; then
   echo "smoke-update: the AppImage was not replaced by $to"; exit 1

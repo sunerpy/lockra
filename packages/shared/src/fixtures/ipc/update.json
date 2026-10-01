@@ -59,12 +59,19 @@
   {
     "method": "deb",
     "status": {
-      "state": "installing",
+      "state": "ready",
       "version": "0.2.0"
     }
   },
   {
     "method": "rpm",
+    "status": {
+      "state": "installing",
+      "version": "0.2.0"
+    }
+  },
+  {
+    "method": "appimage",
     "status": {
       "state": "failed",
       "code": "update_signature",

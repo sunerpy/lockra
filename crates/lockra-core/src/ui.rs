@@ -144,6 +144,11 @@ pub enum UpdateStatus {
         /// Its size, when the server says.
         total: Option<u64>,
     },
+    /// Downloaded and its signature verified: it installs when Lockra restarts for it.
+    Ready {
+        /// Its version.
+        version: String,
+    },
     /// Installing it; Lockra restarts next.
     Installing {
         /// Its version.
@@ -455,11 +460,6 @@ pub enum Notice {
     /// Changing the master password could not keep "remember on this device" (the keychain key
     /// was unreadable); it is off now.
     DeviceUnlockTurnedOff,
-    /// The automatic check found a newer release (once per version).
-    UpdateAvailable {
-        /// Its version.
-        version: String,
-    },
 }
 
 /// One event on [`UI_EVENT_NAME`].

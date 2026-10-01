@@ -243,6 +243,8 @@ export class MockBackend implements Backend {
   private readonly now: () => number;
   private release: MockRelease | null;
   private updateFailure: MockOptions["updateFailure"];
+  /** What the last run found, and whether its package is downloaded (the core's `Pending`). */
+  private pending: { release: MockRelease; downloaded: boolean } | null = null;
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -604,29 +606,38 @@ export class MockBackend implements Backend {
         const settings = command.settings;
         if (settings.auto_backup.enabled && settings.auto_backup.dir === null)
           throw new LockraError("backup_dir_missing");
+        const updateTurnedOn = settings.auto_update && !this.state.settings.auto_update;
         this.state.settings = {
           ...settings,
           font_size_px: Math.min(18, Math.max(12, settings.font_size_px)),
         };
         this.refreshAutoLock();
         this.publish();
+        // Turned on: look and download now, like the core (a busy updater skips it).
+        if (updateTurnedOn && this.state.update.method !== null && !this.updateBusy())
+          this.runUpdate("auto");
         return null;
       }
       case "activity":
         this.refreshAutoLock();
         return null;
       case "update_check":
-        return this.runUpdate(false);
+        return this.runUpdate("check");
       case "update_install":
-        return this.runUpdate(true);
+        return this.runUpdate("install");
     }
   }
 
-  /** The core's update run, at once: each status it passes through is published in turn. */
-  private runUpdate(install: boolean): null {
+  private updateBusy(): boolean {
+    return ["checking", "downloading", "installing"].includes(this.state.update.status.state);
+  }
+
+  /** The core's update run, at once: each status it passes through is published in turn. A check
+   *  asks afresh; an install goes on from what a check found or downloaded; the automatic run
+   *  stops at `ready`. */
+  private runUpdate(run: "check" | "install" | "auto"): null {
     if (this.state.update.method === null) throw new LockraError("update_unavailable");
-    const busy = ["checking", "downloading", "installing"];
-    if (busy.includes(this.state.update.status.state)) throw new LockraError("update_busy");
+    if (this.updateBusy()) throw new LockraError("update_busy");
     const step = (status: UiState["update"]["status"]) => {
       this.state.update = { ...this.state.update, status };
       this.publish();
@@ -636,23 +647,37 @@ export class MockBackend implements Backend {
       step({ state: "failed", code: this.updateFailure.code, at_ms: this.now() });
       return true;
     };
-    step({ state: "checking" });
-    if (failed("check")) return null;
-    const checked_at_ms = this.now();
-    const release = this.release;
-    if (release === null) {
-      step({ state: "up_to_date", checked_at_ms });
-      return null;
-    }
-    const { version, notes, date, size } = release;
-    if (!install) {
+    let pending = run === "check" ? null : this.pending;
+    this.pending = null;
+    if (pending === null) {
+      step({ state: "checking" });
+      if (failed("check")) return null;
+      const checked_at_ms = this.now();
+      const release = this.release;
+      if (release === null) {
+        step({ state: "up_to_date", checked_at_ms });
+        return null;
+      }
+      const { version, notes, date } = release;
       step({ state: "available", version, notes, date, checked_at_ms });
+      pending = { release, downloaded: false };
+      if (run === "check") {
+        this.pending = pending;
+        return null;
+      }
+    }
+    const { version, size } = pending.release;
+    if (!pending.downloaded) {
+      for (const received of [0, Math.round(size / 2), size]) {
+        step({ state: "downloading", version, received, total: size });
+      }
+      if (failed("download")) return null;
+      step({ state: "ready", version });
+    }
+    if (run === "auto") {
+      this.pending = { release: pending.release, downloaded: true };
       return null;
     }
-    for (const received of [0, Math.round(size / 2), size]) {
-      step({ state: "downloading", version, received, total: size });
-    }
-    if (failed("download")) return null;
     step({ state: "installing", version });
     failed("install");
     return null;
@@ -663,9 +688,11 @@ export class MockBackend implements Backend {
     this.release = release;
   }
 
-  /** Test hook: the automatic check announced `version`. */
-  announceUpdate(version: string): void {
-    this.notice({ type: "update_available", version });
+  /** Test hook: the updater reached `status` (a download step, a failure), as the core would
+   *  publish it. */
+  simulateUpdate(status: UiState["update"]["status"]): void {
+    this.state.update = { ...this.state.update, status };
+    this.publish();
   }
 
   private unlock(password: string): null {

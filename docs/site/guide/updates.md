@@ -5,10 +5,16 @@ it completely.
 
 ## Updating
 
-From version 0.2.0, Lockra updates itself. Open **Settings › About** and choose **Check for
-updates**. When a newer version is out, its notes appear there, and **Download and install**
-downloads it, checks its signature and installs it; Lockra then restarts. Your vault and settings
-are kept. Before updating, make sure a recent backup exists: **Backup › Save backup**.
+From version 0.2.0, Lockra updates itself. When a newer version is out, the title bar shows a
+note such as **Version 0.3.0**; choose it to open the update dialog with the notes of that
+version. **Update now** downloads the package, checks its signature and installs it, and Lockra
+restarts. During the download the dialog shows the progress, the speed and the time left;
+**Download in the background** closes the dialog and the download continues. Your vault and
+settings are kept. Before updating, make sure a recent backup exists: **Backup › Save backup**.
+
+To look for a new version yourself, choose **Check for updates** in **Settings › General**, or in
+**Settings › About**. Lockra 0.2.0 has these controls in **Settings › About** only: **Check for
+updates**, then **Download and install**.
 
 How the update installs depends on how Lockra was installed:
 
@@ -23,24 +29,27 @@ Lockra installs a package only when it carries Lockra's signature and was signed
 the release announces, so a changed or older package is refused. Lockra 0.1.x has no in-app
 update: install 0.2.0 or later over it once, with the [install script](/guide/install#install-with-one-command)
 or a package. A copy that was not installed from a package, such as one built from the source,
-cannot update itself and says so in **Settings › About**.
+cannot update itself and says so in **Settings › General**.
 
 You can always update with the install script instead, or by installing the new package over the
 old one.
 
-### Automatic checks
+### Automatic updates
 
-**Settings › About › Check for updates automatically** is off until you turn it on. Then Lockra
-checks 10 seconds after it starts and once a day after that, and tells you when a newer version is
-out. It never downloads or installs one by itself. If a check fails, for example without a
-network, the next one follows within an hour.
+**Settings › General › Automatic updates** is off until you turn it on. Then, 10 seconds after it
+starts, Lockra looks for a newer version and downloads it in the background; the title bar shows
+**Restart to update**. Nothing is installed until you choose it, or until the next start: if you
+quit Lockra instead, it installs the downloaded version when it starts again, then restarts. A
+version newer than the downloaded one waits for you again. Turning the switch on looks for a new
+version and downloads it at once.
 
 ### What a check sends
 
-A check asks GitHub, where Lockra is released, for a short file that names the newest version;
-installing downloads the package from the same release. Nothing from your accounts, your vault or
-your settings goes with either request. GitHub sees the request and the address it came from, as
-for any download. Without a check, Lockra makes no network connections.
+A check asks GitHub, where Lockra is released, for a short file that names the newest version; a
+download fetches the package from the same release. Nothing from your accounts, your vault or your
+settings goes with either request. GitHub sees the request and the address it came from, as for
+any download. Apart from checking for and downloading updates, Lockra makes no network
+connections.
 
 ## Where the files are
 
@@ -51,7 +60,8 @@ for any download. Without a check, Lockra makes no network connections.
 
 **Settings › About** shows the data folder of the computer you are on. Next to the vault Lockra
 keeps `vault.lockra.prev`, the previous version, and the copies it makes before a replacing
-restore (`pre-restore-<date>.lockrabackup`). The settings file holds no secrets.
+restore (`pre-restore-<date>.lockrabackup`); with automatic updates on, `update-ready.json` names
+a version downloaded but not installed yet. The settings file holds no secrets.
 
 ## Moving to another computer
 

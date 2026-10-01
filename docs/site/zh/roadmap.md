@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-Lockra 提供电脑上的验证器所需的功能：支持所有标准账号的验证码，在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，otpauth 链接与列表，加密备份与自动备份，以及对保险库、剪贴板和屏幕的保护。目前没有计划中的新功能；欢迎在[问题跟踪](https://github.com/sunerpy/lockra/issues)中提出建议。
+Lockra 提供电脑上的验证器所需的功能：支持所有标准账号的验证码，在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，otpauth 链接与列表，加密备份与自动备份，对保险库、剪贴板和屏幕的保护，以及经过签名校验的应用内更新和各平台的一键安装。目前没有计划中的新功能；欢迎在[问题跟踪](https://github.com/sunerpy/lockra/issues)中提出建议。
 
 ## 有意不做的功能
 
@@ -12,6 +12,5 @@ Lockra 提供电脑上的验证器所需的功能：支持所有标准账号的�
 - **手机应用。** Lockra 改为导出到你手机上的验证器。
 - **浏览器扩展或自动填写验证码。** 请复制验证码后粘贴。
 - **网站图标。** 账号显示首字母；获取图标需要联网。
-- **应用内更新。** 检查更新需要联网；请关注发布页。
 - **非标准验证码**，例如 Steam 令牌。
 - **从 iPhone 上的 Microsoft Authenticator 导入。** 目前没有已知的方法可以读取其中的账号。

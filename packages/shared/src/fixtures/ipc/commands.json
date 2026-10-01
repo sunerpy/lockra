@@ -144,8 +144,8 @@
           "enabled": true,
           "keep": 7
         },
-        "auto_check_updates": true,
         "auto_lock_minutes": 10,
+        "auto_update": true,
         "clipboard_clear_seconds": 20,
         "density": "compact",
         "follow_system_theme": false,

@@ -44,19 +44,23 @@ export sessions; leaving it drops them.
 
 Argon2 and file I/O run on `spawn_blocking`. One **scheduler task** owns every timer — the next
 code window, auto-lock, clipboard clearing, the automatic backup debounce, export expiry, the
-automatic update check — sleeps until the earliest deadline, and is woken through a `Notify`
+automatic update — sleeps until the earliest deadline, and is woken through a `Notify`
 whenever the state changes, so nothing polls. Core tests run on tokio's paused clock with the
 fakes.
 
-The in-app update is a run in the background, one at a time: `update_check` asks the `Updater`
-for a newer release (`UiState.update` goes `checking` → `up_to_date` / `available` / `failed`);
-`update_install` asks again, downloads with progress (the port verifies the signature), writes a
-pending automatic backup, then installs and lets the shell restart. With
-`Settings.auto_check_updates` (off by default) the scheduler checks 10 s after start and daily, and
-announces each newer version once (`Notice::UpdateAvailable`); it never downloads by itself. The
-port reports how this copy installs (`deb`, `rpm`, `appimage`, `nsis`, `msi`, `app`), read from the
-bundle type the bundler patched into the executable; a build from the tree has none and cannot
-update itself (`docs/security.md`, "Updates").
+The in-app update follows Voltip's design. It is a run in the background, one at a time:
+`update_check` asks the `Updater` afresh (`UiState.update` goes `checking` → `up_to_date` /
+`available` / `failed`); `update_install` goes on from what the last run left (a found release is
+not asked for again, a downloaded package not downloaded again), downloads with progress (the port
+verifies the signature) to `ready`, writes a pending automatic backup, then installs and lets the
+shell restart. With `Settings.auto_update` (off by default) the scheduler runs the automatic
+update once, 10 s after start: it downloads a newer release to `ready` and remembers the version
+in `update-ready.json`; the next start installs that same version at once, and turning the switch
+on checks and downloads without installing. The webview shows the status in the title bar (a note
+that opens the update dialog) and in Settings › General and › About. The port reports how this
+copy installs (`deb`, `rpm`, `appimage`, `nsis`, `msi`, `app`), read from the bundle type the
+bundler patched into the executable; a build from the tree has none and cannot update itself
+(`docs/security.md`, "Updates").
 
 ## The bridge and the shell
 

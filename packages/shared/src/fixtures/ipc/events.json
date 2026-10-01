@@ -32,7 +32,7 @@
           "dir": null,
           "keep": 10
         },
-        "auto_check_updates": false
+        "auto_update": false
       },
       "import": null,
       "backup": {
@@ -137,13 +137,6 @@
     "type": "notice",
     "notice": {
       "type": "device_unlock_turned_off"
-    }
-  },
-  {
-    "type": "notice",
-    "notice": {
-      "type": "update_available",
-      "version": "0.2.0"
     }
   }
 ]

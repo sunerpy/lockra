@@ -8,8 +8,8 @@ The TOTP/HOTP secrets, at rest and in the running app, against: someone who copi
 or a backup; other processes and web content reaching the app's IPC; the webview (the least
 trusted part of the app) reading files or secrets it was not explicitly given; secrets lingering
 on the clipboard or in screenshots; and an update that is not Lockra's. Lockra goes online for one
-thing only, the update check (below), and only when the user asks or has turned automatic checks
-on: there is no account, sync or telemetry. The HTTP client and TLS stack reach the desktop build
+thing only, its update (below): a check and a download when the user asks, or at start once
+automatic updates are on. There is no account, sync or telemetry. The HTTP client and TLS stack reach the desktop build
 only through tauri-plugin-updater (`deny.toml` bans them from every other crate).
 
 ## At rest
@@ -54,10 +54,14 @@ only through tauri-plugin-updater (`deny.toml` bans them from every other crate)
 
 ## Updates
 
-- **Off the network by default.** A check runs when the user chooses **Check for updates**, or
-  10 s after start and once a day when **Check for updates automatically** is on (off by
-  default). An automatic check only reports a newer version; nothing is downloaded or installed
-  without the user choosing **Download and install** (`crates/lockra-core/src/tests/update.rs`).
+- **Off the network by default.** A check runs when the user chooses **Check for updates**, and
+  the package downloads when the user chooses **Update now**. With **Automatic updates** on (off
+  by default, Settings › General), Lockra checks 10 s after start and downloads a newer release
+  in the background, then shows **Restart to update**: nothing is installed until the user
+  restarts for it, or until the next start finds the same version again (remembered in
+  `update-ready.json` in the data directory); a newer version than the remembered one waits for
+  the user again, so a release the user has not been shown is never installed unattended. This is
+  Voltip's design (`crates/lockra-core/src/update.rs`, `crates/lockra-core/src/tests/update.rs`).
 - **From Rust, not the webview.** The webview sends `update_check` / `update_install` through the
   same dispatcher as every command and has no permission for the updater plugin; the CSP still
   grants no remote host. The requests go to `https://github.com/sunerpy/lockra/releases/latest/download/latest.json`

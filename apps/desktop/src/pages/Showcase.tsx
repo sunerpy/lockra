@@ -18,6 +18,7 @@ import {
   Input,
   Keycaps,
   Lamp,
+  LampText,
   Logo,
   OtpCode,
   Panel,
@@ -136,7 +137,7 @@ export default function Showcase() {
                 <Keycaps keys="Ctrl K" />
               </div>
             </Panel>
-            <Panel eyebrow="STATUS" title="Badge / Chip / Lamp / Progress">
+            <Panel eyebrow="STATUS" title="Badge / Chip / Lamp / LampText / Progress">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge tone="ok">已解锁</Badge>
                 <Badge tone="accent">新增</Badge>
@@ -147,6 +148,15 @@ export default function Showcase() {
                 <Lamp tone="ok" label="ok" />
                 <Lamp tone="danger" />
                 <Lamp tone="idle" pulse />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                <LampText tone="ok" size="sm">
+                  已是最新 · 0.3.0
+                </LampText>
+                <LampText tone="accent" size="sm" pulse readout="36%">
+                  正在下载 0.3.1
+                </LampText>
+                <LampText tone="danger">更新失败 · 无法连接更新服务器</LampText>
               </div>
               <div className="mt-3 flex flex-col gap-2">
                 <Progress value={0.62} />

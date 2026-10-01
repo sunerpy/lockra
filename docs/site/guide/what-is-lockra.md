@@ -10,8 +10,9 @@ Google Authenticator and Microsoft Authenticator use.
 ## Where your accounts are kept
 
 Lockra keeps all your accounts in one file on your computer, encrypted with a key derived from a
-master password that only you know. Lockra never connects to the network: there is no account to
-create, nothing is synchronised, and nothing is reported back. The codes are calculated on your
+master password that only you know. Lockra goes online only for its own updates
+([Updating](/guide/updates#updating)): there is no account to create, nothing is synchronised, and
+nothing is reported back. The codes are calculated on your
 computer from the secret each service gave you and the current time.
 
 ## Moving accounts in and out

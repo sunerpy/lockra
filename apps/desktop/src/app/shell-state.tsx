@@ -29,6 +29,9 @@ export interface ShellState {
   close: () => void;
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
+  /** The update dialog: over any overlay (Settings opens it), opened from the title bar too. */
+  updateOpen: boolean;
+  setUpdateOpen: (open: boolean) => void;
   /** Bumped to ask the codes page to focus its search field. */
   searchFocus: number;
   focusSearch: () => void;
@@ -46,6 +49,7 @@ export function ShellStateProvider({
   const [page, setPage] = useState<PageId>(initialPage);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [updateOpen, setUpdateOpenState] = useState(false);
   const [searchFocus, setSearchFocus] = useState(0);
   const navigate = useCallback((next: PageId) => setPage(next), []);
   const open = useCallback((next: Overlay) => {
@@ -53,6 +57,10 @@ export function ShellStateProvider({
     setOverlay(next);
   }, []);
   const close = useCallback(() => setOverlay(null), []);
+  const setUpdateOpen = useCallback((next: boolean) => {
+    if (next) setPaletteOpen(false);
+    setUpdateOpenState(next);
+  }, []);
   const focusSearch = useCallback(() => {
     setPage("codes");
     setSearchFocus((n) => n + 1);
@@ -66,10 +74,23 @@ export function ShellStateProvider({
       close,
       paletteOpen,
       setPaletteOpen,
+      updateOpen,
+      setUpdateOpen,
       searchFocus,
       focusSearch,
     }),
-    [page, navigate, overlay, open, close, paletteOpen, searchFocus, focusSearch],
+    [
+      page,
+      navigate,
+      overlay,
+      open,
+      close,
+      paletteOpen,
+      updateOpen,
+      setUpdateOpen,
+      searchFocus,
+      focusSearch,
+    ],
   );
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;
 }

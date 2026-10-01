@@ -153,22 +153,20 @@ describe("SettingsDialog", () => {
     expect(dialog.getByText("Apache-2.0")).toBeInTheDocument();
     expect(dialog.getByText(/SIL OFL 1\.1/)).toBeInTheDocument();
     expect(dialog.getByText(/Voltip/)).toBeInTheDocument();
-    // The sample core cannot update itself: no check, no automatic check, a pointer elsewhere.
+    // The sample core cannot update itself: it says why, and nothing can be checked.
     expect(dialog.getByTestId("update")).toHaveTextContent("不是通过安装包安装的");
-    expect(dialog.queryByTestId("update-check")).not.toBeInTheDocument();
-    expect(dialog.queryByTestId("update-auto")).not.toBeInTheDocument();
+    expect(dialog.getByTestId("update-check")).toBeDisabled();
   });
 
-  it("checks for an update, shows what changed and installs it", async () => {
+  it("checks for an update in General and walks through it in the update dialog", async () => {
     const { user, backend } = renderApp({ mock: { updateMethod: "deb" } });
     await ready();
-    const dialog = await openSettings(user, "关于");
-    const row = within(dialog.getByTestId("update"));
-    expect(row.getByText("尚未检查")).toBeInTheDocument();
-    await user.click(row.getByRole("button", { name: "检查更新" }));
+    const dialog = await openSettings(user, "通用");
+    const section = within(dialog.getByTestId("update-section"));
+    expect(section.getByTestId("update-status")).toHaveTextContent("尚未检查更新");
+    await user.click(section.getByRole("button", { name: "检查更新" }));
     expect(backend.calls.at(-1)).toEqual({ command: "update_check" });
-    expect(await row.findByText("已是最新版本")).toBeInTheDocument();
-    expect(row.getByText(/上次检查/)).toBeInTheDocument();
+    expect(await section.findByText(/^已是最新 · 0\.1\.0 · 检查于/)).toBeInTheDocument();
 
     backend.setRelease({
       version: "0.2.0",
@@ -177,22 +175,27 @@ describe("SettingsDialog", () => {
       date: "2026-10-02T08:00:00Z",
       size: 2048,
     });
-    await user.click(row.getByRole("button", { name: "检查更新" }));
-    expect(await row.findByText(/新版本 0\.2\.0 可用/)).toBeInTheDocument();
-    expect(row.getByText(/安装时系统会要求输入管理员密码/)).toBeInTheDocument();
-    const notes = dialog.getByTestId("update-notes");
-    expect(notes).toHaveTextContent("Features");
-    expect(notes).toHaveTextContent("• update: install updates");
+    await user.click(section.getByRole("button", { name: "检查更新" }));
+    expect(await section.findByText("有新版本 0.2.0 · 当前 0.1.0")).toBeInTheDocument();
+    await user.click(section.getByRole("button", { name: "查看新版本" }));
+    const update = within(screen.getByRole("dialog", { name: "发现新版本 0.2.0" }));
+    expect(update.getByTestId("update-current")).toHaveTextContent("当前 0.1.0");
+    expect(update.getByTestId("update-published")).toHaveTextContent("发布于");
+    expect(update.getByTestId("update-method")).toHaveTextContent("安装时系统会要求输入管理员密码");
+    const notes = update.getByTestId("release-notes");
+    expect(update.getByRole("heading", { name: "Features" })).toBeInTheDocument();
+    expect(notes).toHaveTextContent("update: install updates (#9)");
     expect(notes).not.toHaveTextContent("https://");
+    expect(notes).not.toHaveTextContent("2026-10-02)");
     expect(notes.querySelector("a")).toBeNull();
 
-    await user.click(row.getByRole("button", { name: "下载并安装" }));
+    await user.click(update.getByRole("button", { name: "立即更新" }));
     expect(backend.calls.at(-1)).toEqual({ command: "update_install" });
-    expect(await row.findByText(/正在安装 0\.2\.0/)).toBeInTheDocument();
-    expect(row.getByRole("progressbar")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "正在安装 0.2.0" })).toBeInTheDocument();
+    expect(section.getByTestId("update-status")).toHaveTextContent("正在安装 0.2.0…");
   });
 
-  it("shows why an update failed and offers a retry", async () => {
+  it("an update that fails says why in the dialog and retries", async () => {
     const { user, backend } = renderApp({
       mock: {
         updateMethod: "nsis",
@@ -201,29 +204,57 @@ describe("SettingsDialog", () => {
       },
     });
     await ready();
-    const dialog = await openSettings(user, "关于");
-    const row = within(dialog.getByTestId("update"));
-    await user.click(row.getByRole("button", { name: "检查更新" }));
-    expect(await row.findByText("新版本 0.2.0 可用")).toBeInTheDocument();
-    expect(dialog.queryByTestId("update-notes")).not.toBeInTheDocument();
-    await user.click(row.getByRole("button", { name: "下载并安装" }));
-    expect(await row.findByText("安装包未使用 Lockra 的密钥签名，已拒绝安装")).toBeInTheDocument();
-    await user.click(row.getByRole("button", { name: "重试" }));
+    const dialog = await openSettings(user, "通用");
+    const section = within(dialog.getByTestId("update-section"));
+    await user.click(section.getByRole("button", { name: "检查更新" }));
+    await user.click(await section.findByRole("button", { name: "查看新版本" }));
+    const update = within(screen.getByRole("dialog", { name: "发现新版本 0.2.0" }));
+    expect(update.getByText("此版本未提供更新说明。")).toBeInTheDocument();
+    await user.click(update.getByRole("button", { name: "立即更新" }));
+    const failed = within(await screen.findByRole("dialog", { name: "更新失败" }));
+    expect(failed.getByRole("alert")).toHaveTextContent(
+      "更新失败：安装包未使用 Lockra 的密钥签名，已拒绝安装",
+    );
+    await user.click(failed.getByRole("button", { name: "重试" }));
     expect(backend.calls.at(-1)).toEqual({ command: "update_check" });
+    expect(section.getByTestId("update-status")).toHaveTextContent("有新版本 0.2.0 · 当前 0.1.0");
   });
 
-  it("turns automatic update checks on and off", async () => {
-    const { user, backend } = renderApp({ mock: { updateMethod: "appimage" } });
+  it("automatic updates download in the background; the restart installs", async () => {
+    const { user, backend } = renderApp({
+      mock: {
+        updateMethod: "appimage",
+        release: { version: "0.3.0", notes: null, date: null, size: 10 },
+      },
+    });
     await ready();
-    const dialog = await openSettings(user, "关于");
-    const toggle = dialog.getByRole("switch", { name: "自动检查更新" });
+    const dialog = await openSettings(user, "通用");
+    const toggle = dialog.getByRole("switch", { name: "自动更新" });
     expect(toggle).not.toBeChecked();
-    expect(dialog.getByTestId("update-auto")).toHaveTextContent("仅连接 GitHub");
+    expect(dialog.getByTestId("update-auto")).toHaveTextContent("启动 10 秒后检查更新并在后台下载");
     await user.click(toggle);
     expect(backend.calls.at(-1)).toMatchObject({
       command: "settings_set",
-      settings: { auto_check_updates: true },
+      settings: { auto_update: true },
     });
-    expect(dialog.getByRole("switch", { name: "自动检查更新" })).toBeChecked();
+    expect(dialog.getByRole("switch", { name: "自动更新" })).toBeChecked();
+    const section = within(dialog.getByTestId("update-section"));
+    expect(await section.findByText("0.3.0 已下载 · 重启后生效")).toBeInTheDocument();
+    // The title bar says so too.
+    expect(screen.getByTestId("update-badge")).toHaveTextContent("重启以更新");
+    await user.click(section.getByRole("button", { name: "重启并更新" }));
+    expect(backend.calls.at(-1)).toEqual({ command: "update_install" });
+    expect(section.getByTestId("update-status")).toHaveTextContent("正在安装 0.3.0…");
+  });
+
+  it("About shows the same status, compact, and points to General for the switch", async () => {
+    const { user } = renderApp({ mock: { updateMethod: "msi" } });
+    await ready();
+    const dialog = await openSettings(user, "关于");
+    const row = within(dialog.getByTestId("update"));
+    expect(row.getByTestId("update-status")).toHaveTextContent("尚未检查更新");
+    expect(row.getByText("自动更新开关位于「通用」分组。")).toBeInTheDocument();
+    await user.click(row.getByRole("button", { name: "检查更新" }));
+    expect(await row.findByText(/^已是最新 · 0\.1\.0/)).toBeInTheDocument();
   });
 });
