@@ -37,8 +37,19 @@ xvfb_pid=""
 driver_pid=""
 app_pid=""
 cleanup() {
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    # What the driver and the app said before the failure: a crash of the app or of
+    # WebKitWebDriver shows here (the app's output goes to the driver's log).
+    for log in "$work/driver.log" "$work/app.log"; do
+      if [ -s "$log" ]; then
+        echo "smoke: the end of $(basename "$log"):"
+        tail -n 60 "$log"
+      fi
+    done
+  fi
   for pid in "$app_pid" "$driver_pid" "$xvfb_pid"; do
-    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+    if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi
   done
   rm -rf "$work"
 }
@@ -65,13 +76,19 @@ kill "$driver_pid" 2>/dev/null || true
 wait "$driver_pid" 2>/dev/null || true
 driver_pid=""
 
-# The title bar's close button ends the process cleanly.
+# The title bar's close button ends the process cleanly. The WebDriver session's app quits with the
+# session: wait for its window to go, then look for the new process's window by its pid, so a
+# window on its way out is never the one found (CI hit that race: the search found the old window,
+# which was gone by the next command).
+if ! timeout 30 sh -c 'while xdotool search --onlyvisible --name "^Lockra$" >/dev/null 2>&1; do sleep 0.5; done'; then
+  echo "smoke: the WebDriver session's window is still open"; exit 1
+fi
 "$app" >"$work/app.log" 2>&1 &
 app_pid=$!
-if ! timeout 60 sh -c 'until xdotool search --onlyvisible --name "^Lockra$" >/dev/null 2>&1; do sleep 0.5; done'; then
+if ! timeout 60 sh -c "until xdotool search --onlyvisible --pid $app_pid --name '^Lockra\$' >/dev/null 2>&1; do sleep 0.5; done"; then
   echo "smoke: the window did not appear"; tail -20 "$work/app.log"; exit 1
 fi
-win=$(xdotool search --onlyvisible --name '^Lockra$' | head -1)
+win=$(xdotool search --onlyvisible --pid "$app_pid" --name '^Lockra$' | head -1)
 xdotool windowmove "$win" 0 0
 read -r x y < <(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(round(r[0]), round(r[1]))' "$work/close-button.json")
 # A click that lands before the page has loaded does nothing: try again, at most three times.

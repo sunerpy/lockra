@@ -18,8 +18,8 @@ work=$(mktemp -d)
 xvfb_pid=""
 app_pgid=""
 cleanup() {
-  [ -n "$app_pgid" ] && kill -- "-$app_pgid" 2>/dev/null || true
-  [ -n "$xvfb_pid" ] && kill "$xvfb_pid" 2>/dev/null || true
+  if [ -n "$app_pgid" ]; then kill -- "-$app_pgid" 2>/dev/null || true; fi
+  if [ -n "$xvfb_pid" ]; then kill "$xvfb_pid" 2>/dev/null || true; fi
   rm -rf "$work"
 }
 trap cleanup EXIT
