@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/sunerpy/lockra/compare/v0.1.1...v0.2.0) (2026-10-01)
+
+
+### Features
+
+* **update:** 增加应用内更新与各平台一键安装脚本 ([#9](https://github.com/sunerpy/lockra/issues/9)) ([bd84c36](https://github.com/sunerpy/lockra/commit/bd84c36a973855c0e9d897f0770ac1fe321f33e5))
+
 ## [0.1.1](https://github.com/sunerpy/lockra/compare/v0.1.0...v0.1.1) (2026-10-01)
 
 
