@@ -13,10 +13,10 @@ use tokio::sync::broadcast;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::fakes::{FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
-use crate::ports::{ClipboardImage, SecretStore, SyncTransport};
+use crate::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
+use crate::ports::{BiometricError, ClipboardImage, SecretStore, SyncTransport};
 use crate::settings::{AutoBackup, Settings, ThemeId};
-use crate::ui::{CandidateAction, CandidateStatus, ExportTarget, Notice, Phase, Platform, UiEvent};
+use crate::ui::{BiometricKind, BiometricView, CandidateAction, CandidateStatus, ExportTarget, Notice, Phase, Platform, UiEvent};
 use crate::{AccountColor, Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, Outcome, Ports, RestoreMode, VAULT_FILE};
 
 /// 2026-09-21T13:46:40Z: an arbitrary moment well inside a 30-second window.
@@ -30,6 +30,7 @@ mod update;
 struct Harness {
     core: Core,
     keychain: Arc<FakeKeychain>,
+    biometrics: Arc<FakeBiometrics>,
     clipboard: Arc<FakeClipboard>,
     updater: Arc<FakeUpdater>,
     sync: Arc<dyn SyncTransport>,
@@ -48,7 +49,14 @@ impl Harness {
 
     /// A second core on the same directories, as after a restart.
     fn restart(&self) -> Core {
-        start(self.dir.path(), Arc::clone(&self.keychain), Arc::clone(&self.clipboard), Arc::clone(&self.updater), Arc::clone(&self.sync))
+        start(
+            self.dir.path(),
+            Arc::clone(&self.keychain),
+            Arc::clone(&self.clipboard),
+            Arc::clone(&self.updater),
+            Arc::clone(&self.sync),
+            Arc::clone(&self.biometrics),
+        )
     }
 
     /// Every notice received since the last call.
@@ -69,7 +77,14 @@ impl Harness {
     }
 }
 
-fn start(root: &Path, keychain: Arc<FakeKeychain>, clipboard: Arc<FakeClipboard>, updater: Arc<FakeUpdater>, sync: Arc<dyn SyncTransport>) -> Core {
+fn start(
+    root: &Path,
+    keychain: Arc<FakeKeychain>,
+    clipboard: Arc<FakeClipboard>,
+    updater: Arc<FakeUpdater>,
+    sync: Arc<dyn SyncTransport>,
+    biometrics: Arc<FakeBiometrics>,
+) -> Core {
     let config = CoreConfig {
         data_dir: root.join("data"),
         config_dir: root.join("config"),
@@ -77,7 +92,7 @@ fn start(root: &Path, keychain: Arc<FakeKeychain>, clipboard: Arc<FakeClipboard>
         kdf: KdfCost::FAST_INSECURE,
         platform: Platform::Linux,
     };
-    Core::start(config, Ports { secrets: keychain, clipboard, clock: Arc::new(FakeClock::new(T0)), updater, sync })
+    Core::start(config, Ports { secrets: keychain, clipboard, clock: Arc::new(FakeClock::new(T0)), updater, sync, biometrics })
 }
 
 fn harness() -> Harness {
@@ -95,9 +110,10 @@ fn harness_on(updater: FakeUpdater, sync: Arc<dyn SyncTransport>) -> Harness {
     let keychain = Arc::new(FakeKeychain::default());
     let clipboard = Arc::new(FakeClipboard::default());
     let updater = Arc::new(updater);
-    let core = start(dir.path(), Arc::clone(&keychain), Arc::clone(&clipboard), Arc::clone(&updater), Arc::clone(&sync));
+    let biometrics = Arc::new(FakeBiometrics::default());
+    let core = start(dir.path(), Arc::clone(&keychain), Arc::clone(&clipboard), Arc::clone(&updater), Arc::clone(&sync), Arc::clone(&biometrics));
     let events = core.subscribe();
-    Harness { core, keychain, clipboard, updater, sync, events, dir }
+    Harness { core, keychain, biometrics, clipboard, updater, sync, events, dir }
 }
 
 fn pw(text: &str) -> Zeroizing<String> {
@@ -191,7 +207,7 @@ async fn a_damaged_vault_is_reported_not_lost() {
     let restarted = h.restart();
     assert_eq!(restarted.state().phase, Phase::Locked);
     assert_eq!(code_err(restarted.unlock(pw(MASTER)).await), ErrorCode::VaultCorrupted);
-    assert_eq!(code_err(restarted.unlock_with_device().await), ErrorCode::DeviceUnlockOff);
+    assert_eq!(code_err(restarted.unlock_with_device(None).await), ErrorCode::DeviceUnlockOff);
 }
 
 #[tokio::test(start_paused = true)]
@@ -221,7 +237,7 @@ async fn device_unlock_round_trip() {
     assert!(h.core.state().lock.device_unlock.enabled);
     assert!(read_header(&fs::read(h.vault_path()).unwrap()).unwrap().has_device_slot);
     h.core.lock_vault();
-    h.core.unlock_with_device().await.unwrap();
+    h.core.unlock_with_device(None).await.unwrap();
     assert_eq!(h.core.state().phase, Phase::Unlocked);
     assert!(h.restart().state().lock.device_unlock.enabled, "known from the header while locked");
     assert_eq!(code_err(h.core.disable_device_unlock(pw("wrong")).await), ErrorCode::WrongPassword);
@@ -230,7 +246,7 @@ async fn device_unlock_round_trip() {
     assert!(h.keychain.get(&vault_id.to_string()).unwrap().is_none());
     assert_eq!(code_err(h.core.disable_device_unlock(pw(MASTER)).await), ErrorCode::DeviceUnlockOff);
     h.core.lock_vault();
-    assert_eq!(code_err(h.core.unlock_with_device().await), ErrorCode::DeviceUnlockOff);
+    assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::DeviceUnlockOff);
 }
 
 #[tokio::test(start_paused = true)]
@@ -240,22 +256,22 @@ async fn device_unlock_reports_every_keychain_failure() {
     let account = read_header(&fs::read(h.vault_path()).unwrap()).unwrap().vault_id.to_string();
     h.core.lock_vault();
     h.keychain.fail_get.store(true, Ordering::SeqCst);
-    assert_eq!(code_err(h.core.unlock_with_device().await), ErrorCode::KeychainFailed);
+    assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::KeychainFailed);
     h.keychain.fail_get.store(false, Ordering::SeqCst);
     let key = h.keychain.get(&account).unwrap().unwrap();
     h.keychain.delete(&account).unwrap();
-    assert_eq!(code_err(h.core.unlock_with_device().await), ErrorCode::DeviceKeyMissing);
+    assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::DeviceKeyMissing);
     h.keychain.set(&account, "AAAA").unwrap();
-    assert_eq!(code_err(h.core.unlock_with_device().await), ErrorCode::DeviceKeyStale);
+    assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::DeviceKeyStale);
     let other = Sealed::create(b"x", KdfCost::FAST_INSECURE, 0).unwrap().enable_device().unwrap();
     h.keychain.set(&account, &other.to_text()).unwrap();
-    assert_eq!(code_err(h.core.unlock_with_device().await), ErrorCode::DeviceKeyStale);
+    assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::DeviceKeyStale);
     h.keychain.set(&account, &key).unwrap();
     h.keychain.unavailable.store(true, Ordering::SeqCst);
-    assert_eq!(code_err(h.core.unlock_with_device().await), ErrorCode::KeychainUnavailable);
+    assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::KeychainUnavailable);
     assert!(!h.core.state().lock.device_unlock.available);
     h.keychain.unavailable.store(false, Ordering::SeqCst);
-    h.core.unlock_with_device().await.unwrap();
+    h.core.unlock_with_device(None).await.unwrap();
 }
 
 #[tokio::test(start_paused = true)]
@@ -281,7 +297,7 @@ async fn changing_the_password_keeps_or_drops_device_unlock() {
     assert_eq!(code_err(h.core.unlock(pw(MASTER)).await), ErrorCode::WrongPassword);
     h.core.unlock(pw("new password")).await.unwrap();
     h.core.lock_vault();
-    h.core.unlock_with_device().await.unwrap();
+    h.core.unlock_with_device(None).await.unwrap();
     h.notices();
     h.keychain.fail_get.store(true, Ordering::SeqCst);
     h.core.change_password(pw("new password"), pw("newer password")).await.unwrap();
@@ -683,7 +699,7 @@ async fn manual_backups_open_with_the_right_password() {
     // A backup written right after a device unlock still opens with the master password.
     h.core.enable_device_unlock().unwrap();
     h.core.lock_vault();
-    h.core.unlock_with_device().await.unwrap();
+    h.core.unlock_with_device(None).await.unwrap();
     let after_device = h.dir.path().join("after-device.lockrabackup");
     h.core.backup_to(after_device.clone(), None).await.unwrap();
     assert!(Sealed::open_with_password(&fs::read(&after_device).unwrap(), MASTER.as_bytes()).is_ok());
@@ -932,4 +948,79 @@ fn an_entry_written_before_colours_reads_with_the_names_colour() {
     let newer = String::from_utf8(legacy.to_vec()).unwrap().replace(r#""favorite":false"#, r#""favorite":false,"color":"lime","mark":"GH""#);
     let data = crate::VaultData::from_bytes(newer.as_bytes()).unwrap();
     assert_eq!((data.entries[0].color, data.entries[0].mark.as_deref()), (AccountColor::Auto, Some("GH")));
+}
+
+// ---- Touch ID and Windows Hello ----------------------------------------------------------------
+
+#[tokio::test(start_paused = true)]
+async fn remembered_unlock_can_ask_for_the_fingerprint_first() {
+    let h = Harness::unlocked().await;
+    let biometric = || h.core.state().lock.device_unlock.biometric;
+    settle().await;
+    assert_eq!(biometric(), BiometricView { kind: Some(BiometricKind::TouchId), enabled: false });
+    // Without "remember on this device" there is nothing to guard.
+    assert_eq!(code_err(h.core.enable_device_biometric(None).await), ErrorCode::DeviceUnlockOff);
+    h.core.enable_device_unlock().unwrap();
+    // Turning it on asks once, to be sure it works.
+    h.biometrics.answer(Err(BiometricError::Cancelled));
+    assert_eq!(code_err(h.core.enable_device_biometric(Some("turn on Touch ID".into())).await), ErrorCode::BiometricCancelled);
+    assert!(!biometric().enabled);
+    h.biometrics.answer(Ok(()));
+    h.core.enable_device_biometric(Some(" turn on Touch ID\u{7} ".into())).await.unwrap();
+    assert!(biometric().enabled);
+    assert_eq!(h.biometrics.reasons(), ["turn on Touch ID", "turn on Touch ID"], "the webview's words, cleaned");
+
+    // Locked: the keychain's key is used only once the check passed.
+    h.core.lock_vault();
+    assert!(biometric().enabled, "shown on the locked screen");
+    h.biometrics.answer(Err(BiometricError::Cancelled));
+    assert_eq!(code_err(h.core.unlock_with_device(Some("unlock Lockra".into())).await), ErrorCode::BiometricCancelled);
+    h.biometrics.answer(Err(BiometricError::Failed("not recognised".into())));
+    assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::BiometricFailed);
+    assert_eq!(h.core.state().phase, Phase::Locked);
+    assert_eq!(h.core.state().lock.failed_attempts, 0, "the platform limits its own attempts");
+    h.biometrics.answer(Ok(()));
+    h.core.unlock_with_device(None).await.unwrap();
+    assert_eq!(h.core.state().phase, Phase::Unlocked);
+    assert_eq!(h.biometrics.reasons().last().map(String::as_str), Some("unlock Lockra"), "Lockra's own words when none are given");
+    // The master password unlocks with no check at all.
+    h.core.lock_vault();
+    let asked = h.biometrics.reasons().len();
+    h.core.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(h.biometrics.reasons().len(), asked);
+    // The vault file keeps it across a restart.
+    h.core.lock_vault();
+    let restarted = h.restart();
+    settle().await;
+    assert!(restarted.state().lock.device_unlock.biometric.enabled);
+    // Turning it off takes the master password.
+    h.core.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(code_err(h.core.disable_device_biometric(pw("a wrong password")).await), ErrorCode::WrongPassword);
+    h.core.disable_device_biometric(pw(MASTER)).await.unwrap();
+    assert!(!biometric().enabled);
+    h.core.lock_vault();
+    h.biometrics.answer(Err(BiometricError::Cancelled));
+    h.core.unlock_with_device(None).await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_computer_without_a_sensor_offers_no_check_and_never_skips_one_it_cannot_make() {
+    let h = Harness::unlocked().await;
+    h.biometrics.set_kind(None);
+    h.core.enable_device_unlock().unwrap();
+    assert_eq!(code_err(h.core.enable_device_biometric(None).await), ErrorCode::BiometricUnavailable);
+    assert_eq!(h.core.state().lock.device_unlock.biometric, BiometricView { kind: None, enabled: false });
+    // Turned on while the sensor worked; the sensor then went away (lid closed, finger removed).
+    h.biometrics.set_kind(Some(BiometricKind::TouchId));
+    h.core.enable_device_biometric(None).await.unwrap();
+    h.biometrics.set_kind(None);
+    h.biometrics.answer(Err(BiometricError::Unavailable));
+    h.core.lock_vault();
+    settle().await;
+    assert_eq!(h.core.state().lock.device_unlock.biometric, BiometricView { kind: None, enabled: true }, "asked again at the lock");
+    assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::BiometricUnavailable);
+    h.core.unlock(pw(MASTER)).await.unwrap();
+    // Turning "remember on this device" off takes the check with it.
+    h.core.disable_device_unlock(pw(MASTER)).await.unwrap();
+    assert!(!h.core.state().lock.device_unlock.biometric.enabled);
 }

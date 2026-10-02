@@ -12,6 +12,7 @@ import {
   type Unsubscribe,
 } from "./backend";
 import {
+  type BiometricKind,
   type CandidateAction,
   type CandidateView,
   type Choice,
@@ -60,6 +61,12 @@ export interface MockOptions {
   platform?: Platform;
   keychainAvailable?: boolean;
   deviceUnlock?: boolean;
+  /** What the computer offers before "remember on this device" unlocks (none by default). */
+  biometric?: BiometricKind | null;
+  /** The vault asks for it. */
+  biometricUnlock?: boolean;
+  /** How the next biometric checks answer (they pass by default). */
+  biometricAnswer?: ErrorCode | null;
   /** Text the clipboard import reads. */
   clipboard?: string;
   now?: () => number;
@@ -375,6 +382,7 @@ export class MockBackend implements Backend {
   private space: SyncSpaceView | null;
   /** The folded groups, kept here while locked (the core keeps them in the vault). */
   private collapsed: string[];
+  private biometricAnswer: ErrorCode | null;
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -386,6 +394,7 @@ export class MockBackend implements Backend {
     this.updateFailure = options.updateFailure;
     this.space = options.sync ?? null;
     this.collapsed = options.collapsedGroups ?? [];
+    this.biometricAnswer = options.biometricAnswer ?? null;
     const entries = options.entries ?? [];
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
     const phase = options.phase ?? (entries.length > 0 ? "unlocked" : "no_vault");
@@ -398,6 +407,7 @@ export class MockBackend implements Backend {
         device_unlock: {
           available: options.keychainAvailable ?? true,
           enabled: options.deviceUnlock ?? false,
+          biometric: { kind: options.biometric ?? null, enabled: options.biometricUnlock ?? false },
         },
         failed_attempts: 0,
         retry_at_ms: null,
@@ -541,6 +551,7 @@ export class MockBackend implements Backend {
         if (this.state.phase !== "locked") return null;
         if (!this.state.lock.device_unlock.available) throw new LockraError("keychain_unavailable");
         if (!this.state.lock.device_unlock.enabled) throw new LockraError("device_unlock_off");
+        if (this.state.lock.device_unlock.biometric.enabled) this.checkUser(command.reason);
         this.enterUnlocked(this.lockedEntries);
         return null;
       case "vault_lock":
@@ -578,6 +589,20 @@ export class MockBackend implements Backend {
         if (!this.state.lock.device_unlock.enabled) throw new LockraError("device_unlock_off");
         this.checkPassword(command.password);
         this.state.lock.device_unlock.enabled = false;
+        this.state.lock.device_unlock.biometric.enabled = false;
+        this.publish();
+        return null;
+      case "device_biometric_enable":
+        this.requireUnlocked();
+        if (!this.state.lock.device_unlock.enabled) throw new LockraError("device_unlock_off");
+        this.checkUser(command.reason);
+        this.state.lock.device_unlock.biometric.enabled = true;
+        this.publish();
+        return null;
+      case "device_biometric_disable":
+        this.requireUnlocked();
+        this.checkPassword(command.password);
+        this.state.lock.device_unlock.biometric.enabled = false;
         this.publish();
         return null;
       case "entry_add_uri": {
@@ -1317,6 +1342,21 @@ export class MockBackend implements Backend {
   private requireUnlocked(): void {
     if (this.state.phase === "locked") throw new LockraError("locked");
     if (this.state.phase === "no_vault") throw new LockraError("no_vault");
+  }
+
+  /** The reasons the biometric checks were shown, for tests. */
+  readonly biometricReasons: string[] = [];
+
+  /** Test hook: how the next biometric checks answer. */
+  answerBiometric(answer: ErrorCode | null): void {
+    this.biometricAnswer = answer;
+  }
+
+  private checkUser(reason: string | undefined): void {
+    this.biometricReasons.push(reason ?? "");
+    if (this.state.lock.device_unlock.biometric.kind === null)
+      throw new LockraError("biometric_unavailable");
+    if (this.biometricAnswer !== null) throw new LockraError(this.biometricAnswer);
   }
 
   private checkPassword(password: string): void {

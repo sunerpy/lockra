@@ -33,7 +33,11 @@ pub enum UiCommand {
         password: Zeroizing<String>,
     },
     /// Unlock with the keychain key.
-    VaultUnlockDevice,
+    VaultUnlockDevice {
+        /// The words of the Touch ID or Windows Hello prompt, in the interface's language.
+        #[serde(default)]
+        reason: Option<String>,
+    },
     /// Lock.
     VaultLock,
     /// Change the master password.
@@ -49,6 +53,17 @@ pub enum UiCommand {
     DeviceUnlockEnable,
     /// Turn it off.
     DeviceUnlockDisable {
+        /// The master password.
+        password: Zeroizing<String>,
+    },
+    /// Ask for Touch ID or Windows Hello before "remember on this device" unlocks (one check now).
+    DeviceBiometricEnable {
+        /// The words of the prompt.
+        #[serde(default)]
+        reason: Option<String>,
+    },
+    /// Stop asking for it.
+    DeviceBiometricDisable {
         /// The master password.
         password: Zeroizing<String>,
     },
@@ -216,7 +231,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 41] = [
+pub const COMMANDS: [&str; 43] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -226,6 +241,8 @@ pub const COMMANDS: [&str; 41] = [
     "vault_reset",
     "device_unlock_enable",
     "device_unlock_disable",
+    "device_biometric_enable",
+    "device_biometric_disable",
     "entry_add_uri",
     "entry_add_manual",
     "entry_update",
@@ -283,7 +300,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::AppState => json!(core.state()),
         UiCommand::VaultCreate { password } => unit(core.create_vault(password).await)?,
         UiCommand::VaultUnlock { password } => unit(core.unlock(password).await)?,
-        UiCommand::VaultUnlockDevice => unit(core.unlock_with_device().await)?,
+        UiCommand::VaultUnlockDevice { reason } => unit(core.unlock_with_device(reason).await)?,
         UiCommand::VaultLock => {
             core.lock_vault();
             Value::Null
@@ -292,6 +309,8 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::VaultReset => unit(core.reset_vault())?,
         UiCommand::DeviceUnlockEnable => unit(core.enable_device_unlock())?,
         UiCommand::DeviceUnlockDisable { password } => unit(core.disable_device_unlock(password).await)?,
+        UiCommand::DeviceBiometricEnable { reason } => unit(core.enable_device_biometric(reason).await)?,
+        UiCommand::DeviceBiometricDisable { password } => unit(core.disable_device_biometric(password).await)?,
         UiCommand::EntryAddUri { uri } => json!({ "id": core.add_uri(&uri)? }),
         UiCommand::EntryAddManual { draft } => json!({ "id": core.add_manual(draft)? }),
         UiCommand::EntryUpdate { id, patch } => unit(core.update_entry(id, patch))?,

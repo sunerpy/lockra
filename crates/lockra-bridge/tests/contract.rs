@@ -11,12 +11,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lockra_bridge::{COMMANDS, SHELL_COMMANDS, UiCommand, dispatch};
-use lockra_core::fakes::{FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
+use lockra_core::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
 use lockra_core::settings::{AccentId, AutoBackup, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
-    BackupFailure, BackupView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded, ExportPage, ExportStarted,
-    ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView, Revealed, StorageView, SyncCreated,
-    SyncDeviceView, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded,
+    ExportPage, ExportStarted, ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView,
+    Revealed, StorageView, SyncCreated, SyncDeviceView, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
@@ -238,7 +238,11 @@ fn state(phase: Phase) -> UiState {
         phase,
         data_dir: "/home/user/.local/share/dev.lockra.desktop".into(),
         lock: LockView {
-            device_unlock: DeviceUnlockView { available: true, enabled: phase != Phase::NoVault },
+            device_unlock: DeviceUnlockView {
+                available: true,
+                enabled: phase != Phase::NoVault,
+                biometric: BiometricView { kind: Some(BiometricKind::TouchId), enabled: phase == Phase::Locked },
+            },
             failed_attempts: if phase == Phase::Locked { 4 } else { 0 },
             retry_at_ms: (phase == Phase::Locked).then_some(T0 + 2000),
         },
@@ -290,12 +294,14 @@ fn commands() -> Vec<Value> {
         json!({"command": "app_state"}),
         json!({"command": "vault_create", "password": "correct horse battery"}),
         json!({"command": "vault_unlock", "password": "correct horse battery"}),
-        json!({"command": "vault_unlock_device"}),
+        json!({"command": "vault_unlock_device", "reason": "unlock Lockra"}),
         json!({"command": "vault_lock"}),
         json!({"command": "vault_change_password", "current": "correct horse battery", "new": "a new password"}),
         json!({"command": "vault_reset"}),
         json!({"command": "device_unlock_enable"}),
         json!({"command": "device_unlock_disable", "password": "a new password"}),
+        json!({"command": "device_biometric_enable", "reason": "turn on Touch ID"}),
+        json!({"command": "device_biometric_disable", "password": "a new password"}),
         json!({"command": "entry_add_uri", "uri": format!("otpauth://totp/GitHub:octocat?secret={SECRET}&issuer=GitHub")}),
         json!({"command": "entry_add_manual", "draft": {
             "issuer": "Mail", "account": "me@example.com", "secret": "GEZD GNBV GY3T QOJQ",
@@ -500,7 +506,14 @@ async fn dispatch_answers_and_leaks_nothing() {
     let updater = Arc::new(FakeUpdater::installed(InstallMethod::Deb));
     *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));
     let transport = Arc::new(FakeTransport::default());
-    let ports = Ports { secrets: keychain, clipboard: clipboard.clone(), clock: Arc::new(FakeClock::new(T0)), updater: updater.clone(), sync: transport };
+    let ports = Ports {
+        secrets: keychain,
+        clipboard: clipboard.clone(),
+        clock: Arc::new(FakeClock::new(T0)),
+        updater: updater.clone(),
+        sync: transport,
+        biometrics: Arc::new(FakeBiometrics::default()),
+    };
     let core = Core::start(config, ports);
     let mut events = core.subscribe();
     let sink = Arc::new(RecordingSink::default());
@@ -525,8 +538,10 @@ async fn dispatch_answers_and_leaks_nothing() {
         json!({"command": "import_text", "text": "otpauth://totp/Mail:me?secret=MZXW6YTBOI"}),
         json!({"command": "import_commit"}),
         json!({"command": "device_unlock_enable"}),
+        json!({"command": "device_biometric_enable", "reason": "turn on Touch ID"}),
         json!({"command": "vault_lock"}),
         json!({"command": "vault_unlock_device"}),
+        json!({"command": "device_biometric_disable", "password": "correct horse battery"}),
         json!({"command": "activity"}),
         json!({"command": "secret_view_closed"}),
         json!({"command": "import_cancel"}),

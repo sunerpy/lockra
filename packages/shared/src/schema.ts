@@ -249,6 +249,9 @@ export const ERROR_CODES = [
   "device_key_missing",
   "device_key_stale",
   "device_unlock_off",
+  "biometric_cancelled",
+  "biometric_failed",
+  "biometric_unavailable",
   "entry_not_found",
   "duplicate_entry",
   "invalid_uri",
@@ -435,8 +438,18 @@ export const MAX_DEVICE_NAME_CHARS = 64;
 
 // ---- state and events ------------------------------------------------------------------------
 
+/** The platform checks Lockra can ask for before "remember on this device" unlocks. */
+export const BIOMETRIC_KINDS = ["touch_id", "windows_hello"] as const;
+export const biometricKindSchema = z.enum(BIOMETRIC_KINDS);
+export type BiometricKind = z.infer<typeof biometricKindSchema>;
+
 export const lockViewSchema = z.object({
-  device_unlock: z.object({ available: z.boolean(), enabled: z.boolean() }),
+  device_unlock: z.object({
+    available: z.boolean(),
+    enabled: z.boolean(),
+    /** Touch ID or Windows Hello first: what the computer offers, and whether the vault asks. */
+    biometric: z.object({ kind: biometricKindSchema.nullable(), enabled: z.boolean() }),
+  }),
   failed_attempts: z.number().int().nonnegative(),
   retry_at_ms: msSchema.nullable(),
 });
@@ -605,12 +618,14 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("app_state") }),
   z.object({ command: z.literal("vault_create"), password }),
   z.object({ command: z.literal("vault_unlock"), password }),
-  z.object({ command: z.literal("vault_unlock_device") }),
+  z.object({ command: z.literal("vault_unlock_device"), reason: z.string().optional() }),
   z.object({ command: z.literal("vault_lock") }),
   z.object({ command: z.literal("vault_change_password"), current: password, new: password }),
   z.object({ command: z.literal("vault_reset") }),
   z.object({ command: z.literal("device_unlock_enable") }),
   z.object({ command: z.literal("device_unlock_disable"), password }),
+  z.object({ command: z.literal("device_biometric_enable"), reason: z.string().optional() }),
+  z.object({ command: z.literal("device_biometric_disable"), password }),
   z.object({ command: z.literal("entry_add_uri"), uri: z.string() }),
   z.object({ command: z.literal("entry_add_manual"), draft: entryDraftSchema }),
   z.object({ command: z.literal("entry_update"), id: idSchema, patch: entryPatchSchema }),

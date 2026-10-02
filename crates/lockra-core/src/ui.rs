@@ -319,6 +319,27 @@ pub struct DeviceUnlockView {
     pub available: bool,
     /// The vault carries a device slot.
     pub enabled: bool,
+    /// The check before the keychain's key is used.
+    pub biometric: BiometricView,
+}
+
+/// Touch ID or Windows Hello before "remember on this device" unlocks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct BiometricView {
+    /// What this computer offers; `None` when it offers nothing (no sensor, nothing enrolled).
+    pub kind: Option<BiometricKind>,
+    /// The device slot asks for it.
+    pub enabled: bool,
+}
+
+/// A platform's biometric check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BiometricKind {
+    /// macOS.
+    TouchId,
+    /// Windows: a fingerprint, the face or the Windows Hello PIN.
+    WindowsHello,
 }
 
 /// Where imported accounts came from.

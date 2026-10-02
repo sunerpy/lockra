@@ -14,6 +14,10 @@
     "lock": {
       "device_unlock": {
         "available": true,
+        "biometric": {
+          "enabled": true,
+          "kind": "touch_id"
+        },
         "enabled": true
       },
       "failed_attempts": 4,
@@ -70,6 +74,10 @@
     "lock": {
       "device_unlock": {
         "available": true,
+        "biometric": {
+          "enabled": false,
+          "kind": "touch_id"
+        },
         "enabled": false
       },
       "failed_attempts": 0,
@@ -388,6 +396,10 @@
     "lock": {
       "device_unlock": {
         "available": true,
+        "biometric": {
+          "enabled": false,
+          "kind": "touch_id"
+        },
         "enabled": true
       },
       "failed_attempts": 0,

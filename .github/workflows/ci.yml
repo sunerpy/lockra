@@ -20,6 +20,7 @@
 #   gateway, for S3's conditional writes, and rclone's WebDAV server.
 # - `windows-check` is the template's optional early warning, enabled: the shell and the
 #   clipboard adapter carry Windows-only code.
+# - `macos-check` is the same warning for macOS: the shell's Touch ID check is macOS-only code.
 # There are still no macOS or Windows test legs: the release bundle matrix is the native proof.
 name: CI
 
@@ -409,9 +410,35 @@ jobs:
         shell: bash
         run: cargo check --locked --workspace --all-targets
 
+  # The same early warning for macOS-only code (the shell's Touch ID check), on the runner the
+  # release bundles macOS on.
+  macos-check:
+    name: macOS cargo check
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.0
+          components: clippy
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: tauri-ci-macos-check
+      - name: Create an empty frontendDist so generate_context! compiles
+        run: mkdir -p apps/desktop/dist
+      - name: Clippy
+        run: cargo clippy --locked -p lockra-desktop --all-targets -- -D warnings
+
   ci-success:
     name: CI Success
-    needs: [frontend, rust, config, repo, deny, smoke, sync-it, windows-check]
+    needs: [frontend, rust, config, repo, deny, smoke, sync-it, windows-check, macos-check]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

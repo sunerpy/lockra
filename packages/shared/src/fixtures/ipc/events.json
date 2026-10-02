@@ -9,7 +9,11 @@
       "lock": {
         "device_unlock": {
           "available": true,
-          "enabled": true
+          "enabled": true,
+          "biometric": {
+            "kind": "touch_id",
+            "enabled": true
+          }
         },
         "failed_attempts": 4,
         "retry_at_ms": 1790000002000

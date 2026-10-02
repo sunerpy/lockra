@@ -38,7 +38,7 @@ export function Unlock() {
       return t("unlock.failed", { n: lock.failed_attempts });
     return errorText(t, code);
   };
-  const { available, enabled } = lock.device_unlock;
+  const { available, enabled, biometric } = lock.device_unlock;
   return (
     <div className="flex min-h-full items-center justify-center p-6" data-testid="page-unlock">
       <div className="flex w-full max-w-[380px] flex-col gap-5 rounded-14 bg-surface p-8 hairline">
@@ -75,16 +75,25 @@ export function Unlock() {
         {enabled && (
           <div className="flex flex-col gap-1.5">
             <Button
-              icon="key"
+              icon={biometric.enabled ? "fingerprint" : "key"}
               loading={device.busy}
               disabled={!available}
               title={available ? undefined : t("settings.security.deviceUnavailable")}
               onClick={() =>
-                void device.run(() => backend.dispatch({ command: "vault_unlock_device" }))
+                void device.run(() =>
+                  backend.dispatch({
+                    command: "vault_unlock_device",
+                    // The words of the system's prompt, in the interface's language.
+                    reason: biometric.enabled ? t("unlock.biometricReason") : undefined,
+                  }),
+                )
               }>
-              {t("unlock.device")}
+              {biometric.enabled && biometric.kind !== null
+                ? t(`unlock.biometric.${biometric.kind}`)
+                : t("unlock.device")}
             </Button>
-            {device.error !== undefined && (
+            {/* A cancelled check is the user's own choice: nothing to say. */}
+            {device.error !== undefined && device.error !== "biometric_cancelled" && (
               <p role="alert" className="text-[12px] text-danger">
                 {errorText(t, device.error)}
               </p>

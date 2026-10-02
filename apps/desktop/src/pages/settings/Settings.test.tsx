@@ -1,4 +1,4 @@
-import { MOCK_PASSWORD } from "@lockra/shared/mock";
+import { MOCK_PASSWORD, MockBackend, sampleEntries } from "@lockra/shared/mock";
 import { screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../../test/render";
 
@@ -106,6 +106,56 @@ describe("SettingsDialog", () => {
       "false",
     );
     expect(dialog.queryByTestId("device-disable")).toBeNull();
+  });
+
+  it("asks for Touch ID before the remembered key unlocks, and for the password to stop", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      deviceUnlock: true,
+      biometric: "touch_id",
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const dialog = await openSettings(user, "安全");
+    const toggle = dialog.getByRole("switch", { name: "解锁时验证 Touch ID" });
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(
+      dialog.getByText("用「在本机记住」解锁前先验证指纹。主密码始终可以解锁。"),
+    ).toBeInTheDocument();
+    backend.answerBiometric("biometric_cancelled");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    backend.answerBiometric(null);
+    await user.click(toggle);
+    expect(backend.calls.at(-1)).toEqual({
+      command: "device_biometric_enable",
+      reason: "开启 Touch ID 解锁",
+    });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    await user.click(toggle);
+    const form = within(dialog.getByTestId("biometric-disable"));
+    await user.type(form.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    expect(await dialog.findByRole("switch", { name: "解锁时验证 Touch ID" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(backend.calls.at(-1)).toEqual({
+      command: "device_biometric_disable",
+      password: MOCK_PASSWORD,
+    });
+  });
+
+  it("offers no fingerprint check where there is none, or before the vault is remembered", async () => {
+    const none = renderApp({ mock: { deviceUnlock: true } });
+    await ready();
+    const dialog = await openSettings(none.user, "安全");
+    expect(dialog.queryByRole("switch", { name: /解锁时验证/ })).toBeNull();
+    none.unmount();
+    const off = renderApp({ mock: { biometric: "windows_hello" } });
+    await ready();
+    const later = await openSettings(off.user, "安全");
+    expect(later.queryByRole("switch", { name: "解锁时验证 Windows Hello" })).toBeNull();
   });
 
   it("cannot remember without a keychain", async () => {

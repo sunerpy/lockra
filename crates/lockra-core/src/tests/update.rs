@@ -88,7 +88,7 @@ fn remember(h: &Harness, version: &str) {
 /// A new start on the harness's directories with automatic updates saved as on.
 fn start_automatic(h: &Harness, updater: &Arc<FakeUpdater>) -> Core {
     SettingsStore::new(&h.dir.path().join("config")).save(&automatic(true)).unwrap();
-    start(h.dir.path(), Arc::clone(&h.keychain), Arc::clone(&h.clipboard), Arc::clone(updater), Arc::clone(&h.sync))
+    start(h.dir.path(), Arc::clone(&h.keychain), Arc::clone(&h.clipboard), Arc::clone(updater), Arc::clone(&h.sync), Arc::clone(&h.biometrics))
 }
 
 fn release_out(method: InstallMethod, version: &str) -> Arc<FakeUpdater> {
@@ -283,7 +283,7 @@ async fn a_switch_saved_before_0_3_2_neither_checks_nor_installs_at_start() {
     fs::write(h.dir.path().join("config/settings.json"), r#"{"auto_update":true}"#).unwrap();
     remember(&h, "0.2.0");
     let updater = release_out(InstallMethod::Deb, "0.2.0");
-    let core = start(h.dir.path(), Arc::clone(&h.keychain), Arc::clone(&h.clipboard), Arc::clone(&updater), Arc::clone(&h.sync));
+    let core = start(h.dir.path(), Arc::clone(&h.keychain), Arc::clone(&h.clipboard), Arc::clone(&updater), Arc::clone(&h.sync), Arc::clone(&h.biometrics));
     assert!(!core.state().settings.auto_update);
     advance(STARTUP_CHECK_DELAY * 10).await;
     assert!(updater.calls().is_empty(), "nothing goes online until the switch is turned on again");

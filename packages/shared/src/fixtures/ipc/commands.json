@@ -12,7 +12,8 @@
       "password": "correct horse battery"
     },
     {
-      "command": "vault_unlock_device"
+      "command": "vault_unlock_device",
+      "reason": "unlock Lockra"
     },
     {
       "command": "vault_lock"
@@ -30,6 +31,14 @@
     },
     {
       "command": "device_unlock_disable",
+      "password": "a new password"
+    },
+    {
+      "command": "device_biometric_enable",
+      "reason": "turn on Touch ID"
+    },
+    {
+      "command": "device_biometric_disable",
       "password": "a new password"
     },
     {

@@ -7,6 +7,7 @@
 //! Argon2 works). Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs`
 //! drives the real command layer on `tauri::test::MockRuntime` without a window.
 
+pub mod biometrics;
 pub mod clipboard;
 pub mod keychain;
 pub mod sync;
@@ -313,7 +314,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 None => Arc::new(NoUpdater),
             };
             let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
-            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync };
+            let biometrics = Arc::new(biometrics::PlatformBiometrics::default());
+            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());
