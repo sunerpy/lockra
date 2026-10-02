@@ -11,6 +11,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use futures_util::StreamExt as _;
 pub use lockra_sync::{ConfigError, StorageConfig};
 use lockra_sync::{MAX_OBJECT_BYTES, ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SyncError};
 use opendal::layers::{RetryLayer, TimeoutLayer};
@@ -166,11 +167,27 @@ impl RemoteStore for Storage {
             if size == 0 {
                 return Ok(Some((Vec::new(), None)));
             }
-            match self.operator.read_with(path).range(0..size).await {
-                Ok(buffer) => Ok(Some((buffer.to_vec(), None))),
-                Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
-                Err(e) => Err(map(e)),
+            // Streamed, and stopped past the size: a server that ignores the range and sends more is
+            // not read to its end.
+            let stream = match self.operator.reader(path).await {
+                Ok(reader) => reader.into_stream(0..size).await,
+                Err(e) => Err(e),
+            };
+            let mut stream = match stream {
+                Ok(stream) => stream,
+                Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+                Err(e) => return Err(map(e)),
+            };
+            let mut bytes = Vec::with_capacity(usize::try_from(size).unwrap_or(0));
+            while let Some(chunk) = stream.next().await {
+                for piece in chunk.map_err(map)? {
+                    if (bytes.len() + piece.len()) as u64 > size {
+                        return Err(SyncError::Corrupted);
+                    }
+                    bytes.extend_from_slice(&piece);
+                }
             }
+            Ok(Some((bytes, None)))
         })
     }
 
@@ -257,6 +274,42 @@ mod tests {
         ] {
             assert_eq!(redirect_allowed(&Url::parse(url).unwrap()), allowed, "{url}");
         }
+    }
+
+    /// An S3 server on this computer that says an object has 10 bytes and, asked for them, sends a
+    /// mebibyte (it ignores the range).
+    async fn lying_server() -> u16 {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut request = vec![0u8; 8192];
+                    let read = socket.read(&mut request).await.unwrap_or(0);
+                    let head = String::from_utf8_lossy(&request[..read]).starts_with("HEAD");
+                    let headers = "ETag: \"a\"\r\nLast-Modified: Thu, 01 Oct 2026 00:00:00 GMT\r\nConnection: close\r\n";
+                    if head {
+                        let _ = socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: 10\r\n{headers}\r\n").as_bytes()).await;
+                    } else {
+                        let body = vec![b'x'; 1024 * 1024];
+                        let _ = socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{headers}\r\n", body.len()).as_bytes()).await;
+                        let _ = socket.write_all(&body).await;
+                    }
+                });
+            }
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn a_server_sending_more_than_the_size_it_gave_is_not_read_to_its_end() {
+        let port = lying_server().await;
+        let storage = Storage::open(&s3(&format!("http://127.0.0.1:{port}"))).unwrap();
+        // Refused at once, as damaged: not a network failure to retry (OpenDAL's own check reads the
+        // whole body first, then calls it a temporary error).
+        let answer = storage.get("phone/x.lks").await;
+        assert_eq!(answer.map(|found| found.map(|(bytes, _)| bytes.len())), Err(SyncError::Corrupted));
     }
 
     #[tokio::test]

@@ -226,7 +226,10 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   reported as unreadable.
 - **The keyring's stamp** is the stamp of the change that sealed it (creating the space, or a new
   master password). A device writing a keyring under a new master password first reads the
-  stored one and leaves it if its stamp is later: the space follows the latest password.
+  stored one and leaves it if its stamp is later: the space follows the latest password. On S3
+  the write carries `If-Match` on the etag listed (or `If-None-Match: *`), and a keyring written
+  in between is compared again on the next run. An object is read as a stream, and no further
+  than the size the storage gave for it.
 - **Merge.** Last writer wins per account, on the stamps: a hybrid logical clock
   `(wall_ms, counter, device)` that follows wall time, never goes back on a device and comes after
   every stamp the device has seen. A tombstone at or after an account's stamp removes it; a change

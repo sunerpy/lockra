@@ -537,3 +537,61 @@ async fn new_storage_settings_must_lead_to_this_spaces_keyring() {
     assert!(matches!(space(&desktop).storage, StorageView::Webdav { .. }));
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
 }
+
+/// The fake storage, where another device writes the keyring just before this one does.
+struct Interfering {
+    remote: MemoryRemote,
+    armed: AtomicBool,
+}
+
+impl RemoteStore for Interfering {
+    fn conditional_puts(&self) -> bool {
+        self.remote.conditional_puts()
+    }
+
+    fn list<'a>(&'a self, dir: &'a str) -> RemoteFuture<'a, Vec<ObjectMeta>> {
+        self.remote.list(dir)
+    }
+
+    fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
+        self.remote.get(path)
+    }
+
+    fn put<'a>(&'a self, path: &'a str, bytes: Vec<u8>, condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
+        if path.ends_with("keyring.lks")
+            && self.armed.swap(false, Ordering::SeqCst)
+            && let Some(current) = self.remote.object(path)
+        {
+            self.remote.set_object(path, current);
+        }
+        self.remote.put(path, bytes, condition)
+    }
+
+    fn delete<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, ()> {
+        self.remote.delete(path)
+    }
+}
+
+struct OneStore(Arc<dyn RemoteStore>);
+
+impl SyncTransport for OneStore {
+    fn open(&self, _config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+        Ok(Arc::clone(&self.0))
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_keyring_written_meanwhile_is_compared_again_before_it_is_replaced() {
+    let store = Arc::new(Interfering { remote: MemoryRemote::new(true), armed: AtomicBool::new(false) });
+    let desktop = harness_on(FakeUpdater::default(), Arc::new(OneStore(Arc::clone(&store) as Arc<dyn RemoteStore>)));
+    desktop.core.create_vault(pw(MASTER)).await.unwrap();
+    desktop.core.sync_create(s3(STORAGE_SECRET), pw(MASTER), "Desktop".into()).await.unwrap();
+    settle().await;
+    store.armed.store(true, Ordering::SeqCst);
+    desktop.core.change_password(pw(MASTER), pw("a new password")).await.unwrap();
+    settle().await;
+    assert!(space(&desktop).keyring_pending, "the keyring changed between reading and writing: not written over");
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert!(!space(&desktop).keyring_pending, "compared again, then written");
+}

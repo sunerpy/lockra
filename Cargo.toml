@@ -44,6 +44,8 @@ data-encoding = "=2.11.1"
 getrandom = "=0.3.4"
 # The sync keyring and the per-object keys (docs/formats.md, "Sync"): HKDF-SHA256, RFC 5869.
 hkdf = "=0.13.0"
+# Reading a sync object as a stream, to stop at its size (crates/lockra-remote).
+futures-util = { version = "=0.3.34", default-features = false }
 hmac = "=0.13.0"
 # Screenshots and photos of export QR codes: decoding only, PNG / JPEG / WebP.
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }

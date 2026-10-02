@@ -12,6 +12,7 @@ publish = false
 workspace = true
 
 [dependencies]
+futures-util.workspace = true
 lockra-sync.workspace = true
 opendal.workspace = true
 opendal-http-transport-reqwest.workspace = true

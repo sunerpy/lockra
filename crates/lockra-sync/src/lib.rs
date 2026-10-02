@@ -32,7 +32,7 @@ pub use lww::{Record, Tombstone, merge};
 pub use object::{PAD_TO, Snapshot, open_snapshot, seal_snapshot};
 pub use remote::{MAX_OBJECT_BYTES, MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteStore};
 pub use step::{
-    DeviceView, Outcome, PendingWrite, Persist, Replica, Seen, Space, SyncState, device_path, devices_dir, keyring_path, remove_device, spaces_dir, step,
-    step_with,
+    DeviceView, Outcome, PendingWrite, Persist, Replica, Seen, Space, SyncState, device_path, devices_dir, keyring_path, remove_device, space_dir, spaces_dir,
+    step, step_with,
 };
 pub use storage::{ConfigError, StorageConfig};

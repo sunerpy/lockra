@@ -32,6 +32,11 @@ pub fn spaces_dir(prefix: &str) -> String {
     format!("{}{ROOT}/", base(prefix))
 }
 
+/// The directory of space `space_id` under `prefix`: its keyring and its `devices/`.
+pub fn space_dir(prefix: &str, space_id: Uuid) -> String {
+    format!("{}{ROOT}/{space_id}/", base(prefix))
+}
+
 /// Where the keyring object of space `space_id` lives under `prefix`.
 pub fn keyring_path(prefix: &str, space_id: Uuid) -> String {
     format!("{}{ROOT}/{space_id}/keyring{EXTENSION}", base(prefix))

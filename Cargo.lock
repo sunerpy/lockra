@@ -2727,6 +2727,7 @@ dependencies = [
 name = "lockra-remote"
 version = "0.0.0"
 dependencies = [
+ "futures-util",
  "lockra-sync",
  "lockra-vault",
  "opendal",

@@ -385,6 +385,11 @@ impl VaultData {
     /// backup's own deletions are kept, so the other devices of a sync space end up with the
     /// backup's accounts. An HOTP counter does not go back below what this vault had.
     pub(crate) fn replace_entries(&mut self, entries: Vec<Entry>, tombstones: &[Tombstone], now_ms: u64) {
+        // The new stamps come after everything the backup holds, its deletions included (a backup
+        // from a device whose clock ran ahead), so no kept tombstone removes a restored account.
+        if let Some(latest) = entries.iter().map(|e| e.stamp).chain(tombstones.iter().map(|t| t.stamp)).max() {
+            self.local_mut().clock.observe(latest);
+        }
         for tombstone in tombstones {
             self.bury(*tombstone);
         }
@@ -551,6 +556,13 @@ mod tests {
         assert_eq!(data.entries[0].kind, OtpKind::Hotp { counter: 9 }, "restored at the counter this vault reached");
         assert!(data.entries[0].stamp > data.tombstones.iter().find(|t| t.id == id).unwrap().stamp);
         assert!(data.tombstones.contains(&elsewhere), "the backup's deletions are kept");
+        // A backup from a clock far ahead: an account deleted there and brought back later stays.
+        let mut revived = Entry::from_auth(auth("otpauth://totp/Mail:me?secret=GEZDGNBV"), Origin::Uri, 1);
+        revived.stamp = Hlc { wall_ms: 9_000_000_000_000, counter: 5, device: 3 };
+        let old_deletion = Tombstone { id: revived.id, stamp: Hlc { wall_ms: 9_000_000_000_000, counter: 4, device: 3 }, counter: None };
+        data.replace_entries(vec![revived.clone()], &[old_deletion], 20);
+        let tombstone = data.tombstones.iter().find(|t| t.id == revived.id).unwrap();
+        assert!(data.entries[0].stamp > tombstone.stamp, "{:?} is not after {:?}", data.entries[0].stamp, tombstone.stamp);
         // TOTP accounts have no counter.
         let totp = Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1);
         assert_eq!(totp.counter(), None);

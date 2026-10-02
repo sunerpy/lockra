@@ -162,7 +162,10 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   instance) can try master passwords offline at Argon2id's cost; the master password is the last
   line. The storage's operator sees when devices write and how many there are, and can delete the
   space. Devices of one space may keep different master passwords: the keyring follows the last
-  one changed, and joining asks for that one.
+  one changed, and joining asks for that one. On WebDAV, which has no conditional writes, a keyring
+  written by another device between this device's read and write can be replaced by an older one
+  (S3 refuses that write); joining then asks for the older password until a device changes the
+  password again.
 - Importing from Microsoft Authenticator needs a rooted Android phone, and newer versions of that
   app may encrypt the field Lockra reads.
 - The packages are not code-signed (Windows SmartScreen and macOS Gatekeeper warn); the update

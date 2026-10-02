@@ -14,7 +14,7 @@ use data_encoding::BASE64;
 use lockra_otp::{OtpKind, base32, hotp, totp_window, uri};
 use lockra_sync::{
     Invite, Outcome as SyncOutcome, PutCondition, RemoteStore, Space, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, keyring_info, keyring_path,
-    open_keyring, remove_device, seal_keyring, step_with,
+    open_keyring, remove_device, seal_keyring, space_dir, step_with,
 };
 use lockra_transfer::{Item, Origin, detect, microsoft, qr, text};
 use lockra_vault::{DeviceKey, DeviceSlot, FileKind, KdfCost, Opened, Sealed, read_header, write_atomic};
@@ -1520,12 +1520,26 @@ impl Core {
             let path = keyring_path(&prefix, space_id);
             let ours = keyring_info(&keyring)?.stamp;
             // Another device's later master password is the space's now: ours does not go over it.
-            let newer =
-                remote.get(&path).await?.is_some_and(|(bytes, _)| keyring_info(&bytes).is_ok_and(|theirs| theirs.space_id == space_id && theirs.stamp > ours));
-            if !newer {
-                remote.put(&path, keyring.clone(), PutCondition::Always).await?;
+            // On S3 the write holds only while the keyring is still the one read (WebDAV has no
+            // conditions: there a keyring written between the two requests can still be lost).
+            let listed = remote.list(&space_dir(&prefix, space_id)).await?.into_iter().find(|meta| path.ends_with(&format!("/{}", meta.name)));
+            let stored = if listed.is_some() { remote.get(&path).await? } else { None };
+            let newer = stored.is_some_and(|(bytes, _)| keyring_info(&bytes).is_ok_and(|theirs| theirs.space_id == space_id && theirs.stamp > ours));
+            let condition = match (remote.conditional_puts(), listed) {
+                (false, _) => PutCondition::Always,
+                (true, None) => PutCondition::IfAbsent,
+                (true, Some(meta)) => meta.etag.map_or(PutCondition::Always, PutCondition::IfMatch),
+            };
+            let settled = newer
+                || match remote.put(&path, keyring.clone(), condition).await {
+                    Ok(_) => true,
+                    // Written meanwhile: the next run compares again.
+                    Err(SyncError::Conflict) => false,
+                    Err(error) => return Err(error),
+                };
+            if settled {
+                self.sync_keyring_written(space_id, &keyring);
             }
-            self.sync_keyring_written(space_id, &keyring);
         }
         let space = Space { prefix: &prefix, keys: &keys, device, device_name: &device_name };
         let core = self.clone();
