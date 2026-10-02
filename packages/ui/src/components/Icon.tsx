@@ -64,8 +64,8 @@ const PATHS = {
   globe: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18",
   folder: "M3 7h6l2 2h10v10H3z",
   key: "M15 3a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM9.5 14.5 3 21M6 18l2 2M4 20l2 2",
-  fingerprint:
-    "M12 11v2c0 2.8-.6 5.3-1.8 7.5M15.6 14.2a19 19 0 0 1-1.2 6M8.4 11a3.6 3.6 0 0 1 7.2 0v.8M5.4 15.5c.4-1.2.6-2.4.6-3.5a6 6 0 0 1 12 0v1.3M18.6 17.6c.2-.7.3-1.3.4-2M4.6 8.4A9 9 0 0 1 20.4 9",
+  // Two ridges and the core: more lines run together at a button's 14 px.
+  fingerprint: "M4.5 16.5V12a7.5 7.5 0 0 1 15 0v1.5M8 20v-8a4 4 0 0 1 8 0v5M12 12v9",
   gauge: "M4 14a8 8 0 1 1 16 0M12 14l4-4M12 14h.01",
   drag: "M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01",
   // Three dots in a row: the overflow menu of a row.

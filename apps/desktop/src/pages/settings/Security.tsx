@@ -19,7 +19,7 @@ import { passwordLongEnough } from "../../app/password";
 import { useUpdateSettings } from "../../app/settings";
 
 /** Settings › Security: auto-lock, clipboard clearing, hidden codes, "remember on this device"
- *  and the master password. */
+ *  with Touch ID or Windows Hello before it, and the master password. */
 export function Security() {
   const t = useT();
   const { settings } = useUiState();
@@ -66,8 +66,8 @@ export function Security() {
           />
         </StatusRow>
         <DeviceUnlock />
+        <BiometricUnlock />
       </SettingsRows>
-      <BiometricUnlock />
       <ChangePassword />
     </SettingsPane>
   );
