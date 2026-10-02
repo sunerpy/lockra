@@ -131,6 +131,17 @@ async fn settle() {
     }
 }
 
+/// Wait until `check` holds, for work on `spawn_blocking`'s threads (the look at the sensor), which
+/// yields alone do not wait for; fails after two seconds.
+async fn until(what: &str, check: impl Fn() -> bool) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while !check() {
+        assert!(std::time::Instant::now() < deadline, "timed out waiting for {what}");
+        std::thread::sleep(Duration::from_millis(1));
+        settle().await;
+    }
+}
+
 async fn advance(duration: Duration) {
     tokio::time::advance(duration).await;
     settle().await;
@@ -936,6 +947,29 @@ async fn an_account_takes_a_colour_and_a_mark_and_a_backup_keeps_them() {
     assert!(bytes.entries[0].mark.is_none());
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_merged_backup_and_a_replaced_secret_keep_an_accounts_colour_and_mark() {
+    let source = Harness::unlocked().await;
+    let id = source.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    source.core.update_entry(id, EntryPatch { color: Some(AccountColor::Purple), mark: Some("GH".into()), ..EntryPatch::default() }).unwrap();
+    let file = source.dir.path().join("styled.lockrabackup");
+    source.core.backup_to(file.clone(), None).await.unwrap();
+    // Merged into another vault through the import preview: the account looks the same there.
+    let h = Harness::unlocked().await;
+    h.core.restore_open(file).await.unwrap();
+    h.core.restore_commit(pw(MASTER), RestoreMode::Merge).await.unwrap();
+    h.core.import_commit(&[]).unwrap();
+    let merged = h.core.state().entries[0].clone();
+    assert_eq!((merged.color, merged.mark.as_deref()), (AccountColor::Purple, Some("GH")));
+    // A new secret replaces the entry, which keeps how it looks along with its group and pin.
+    h.core.import_text(&otpauth("GitHub", "octocat", "MZXW6YTBOI")).unwrap();
+    let conflict = h.core.state().import.unwrap().candidates[0].clone();
+    assert!(matches!(conflict.status, CandidateStatus::Conflict { .. }));
+    h.core.import_commit(&[Choice { id: conflict.id, action: CandidateAction::Replace }]).unwrap();
+    let replaced = h.core.state().entries[0].clone();
+    assert_eq!((replaced.color, replaced.mark.as_deref()), (AccountColor::Purple, Some("GH")));
+}
+
 #[test]
 fn an_entry_written_before_colours_reads_with_the_names_colour() {
     let legacy = br#"{"format":2,"entries":[{"id":"0f3f1a1e-8d4b-4c8e-9f7a-000000000001","issuer":"GitHub","account":"octocat","kind":{"type":"totp","period":30},"algorithm":"sha1","digits":6,"secret":"JBSWY3DPEHPK3PXP","group":null,"favorite":false,"origin":"uri","created_at_ms":5,"updated_at_ms":7,"last_used_at_ms":null}]}"#;
@@ -956,7 +990,7 @@ fn an_entry_written_before_colours_reads_with_the_names_colour() {
 async fn remembered_unlock_can_ask_for_the_fingerprint_first() {
     let h = Harness::unlocked().await;
     let biometric = || h.core.state().lock.device_unlock.biometric;
-    settle().await;
+    until("the first look at the sensor", || biometric().kind.is_some()).await;
     assert_eq!(biometric(), BiometricView { kind: Some(BiometricKind::TouchId), enabled: false });
     // Without "remember on this device" there is nothing to guard.
     assert_eq!(code_err(h.core.enable_device_biometric(None).await), ErrorCode::DeviceUnlockOff);
@@ -1006,6 +1040,8 @@ async fn remembered_unlock_can_ask_for_the_fingerprint_first() {
 #[tokio::test(start_paused = true)]
 async fn a_computer_without_a_sensor_offers_no_check_and_never_skips_one_it_cannot_make() {
     let h = Harness::unlocked().await;
+    // The look at start comes first, so that it cannot land after the sensor goes.
+    until("the first look at the sensor", || h.core.state().lock.device_unlock.biometric.kind.is_some()).await;
     h.biometrics.set_kind(None);
     h.core.enable_device_unlock().unwrap();
     assert_eq!(code_err(h.core.enable_device_biometric(None).await), ErrorCode::BiometricUnavailable);
@@ -1016,7 +1052,7 @@ async fn a_computer_without_a_sensor_offers_no_check_and_never_skips_one_it_cann
     h.biometrics.set_kind(None);
     h.biometrics.answer(Err(BiometricError::Unavailable));
     h.core.lock_vault();
-    settle().await;
+    until("the look at the lock", || h.core.state().lock.device_unlock.biometric.kind.is_none()).await;
     assert_eq!(h.core.state().lock.device_unlock.biometric, BiometricView { kind: None, enabled: true }, "asked again at the lock");
     assert_eq!(code_err(h.core.unlock_with_device(None).await), ErrorCode::BiometricUnavailable);
     h.core.unlock(pw(MASTER)).await.unwrap();

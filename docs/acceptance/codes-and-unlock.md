@@ -42,6 +42,16 @@ Problems found by looking at them, and fixed:
 5. The fingerprint icon ran together into a blot at the unlock button's 14 px; it is now two
    ridges and the core.
 
+Found after 0.5.0 was released, and fixed:
+
+- The goal review saw that a backup restored by merging, and an account given a new secret through
+  an import, came back without its colour and avatar text (`import.rs` carried only the group and
+  the pin); both keep them now
+  (`a_merged_backup_and_a_replaced_secret_keep_an_accounts_colour_and_mark`).
+- The two Touch ID core tests waited for the look at the sensor with a fixed number of yields, which
+  a busy machine outran once; they wait for the condition itself, with a deadline (ten full runs of
+  the suite in a row passed).
+
 ## Not verified here
 
 Touch ID on a real Mac (the prompt's words, the lockout after failures, a lid closed on an external
