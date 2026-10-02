@@ -68,6 +68,15 @@ against white, as in Codex: state is never carried by the fill alone.
 - **No hex literal in a TSX file** (`scripts/check-no-literal-colors.sh`); the logo is the one
   exception, as in Voltip, because the mark must look the same in every theme.
 
+### Account colours
+
+Ten pairs per theme, `--tag-{red orange amber green teal blue indigo purple pink gray}` (a soft
+fill) and `--tag-…-text` (its text), picked through `data-tag` and drawn with `bg-tag-bg` and
+`text-tag-fg`. They identify an account (its avatar, the swatches of **Edit…**) and are never a
+state: green here is not `ok`. Every pair reaches 4.5:1 (`theme.test.ts`); without `data-tag` the
+avatar keeps the neutral `inset2` / `fg-muted`. An account left on **Automatic** takes one of the
+nine colours other than grey from a hash of its name, so a service has the same colour everywhere.
+
 ## 2. Spatial model
 
 The window is frameless (`decorations: false`; macOS keeps its traffic lights through

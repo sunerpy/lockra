@@ -52,6 +52,10 @@ home:
             body: Type to find an account, file accounts into groups, and pin the ones you use most to the top. Ctrl K finds any account and copies its code.
             status: available
             link: /accounts/codes#finding-an-account
+          - title: Folding groups and account colours
+            body: Fold groups one by one or all at once, give each account a colour or its own avatar text, and pin or edit from the row or a right-click.
+            status: building
+            link: /accounts/codes#folding-groups
           - title: Every standard account
             body: Time-based (TOTP) and counter-based (HOTP) codes, SHA1, SHA256 or SHA512, 6 to 8 digits, any period.
             status: available
@@ -102,6 +106,10 @@ home:
             body: Optionally keep a key in the system keychain so that unlocking needs no password on this computer.
             status: available
             link: /security/#remember-on-this-device
+          - title: Touch ID and Windows Hello
+            body: Ask for your fingerprint, or Windows Hello, before the remembered key unlocks.
+            status: building
+            link: /security/#touch-id-and-windows-hello
           - title: Locks itself
             body: After five idle minutes by default, and at once with Ctrl L.
             status: available
