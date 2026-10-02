@@ -70,7 +70,7 @@ the same menu as ⋯ where you are.
 
 ## Selecting several accounts
 
-<StatusTag status="building" /> Comes with version 0.6.0.
+<StatusTag status="available" /> Available from version 0.6.0.
 
 Click **Select** beside the sort menu, or choose **Select** in an account's menu, to tick accounts:
 click a row or press Space on it, tick a section's box for all of its accounts, or click **Select

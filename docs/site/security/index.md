@@ -34,17 +34,13 @@ vault, so the deleted key opens nothing afterwards.
 
 <StatusTag status="available" /> Available from version 0.5.0.
 
-On a Mac with Touch ID, or a Windows PC with Windows Hello, turn on **Settings › Security › Ask for
-Touch ID to unlock** (**Ask for Windows Hello to unlock** on Windows) after **Remember on this
-device**. The unlock screen then shows **Unlock with Touch ID** (or **Unlock with Windows Hello**):
-your fingerprint, or Windows Hello's fingerprint, face or PIN, is checked before the remembered key
-opens the vault. Turning it on checks once that it works; turning it off asks for the master
-password. The master password always unlocks.
-
-<StatusTag status="building" /> From version 0.6.0 the switch is called **Unlock with Touch ID**
-(**Unlock with Windows Hello**) and is offered before **Remember on this device** is on: turning it
-on checks once and turns **Remember on this device** on with it. On a computer that has Touch ID or
-Windows Hello but has not turned it on, the unlock screen says where to find the switch.
+On a Mac with Touch ID, or a Windows PC with Windows Hello, turn on **Settings › Security › Unlock
+with Touch ID** (**Unlock with Windows Hello** on Windows). Turning it on checks once that it works
+and turns **Remember on this device** on with it. The unlock screen then shows **Unlock with Touch
+ID** (or **Unlock with Windows Hello**): your fingerprint, or Windows Hello's fingerprint, face or
+PIN, is checked before the remembered key opens the vault. Until it is on, the unlock screen of a
+computer that has Touch ID or Windows Hello says where to find the switch. Turning it off asks for
+the master password and leaves **Remember on this device** on. The master password always unlocks.
 
 On Windows, if Windows Hello becomes unavailable at the moment you unlock (for example while another
 app shows its own Windows Hello prompt), Windows asks for your Windows sign-in password instead.
