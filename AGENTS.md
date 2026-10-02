@@ -7,7 +7,8 @@ How to work in this repository, for coding agents and people alike.
 - `crates/` — the Rust workspace: `lockra-otp` (codes, Base32, URIs), `lockra-vault` (the
   encrypted container), `lockra-transfer` (Google, Microsoft, otpauth lists, QR codes),
   `lockra-core` (the platform-free application core: commands in, state and notices out, ports for
-  everything native) and `lockra-bridge` (the IPC contract).
+  everything native), `lockra-bridge` (the IPC contract), `lockra-sync` (the end-to-end encrypted
+  sync: keyring, device snapshots, merge; no I/O) and `lockra-remote` (its S3 and WebDAV storage).
 - `apps/desktop` — the React app (`src/`) and the Tauri 2 shell (`src-tauri/`, crate
   `lockra-desktop`).
 - `packages/shared` (zod contract, backends, i18n, labels), `packages/ui` (design system).
@@ -28,6 +29,7 @@ make hooks                       # pre-commit runs make fmt, pre-push make lint 
 make check                       # every gate, stopping at the first failure; run before pushing
 make fmt | make lint | make test # the narrower loops
 make coverage                    # crates/* line coverage, floor 90 %
+make sync-it                     # the sync storage against S3 and WebDAV servers in Docker
 make pre-ci                      # the real app under Xvfb, the deb, the cross-built installer
 make smoke-desktop               # the real app alone: flows and screenshots
 make showcase                    # the component showcase in the four themes

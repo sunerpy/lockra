@@ -1,4 +1,4 @@
-# CI for Lockra: a Tauri v2 desktop app with the Cargo workspace at the repository root (five
+# CI for Lockra: a Tauri v2 desktop app with the Cargo workspace at the repository root (seven
 # crates plus the shell in apps/desktop/src-tauri) and three pnpm packages.
 #
 # Rendered from the github-project-scaffold tauri profile (ci-tauri.yml) and adapted, so the file
@@ -13,6 +13,8 @@
 # - `smoke` drives the real app under Xvfb (scripts/smoke-desktop-linux.sh): it types a master
 #   password, imports from the clipboard, compares a copied code with RFC 6238, decodes the
 #   export QR code and closes the window with its own button.
+# - `sync-it` runs the sync storage against real servers in Docker (make sync-it): the Versity S3
+#   gateway, for S3's conditional writes, and rclone's WebDAV server.
 # - `windows-check` is the template's optional early warning, enabled: the shell and the
 #   clipboard adapter carry Windows-only code.
 # There are still no macOS or Windows test legs: the release bundle matrix is the native proof.
@@ -345,6 +347,32 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  sync-it:
+    name: Sync storage (S3, WebDAV)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.0
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: sync-it
+
+      # Starts both servers on free loopback ports with a throwaway password, runs
+      # crates/lockra-remote/tests/live.rs with LOCKRA_IT_REQUIRED=1 and removes the containers.
+      - name: Against the servers (make sync-it)
+        run: make sync-it
+
   # The template's optional early warning for Windows-only compile breaks (about 6-10 minutes with
   # a warm cache; a full Windows bundle leg is 15-36 minutes).
   windows-check:
@@ -374,7 +402,7 @@ jobs:
 
   ci-success:
     name: CI Success
-    needs: [frontend, rust, config, repo, deny, smoke, windows-check]
+    needs: [frontend, rust, config, repo, deny, smoke, sync-it, windows-check]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

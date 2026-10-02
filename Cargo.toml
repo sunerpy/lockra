@@ -8,6 +8,7 @@ members = [
   "crates/lockra-core",
   "crates/lockra-bridge",
   "crates/lockra-sync",
+  "crates/lockra-remote",
   "apps/desktop/src-tauri",
 ]
 
@@ -47,9 +48,28 @@ hmac = "=0.13.0"
 # Screenshots and photos of export QR codes: decoding only, PNG / JPEG / WebP.
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 keyring = "=4.2.0"
+# The sync storage (crates/lockra-remote): S3-compatible and WebDAV through one client. No default
+# features: only the two services, reqwest on rustls without its own crypto provider (ring, as the
+# update check installs it), tokio, retries and timeouts.
+opendal = { version = "=0.59.3", default-features = false, features = [
+  "services-s3",
+  "services-webdav",
+  "executors-tokio",
+  "layers-retry",
+  "layers-timeout",
+] }
+# OpenDAL's reqwest transport, built around Lockra's own client (crates/lockra-remote).
+opendal-http-transport-reqwest = { version = "=0.59.3", default-features = false, features = [
+  "rustls-no-provider",
+] }
 parking_lot = "=0.12.5"
 percent-encoding = "=2.3.2"
 proptest = "=1.11.0"
+# The sync storage's HTTP client, the versions tauri-plugin-updater already brings: rustls on ring.
+reqwest = { version = "=0.13.5", default-features = false, features = [
+  "rustls-no-provider",
+  "system-proxy",
+] }
 # Google Authenticator's migration payload is a protobuf; the messages are written by hand with
 # `#[derive(prost::Message)]`, so there is no protoc and no build script.
 prost = { version = "=0.14.4", default-features = false, features = ["derive", "std"] }
@@ -62,6 +82,7 @@ rxing = { version = "=0.9.3", default-features = false, features = [
 ] }
 # Microsoft Authenticator's PhoneFactor database; `bundled` builds SQLite from C on every target.
 rusqlite = { version = "=0.40.2", features = ["bundled"] }
+rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std"] }
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sha1 = "=0.11.0"
@@ -71,6 +92,7 @@ thiserror = "=2.0.21"
 tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+url = "=2.5.8"
 uuid = { version = "=1.26.1", features = ["v4", "serde"] }
 zeroize = { version = "=1.9.0", features = ["derive", "serde"] }
 
@@ -80,6 +102,7 @@ lockra-transfer = { path = "crates/lockra-transfer" }
 lockra-core = { path = "crates/lockra-core" }
 lockra-bridge = { path = "crates/lockra-bridge" }
 lockra-sync = { path = "crates/lockra-sync" }
+lockra-remote = { path = "crates/lockra-remote" }
 
 [profile.release]
 lto = "thin"

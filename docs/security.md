@@ -10,7 +10,8 @@ trusted part of the app) reading files or secrets it was not explicitly given; s
 on the clipboard or in screenshots; and an update that is not Lockra's. Lockra goes online for one
 thing only, its update (below): a check and a download when the user asks, or at start once
 automatic updates are on. There is no account, sync or telemetry. The HTTP client and TLS stack reach the desktop build
-only through tauri-plugin-updater (`deny.toml` bans them from every other crate).
+only through tauri-plugin-updater (`deny.toml` bans them from every other crate but `lockra-remote`, the storage of the
+coming sync, which the app does not use yet).
 
 ## At rest
 

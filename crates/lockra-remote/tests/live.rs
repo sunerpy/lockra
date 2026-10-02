@@ -1,0 +1,193 @@
+//! The storage against real servers: the Versity S3 gateway and rclone's WebDAV server, as
+//! `make sync-it` (scripts/sync-it.sh) and CI start them. Each test runs only when its server is
+//! named in the environment; with `LOCKRA_IT_REQUIRED=1` a missing one fails instead of skipping.
+
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use lockra_remote::{Storage, StorageConfig};
+use lockra_sync::{
+    Hlc, MemoryRemote, PutCondition, Record, RemoteStore, Replica, Space, SpaceKeys, SyncError, SyncKey, SyncState, Tombstone, keyring_path, merge,
+    open_keyring, seal_keyring, step,
+};
+use lockra_vault::KdfCost;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+use zeroize::Zeroizing;
+
+fn env(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|v| !v.is_empty())
+}
+
+/// The server's configuration, under a fresh prefix so runs never meet; `None` to skip.
+fn configured(server: &str, config: impl FnOnce(String) -> Option<StorageConfig>) -> Option<StorageConfig> {
+    let prefix = format!("it-{}/", Uuid::new_v4());
+    let found = config(prefix);
+    if found.is_none() {
+        assert!(env("LOCKRA_IT_REQUIRED").is_none(), "LOCKRA_IT_REQUIRED is set but the {server} server is not configured");
+        eprintln!("live: no {server} server configured, skipped (make sync-it)");
+    }
+    found
+}
+
+fn s3() -> Option<StorageConfig> {
+    configured("S3", |prefix| {
+        Some(StorageConfig::S3 {
+            endpoint: env("LOCKRA_IT_S3_ENDPOINT")?,
+            region: env("LOCKRA_IT_S3_REGION").unwrap_or_else(|| "us-east-1".into()),
+            bucket: env("LOCKRA_IT_S3_BUCKET")?,
+            prefix,
+            access_key_id: env("LOCKRA_IT_S3_ACCESS_KEY")?,
+            secret_access_key: Zeroizing::new(env("LOCKRA_IT_S3_SECRET_KEY")?),
+            path_style: true,
+        })
+    })
+}
+
+fn webdav() -> Option<StorageConfig> {
+    configured("WebDAV", |prefix| {
+        Some(StorageConfig::Webdav {
+            url: env("LOCKRA_IT_WEBDAV_URL")?,
+            prefix,
+            username: env("LOCKRA_IT_WEBDAV_USER")?,
+            password: Zeroizing::new(env("LOCKRA_IT_WEBDAV_PASSWORD")?),
+        })
+    })
+}
+
+/// What lockra-sync relies on, request by request.
+async fn the_store_contract(storage: &dyn RemoteStore, prefix: &str) {
+    let dir = format!("{prefix}contract/");
+    let path = format!("{dir}a.lks");
+    assert!(storage.list(&dir).await.unwrap().is_empty(), "an absent directory lists empty");
+    assert_eq!(storage.get(&path).await.unwrap(), None);
+    let first = storage.put(&path, b"one".to_vec(), PutCondition::IfAbsent).await.unwrap();
+    assert_eq!(storage.get(&path).await.unwrap().map(|(bytes, _)| bytes), Some(b"one".to_vec()));
+    let listing = storage.list(&dir).await.unwrap();
+    assert_eq!(listing.iter().map(|m| (m.name.as_str(), m.size)).collect::<Vec<_>>(), [("a.lks", 3)]);
+    if storage.conditional_puts() {
+        assert_eq!(storage.put(&path, b"two".to_vec(), PutCondition::IfAbsent).await.err(), Some(SyncError::Conflict), "an existing object is not replaced");
+        assert_eq!(storage.put(&path, b"two".to_vec(), PutCondition::IfMatch("\"not-the-etag\"".into())).await.err(), Some(SyncError::Conflict));
+        let etag = first.or_else(|| listing[0].etag.clone()).expect("S3 gives etags");
+        storage.put(&path, b"two".to_vec(), PutCondition::IfMatch(etag)).await.unwrap();
+        assert_eq!(storage.get(&path).await.unwrap().map(|(bytes, _)| bytes), Some(b"two".to_vec()));
+    } else {
+        storage.put(&path, b"two".to_vec(), PutCondition::IfAbsent).await.unwrap();
+        assert_eq!(storage.get(&path).await.unwrap().map(|(bytes, _)| bytes), Some(b"two".to_vec()), "WebDAV writes whatever the condition");
+    }
+    // A listing does not descend into folders.
+    storage.put(&format!("{dir}sub/b.lks"), b"x".to_vec(), PutCondition::Always).await.unwrap();
+    assert_eq!(storage.list(&dir).await.unwrap().len(), 1);
+    storage.delete(&path).await.unwrap();
+    storage.delete(&path).await.unwrap();
+    assert_eq!(storage.get(&path).await.unwrap(), None);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct Account {
+    id: Uuid,
+    stamp: Hlc,
+    issuer: String,
+}
+
+impl Record for Account {
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn stamp(&self) -> Hlc {
+        self.stamp
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+struct Vault {
+    accounts: Vec<Account>,
+    tombstones: Vec<Tombstone>,
+}
+
+impl Replica for Vault {
+    fn payload(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap()
+    }
+
+    fn absorb(&mut self, payload: &[u8]) -> Result<bool, SyncError> {
+        let theirs: Self = serde_json::from_slice(payload).map_err(|_| SyncError::Corrupted)?;
+        Ok(merge(&mut self.accounts, &mut self.tombstones, &theirs.accounts, &theirs.tombstones))
+    }
+}
+
+/// A space created on one device and joined on another, through the real server.
+async fn two_devices_sync(storage: &dyn RemoteStore, prefix: &str) {
+    let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+    let sync_key = SyncKey::generate().unwrap();
+    let password = b"correct horse battery";
+    let keyring = seal_keyring(&keys, &sync_key, password, KdfCost::FAST_INSECURE, 1).unwrap();
+    storage.put(&keyring_path(prefix, keys.space_id()), keyring, PutCondition::IfAbsent).await.unwrap();
+
+    let mut laptop = (SyncState::default(), Vault::default());
+    laptop.1.accounts.push(Account { id: Uuid::new_v4(), stamp: Hlc { wall_ms: 10, counter: 0, device: 1 }, issuer: "GitHub".into() });
+    let space = Space { prefix, keys: &keys, device: 1, device_name: "Laptop" };
+    assert!(step(storage, &space, &mut laptop.0, &mut laptop.1, 100).await.unwrap().wrote);
+
+    let (bytes, _) = storage.get(&keyring_path(prefix, keys.space_id())).await.unwrap().unwrap();
+    let joined = open_keyring(&bytes, keys.space_id(), &sync_key, password).unwrap();
+    let mut phone = (SyncState::default(), Vault::default());
+    let phone_space = Space { prefix, keys: &joined, device: 2, device_name: "Phone" };
+    let outcome = step(storage, &phone_space, &mut phone.0, &mut phone.1, 200).await.unwrap();
+    assert!(outcome.changed);
+    assert_eq!(phone.1.accounts[0].issuer, "GitHub");
+    assert_eq!(outcome.devices.len(), 2);
+
+    let id = phone.1.accounts[0].id;
+    phone.1.accounts.clear();
+    phone.1.tombstones.push(Tombstone { id, stamp: Hlc { wall_ms: 300, counter: 0, device: 2 } });
+    step(storage, &phone_space, &mut phone.0, &mut phone.1, 300).await.unwrap();
+    assert!(step(storage, &space, &mut laptop.0, &mut laptop.1, 400).await.unwrap().changed);
+    assert!(laptop.1.accounts.is_empty(), "the deletion arrived");
+    // Quiet runs read and write nothing more.
+    assert!(!step(storage, &space, &mut laptop.0, &mut laptop.1, 500).await.unwrap().wrote);
+}
+
+#[tokio::test]
+async fn s3_holds_a_sync_space() {
+    let Some(config) = s3() else { return };
+    let storage = Storage::open(&config).unwrap();
+    assert!(storage.conditional_puts());
+    the_store_contract(&storage, config.prefix()).await;
+    two_devices_sync(&storage, config.prefix()).await;
+}
+
+#[tokio::test]
+async fn webdav_holds_a_sync_space() {
+    let Some(config) = webdav() else { return };
+    let storage = Storage::open(&config).unwrap();
+    assert!(!storage.conditional_puts());
+    the_store_contract(&storage, config.prefix()).await;
+    two_devices_sync(&storage, config.prefix()).await;
+}
+
+#[tokio::test]
+async fn wrong_credentials_are_denied() {
+    let Some(StorageConfig::S3 { endpoint, region, bucket, prefix, access_key_id, path_style, .. }) = s3() else { return };
+    let wrong = StorageConfig::S3 {
+        endpoint,
+        region,
+        bucket,
+        prefix: prefix.clone(),
+        access_key_id,
+        secret_access_key: Zeroizing::new("wrong secret".into()),
+        path_style,
+    };
+    let storage = Storage::open(&wrong).unwrap();
+    assert_eq!(storage.list(&prefix).await.err(), Some(SyncError::Denied));
+}
+
+/// The same contract on the in-memory stand-in, so the test code itself is exercised everywhere.
+#[tokio::test]
+async fn the_contract_holds_for_the_memory_store_too() {
+    for conditional in [true, false] {
+        let store = MemoryRemote::new(conditional);
+        the_store_contract(&store, "mem/").await;
+        two_devices_sync(&store, "mem/").await;
+    }
+}
