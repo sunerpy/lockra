@@ -18,6 +18,16 @@
 
 关闭这项设置时需要输入主密码。Lockra 会从钥匙串中删除密钥，并重新加密保险库，因此被删除的密钥此后无法打开任何内容。
 
+## Touch ID 与 Windows Hello
+
+<StatusTag status="building" /> 随 0.5.0 版提供。
+
+在带 Touch ID 的 Mac 或支持 Windows Hello 的 Windows 电脑上，开启「在本机记住」后，再开启「设置 › 安全 › 解锁时验证 Touch ID」（Windows 上为「解锁时验证 Windows Hello」）。解锁页随即显示「使用 Touch ID 解锁」（或「使用 Windows Hello 解锁」）：先验证你的指纹，或 Windows Hello 的指纹、面容或 PIN，再用本机记住的密钥打开保险库。开启时会验证一次，确认可以使用；关闭时需要输入主密码。主密码始终可以解锁。
+
+在 Windows 上，如果解锁的那一刻 Windows Hello 恰好不可用（例如另一个应用正在显示 Windows Hello 窗口），Windows 会改为要求输入你的 Windows 登录密码。
+
+这项验证防范的是有人使用你已登录的电脑。以你的身份运行的程序仍然可以从钥匙串中读取本机记住的密钥，与不开启验证时相同。
+
 ## 锁定
 
 在没有按键或点击的情况下，Lockra 默认在 5 分钟后锁定（「设置 › 安全 › 自动锁定」：1 至 60 分钟，或从不）；按 `Ctrl L` 或选择侧栏中的「锁定」会立即锁定。锁定会从内存中清除已解密的账号，并关闭正在进行的导入或导出。

@@ -12,7 +12,8 @@
       "password": "correct horse battery"
     },
     {
-      "command": "vault_unlock_device"
+      "command": "vault_unlock_device",
+      "reason": "unlock Lockra"
     },
     {
       "command": "vault_lock"
@@ -30,6 +31,14 @@
     },
     {
       "command": "device_unlock_disable",
+      "password": "a new password"
+    },
+    {
+      "command": "device_biometric_enable",
+      "reason": "turn on Touch ID"
+    },
+    {
+      "command": "device_biometric_disable",
       "password": "a new password"
     },
     {
@@ -76,6 +85,13 @@
       "command": "entry_reveal",
       "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
       "password": "a new password"
+    },
+    {
+      "command": "view_collapse_groups",
+      "groups": [
+        "Work",
+        ""
+      ]
     },
     {
       "command": "import_text",
@@ -150,6 +166,7 @@
         "density": "compact",
         "follow_system_theme": false,
         "font_size_px": 13,
+        "group_codes": false,
         "hide_codes": true,
         "locale": "zh-cn",
         "reduce_motion": true,

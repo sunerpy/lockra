@@ -102,6 +102,36 @@ struct Slot {
     nonce: [u8; NONCE_LEN],
     #[serde(with = "b64::vec")]
     wrapped_dek: Vec<u8>,
+    /// A device slot's check before its key is used. In the header, so the payload's
+    /// authentication covers it: a file without it no longer opens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    check: Option<DeviceCheck>,
+}
+
+/// What the device must confirm before the keychain's key opens the vault.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceCheck {
+    /// The user, by Touch ID or Windows Hello.
+    Biometric,
+    /// A check a newer Lockra wrote, kept as it is: this version cannot make it, so the master
+    /// password opens the vault instead.
+    Other(String),
+}
+
+impl Serialize for DeviceCheck {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(match self {
+            Self::Biometric => "biometric",
+            Self::Other(name) => name,
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for DeviceCheck {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let name = String::deserialize(deserializer)?;
+        Ok(if name == "biometric" { Self::Biometric } else { Self::Other(name) })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,7 +158,7 @@ struct FormatProbe {
 }
 
 /// What a file says about itself before any key is involved (the restore screen shows it).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HeaderInfo {
     /// Vault or backup.
     pub kind: FileKind,
@@ -138,6 +168,8 @@ pub struct HeaderInfo {
     pub created_at_ms: u64,
     /// Whether it opens with a device key.
     pub has_device_slot: bool,
+    /// What its device slot asks for first.
+    pub device_check: Option<DeviceCheck>,
 }
 
 /// The random key a device slot is wrapped under; the OS keychain holds it.
@@ -291,6 +323,18 @@ impl Sealed {
         self.password_kek(password).map(drop)
     }
 
+    /// What the device slot asks for before its key is used.
+    pub fn device_check(&self) -> Option<&DeviceCheck> {
+        self.device_slot.as_ref().and_then(|slot| slot.check.as_ref())
+    }
+
+    /// Make the device slot ask for `check` first (or for nothing); the file written next says so.
+    pub fn set_device_check(&mut self, check: Option<DeviceCheck>) -> Result<(), VaultError> {
+        let slot = self.device_slot.as_mut().ok_or(VaultError::NoDeviceSlot)?;
+        slot.check = check;
+        Ok(())
+    }
+
     /// Add a device slot under a fresh random key (returned for the keychain). The data key stays,
     /// so backups written before still open with the master password.
     pub fn enable_device(&mut self) -> Result<DeviceKey, VaultError> {
@@ -321,7 +365,8 @@ impl Sealed {
         let (device_slot, outcome) = match (&self.device_slot, device_key) {
             (None, _) => (None, DeviceSlot::Absent),
             (Some(slot), Some(key)) if unwrap(&key.0, slot, self.vault_id).is_some() => {
-                (Some(wrap(&key.0, &dek, self.vault_id, SlotKind::Device)?), DeviceSlot::Kept)
+                let rewrapped = Slot { check: slot.check.clone(), ..wrap(&key.0, &dek, self.vault_id, SlotKind::Device)? };
+                (Some(rewrapped), DeviceSlot::Kept)
             }
             (Some(_), _) => (None, DeviceSlot::Dropped),
         };
@@ -347,6 +392,7 @@ pub fn read_header(bytes: &[u8]) -> Result<HeaderInfo, VaultError> {
         vault_id: parsed.header.vault_id,
         created_at_ms: parsed.header.created_at_ms,
         has_device_slot: parsed.header.slot(SlotKind::Device).is_some(),
+        device_check: parsed.header.slot(SlotKind::Device).and_then(|slot| slot.check.clone()),
     })
 }
 
@@ -410,7 +456,7 @@ fn slot_aad(vault_id: Uuid, kind: SlotKind) -> Vec<u8> {
 fn wrap(kek: &[u8; KEY_LEN], dek: &[u8; KEY_LEN], vault_id: Uuid, kind: SlotKind) -> Result<Slot, VaultError> {
     let nonce = random_nonce()?;
     let wrapped_dek = cipher(kek).encrypt(&XNonce::from(nonce), Payload { msg: dek, aad: &slot_aad(vault_id, kind) }).map_err(|_| VaultError::Corrupted)?;
-    Ok(Slot { kind, nonce, wrapped_dek })
+    Ok(Slot { kind, nonce, wrapped_dek, check: None })
 }
 
 fn unwrap(kek: &[u8; KEY_LEN], slot: &Slot, vault_id: Uuid) -> Option<Zeroizing<[u8; KEY_LEN]>> {
@@ -647,5 +693,99 @@ mod tests {
         assert_eq!(DeviceKey::from_text("AAAA").unwrap_err(), VaultError::WrongDeviceKey);
         assert_eq!(format!("{key:?}"), "DeviceKey(<redacted>)");
         assert!(!format!("{:?}", vault(b"pw")).contains("dek"));
+    }
+}
+
+#[cfg(test)]
+mod device_check_tests {
+    use super::*;
+
+    const COST: KdfCost = KdfCost::FAST_INSECURE;
+
+    fn header_json(file: &[u8]) -> serde_json::Value {
+        let len = u32::from_le_bytes(file[8..12].try_into().unwrap()) as usize;
+        serde_json::from_slice(&file[12..12 + len]).unwrap()
+    }
+
+    fn rewritten(file: &[u8], header: &serde_json::Value) -> Vec<u8> {
+        let len = u32::from_le_bytes(file[8..12].try_into().unwrap()) as usize;
+        let bytes = serde_json::to_vec(header).unwrap();
+        let mut out = file[..8].to_vec();
+        out.extend_from_slice(&u32::try_from(bytes.len()).unwrap().to_le_bytes());
+        out.extend_from_slice(&bytes);
+        out.extend_from_slice(&file[12 + len..]);
+        out
+    }
+
+    #[test]
+    fn a_device_slot_asks_for_a_biometric_check_that_the_header_shows_and_authenticates() {
+        let mut sealed = Sealed::create(b"pw", COST, 1).unwrap();
+        assert_eq!(sealed.set_device_check(Some(DeviceCheck::Biometric)).unwrap_err(), VaultError::NoDeviceSlot, "only with a device slot");
+        let key = sealed.enable_device().unwrap();
+        assert_eq!(sealed.device_check(), None, "a new device slot asks for nothing");
+        sealed.set_device_check(Some(DeviceCheck::Biometric)).unwrap();
+        let file = sealed.seal(FileKind::Vault, b"{}").unwrap();
+        assert_eq!(read_header(&file).unwrap().device_check, Some(DeviceCheck::Biometric));
+        let opened = Sealed::open_with_device_key(&file, &key).unwrap();
+        assert_eq!(opened.sealed.device_check(), Some(&DeviceCheck::Biometric));
+        // Taking the check out of the header breaks the file for every key: it cannot be skipped.
+        let mut header = header_json(&file);
+        for slot in header["slots"].as_array_mut().unwrap() {
+            slot.as_object_mut().unwrap().remove("check");
+        }
+        let edited = rewritten(&file, &header);
+        assert_eq!(read_header(&edited).unwrap().device_check, None);
+        assert_eq!(Sealed::open_with_device_key(&edited, &key).unwrap_err(), VaultError::Corrupted);
+        assert_eq!(Sealed::open_with_password(&edited, b"pw").unwrap_err(), VaultError::Corrupted);
+    }
+
+    #[test]
+    fn the_check_follows_the_device_slot_and_never_reaches_a_backup() {
+        let mut sealed = Sealed::create(b"pw", COST, 1).unwrap();
+        let key = sealed.enable_device().unwrap();
+        sealed.set_device_check(Some(DeviceCheck::Biometric)).unwrap();
+        assert_eq!(sealed.change_password(b"pw", b"new pw", COST, Some(&key)).unwrap(), DeviceSlot::Kept);
+        assert_eq!(sealed.device_check(), Some(&DeviceCheck::Biometric), "a new master password keeps it");
+        let backup = sealed.seal(FileKind::Backup, b"{}").unwrap();
+        assert_eq!(read_header(&backup).unwrap().device_check, None);
+        sealed.set_device_check(None).unwrap();
+        assert_eq!(sealed.device_check(), None);
+        sealed.set_device_check(Some(DeviceCheck::Biometric)).unwrap();
+        sealed.disable_device(b"new pw").unwrap();
+        assert_eq!(sealed.device_check(), None, "gone with the slot");
+        assert!(!sealed.has_device_slot());
+    }
+
+    #[test]
+    fn a_check_from_a_newer_lockra_is_kept_and_named() {
+        let mut sealed = Sealed::create(b"pw", COST, 1).unwrap();
+        let key = sealed.enable_device().unwrap();
+        sealed.set_device_check(Some(DeviceCheck::Biometric)).unwrap();
+        let file = sealed.seal(FileKind::Vault, b"{}").unwrap();
+        // A newer check, written by a newer Lockra under the same key: the header reads, the
+        // check is named, and sealing again keeps it as it was.
+        let mut header = header_json(&file);
+        for slot in header["slots"].as_array_mut().unwrap() {
+            if slot["kind"] == "device" {
+                slot["check"] = serde_json::json!("security_key");
+            }
+        }
+        let newer = sealed_with(&sealed, &header);
+        assert_eq!(read_header(&newer).unwrap().device_check, Some(DeviceCheck::Other("security_key".into())));
+        let opened = Sealed::open_with_device_key(&newer, &key).unwrap();
+        let again = opened.sealed.seal(FileKind::Vault, b"{}").unwrap();
+        assert_eq!(read_header(&again).unwrap().device_check, Some(DeviceCheck::Other("security_key".into())));
+    }
+
+    /// `header` sealed as `sealed` would seal it: the payload encrypted with the header as AAD.
+    fn sealed_with(sealed: &Sealed, header: &serde_json::Value) -> Vec<u8> {
+        let header: Header = serde_json::from_value(header.clone()).unwrap();
+        let bytes = serde_json::to_vec(&header).unwrap();
+        let mut file = VAULT_MAGIC.to_vec();
+        file.extend_from_slice(&u32::try_from(bytes.len()).unwrap().to_le_bytes());
+        file.extend_from_slice(&bytes);
+        let ciphertext = cipher(&sealed.dek).encrypt(&XNonce::from(header.payload_nonce), Payload { msg: b"{}".as_slice(), aad: &file }).unwrap();
+        file.extend_from_slice(&ciphertext);
+        file
     }
 }

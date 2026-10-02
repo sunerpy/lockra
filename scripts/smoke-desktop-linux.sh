@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Desktop smoke test on Linux: the real app (a debug build serving the release web bundle, with
-# the in-memory keychain of debug builds) under Xvfb, in throwaway data and config folders.
+# the in-memory keychain and the stand-in Touch ID of debug builds) under Xvfb, in throwaway data
+# and config folders.
 # scripts/smoke/desktop.py drives it over WebDriver (tauri-driver + WebKitWebDriver) with real X
 # input; then the app is started once more on its own and closed with the title bar's button,
 # which must end the process with status 0. Screenshots go to the given folder.
@@ -64,7 +65,7 @@ timeout 20 sh -c "until DISPLAY=$display xdpyinfo >/dev/null 2>&1; do sleep 0.5;
 mkdir -p "$work/data" "$work/config/dev.lockra.desktop"
 # Chinese copy (the container has no zh_CN locale for the webview to follow).
 printf '{"locale":"zh-cn"}\n' >"$work/config/dev.lockra.desktop/settings.json"
-export DISPLAY="$display" XDG_DATA_HOME="$work/data" XDG_CONFIG_HOME="$work/config" LOCKRA_DEV_SECRET_STORE=memory
+export DISPLAY="$display" XDG_DATA_HOME="$work/data" XDG_CONFIG_HOME="$work/config" LOCKRA_DEV_SECRET_STORE=memory LOCKRA_DEV_BIOMETRIC=touch_id
 
 tauri-driver --port "$port" --native-port "$((port + 1))" >"$work/driver.log" 2>&1 &
 driver_pid=$!

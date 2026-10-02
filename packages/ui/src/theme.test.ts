@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { ACCOUNT_COLORS } from "@lockra/shared";
 import { resolve } from "node:path";
 import {
   ACCENT_IDS,
@@ -302,5 +303,50 @@ describe("cursor", () => {
     expect(base).toMatch(
       /:where\(button, select, input, textarea\):disabled,\s*:where\(\[aria-disabled="true"\]\)\s*\{\s*cursor:\s*not-allowed;/,
     );
+  });
+});
+
+const TAGS = [
+  "red",
+  "orange",
+  "amber",
+  "green",
+  "teal",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "gray",
+];
+
+describe("account colours", () => {
+  it.each(THEMES)(
+    "theme %s carries every account colour with its text at 4.5:1 or more",
+    (theme) => {
+      const block = themeBlock(theme);
+      for (const tag of TAGS) {
+        const fill = new RegExp(`--tag-${tag}: (#[0-9a-f]{6});`).exec(block)?.[1];
+        const text = new RegExp(`--tag-${tag}-text: (#[0-9a-f]{6});`).exec(block)?.[1];
+        if (fill === undefined || text === undefined)
+          throw new Error(`${theme} lacks the ${tag} pair`);
+        expect(contrast(fill, text), `${theme} ${tag}`).toBeGreaterThanOrEqual(4.5);
+      }
+    },
+  );
+
+  it("picks the pair through data-tag, falls back to the neutral fill and reaches Tailwind", () => {
+    for (const tag of TAGS)
+      expect(tokens).toContain(
+        `[data-tag="${tag}"] {\n  --tag-bg: var(--tag-${tag});\n  --tag-fg: var(--tag-${tag}-text);\n}`,
+      );
+    expect(tokens).toMatch(
+      /:root \{\n {2}--tag-bg: var\(--inset2\);\n {2}--tag-fg: var\(--fg-muted\);/,
+    );
+    expect(tokens).toContain("--color-tag-bg: var(--tag-bg);");
+    expect(tokens).toContain("--color-tag-fg: var(--tag-fg);");
+  });
+
+  it("are the contract's colours", () => {
+    expect(TAGS).toEqual(ACCOUNT_COLORS.filter((c) => c !== "auto"));
   });
 });

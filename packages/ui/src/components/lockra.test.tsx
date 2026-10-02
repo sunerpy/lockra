@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { I18nProvider } from "../i18n/I18nProvider";
 import { CountdownRing, remaining } from "./CountdownRing";
 import { DropZone } from "./DropZone";
-import { EntryAvatar, initial } from "./EntryAvatar";
+import { EntryAvatar, autoColor, initial } from "./EntryAvatar";
 import { EntryRow } from "./EntryRow";
 import { OtpCode } from "./OtpCode";
 import { PasswordField, passwordStrength } from "./PasswordField";
@@ -23,6 +23,8 @@ function entry(overrides: Partial<EntryView> = {}): EntryView {
     digits: 6,
     group: null,
     favorite: false,
+    color: "auto",
+    mark: null,
     origin: "uri",
     created_at_ms: 0,
     updated_at_ms: 0,
@@ -76,6 +78,31 @@ describe("CountdownRing", () => {
 });
 
 describe("EntryAvatar", () => {
+  it("takes the account's colour, its name's when automatic, and its mark", () => {
+    // The same name, the same colour, on every device and whatever the case.
+    expect(autoColor("GitHub")).toBe(autoColor("  github "));
+    expect(autoColor("", "octocat")).toBe(autoColor("octocat"));
+    const picked = new Set(
+      ["GitHub", "Google", "Microsoft", "AWS", "Bank", "Proton", "Game", "Cloudflare"].map((n) =>
+        autoColor(n),
+      ),
+    );
+    expect(picked.size).toBeGreaterThanOrEqual(4);
+    expect(picked.has("gray")).toBe(false);
+    const { rerender } = render(<EntryAvatar issuer="GitHub" />);
+    const avatar = screen.getByTestId("entry-avatar");
+    expect(avatar).toHaveAttribute("data-tag", autoColor("GitHub"));
+    expect(avatar).toHaveClass("bg-tag-bg", "text-tag-fg");
+    expect(avatar).toHaveTextContent("G");
+    rerender(<EntryAvatar issuer="GitHub" color="purple" mark="GH" />);
+    expect(avatar).toHaveAttribute("data-tag", "purple");
+    expect(avatar).toHaveTextContent("GH");
+    expect(avatar).toHaveClass("text-[12px]");
+    rerender(<EntryAvatar issuer="GitHub" color="gray" mark={null} />);
+    expect(avatar).toHaveAttribute("data-tag", "gray");
+    expect(avatar).toHaveTextContent("G");
+  });
+
   it("shows the first letter of the issuer, else of the account", () => {
     expect(initial("github", "x")).toBe("G");
     expect(initial("  ", "octocat")).toBe("O");
@@ -130,6 +157,34 @@ describe("EntryRow", () => {
     );
     expect(screen.getByTestId("otp-code")).toHaveTextContent("114 415");
     expect(screen.queryByTestId("countdown-ring")).toBeNull();
+  });
+
+  it("shows pin and edit beside the menu, and hands a right click over", async () => {
+    const onCopy = vi.fn();
+    const onFavorite = vi.fn();
+    const onEdit = vi.fn();
+    const onContextMenu = vi.fn();
+    const props = { code: code(), nowMs: T, onCopy, onFavorite, onEdit, onContextMenu };
+    const { rerender } = render(<EntryRow entry={entry()} {...props} />);
+    const pin = screen.getByRole("button", { name: "收藏" });
+    expect(pin).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(pin);
+    await userEvent.click(screen.getByRole("button", { name: "编辑…" }));
+    expect(onFavorite).toHaveBeenCalledOnce();
+    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onCopy).not.toHaveBeenCalled();
+    fireEvent.contextMenu(screen.getByTestId("entry-row"));
+    expect(onContextMenu).toHaveBeenCalledOnce();
+    rerender(<EntryRow entry={entry({ favorite: true })} {...props} />);
+    const pinned = screen.getByRole("button", { name: "收藏" });
+    // Said once: by the pressed button, not again beside the name.
+    expect(screen.getByTestId("entry-row").querySelectorAll('[data-icon="star"]')).toHaveLength(1);
+    expect(pinned).toHaveAttribute("aria-pressed", "true");
+    expect(pinned.querySelector("svg")).toHaveAttribute("fill", "currentColor");
+    // Without the handlers, no buttons.
+    rerender(<EntryRow entry={entry()} code={code()} nowMs={T} onCopy={onCopy} />);
+    expect(screen.queryByRole("button", { name: "收藏" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "编辑…" })).toBeNull();
   });
 
   it("masks until hovered, waits for the first frame, and names an account-only entry", () => {

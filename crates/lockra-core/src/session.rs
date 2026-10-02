@@ -17,7 +17,7 @@ use lockra_sync::{
     remove_device, seal_keyring, step, step_with,
 };
 use lockra_transfer::{Item, Origin, detect, microsoft, qr, text};
-use lockra_vault::{DeviceKey, DeviceSlot, FileKind, KdfCost, Opened, Sealed, read_header, write_atomic};
+use lockra_vault::{DeviceCheck, DeviceKey, DeviceSlot, FileKind, KdfCost, Opened, Sealed, read_header, write_atomic};
 use parking_lot::{Mutex, MutexGuard};
 use tokio::sync::{Notify, broadcast};
 use tokio::time::Instant;
@@ -25,16 +25,17 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::backup::{auto_file_name, pre_restore_file_name, prune};
-use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_name, random_device};
+use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_mark, clean_name, random_device};
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
-use crate::ports::{Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, SyncTransport, Updater};
+use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, SyncTransport, Updater};
 use crate::settings::{Settings, SettingsStore};
 use crate::sync::{SYNC_DEBOUNCE, SYNC_INTERVAL, SyncLocal, Working, config_error, device_name, merge_entries, storage_view, sync_error};
 use crate::ui::{
-    BackupFailure, BackupView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource, JoinSource, LockView, Notice,
-    Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
+    JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState,
+    UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
 
@@ -78,6 +79,8 @@ pub struct Ports {
     pub updater: Arc<dyn Updater>,
     /// The storage of a sync space.
     pub sync: Arc<dyn SyncTransport>,
+    /// Touch ID or Windows Hello, before "remember on this device" unlocks.
+    pub biometrics: Arc<dyn Biometrics>,
 }
 
 /// How a backup is restored into an unlocked vault.
@@ -111,6 +114,11 @@ struct State {
     /// From the vault file's header, readable while locked.
     vault_id: Option<Uuid>,
     device_slot: bool,
+    /// What the device slot asks for first, as the header said at start or the keys at the last
+    /// lock (while unlocked, the keys say).
+    device_check: Option<DeviceCheck>,
+    /// What the platform offers, as last asked: at start and at every lock.
+    biometric: Option<BiometricKind>,
     failed_attempts: u32,
     retry_at_ms: Option<u64>,
     last_backup_ms: Option<u64>,
@@ -183,13 +191,13 @@ impl Core {
         let settings_store = SettingsStore::new(&config.config_dir);
         let settings = settings_store.load();
         let vault_path = config.data_dir.join(VAULT_FILE);
-        let (phase, vault_id, device_slot) = match fs::read(&vault_path) {
+        let (phase, vault_id, device_slot, device_check) = match fs::read(&vault_path) {
             Ok(bytes) => match read_header(&bytes) {
-                Ok(info) => (PhaseState::Locked, Some(info.vault_id), info.has_device_slot),
+                Ok(info) => (PhaseState::Locked, Some(info.vault_id), info.has_device_slot, info.device_check),
                 // A damaged header still means "there is a vault": unlocking reports the damage.
-                Err(_) => (PhaseState::Locked, None, false),
+                Err(_) => (PhaseState::Locked, None, false, None),
             },
-            Err(_) => (PhaseState::NoVault, None, false),
+            Err(_) => (PhaseState::NoVault, None, false, None),
         };
         let update = UpdateState::new(settings.auto_update && ports.updater.method().is_some());
         let state = State {
@@ -197,6 +205,8 @@ impl Core {
             settings,
             vault_id,
             device_slot,
+            device_check,
+            biometric: None,
             failed_attempts: 0,
             retry_at_ms: None,
             last_backup_ms: None,
@@ -214,7 +224,26 @@ impl Core {
         let (events, _) = broadcast::channel(64);
         let shared = Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new() });
         tokio::spawn(scheduler(Arc::clone(&shared)));
-        Self { shared }
+        let core = Self { shared };
+        core.refresh_biometrics();
+        core
+    }
+
+    /// Ask the platform what it offers, off the runtime: at start and at every lock, so a finger
+    /// enrolled meanwhile shows up.
+    fn refresh_biometrics(&self) {
+        let core = self.clone();
+        tokio::spawn(async move {
+            let biometrics = Arc::clone(&core.shared.ports.biometrics);
+            let Ok(kind) = tokio::task::spawn_blocking(move || biometrics.availability()).await else { return };
+            let changed = {
+                let mut st = core.lock();
+                std::mem::replace(&mut st.biometric, kind) != kind
+            };
+            if changed {
+                core.changed();
+            }
+        });
     }
 
     /// Every state change and notice, in order.
@@ -296,8 +325,9 @@ impl Core {
         }
     }
 
-    /// Unlock with the key "remember on this device" left in the keychain.
-    pub async fn unlock_with_device(&self) -> CoreResult<()> {
+    /// Unlock with the key "remember on this device" left in the keychain, after Touch ID or
+    /// Windows Hello when the vault asks for it (`reason` is the webview's words for the prompt).
+    pub async fn unlock_with_device(&self, reason: Option<String>) -> CoreResult<()> {
         let vault_id = {
             let st = self.lock();
             match st.phase {
@@ -310,10 +340,78 @@ impl Core {
             }
             st.vault_id.ok_or(ErrorCode::VaultCorrupted)?
         };
-        let key = self.device_key(vault_id)?;
         let path = self.vault_path();
-        let opened = blocking(move || Ok(Sealed::open_with_device_key(&read_limited(&path)?, &key)?)).await?;
+        let bytes = blocking(move || read_limited(&path)).await?;
+        // The check the file asks for comes before the keychain is read. A file that no longer asks
+        // for it does not open: its header is authenticated with the payload.
+        match read_header(&bytes)?.device_check {
+            None => {}
+            Some(DeviceCheck::Biometric) => self.check_user(reason).await?,
+            Some(DeviceCheck::Other(_)) => return Err(ErrorCode::BiometricUnavailable.into()),
+        }
+        let key = self.device_key(vault_id)?;
+        let opened = blocking(move || Ok(Sealed::open_with_device_key(&bytes, &key)?)).await?;
         self.enter(opened)
+    }
+
+    /// Touch ID or Windows Hello, with `reason` in the system's prompt (Lockra's own words when the
+    /// webview gave none).
+    async fn check_user(&self, reason: Option<String>) -> CoreResult<()> {
+        let reason = reason.map(|r| clean_name(&r)).filter(|r| !r.is_empty()).unwrap_or_else(|| "unlock Lockra".to_owned());
+        let biometrics = Arc::clone(&self.shared.ports.biometrics);
+        let answer = tokio::task::spawn_blocking(move || biometrics.verify(&reason)).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+        answer.map_err(|error| {
+            CoreError::from(match error {
+                BiometricError::Cancelled => ErrorCode::BiometricCancelled,
+                BiometricError::Unavailable => ErrorCode::BiometricUnavailable,
+                BiometricError::Failed(why) => {
+                    tracing::warn!("the biometric check failed: {why}");
+                    ErrorCode::BiometricFailed
+                }
+            })
+        })
+    }
+
+    /// Make "remember on this device" ask for Touch ID or Windows Hello before it unlocks; the user
+    /// passes one check now, so that it is known to work.
+    pub async fn enable_device_biometric(&self, reason: Option<String>) -> CoreResult<()> {
+        if !unlocked(&self.lock())?.sealed.has_device_slot() {
+            return Err(ErrorCode::DeviceUnlockOff.into());
+        }
+        let biometrics = Arc::clone(&self.shared.ports.biometrics);
+        let kind = tokio::task::spawn_blocking(move || biometrics.availability()).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+        self.lock().biometric = kind;
+        if kind.is_none() {
+            self.changed();
+            return Err(ErrorCode::BiometricUnavailable.into());
+        }
+        self.check_user(reason).await?;
+        self.set_device_check(Some(DeviceCheck::Biometric))
+    }
+
+    /// Stop asking for Touch ID or Windows Hello, after the master password was entered again.
+    pub async fn disable_device_biometric(&self, password: Zeroizing<String>) -> CoreResult<()> {
+        let sealed = unlocked(&self.lock())?.sealed.clone();
+        blocking(move || Ok(sealed.verify_password(password.as_bytes())?)).await?;
+        self.set_device_check(None)
+    }
+
+    fn set_device_check(&self, check: Option<DeviceCheck>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let mut next = session.sealed.clone();
+            if next.has_device_slot() {
+                next.set_device_check(check)?;
+            }
+            let previous = std::mem::replace(&mut session.sealed, next);
+            if let Err(error) = self.write_vault(session) {
+                session.sealed = previous;
+                return Err(error);
+            }
+        }
+        self.changed();
+        Ok(())
     }
 
     fn enter(&self, opened: Opened) -> CoreResult<()> {
@@ -347,6 +445,9 @@ impl Core {
         let locked = {
             let mut st = self.lock();
             let was_unlocked = matches!(st.phase, PhaseState::Unlocked(_));
+            if let PhaseState::Unlocked(session) = &st.phase {
+                st.device_check = session.sealed.device_check().cloned();
+            }
             if was_unlocked {
                 st.phase = PhaseState::Locked;
                 st.auto_backup_at = None;
@@ -357,6 +458,7 @@ impl Core {
         };
         if locked {
             self.changed();
+            self.refresh_biometrics();
         }
     }
 
@@ -562,12 +664,38 @@ impl Core {
             if let Some(favorite) = patch.favorite {
                 entry.favorite = favorite;
             }
+            if let Some(color) = patch.color {
+                entry.color = color;
+            }
+            if let Some(mark) = patch.mark {
+                entry.mark = clean_mark(&mark);
+            }
             entry.updated_at_ms = now;
             self.save(&mut st, true, move |s| {
                 if let Some(e) = s.data.get_mut(id) {
                     *e = before;
                 }
             })?;
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// Fold `groups` in the code list ("" for the accounts in no group) and unfold the others. Kept
+    /// in the vault's local part: this device's view, never synced and never in a backup, and no
+    /// change of the accounts (no backup or sync follows).
+    pub fn collapse_groups(&self, groups: Vec<String>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let existing: std::collections::BTreeSet<String> = session.data.entries.iter().filter_map(|e| e.group.clone()).collect();
+            let folded: std::collections::BTreeSet<String> = groups.iter().map(|g| clean_name(g)).filter(|g| g.is_empty() || existing.contains(g)).collect();
+            let folded: Vec<String> = folded.into_iter().collect();
+            if session.data.collapsed_groups() == folded.as_slice() {
+                return Ok(());
+            }
+            let previous = std::mem::replace(&mut session.data.local_mut().view.collapsed_groups, folded);
+            self.save(&mut st, false, move |s| s.data.local_mut().view.collapsed_groups = previous)?;
         }
         self.changed();
         Ok(())
@@ -1742,12 +1870,15 @@ impl Core {
 
     fn view(&self, st: &State) -> UiState {
         let now = self.now_ms();
-        let (phase, entries, import) = match &st.phase {
-            PhaseState::NoVault => (Phase::NoVault, Vec::new(), None),
-            PhaseState::Locked => (Phase::Locked, Vec::new(), None),
-            PhaseState::Unlocked(session) => {
-                (Phase::Unlocked, session.data.entries.iter().map(Entry::view).collect(), session.import.as_ref().map(|i| i.view(&session.data)))
-            }
+        let (phase, entries, collapsed_groups, import) = match &st.phase {
+            PhaseState::NoVault => (Phase::NoVault, Vec::new(), Vec::new(), None),
+            PhaseState::Locked => (Phase::Locked, Vec::new(), Vec::new(), None),
+            PhaseState::Unlocked(session) => (
+                Phase::Unlocked,
+                session.data.entries.iter().map(Entry::view).collect(),
+                session.data.collapsed_groups().to_vec(),
+                session.import.as_ref().map(|i| i.view(&session.data)),
+            ),
         };
         let auto_lock_at_ms = match (&st.phase, st.settings.auto_lock_minutes) {
             (PhaseState::Unlocked(_), minutes) if minutes > 0 => {
@@ -1762,11 +1893,23 @@ impl Core {
             phase,
             data_dir: self.shared.config.data_dir.display().to_string(),
             lock: LockView {
-                device_unlock: DeviceUnlockView { available: self.shared.ports.secrets.status() == KeychainStatus::Available, enabled: st.device_slot },
+                device_unlock: DeviceUnlockView {
+                    available: self.shared.ports.secrets.status() == KeychainStatus::Available,
+                    enabled: st.device_slot,
+                    biometric: BiometricView {
+                        kind: st.biometric,
+                        enabled: st.device_slot
+                            && match &st.phase {
+                                PhaseState::Unlocked(session) => session.sealed.device_check() == Some(&DeviceCheck::Biometric),
+                                _ => st.device_check == Some(DeviceCheck::Biometric),
+                            },
+                    },
+                },
                 failed_attempts: st.failed_attempts,
                 retry_at_ms: st.retry_at_ms.filter(|at| *at > now),
             },
             entries,
+            collapsed_groups,
             settings: st.settings.clone(),
             import,
             backup: BackupView { last_backup_ms: st.last_backup_ms, last_auto_file: st.last_auto_file.clone(), last_auto_error: st.last_auto_error },

@@ -34,6 +34,12 @@ pub enum ErrorCode {
     DeviceKeyStale,
     /// "Remember on this device" is off for this vault.
     DeviceUnlockOff,
+    /// Touch ID or Windows Hello was cancelled (or the password chosen instead).
+    BiometricCancelled,
+    /// Touch ID or Windows Hello did not recognise the user, or failed.
+    BiometricFailed,
+    /// No Touch ID or Windows Hello here now (no sensor, nothing enrolled, turned off).
+    BiometricUnavailable,
     /// No entry with that id.
     EntryNotFound,
     /// That exact account is already in the vault.

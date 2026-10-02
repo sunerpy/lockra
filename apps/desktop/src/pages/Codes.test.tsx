@@ -1,5 +1,5 @@
 import { MockBackend, mockEntry, sampleEntries } from "@lockra/shared/mock";
-import { act, screen, within } from "@testing-library/react";
+import { act, fireEvent, screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../test/render";
 import { filterEntries, sortEntries } from "./Codes";
 
@@ -198,5 +198,129 @@ describe("Codes", () => {
       await backend.saveBackup();
     });
     expect(screen.getByTestId("codes-status")).toHaveTextContent("上次备份 刚刚");
+  });
+});
+
+describe("Codes · groups", () => {
+  const headers = () =>
+    screen
+      .getAllByTestId("codes-group-toggle")
+      .map((h) => [h.textContent, h.getAttribute("aria-expanded")]);
+
+  it("shows the accounts in sections that fold one by one", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    expect(headers()).toEqual([
+      ["工作3", "true"],
+      ["未分组5", "true"],
+    ]);
+    expect(names().slice(0, 3)).toEqual(["GitHub", "AWS", "Cloudflare"]);
+    await user.click(screen.getByRole("button", { name: /^工作/ }));
+    expect(backend.calls.at(-1)).toEqual({ command: "view_collapse_groups", groups: ["工作"] });
+    expect(headers()[0]).toEqual(["工作3", "false"]);
+    expect(names()).not.toContain("GitHub");
+    expect(names()).toHaveLength(5);
+    // A search shows what it finds, folded or not.
+    await user.type(screen.getByTestId("codes-search"), "aws");
+    expect(names()).toEqual(["AWS"]);
+    await user.clear(screen.getByTestId("codes-search"));
+    expect(names()).not.toContain("AWS");
+  });
+
+  it("folds and unfolds every section at once", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const expandAll = screen.getByRole("button", { name: "全部展开" });
+    expect(expandAll).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "全部折叠" }));
+    expect(backend.calls.at(-1)).toEqual({ command: "view_collapse_groups", groups: ["工作", ""] });
+    expect(screen.queryAllByTestId("entry-row")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "全部折叠" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "全部展开" }));
+    expect(backend.calls.at(-1)).toEqual({ command: "view_collapse_groups", groups: [] });
+    expect(names()).toHaveLength(8);
+  });
+
+  it("keeps the folded sections from the vault, and turns the sections off", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      collapsedGroups: [""],
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    expect(headers()[1]).toEqual(["未分组5", "false"]);
+    expect(names()).toEqual(["GitHub", "AWS", "Cloudflare"]);
+    const toggle = screen.getByRole("button", { name: "按分组显示" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await user.click(toggle);
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "settings_set",
+      settings: { group_codes: false },
+    });
+    expect(screen.queryAllByTestId("codes-group-toggle")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "全部折叠" })).toBeNull();
+    expect(names()).toHaveLength(8);
+  });
+
+  it("has no sections when no account has a group", async () => {
+    const backend = new MockBackend({
+      entries: [mockEntry("Solo", "me")],
+      settings: { locale: "zh-cn" },
+    });
+    renderApp({ backend });
+    await ready();
+    expect(screen.queryAllByTestId("codes-group-toggle")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "按分组显示" })).toBeNull();
+    expect(names()).toEqual(["Solo"]);
+  });
+});
+
+describe("Codes · row actions", () => {
+  it("pins and edits from the buttons beside each row's menu", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const first = screen.getAllByTestId("entry-row")[0];
+    if (!first) throw new Error("no row");
+    const pin = within(first).getByRole("button", { name: "收藏" });
+    expect(pin).toHaveAttribute("aria-pressed", "true");
+    await user.click(pin);
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "entry_update",
+      patch: { favorite: false },
+    });
+    const row = screen.getAllByTestId("entry-row")[0];
+    if (!row) throw new Error("no row");
+    await user.click(within(row).getByRole("button", { name: "编辑…" }));
+    expect(screen.getByRole("dialog", { name: "编辑账号" })).toBeInTheDocument();
+    expect(backend.calls.some((c) => c.command === "entry_copy")).toBe(false);
+  });
+
+  it("opens the row's menu where it was right-clicked, and beside the row from the keyboard", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const row = screen.getAllByTestId("entry-row")[1];
+    if (!row) throw new Error("no row");
+    fireEvent.contextMenu(row, { clientX: 120, clientY: 80 });
+    const menu = screen.getByRole("menu", { name: "账号操作" });
+    expect(menu).toHaveStyle({ left: "120px", top: "80px" });
+    expect(within(menu).getByRole("menuitem", { name: "收藏" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("menu", { name: "账号操作" })).toBeNull();
+    expect(row).toHaveFocus();
+    // The context-menu key, or Shift F10, on a focused row.
+    fireEvent.keyDown(row, { key: "ContextMenu" });
+    await user.click(screen.getByRole("menuitem", { name: "编辑…" }));
+    expect(screen.getByRole("dialog", { name: "编辑账号" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    fireEvent.keyDown(screen.getAllByTestId("entry-row")[1] as HTMLElement, {
+      key: "F10",
+      shiftKey: true,
+    });
+    await user.click(screen.getByRole("menuitem", { name: "收藏" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "entry_update",
+      patch: { favorite: true },
+    });
   });
 });

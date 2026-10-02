@@ -12,6 +12,7 @@ import {
   type Unsubscribe,
 } from "./backend";
 import {
+  type BiometricKind,
   type CandidateAction,
   type CandidateView,
   type Choice,
@@ -29,6 +30,7 @@ import {
   type Incompatible,
   type InstallMethod,
   type JoinSource,
+  MARK_CHARS,
   type Notice,
   type OtpKind,
   type Platform,
@@ -59,6 +61,12 @@ export interface MockOptions {
   platform?: Platform;
   keychainAvailable?: boolean;
   deviceUnlock?: boolean;
+  /** What the computer offers before "remember on this device" unlocks (none by default). */
+  biometric?: BiometricKind | null;
+  /** The vault asks for it. */
+  biometricUnlock?: boolean;
+  /** How the next biometric checks answer (they pass by default). */
+  biometricAnswer?: ErrorCode | null;
   /** Text the clipboard import reads. */
   clipboard?: string;
   now?: () => number;
@@ -70,6 +78,8 @@ export interface MockOptions {
   updateFailure?: { step: "check" | "download" | "install"; code: ErrorCode };
   /** The sync space this device belongs to (shown once unlocked). */
   sync?: SyncSpaceView | null;
+  /** The groups folded in the code list (shown once unlocked). */
+  collapsedGroups?: string[];
 }
 
 /** A release the mock's update check announces. */
@@ -142,7 +152,15 @@ export function mockEntry(
   options: Partial<
     Pick<
       EntryView,
-      "kind" | "algorithm" | "digits" | "group" | "favorite" | "origin" | "last_used_at_ms"
+      | "kind"
+      | "algorithm"
+      | "digits"
+      | "group"
+      | "favorite"
+      | "origin"
+      | "last_used_at_ms"
+      | "color"
+      | "mark"
     >
   > & { secret?: string; at?: number } = {},
 ): MockEntry {
@@ -167,6 +185,8 @@ export function mockEntry(
       digits,
       group: options.group ?? null,
       favorite: options.favorite ?? false,
+      color: options.color ?? "auto",
+      mark: options.mark ?? null,
       origin: options.origin ?? "uri",
       created_at_ms: at,
       updated_at_ms: at,
@@ -174,6 +194,20 @@ export function mockEntry(
       export: exportCompat(kind, algorithm, digits),
     },
   };
+}
+
+/** A mark as the core keeps it: trimmed, at most `MARK_CHARS` characters as people count them;
+ *  `null` when nothing is left. */
+export function cleanMark(mark: string): string | null {
+  const segments = Array.from(
+    new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(mark.trim()),
+  );
+  const kept = segments
+    .slice(0, MARK_CHARS)
+    .map((s) => s.segment)
+    .join("")
+    .trim();
+  return kept === "" ? null : kept;
 }
 
 /** A believable vault for the preview. */
@@ -185,7 +219,12 @@ export function sampleEntries(): MockEntry[] {
     mockEntry("AWS", "root@acme-corp", { group: "工作", last_used_at_ms: Date.UTC(2026, 8, 29) }),
     mockEntry("Cloudflare", "ops@acme.dev", { group: "工作" }),
     mockEntry("Proton", "alex@proton.me", { algorithm: "sha256" }),
-    mockEntry("Bank", "6222 •••• 1234", { kind: { type: "hotp", counter: 12 }, origin: "manual" }),
+    mockEntry("Bank", "6222 •••• 1234", {
+      kind: { type: "hotp", counter: 12 },
+      origin: "manual",
+      color: "amber",
+      mark: "银行",
+    }),
     mockEntry("Game", "player-one", { kind: { type: "totp", period: 60 }, digits: 7 }),
   ];
 }
@@ -341,6 +380,9 @@ export class MockBackend implements Backend {
   private pending: { release: MockRelease; downloaded: boolean } | null = null;
   /** The sync space, kept here while locked (the core keeps it in the vault). */
   private space: SyncSpaceView | null;
+  /** The folded groups, kept here while locked (the core keeps them in the vault). */
+  private collapsed: string[];
+  private biometricAnswer: ErrorCode | null;
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -351,6 +393,8 @@ export class MockBackend implements Backend {
     this.release = options.release ?? null;
     this.updateFailure = options.updateFailure;
     this.space = options.sync ?? null;
+    this.collapsed = options.collapsedGroups ?? [];
+    this.biometricAnswer = options.biometricAnswer ?? null;
     const entries = options.entries ?? [];
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
     const phase = options.phase ?? (entries.length > 0 ? "unlocked" : "no_vault");
@@ -363,11 +407,13 @@ export class MockBackend implements Backend {
         device_unlock: {
           available: options.keychainAvailable ?? true,
           enabled: options.deviceUnlock ?? false,
+          biometric: { kind: options.biometric ?? null, enabled: options.biometricUnlock ?? false },
         },
         failed_attempts: 0,
         retry_at_ms: null,
       },
       entries: phase === "unlocked" ? entries.map((e) => e.view) : [],
+      collapsed_groups: phase === "unlocked" ? [...this.collapsed] : [],
       settings: { ...defaultSettings(), ...options.settings },
       import: null,
       backup: { last_backup_ms: null, last_auto_file: null, last_auto_error: null },
@@ -505,6 +551,7 @@ export class MockBackend implements Backend {
         if (this.state.phase !== "locked") return null;
         if (!this.state.lock.device_unlock.available) throw new LockraError("keychain_unavailable");
         if (!this.state.lock.device_unlock.enabled) throw new LockraError("device_unlock_off");
+        if (this.state.lock.device_unlock.biometric.enabled) this.checkUser(command.reason);
         this.enterUnlocked(this.lockedEntries);
         return null;
       case "vault_lock":
@@ -542,6 +589,20 @@ export class MockBackend implements Backend {
         if (!this.state.lock.device_unlock.enabled) throw new LockraError("device_unlock_off");
         this.checkPassword(command.password);
         this.state.lock.device_unlock.enabled = false;
+        this.state.lock.device_unlock.biometric.enabled = false;
+        this.publish();
+        return null;
+      case "device_biometric_enable":
+        this.requireUnlocked();
+        if (!this.state.lock.device_unlock.enabled) throw new LockraError("device_unlock_off");
+        this.checkUser(command.reason);
+        this.state.lock.device_unlock.biometric.enabled = true;
+        this.publish();
+        return null;
+      case "device_biometric_disable":
+        this.requireUnlocked();
+        this.checkPassword(command.password);
+        this.state.lock.device_unlock.biometric.enabled = false;
         this.publish();
         return null;
       case "entry_add_uri": {
@@ -581,11 +642,13 @@ export class MockBackend implements Backend {
       }
       case "entry_update": {
         const entry = this.entry(command.id);
-        const { issuer, account, group, favorite } = command.patch;
+        const { issuer, account, group, favorite, color, mark } = command.patch;
         if (issuer !== undefined) entry.issuer = issuer.trim();
         if (account !== undefined) entry.account = account.trim();
         if (group !== undefined) entry.group = group.trim() === "" ? null : group.trim();
         if (favorite !== undefined) entry.favorite = favorite;
+        if (color !== undefined) entry.color = color;
+        if (mark !== undefined) entry.mark = cleanMark(mark);
         entry.updated_at_ms = this.now();
         this.changed();
         return null;
@@ -626,6 +689,19 @@ export class MockBackend implements Backend {
           svg: placeholderSvg(entry.id),
         };
         return revealed;
+      }
+      case "view_collapse_groups": {
+        this.requireUnlocked();
+        // As the core: the groups that exist, once each, and "" for the accounts in no group.
+        const existing = new Set(this.state.entries.map((e) => e.group ?? ""));
+        const folded = [...new Set(command.groups.map((g) => g.trim()))].filter((g) =>
+          g === "" ? true : existing.has(g),
+        );
+        // oxlint-disable-next-line unicorn/no-array-sort
+        this.collapsed = folded.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+        this.state.collapsed_groups = [...this.collapsed];
+        this.publish();
+        return null;
       }
       case "import_text":
         this.requireUnlocked();
@@ -999,6 +1075,7 @@ export class MockBackend implements Backend {
   private enterUnlocked(entries: EntryView[]): void {
     this.state.phase = "unlocked";
     this.state.entries = entries;
+    this.state.collapsed_groups = [...this.collapsed];
     this.state.sync = { space: this.space };
     this.lockedEntries = [];
     this.state.lock = { ...this.state.lock, failed_attempts: 0, retry_at_ms: null };
@@ -1011,6 +1088,7 @@ export class MockBackend implements Backend {
     if (this.state.phase !== "unlocked") return;
     this.lockedEntries = this.state.entries;
     this.state.entries = [];
+    this.state.collapsed_groups = [];
     this.state.phase = "locked";
     this.state.sync = { space: null };
     this.exports.clear();
@@ -1264,6 +1342,21 @@ export class MockBackend implements Backend {
   private requireUnlocked(): void {
     if (this.state.phase === "locked") throw new LockraError("locked");
     if (this.state.phase === "no_vault") throw new LockraError("no_vault");
+  }
+
+  /** The reasons the biometric checks were shown, for tests. */
+  readonly biometricReasons: string[] = [];
+
+  /** Test hook: how the next biometric checks answer. */
+  answerBiometric(answer: ErrorCode | null): void {
+    this.biometricAnswer = answer;
+  }
+
+  private checkUser(reason: string | undefined): void {
+    this.biometricReasons.push(reason ?? "");
+    if (this.state.lock.device_unlock.biometric.kind === null)
+      throw new LockraError("biometric_unavailable");
+    if (this.biometricAnswer !== null) throw new LockraError(this.biometricAnswer);
   }
 
   private checkPassword(password: string): void {

@@ -19,7 +19,7 @@ import { passwordLongEnough } from "../../app/password";
 import { useUpdateSettings } from "../../app/settings";
 
 /** Settings › Security: auto-lock, clipboard clearing, hidden codes, "remember on this device"
- *  and the master password. */
+ *  with Touch ID or Windows Hello before it, and the master password. */
 export function Security() {
   const t = useT();
   const { settings } = useUiState();
@@ -66,6 +66,7 @@ export function Security() {
           />
         </StatusRow>
         <DeviceUnlock />
+        <BiometricUnlock />
       </SettingsRows>
       <ChangePassword />
     </SettingsPane>
@@ -215,5 +216,93 @@ function ChangePassword() {
         </Button>
       </form>
     </SettingsSection>
+  );
+}
+
+/** Touch ID or Windows Hello before "remember on this device" unlocks: on after one check passes,
+ *  off with the master password. Offered only where the computer has it and the vault is
+ *  remembered. */
+function BiometricUnlock() {
+  const t = useT();
+  const { backend } = useBackend();
+  const { lock } = useUiState();
+  const { enabled: remembered, biometric } = lock.device_unlock;
+  const [confirming, setConfirming] = useState(false);
+  const [password, setPassword] = useState("");
+  const toggle = useSubmit();
+  const disable = useSubmit();
+  const kind = biometric.kind;
+  if (!remembered || kind === null) return null;
+  const onChange = (on: boolean) => {
+    if (on)
+      void toggle.run(() =>
+        backend.dispatch({
+          command: "device_biometric_enable",
+          reason: t(`settings.security.biometricReason.${kind}`),
+        }),
+      );
+    else setConfirming(true);
+  };
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (password === "") return;
+    const done = await disable.run(() =>
+      backend.dispatch({ command: "device_biometric_disable", password }),
+    );
+    setPassword("");
+    if (done !== undefined) setConfirming(false);
+  };
+  return (
+    <>
+      <StatusRow
+        label={t(`settings.security.biometric.${kind}`)}
+        help={t(`settings.security.biometricHint.${kind}`)}
+        data-testid="biometric-unlock"
+        note={
+          toggle.error === undefined || toggle.error === "biometric_cancelled" ? undefined : (
+            <span className="text-danger">{errorText(t, toggle.error)}</span>
+          )
+        }>
+        <Toggle
+          checked={biometric.enabled}
+          disabled={toggle.busy}
+          onChange={onChange}
+          ariaLabel={t(`settings.security.biometric.${kind}`)}
+        />
+      </StatusRow>
+      {confirming && biometric.enabled && (
+        <form
+          onSubmit={(e) => void onSubmit(e)}
+          className="flex flex-col gap-2 border-b border-border py-3"
+          data-testid="biometric-disable">
+          <p className="text-[12px] text-fg-muted">
+            {t("settings.security.biometricDisablePrompt")}
+          </p>
+          <div className="flex flex-wrap items-start gap-2">
+            <PasswordField
+              label={t("unlock.password")}
+              value={password}
+              onChange={setPassword}
+              autoFocus
+              autoComplete="current-password"
+              className="min-w-[16rem] flex-1"
+              error={disable.error === undefined ? undefined : errorText(t, disable.error)}
+            />
+            <div className="flex gap-2 pt-5">
+              <Button variant="ghost" onClick={() => setConfirming(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="danger"
+                type="submit"
+                loading={disable.busy}
+                disabled={password === ""}>
+                {t("settings.security.biometricDisableTitle")}
+              </Button>
+            </div>
+          </div>
+        </form>
+      )}
+    </>
   );
 }

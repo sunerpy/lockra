@@ -95,6 +95,8 @@ tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "sync", 
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 url = "=2.5.8"
+# Grapheme clusters: an account's mark is at most two characters as people count them.
+unicode-segmentation = "=1.13.3"
 uuid = { version = "=1.26.1", features = ["v4", "serde"] }
 zeroize = { version = "=1.9.0", features = ["derive", "serde"] }
 

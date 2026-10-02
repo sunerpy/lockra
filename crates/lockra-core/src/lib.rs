@@ -26,7 +26,7 @@ pub mod fakes;
 mod tests;
 
 pub use backup::{AUTO_PREFIX, BACKUP_EXTENSION, is_auto_name};
-pub use entry::{Entry, EntryDraft, EntryPatch, EntryView, ExportCompat, Local, VAULT_DATA_FORMAT, VaultData};
+pub use entry::{AccountColor, Entry, EntryDraft, EntryPatch, EntryView, ExportCompat, Local, MARK_CHARS, VAULT_DATA_FORMAT, VaultData};
 pub use error::{CoreError, CoreResult, ErrorCode};
 pub use export::EXPORT_IDLE;
 pub use import::{Choice, Outcome};

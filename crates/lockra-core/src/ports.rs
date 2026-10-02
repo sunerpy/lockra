@@ -12,7 +12,7 @@ pub use lockra_sync::{RemoteStore, StorageConfig, SyncError};
 use parking_lot::Mutex;
 use zeroize::Zeroizing;
 
-use crate::ui::{CodesFrame, InstallMethod};
+use crate::ui::{BiometricKind, CodesFrame, InstallMethod};
 
 /// A port failed; the core maps it to a code.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -26,6 +26,40 @@ pub enum KeychainStatus {
     Available,
     /// Not on this system (no Secret Service on a Linux session, a sandbox without access).
     Unavailable,
+}
+
+/// Why a biometric check did not pass.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BiometricError {
+    /// The user cancelled, or chose to type the password instead.
+    Cancelled,
+    /// Nothing to check with here now: no sensor, nothing enrolled, turned off, locked out.
+    Unavailable,
+    /// Not recognised, or the platform answered with an error.
+    Failed(String),
+}
+
+/// The platform's check of the user (Touch ID, Windows Hello).
+pub trait Biometrics: Send + Sync {
+    /// What this computer offers now; `None` when it offers nothing.
+    fn availability(&self) -> Option<BiometricKind>;
+    /// Ask the user to confirm, with `reason` in the system's prompt. Blocks until they answer:
+    /// the core calls it on the blocking pool.
+    fn verify(&self, reason: &str) -> Result<(), BiometricError>;
+}
+
+/// No biometric check (Linux, tests that need none).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct NoBiometrics;
+
+impl Biometrics for NoBiometrics {
+    fn availability(&self) -> Option<BiometricKind> {
+        None
+    }
+
+    fn verify(&self, _reason: &str) -> Result<(), BiometricError> {
+        Err(BiometricError::Unavailable)
+    }
 }
 
 /// The OS keychain: one secret per vault id.

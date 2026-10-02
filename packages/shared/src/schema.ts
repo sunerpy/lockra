@@ -61,6 +61,7 @@ export const settingsSchema = z.object({
   clipboard_clear_seconds: z.number().int().nonnegative(),
   hide_codes: z.boolean(),
   sort: sortOrderSchema,
+  group_codes: z.boolean(),
   auto_backup: autoBackupSchema,
   auto_update: z.boolean(),
 });
@@ -80,6 +81,7 @@ export function defaultSettings(): Settings {
     clipboard_clear_seconds: 30,
     hide_codes: false,
     sort: "name",
+    group_codes: true,
     auto_backup: { enabled: false, dir: null, keep: 10 },
     auto_update: false,
   };
@@ -139,6 +141,25 @@ export type RejectReason = z.infer<typeof rejectReasonSchema>;
 const idSchema = z.string().min(1);
 const msSchema = z.number().int().nonnegative();
 
+/** The colours an account can be shown in; `auto` follows its name (lockra-core `AccountColor`). */
+export const ACCOUNT_COLORS = [
+  "auto",
+  "red",
+  "orange",
+  "amber",
+  "green",
+  "teal",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "gray",
+] as const;
+export const accountColorSchema = z.enum(ACCOUNT_COLORS);
+export type AccountColor = z.infer<typeof accountColorSchema>;
+/** The most characters, as people count them, an account's mark holds (lockra-core `MARK_CHARS`). */
+export const MARK_CHARS = 2;
+
 export const entryViewSchema = z.object({
   id: idSchema,
   issuer: z.string(),
@@ -148,6 +169,8 @@ export const entryViewSchema = z.object({
   digits: z.number().int().min(6).max(8),
   group: z.string().nullable(),
   favorite: z.boolean(),
+  color: accountColorSchema,
+  mark: z.string().nullable(),
   origin: originSchema,
   created_at_ms: msSchema,
   updated_at_ms: msSchema,
@@ -226,6 +249,9 @@ export const ERROR_CODES = [
   "device_key_missing",
   "device_key_stale",
   "device_unlock_off",
+  "biometric_cancelled",
+  "biometric_failed",
+  "biometric_unavailable",
   "entry_not_found",
   "duplicate_entry",
   "invalid_uri",
@@ -412,8 +438,18 @@ export const MAX_DEVICE_NAME_CHARS = 64;
 
 // ---- state and events ------------------------------------------------------------------------
 
+/** The platform checks Lockra can ask for before "remember on this device" unlocks. */
+export const BIOMETRIC_KINDS = ["touch_id", "windows_hello"] as const;
+export const biometricKindSchema = z.enum(BIOMETRIC_KINDS);
+export type BiometricKind = z.infer<typeof biometricKindSchema>;
+
 export const lockViewSchema = z.object({
-  device_unlock: z.object({ available: z.boolean(), enabled: z.boolean() }),
+  device_unlock: z.object({
+    available: z.boolean(),
+    enabled: z.boolean(),
+    /** Touch ID or Windows Hello first: what the computer offers, and whether the vault asks. */
+    biometric: z.object({ kind: biometricKindSchema.nullable(), enabled: z.boolean() }),
+  }),
   failed_attempts: z.number().int().nonnegative(),
   retry_at_ms: msSchema.nullable(),
 });
@@ -426,6 +462,8 @@ export const uiStateSchema = z.object({
   data_dir: z.string(),
   lock: lockViewSchema,
   entries: z.array(entryViewSchema),
+  /** The groups folded in the code list ("" for the accounts in no group); empty unless unlocked. */
+  collapsed_groups: z.array(z.string()),
   settings: settingsSchema,
   import: importViewSchema.nullable(),
   backup: backupViewSchema,
@@ -558,6 +596,9 @@ export const entryPatchSchema = z.object({
   account: z.string().optional(),
   group: z.string().optional(),
   favorite: z.boolean().optional(),
+  color: accountColorSchema.optional(),
+  /** `""` goes back to the name's initial. */
+  mark: z.string().optional(),
 });
 export type EntryPatch = z.infer<typeof entryPatchSchema>;
 
@@ -577,12 +618,14 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("app_state") }),
   z.object({ command: z.literal("vault_create"), password }),
   z.object({ command: z.literal("vault_unlock"), password }),
-  z.object({ command: z.literal("vault_unlock_device") }),
+  z.object({ command: z.literal("vault_unlock_device"), reason: z.string().optional() }),
   z.object({ command: z.literal("vault_lock") }),
   z.object({ command: z.literal("vault_change_password"), current: password, new: password }),
   z.object({ command: z.literal("vault_reset") }),
   z.object({ command: z.literal("device_unlock_enable") }),
   z.object({ command: z.literal("device_unlock_disable"), password }),
+  z.object({ command: z.literal("device_biometric_enable"), reason: z.string().optional() }),
+  z.object({ command: z.literal("device_biometric_disable"), password }),
   z.object({ command: z.literal("entry_add_uri"), uri: z.string() }),
   z.object({ command: z.literal("entry_add_manual"), draft: entryDraftSchema }),
   z.object({ command: z.literal("entry_update"), id: idSchema, patch: entryPatchSchema }),
@@ -590,6 +633,7 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("entry_hotp_next"), id: idSchema }),
   z.object({ command: z.literal("entry_copy"), id: idSchema }),
   z.object({ command: z.literal("entry_reveal"), id: idSchema, password }),
+  z.object({ command: z.literal("view_collapse_groups"), groups: z.array(z.string()) }),
   z.object({ command: z.literal("import_text"), text: z.string() }),
   z.object({ command: z.literal("import_clipboard") }),
   z.object({ command: z.literal("import_backup_password"), password }),

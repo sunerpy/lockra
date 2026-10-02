@@ -56,6 +56,18 @@ tauri-utils = "=2.9.3"
 wry = { version = "=0.55.1", default-features = false }
 tao = { version = "=0.35.3", default-features = false }
 
+# Touch ID and Windows Hello before "remember on this device" unlocks (src/biometrics.rs). Their
+# unsafe platform calls stay inside robius-authentication: the workspace still forbids unsafe code.
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+robius-authentication = "=0.3.1"
+
+# Whether Windows Hello is set up (UserConsentVerifier), on the version tauri builds on.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "=0.61.3", default-features = false, features = [
+  "std",
+  "Security_Credentials_UI",
+] }
+
 [dev-dependencies]
 lockra-core = { workspace = true, features = ["fakes"] }
 lockra-vault = { workspace = true, features = ["test-kdf"] }

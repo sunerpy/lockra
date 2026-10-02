@@ -40,6 +40,34 @@ Give accounts a group, such as "Work", in **Edit…** (the ⋯ menu of a row). W
 menu next to the search field shows one group at a time. **Pin to top**, in the same menu, keeps an
 account first.
 
+## Folding groups
+
+<StatusTag status="building" /> Comes with version 0.5.0.
+
+When accounts have groups, the list shows a section for each group, by name, then **No group** for
+the others. Click a section's heading to fold or unfold it; **Collapse all** and **Expand all**,
+beside the sort menu, do it for every section at once. A search shows what it finds in folded
+sections too. Which sections are folded is kept in the vault, on this device only. The folder button
+beside the sort menu (**Show groups**) turns the sections off and shows a single list.
+
+## Colours and avatar text
+
+<StatusTag status="building" /> Comes with version 0.5.0.
+
+Each account's avatar has a colour: **Automatic** picks one from the service's name, the same on
+every device, so different services look different. In **Edit…**, under **Appearance**, choose
+another **Colour**, or up to two characters for the **Avatar text**: letters, a Chinese character
+or an emoji, shown instead of the initial. Colours and avatar text sync to your other devices and
+stay in backups.
+
+## Buttons and the right-click menu
+
+<StatusTag status="building" /> Comes with version 0.5.0.
+
+Beside each row's ⋯ button, a star pins the account to the top (or unpins it) and a pencil opens
+**Edit…**. Right-click a row, or press the context-menu key or Shift F10 on a selected row, to open
+the same menu as ⋯ where you are.
+
 ## Order
 
 The sort menu orders the list by name, by the most recently added, or by the most recently used.

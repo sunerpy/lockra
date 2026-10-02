@@ -52,6 +52,10 @@ home:
             body: 输入关键字查找账号，把账号归入分组，收藏的账号排在最前。按 Ctrl K 可以查找任意账号并复制验证码。
             status: available
             link: /zh/accounts/codes#查找账号
+          - title: 分组折叠与账号颜色
+            body: 分组可以逐个或一次全部折叠，每个账号可以设置颜色或自己的头像文字，在行内或右键菜单中即可收藏和编辑。
+            status: building
+            link: /zh/accounts/codes#按分组折叠
           - title: 支持所有标准账号
             body: 基于时间（TOTP）和基于计数器（HOTP）的验证码，SHA1、SHA256 或 SHA512，6 至 8 位，任意周期。
             status: available
@@ -102,6 +106,10 @@ home:
             body: 可以选择把密钥保存在系统钥匙串中，在这台电脑上解锁时无需输入主密码。
             status: available
             link: /zh/security/#在本机记住
+          - title: Touch ID 与 Windows Hello
+            body: 用本机记住的密钥解锁前，先验证指纹或 Windows Hello。
+            status: building
+            link: /zh/security/#touch-id-与-windows-hello
           - title: 自动锁定
             body: 默认无操作 5 分钟后锁定，也可以按 Ctrl L 立即锁定。
             status: available

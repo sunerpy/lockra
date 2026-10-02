@@ -35,6 +35,12 @@ pub struct Entry {
     pub group: Option<String>,
     /// Pinned to the top of the list.
     pub favorite: bool,
+    /// The colour it is shown in; `auto` follows its name.
+    #[serde(default, skip_serializing_if = "AccountColor::is_auto", deserialize_with = "lenient_color")]
+    pub color: AccountColor,
+    /// What its avatar shows instead of the name's initial ([`clean_mark`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mark: Option<String>,
     /// Where it came from.
     pub origin: Origin,
     /// Unix milliseconds.
@@ -88,6 +94,8 @@ impl Entry {
             secret: auth.secret,
             group: None,
             favorite: false,
+            color: AccountColor::Auto,
+            mark: None,
             origin,
             created_at_ms: now_ms,
             updated_at_ms: now_ms,
@@ -135,6 +143,8 @@ impl Entry {
             digits: self.digits,
             group: self.group.clone(),
             favorite: self.favorite,
+            color: self.color,
+            mark: self.mark.clone(),
             origin: self.origin,
             created_at_ms: self.created_at_ms,
             updated_at_ms: self.updated_at_ms,
@@ -164,6 +174,10 @@ pub struct EntryView {
     /// Pinned.
     pub favorite: bool,
     /// Where it came from.
+    /// The colour it is shown in.
+    pub color: AccountColor,
+    /// What its avatar shows instead of the name's initial.
+    pub mark: Option<String>,
     pub origin: Origin,
     /// Unix milliseconds.
     pub created_at_ms: u64,
@@ -208,8 +222,8 @@ pub struct EntryDraft {
     pub group: Option<String>,
 }
 
-/// What an edit may change: the names, the group and the pin. Secrets and code parameters are
-/// fixed for the life of an entry (delete it and add it again to change them).
+/// What an edit may change: the names, the group, the pin, the colour and the mark. Secrets and
+/// code parameters are fixed for the life of an entry (delete it and add it again to change them).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct EntryPatch {
     /// New issuer.
@@ -220,6 +234,63 @@ pub struct EntryPatch {
     pub group: Option<String>,
     /// Pin or unpin.
     pub favorite: Option<bool>,
+    /// New colour; `auto` goes back to the name's.
+    pub color: Option<AccountColor>,
+    /// New mark; `Some("")` goes back to the name's initial.
+    pub mark: Option<String>,
+}
+
+/// The colours of Settings' palette an account can be shown in (DESIGN.md, "Account colours").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountColor {
+    /// One of the colours below, picked from the account's name: each service its own.
+    #[default]
+    Auto,
+    /// Red.
+    Red,
+    /// Orange.
+    Orange,
+    /// Amber.
+    Amber,
+    /// Green.
+    Green,
+    /// Teal.
+    Teal,
+    /// Blue.
+    Blue,
+    /// Indigo.
+    Indigo,
+    /// Purple.
+    Purple,
+    /// Pink.
+    Pink,
+    /// Grey.
+    Gray,
+}
+
+impl AccountColor {
+    fn is_auto(&self) -> bool {
+        *self == Self::Auto
+    }
+}
+
+/// A colour this version does not know (written by a newer one) reads as `auto`: neither the vault
+/// nor another device's snapshot fails to open over a colour.
+fn lenient_color<'de, D: Deserializer<'de>>(deserializer: D) -> Result<AccountColor, D::Error> {
+    let name = String::deserialize(deserializer)?;
+    Ok(serde_json::from_value(serde_json::Value::String(name)).unwrap_or_default())
+}
+
+/// The most characters, as people count them, an account's mark holds.
+pub const MARK_CHARS: usize = 2;
+
+/// A mark as an account keeps it: cleaned like a name, at most [`MARK_CHARS`] characters as people
+/// count them (an emoji with its joiners is one); `None` when nothing is left.
+pub(crate) fn clean_mark(mark: &str) -> Option<String> {
+    use unicode_segmentation::UnicodeSegmentation;
+    let kept: String = clean_name(mark).graphemes(true).take(MARK_CHARS).collect();
+    Some(kept.trim().to_owned()).filter(|m| !m.is_empty())
 }
 
 /// The payload format this Lockra writes: 2 added the stamps, the tombstones and the local part.
@@ -251,12 +322,30 @@ pub struct Local {
     /// The sync space this device belongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) sync: Option<SyncLocal>,
+    /// How this device shows the code list.
+    #[serde(default, skip_serializing_if = "View::is_empty")]
+    pub(crate) view: View,
 }
 
 impl Local {
     /// A new device: a random number, nothing stamped yet, no sync.
     pub(crate) fn new() -> Self {
-        Self { clock: Clock::new(random_device()), sync: None }
+        Self { clock: Clock::new(random_device()), sync: None, view: View::default() }
+    }
+}
+
+/// How this device shows the code list. In the vault, not in `settings.json`: group names are the
+/// vault's, and the settings file is not encrypted.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct View {
+    /// The groups folded in the code list; "" folds the accounts in no group.
+    #[serde(default)]
+    pub collapsed_groups: Vec<String>,
+}
+
+impl View {
+    fn is_empty(&self) -> bool {
+        self.collapsed_groups.is_empty()
     }
 }
 
@@ -328,7 +417,7 @@ impl VaultData {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         serde_json::from_slice(bytes).ok().or_else(|| {
             let data: WithoutSync = serde_json::from_slice(bytes).ok()?;
-            let local = data.local.map(|local| Local { clock: local.clock, sync: None });
+            let local = data.local.map(|local| Local { clock: local.clock, sync: None, view: View::default() });
             Some(Self { format: data.format, entries: data.entries, tombstones: data.tombstones, local })
         })
     }
@@ -361,6 +450,11 @@ impl VaultData {
     /// This device's number.
     pub(crate) fn device(&self) -> u64 {
         self.local.as_ref().map_or(0, |l| l.clock.device())
+    }
+
+    /// The groups folded in this device's code list.
+    pub(crate) fn collapsed_groups(&self) -> &[String] {
+        self.local.as_ref().map_or(&[], |l| l.view.collapsed_groups.as_slice())
     }
 
     /// The sync space this device belongs to.

@@ -21,7 +21,7 @@ magic (8 bytes) | header length (u32, little-endian) | header (JSON, ≤ 64 KiB)
 | `vault_id`      | UUID of the vault the file belongs to (a backup keeps its vault's id)                                                                                               |
 | `created_at_ms` | when the vault was created                                                                                                                                          |
 | `kdf`           | `{algorithm: "argon2id", m_kib, t, p, salt}` — default 64 MiB, 3 passes, 1 lane, 16-byte salt; a file asking for more than 256 MiB, 16 passes or 8 lanes is refused |
-| `slots`         | the data key wrapped once per way in: `{kind: "password" \| "device", nonce, wrapped_dek}`                                                                          |
+| `slots`         | the data key wrapped once per way in: `{kind: "password" \| "device", nonce, wrapped_dek, check?}`                                                                  |
 | `payload_nonce` | 24 bytes                                                                                                                                                            |
 
 Binary fields are Base64. Cryptography:
@@ -33,6 +33,10 @@ Binary fields are Base64. Cryptography:
   `kdf`). A **device slot** wraps it with a random 32-byte key kept in the OS keychain
   (service `dev.lockra.desktop`, account = `vault_id`). A slot's associated data is
   `lockra/slot/v1 | vault_id (16 bytes) | kind (1 = password, 2 = device)`.
+- A device slot's `check` is what the device confirms before its key is used: `"biometric"` (Touch
+  ID, Windows Hello) or absent. It sits in the header, so a file whose check was taken out no longer
+  opens with any key; a value this version does not know is kept as it is, and the device slot is
+  then not used (the master password opens the vault).
 - Every write rewrites the whole file: a fresh payload nonce, the current header as associated
   data. There is no in-place slot edit.
 
@@ -44,6 +48,7 @@ Slot operations:
 | remember on this device               | kept        | password + device (new device key into the keychain)                                                                                  |
 | stop remembering (needs the password) | **rotated** | password; the keychain entry is deleted                                                                                               |
 | change the master password            | **rotated** | password (new salt) + device, if the keychain still returns the device key; otherwise the device slot is dropped and the user is told |
+| ask for Touch ID / Windows Hello      | kept        | the device slot gains `check: "biometric"` after one check passes; turning it off (needs the password) removes it                     |
 
 Errors: a password slot that does not open is `WrongPassword`; a payload that fails
 authentication, a truncated file or a malformed header is `Corrupted`; a future `format` is
@@ -72,14 +77,22 @@ refused (`VaultUnsupported`). The entries:
 | `origin`                                            | `manual`, `uri`, `google`, `microsoft`, `backup`                         |
 | `created_at_ms`, `updated_at_ms`, `last_used_at_ms` | `last_used_at_ms` stays on this device: it does not sync                 |
 | `stamp`                                             | `{wall_ms, counter, device}`: when it last changed (§9)                  |
+| `color`, `mark`                                     | the avatar's colour and up to two characters; absent: from the name      |
+
+`color` is one of `red orange amber green teal blue indigo purple pink gray`; absent (`auto`), the
+avatar takes a colour from a hash of the name, the same on every device. A colour this version does
+not know reads as `auto`, so neither the vault nor another device's snapshot fails over one. `mark`
+holds at most two characters as people count them (an emoji with its joiners is one).
 
 `tombstones` lists deleted accounts as `{id, stamp, counter?}` (an HOTP account's counter at its
 deletion), so that a deletion reaches the other devices of a sync space. Replacing an account's
 secret through an import gives it a new id (the old id is tombstoned), so its HOTP counter starts
 again with the new secret. `local` is this device's own part and never leaves the vault file (no
-backup, no sync): `clock` (its device number and the latest stamp) and, with sync on, `sync` (the
-storage settings and credentials, the space id, its data key, the sync key, this device's name,
-its keyring and what the runs remember). A `sync` this version cannot read (one kept by an earlier
+backup, no sync): `clock` (its device number and the latest stamp), `view` (the groups folded in
+the code list, `{collapsed_groups}`, "" for the accounts in no group: group names stay inside the
+encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and
+credentials, the space id, its data key, the sync key, this device's name, its keyring and what
+the runs remember). A `sync` this version cannot read (one kept by an earlier
 build) is left out and the vault opens without it: sync is off on that device until it is set up
 again.
 

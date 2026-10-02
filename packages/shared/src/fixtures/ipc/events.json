@@ -9,12 +9,17 @@
       "lock": {
         "device_unlock": {
           "available": true,
-          "enabled": true
+          "enabled": true,
+          "biometric": {
+            "kind": "touch_id",
+            "enabled": true
+          }
         },
         "failed_attempts": 4,
         "retry_at_ms": 1790000002000
       },
       "entries": [],
+      "collapsed_groups": [],
       "settings": {
         "theme": "light",
         "follow_system_theme": true,
@@ -27,6 +32,7 @@
         "clipboard_clear_seconds": 30,
         "hide_codes": false,
         "sort": "name",
+        "group_codes": true,
         "auto_backup": {
           "enabled": false,
           "dir": null,

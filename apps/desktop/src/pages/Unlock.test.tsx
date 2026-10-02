@@ -2,7 +2,7 @@ import { MOCK_PASSWORD, MockBackend, sampleEntries } from "@lockra/shared/mock";
 import { screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../test/render";
 
-function locked(options: { deviceUnlock?: boolean; keychainAvailable?: boolean } = {}) {
+function locked(options: ConstructorParameters<typeof MockBackend>[0] = {}) {
   return new MockBackend({
     entries: sampleEntries(),
     phase: "locked",
@@ -56,6 +56,36 @@ describe("Unlock", () => {
     await ready();
     await user.click(screen.getByRole("button", { name: "使用本机记住的密钥解锁" }));
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+  });
+
+  it("unlocks with Touch ID when the vault asks for it, and stays quiet when it is cancelled", async () => {
+    const backend = locked({ deviceUnlock: true, biometric: "touch_id", biometricUnlock: true });
+    const { user } = renderApp({ backend });
+    await ready();
+    const button = screen.getByRole("button", { name: "使用 Touch ID 解锁" });
+    expect(button.querySelector('[data-icon="fingerprint"]')).not.toBeNull();
+    backend.answerBiometric("biometric_cancelled");
+    await user.click(button);
+    expect(screen.queryByRole("alert")).toBeNull();
+    backend.answerBiometric("biometric_failed");
+    await user.click(button);
+    expect(await screen.findByRole("alert")).toHaveTextContent("验证未通过，请重试或输入主密码");
+    backend.answerBiometric(null);
+    await user.click(button);
+    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+    expect(backend.calls.filter((c) => c.command === "vault_unlock_device")).toContainEqual({
+      command: "vault_unlock_device",
+      reason: "解锁保险库",
+    });
+    expect(backend.biometricReasons).toEqual(["解锁保险库", "解锁保险库", "解锁保险库"]);
+  });
+
+  it("names Windows Hello on Windows", async () => {
+    renderApp({
+      backend: locked({ deviceUnlock: true, biometric: "windows_hello", biometricUnlock: true }),
+    });
+    await ready();
+    expect(screen.getByRole("button", { name: "使用 Windows Hello 解锁" })).toBeInTheDocument();
   });
 
   it("resets a vault whose password is lost after the word is typed", async () => {

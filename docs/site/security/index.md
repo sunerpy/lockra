@@ -30,6 +30,23 @@ then open the vault, so use it only on a computer that only you use.
 Turning it off asks for the master password, deletes the key from the keychain and re-encrypts the
 vault, so the deleted key opens nothing afterwards.
 
+## Touch ID and Windows Hello
+
+<StatusTag status="building" /> Comes with version 0.5.0.
+
+On a Mac with Touch ID, or a Windows PC with Windows Hello, turn on **Settings › Security › Ask for
+Touch ID to unlock** (**Ask for Windows Hello to unlock** on Windows) after **Remember on this
+device**. The unlock screen then shows **Unlock with Touch ID** (or **Unlock with Windows Hello**):
+your fingerprint, or Windows Hello's fingerprint, face or PIN, is checked before the remembered key
+opens the vault. Turning it on checks once that it works; turning it off asks for the master
+password. The master password always unlocks.
+
+On Windows, if Windows Hello becomes unavailable at the moment you unlock (for example while another
+app shows its own Windows Hello prompt), Windows asks for your Windows sign-in password instead.
+
+The check guards against someone using your unlocked computer. A program running as you could
+still read the remembered key from the keychain, as without the check.
+
 ## Locking
 
 Lockra locks after five minutes without a key press or click (**Settings › Security › Auto-lock**:

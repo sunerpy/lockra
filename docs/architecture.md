@@ -32,14 +32,15 @@ packages/ui        The design system (Voltip's tokens and components, plus Lockr
 `lockra-core` holds all behaviour and no platform code. `Core::start(config, ports)` returns a
 cheap handle; the shell injects the ports:
 
-| Port                        | Desktop adapter                                                               | Test fake                           |
-| --------------------------- | ----------------------------------------------------------------------------- | ----------------------------------- |
-| `SecretStore` (device keys) | `keyring` (Credential Manager, Keychain, Secret Service), probed at start     | `FakeKeychain`, `MemorySecretStore` |
-| `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard) | `FakeClipboard`                     |
-| `Clock`                     | `SystemClock`                                                                 | `FakeClock`                         |
-| `CodeSink` (code frames)    | a Tauri `Channel`                                                             | `RecordingSink`                     |
-| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy    | `FakeUpdater`, `NoUpdater`          |
-| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS (`src-tauri/src/sync.rs`)              | `FakeTransport`, `NoSync`           |
+| Port                        | Desktop adapter                                                                   | Test fake                           |
+| --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
+| `SecretStore` (device keys) | `keyring` (Credential Manager, Keychain, Secret Service), probed at start         | `FakeKeychain`, `MemorySecretStore` |
+| `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard)     | `FakeClipboard`                     |
+| `Clock`                     | `SystemClock`                                                                     | `FakeClock`                         |
+| `CodeSink` (code frames)    | a Tauri `Channel`                                                                 | `RecordingSink`                     |
+| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy        | `FakeUpdater`, `NoUpdater`          |
+| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS (`src-tauri/src/sync.rs`)                  | `FakeTransport`, `NoSync`           |
+| `Biometrics` (unlock check) | Touch ID, Windows Hello via robius-authentication (`src-tauri/src/biometrics.rs`) | `FakeBiometrics`, `NoBiometrics`    |
 
 State machine: **NoVault → Locked → Unlocked**. Create or restore leads from NoVault to Unlocked;
 unlock (password or device key) from Locked; lock, auto-lock and closing return to Locked; reset

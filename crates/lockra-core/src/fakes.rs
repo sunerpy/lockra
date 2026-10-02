@@ -11,10 +11,10 @@ use tokio::time::Instant;
 use zeroize::Zeroizing;
 
 use crate::ports::{
-    Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, MemorySecretStore, PortError, Release, SecretStore, SyncTransport, UpdateFailure, UpdateFuture,
-    UpdateProgress, Updater,
+    BiometricError, Biometrics, Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, MemorySecretStore, PortError, Release, SecretStore, SyncTransport,
+    UpdateFailure, UpdateFuture, UpdateProgress, Updater,
 };
-use crate::ui::{CodesFrame, InstallMethod};
+use crate::ui::{BiometricKind, CodesFrame, InstallMethod};
 
 /// Wall-clock time that moves with tokio's clock, so `tokio::time::advance` under
 /// `start_paused` moves both the timers and the codes.
@@ -34,6 +34,48 @@ impl FakeClock {
 impl Clock for FakeClock {
     fn now_ms(&self) -> u64 {
         self.base_ms + u64::try_from(self.start.elapsed().as_millis()).unwrap_or(u64::MAX)
+    }
+}
+
+/// Touch ID that answers what the test says, and remembers every reason it was shown.
+#[derive(Debug)]
+pub struct FakeBiometrics {
+    kind: Mutex<Option<BiometricKind>>,
+    answer: Mutex<Result<(), BiometricError>>,
+    reasons: Mutex<Vec<String>>,
+}
+
+impl Default for FakeBiometrics {
+    fn default() -> Self {
+        Self { kind: Mutex::new(Some(BiometricKind::TouchId)), answer: Mutex::new(Ok(())), reasons: Mutex::new(Vec::new()) }
+    }
+}
+
+impl FakeBiometrics {
+    /// What the computer offers from now on.
+    pub fn set_kind(&self, kind: Option<BiometricKind>) {
+        *self.kind.lock() = kind;
+    }
+
+    /// How every check answers from now on.
+    pub fn answer(&self, answer: Result<(), BiometricError>) {
+        *self.answer.lock() = answer;
+    }
+
+    /// The reasons of the checks asked so far.
+    pub fn reasons(&self) -> Vec<String> {
+        self.reasons.lock().clone()
+    }
+}
+
+impl Biometrics for FakeBiometrics {
+    fn availability(&self) -> Option<BiometricKind> {
+        *self.kind.lock()
+    }
+
+    fn verify(&self, reason: &str) -> Result<(), BiometricError> {
+        self.reasons.lock().push(reason.to_owned());
+        self.answer.lock().clone()
     }
 }
 

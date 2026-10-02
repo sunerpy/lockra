@@ -10,8 +10,8 @@ use lockra_bridge::SHELL_COMMANDS;
 use lockra_core::KdfCost;
 use lockra_core::fakes::{FakeClipboard, FakeTransport, FakeUpdater};
 use lockra_core::ports::{MemorySecretStore, Updater};
-use lockra_core::ui::InstallMethod;
-use lockra_desktop_lib::{COMMANDS, ShellOptions, build_app, dev_memory_store_requested};
+use lockra_core::ui::{BiometricKind, InstallMethod};
+use lockra_desktop_lib::{COMMANDS, ShellOptions, build_app, dev_biometric_requested, dev_memory_store_requested};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets};
@@ -166,4 +166,14 @@ fn only_a_debug_build_may_keep_the_keychain_in_memory() {
     assert!(!dev_memory_store_requested(Some("memory"), false));
     assert!(!dev_memory_store_requested(Some("file"), true));
     assert!(!dev_memory_store_requested(None, true));
+}
+
+#[test]
+fn only_a_debug_build_may_stand_in_for_touch_id_or_windows_hello() {
+    assert_eq!(dev_biometric_requested(Some("touch_id"), true), Some(BiometricKind::TouchId));
+    assert_eq!(dev_biometric_requested(Some("windows_hello"), true), Some(BiometricKind::WindowsHello));
+    assert_eq!(dev_biometric_requested(Some("touch_id"), false), None);
+    assert_eq!(dev_biometric_requested(Some("windows_hello"), false), None);
+    assert_eq!(dev_biometric_requested(Some("face"), true), None);
+    assert_eq!(dev_biometric_requested(None, true), None);
 }
