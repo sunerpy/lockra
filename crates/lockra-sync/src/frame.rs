@@ -103,6 +103,21 @@ pub(crate) mod b64 {
     }
 }
 
+/// Byte strings of any length as standard Base64 in a JSON header.
+pub(crate) mod b64_bytes {
+    use data_encoding::BASE64;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&BASE64.encode(bytes))
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<u8>, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        BASE64.decode(text.as_bytes()).map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

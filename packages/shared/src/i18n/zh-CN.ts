@@ -470,7 +470,7 @@ export const zhCN = {
     deviceNameHint: "其他设备的设备列表里显示这个名称。",
     masterPassword: "主密码",
     spacePassword: "同步空间的主密码",
-    spacePasswordHint: "创建同步空间那台设备的主密码；之后在任一设备上改过主密码的，用最新的那个。",
+    spacePasswordHint: "同步空间中任一设备的主密码。",
     join: {
       fromInvite: "邀请码",
       fromKey: "同步密钥",
@@ -478,7 +478,11 @@ export const zhCN = {
       inviteHint: "在另一台设备的「设置 › 同步 › 邀请其他设备」中获取。",
       syncKey: "同步密钥",
       submit: "加入",
-      newVault: "这台电脑上还没有保险库，加入后会用同步空间的主密码创建一个。",
+      newVault: "这台电脑上还没有保险库，加入后会用这个主密码创建一个。",
+      vaultPassword: "这台设备的主密码",
+      vaultPasswordHint: "核对后，这台设备的主密码也能用来加入同步空间。",
+      otherPassword: "同步空间的主密码（可选）",
+      otherPasswordHint: "同步空间中的设备使用其他主密码时填写；留空则使用这台设备的主密码。",
     },
     created: {
       title: "保存你的同步密钥",
@@ -495,7 +499,8 @@ export const zhCN = {
       synced: "已同步 · {when}",
       failed: "同步失败：{error}",
       now: "立即同步",
-      keyringPending: "新的主密码将在下次同步时写入同步空间；在此之前，新设备加入仍需旧的主密码。",
+      keyringPending:
+        "这台设备的新主密码将在下次同步时写入同步空间；在此之前，新设备需用旧的主密码或其他设备的主密码加入。",
     },
     storageRow: "存储",
     storageEdit: "修改存储设置",

@@ -317,7 +317,10 @@ fn commands() -> Vec<Value> {
         json!({"command": "update_check"}),
         json!({"command": "update_install"}),
         json!({"command": "sync_create", "storage": s3_storage(), "password": "a new password", "device_name": "Desktop"}),
-        json!({"command": "sync_join", "source": {"type": "invite", "text": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0"}, "password": "a new password", "device_name": "Pixel 8"}),
+        json!({
+            "command": "sync_join", "source": {"type": "invite", "text": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0"},
+            "password": "a new password", "device_name": "Pixel 8", "space_password": "another device's password"
+        }),
         json!({"command": "sync_invite", "password": "a new password"}),
         json!({"command": "sync_set_storage", "storage": webdav_storage(), "password": "a new password"}),
         json!({"command": "sync_rename_device", "name": "Work desktop"}),
@@ -563,7 +566,8 @@ async fn dispatch_answers_and_leaks_nothing() {
     assert_eq!(run(json!({"command": "sync_remove_device", "tag": own_tag})).await.unwrap_err().code, ErrorCode::Internal);
     ok(run(json!({"command": "sync_disable"})).await, &mut answers);
     let source = json!({"type": "manual", "storage": storage, "sync_key": sync_key});
-    ok(run(json!({"command": "sync_join", "source": source, "password": "correct horse battery", "device_name": "Desktop"})).await, &mut answers);
+    let join = json!({"command": "sync_join", "source": source, "password": "correct horse battery", "device_name": "Desktop", "space_password": "correct horse battery"});
+    ok(run(join).await, &mut answers);
     for _ in 0..50 {
         tokio::task::yield_now().await;
     }

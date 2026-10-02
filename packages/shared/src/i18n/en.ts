@@ -493,8 +493,7 @@ export const en: Messages = {
     deviceNameHint: "The other devices list it under this name.",
     masterPassword: "Master password",
     spacePassword: "The sync space's master password",
-    spacePasswordHint:
-      "The master password of the device that created the space; if it was changed on any device since, the newest one.",
+    spacePasswordHint: "The master password of any device in the space.",
     join: {
       fromInvite: "Invitation",
       fromKey: "Sync key",
@@ -503,7 +502,13 @@ export const en: Messages = {
       syncKey: "Sync key",
       submit: "Join",
       newVault:
-        "There is no vault on this computer yet: joining creates one under the space's master password.",
+        "There is no vault on this computer yet: joining creates one under this master password.",
+      vaultPassword: "This device's master password",
+      vaultPasswordHint:
+        "Checked against this vault; from then on it opens the sync space as well.",
+      otherPassword: "The sync space's master password (optional)",
+      otherPasswordHint:
+        "When the space's devices use another master password; leave it empty to use this device's.",
     },
     created: {
       title: "Keep your sync key",
@@ -521,7 +526,7 @@ export const en: Messages = {
       failed: "Sync failed: {error}",
       now: "Sync now",
       keyringPending:
-        "The new master password reaches the sync space on the next sync; until then, joining a device still takes the old one.",
+        "This device's new master password reaches the sync space on the next sync; until then, joining a device takes the old one or another device's.",
     },
     storageRow: "Storage",
     storageEdit: "Change storage settings",

@@ -1,7 +1,5 @@
 //! Multi-device sync through the core: devices are cores sharing one fake storage.
 
-use std::sync::atomic::AtomicBool;
-
 use lockra_sync::{MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SyncError};
 use tokio::sync::Notify;
 
@@ -68,9 +66,9 @@ async fn a_space_created_on_one_device_is_joined_by_a_new_one_and_both_converge(
         let (desktop, sync_key) = first_device(&transport, storage.clone()).await;
         assert!(sync_key.starts_with("LKS1-"));
         assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
-        // On the storage: the keyring and the desktop's snapshot, neither of them readable.
+        // On the storage: the desktop's snapshot alone, its keyring inside, nothing of it readable.
         let store = transport.store(&storage);
-        assert_eq!(store.paths().len(), 2, "{:?}", store.paths());
+        assert_eq!(store.paths().len(), 1, "{:?}", store.paths());
         for path in store.paths() {
             let text = String::from_utf8_lossy(&store.object(&path).unwrap()).into_owned();
             for clear in ["GitHub", SECRET, "Desktop", MASTER] {
@@ -80,7 +78,7 @@ async fn a_space_created_on_one_device_is_joined_by_a_new_one_and_both_converge(
 
         // A new device without a vault: the storage, the sync key and the master password make one.
         let phone = device(&transport);
-        phone.core.sync_join(manual(storage.clone(), &sync_key), pw(MASTER), " Phone ".into()).await.unwrap();
+        phone.core.sync_join(manual(storage.clone(), &sync_key), pw(MASTER), " Phone ".into(), None).await.unwrap();
         assert_eq!(phone.core.state().phase, Phase::Unlocked);
         settle().await;
         assert_eq!(issuers(&phone), ["GitHub"]);
@@ -119,16 +117,25 @@ async fn an_invitation_joins_an_unlocked_vault_and_its_accounts_join_the_space()
     let laptop = device(&transport);
     laptop.core.create_vault(pw("another password")).await.unwrap();
     laptop.core.add_uri(&otpauth("Bank", "card", "MZXW6YTBOI")).unwrap();
-    laptop.core.sync_join(JoinSource::Invite { text: pw(&invite.invite) }, pw(MASTER), "Laptop".into()).await.unwrap();
+    let invited = || JoinSource::Invite { text: pw(&invite.invite) };
+    // This vault's own master password is checked; alone, it opens nothing of the space.
+    assert_eq!(code_err(laptop.core.sync_join(invited(), pw(MASTER), "Laptop".into(), None).await), ErrorCode::WrongPassword);
+    assert_eq!(code_err(laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), None).await), ErrorCode::SyncWrongCredentials);
+    laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), Some(pw(MASTER))).await.unwrap();
     settle().await;
     assert_eq!(issuers(&laptop), ["Bank", "GitHub"]);
     desktop.core.sync_now().unwrap();
     settle().await;
     assert_eq!(issuers(&desktop), ["Bank", "GitHub"]);
-    assert_eq!(code_err(laptop.core.sync_join(JoinSource::Invite { text: pw(&invite.invite) }, pw(MASTER), "Laptop".into()).await), ErrorCode::SyncAlreadyOn);
-    // The laptop keeps its own master password.
+    assert_eq!(code_err(laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), None).await), ErrorCode::SyncAlreadyOn);
+    // The laptop keeps its own master password, and its keyring in the space is under it: that
+    // password opens the space as well now.
     laptop.core.lock_vault();
     laptop.core.unlock(pw("another password")).await.unwrap();
+    let phone = device(&transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("another password"), "Phone".into(), None).await.unwrap();
+    settle().await;
+    assert_eq!(issuers(&phone), ["Bank", "GitHub"]);
 }
 
 #[tokio::test(start_paused = true)]
@@ -136,7 +143,7 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let phone = device(&transport);
-    let join = |source: JoinSource, password: &str| phone.core.sync_join(source, pw(password), "Phone".into());
+    let join = |source: JoinSource, password: &str| phone.core.sync_join(source, pw(password), "Phone".into(), None);
     assert_eq!(code_err(join(manual(s3(STORAGE_SECRET), &sync_key), "wrong password").await), ErrorCode::SyncWrongCredentials);
     assert_eq!(phone.core.state().phase, Phase::NoVault, "no vault is made on a failed join");
     let other_key = lockra_sync::SyncKey::generate().unwrap().to_text();
@@ -169,7 +176,7 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     assert_eq!(code_err(laptop.core.sync_set_storage(s3(STORAGE_SECRET), pw(MASTER)).await), ErrorCode::SyncOff);
     // Locked, nothing goes.
     desktop.core.lock_vault();
-    assert_eq!(code_err(desktop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "x".into()).await), ErrorCode::Locked);
+    assert_eq!(code_err(desktop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "x".into(), None).await), ErrorCode::Locked);
     assert_eq!(code_err(desktop.core.sync_now()), ErrorCode::Locked);
 }
 
@@ -247,7 +254,7 @@ async fn a_copied_vault_becomes_a_new_device_of_the_space() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_new_master_password_reaches_the_keyring_even_after_a_failed_run() {
+async fn a_new_master_password_reaches_the_space_even_after_a_failed_run() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let store = transport.store(&s3(STORAGE_SECRET));
@@ -261,8 +268,8 @@ async fn a_new_master_password_reaches_the_keyring_even_after_a_failed_run() {
     assert!(!space(&desktop).keyring_pending);
 
     let phone = device(&transport);
-    assert_eq!(code_err(phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into()).await), ErrorCode::SyncWrongCredentials);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("a new password"), "Phone".into()).await.unwrap();
+    assert_eq!(code_err(phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await), ErrorCode::SyncWrongCredentials);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("a new password"), "Phone".into(), None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["GitHub"]);
 }
@@ -304,7 +311,7 @@ async fn devices_are_renamed_and_removed_and_sync_turns_off_here_only() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into()).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
     settle().await;
     phone.core.sync_rename_device("  Pixel 8\n").unwrap();
     settle().await;
@@ -343,7 +350,7 @@ async fn restoring_a_backup_in_place_reaches_the_other_devices() {
     desktop.core.backup_to(path.clone(), None).await.unwrap();
     desktop.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into()).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
     advance(SYNC_DEBOUNCE).await;
     phone.core.sync_now().unwrap();
     settle().await;
@@ -358,12 +365,36 @@ async fn restoring_a_backup_in_place_reaches_the_other_devices() {
     assert_eq!(issuers(&phone), ["GitHub"]);
 }
 
-/// The fake storage, with writes that can be held: a run waits there while the test locks.
+/// The fake storage, with calls that can be held: a run waits there while the test acts.
 struct Gate {
     remote: MemoryRemote,
-    hold: AtomicBool,
+    /// Calls that begin with this (`put …`, `list sync/`) wait until released.
+    hold: std::sync::Mutex<Option<String>>,
     reached: Notify,
     go: Notify,
+}
+
+impl Gate {
+    fn new(conditional: bool) -> Arc<Self> {
+        Arc::new(Self { remote: MemoryRemote::new(conditional), hold: std::sync::Mutex::new(None), reached: Notify::new(), go: Notify::new() })
+    }
+
+    fn hold(&self, call: &str) {
+        *self.hold.lock().unwrap() = Some(call.to_owned());
+    }
+
+    fn release(&self) {
+        *self.hold.lock().unwrap() = None;
+        self.go.notify_one();
+    }
+
+    async fn pass(&self, call: String) {
+        let held = self.hold.lock().unwrap().as_ref().is_some_and(|start| call.starts_with(start.as_str()));
+        if held {
+            self.reached.notify_one();
+            self.go.notified().await;
+        }
+    }
 }
 
 impl RemoteStore for Gate {
@@ -372,7 +403,10 @@ impl RemoteStore for Gate {
     }
 
     fn list<'a>(&'a self, dir: &'a str) -> RemoteFuture<'a, Vec<ObjectMeta>> {
-        self.remote.list(dir)
+        Box::pin(async move {
+            self.pass(format!("list {dir}")).await;
+            self.remote.list(dir).await
+        })
     }
 
     fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
@@ -381,10 +415,7 @@ impl RemoteStore for Gate {
 
     fn put<'a>(&'a self, path: &'a str, bytes: Vec<u8>, condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
         Box::pin(async move {
-            if self.hold.load(Ordering::SeqCst) {
-                self.reached.notify_one();
-                self.go.notified().await;
-            }
+            self.pass(format!("put {path}")).await;
             self.remote.put(path, bytes, condition).await
         })
     }
@@ -404,19 +435,18 @@ impl SyncTransport for GateTransport {
 
 #[tokio::test(start_paused = true)]
 async fn a_write_cut_off_by_locking_is_this_devices_own_on_the_next_run() {
-    let gate = Arc::new(Gate { remote: MemoryRemote::new(true), hold: AtomicBool::new(false), reached: Notify::new(), go: Notify::new() });
+    let gate = Gate::new(true);
     let desktop = harness_on(FakeUpdater::default(), Arc::new(GateTransport(Arc::clone(&gate))));
     desktop.core.create_vault(pw(MASTER)).await.unwrap();
     desktop.core.sync_create(s3(STORAGE_SECRET), pw(MASTER), "Desktop".into()).await.unwrap();
     settle().await;
     // The next write reaches the storage only after the vault was locked: the run cannot record it.
-    gate.hold.store(true, Ordering::SeqCst);
+    gate.hold("put ");
     desktop.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
     advance(SYNC_DEBOUNCE).await;
     gate.reached.notified().await;
     desktop.core.lock_vault();
-    gate.hold.store(false, Ordering::SeqCst);
-    gate.go.notify_one();
+    gate.release();
     settle().await;
 
     desktop.core.unlock(pw(MASTER)).await.unwrap();
@@ -459,11 +489,11 @@ async fn the_storage_is_opened_once_for_its_settings() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn the_latest_master_password_keeps_the_keyring_when_two_devices_change_it_apart() {
+async fn every_devices_master_password_opens_the_space_and_a_replaced_one_no_longer_does() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into()).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
     settle().await;
     let store = transport.store(&s3(STORAGE_SECRET));
     // The desktop changes its password offline: its keyring waits.
@@ -471,21 +501,22 @@ async fn the_latest_master_password_keeps_the_keyring_when_two_devices_change_it
     desktop.core.change_password(pw(MASTER), pw("desktop password")).await.unwrap();
     settle().await;
     assert!(space(&desktop).keyring_pending);
-    // Later, the phone changes its own, online.
-    advance(Duration::from_secs(10)).await;
+    // The phone changes its own, online; then the desktop is back.
     phone.core.change_password(pw(MASTER), pw("phone password")).await.unwrap();
     settle().await;
     assert!(!space(&phone).keyring_pending);
-    // Back online, the desktop's older keyring does not go over the phone's.
     desktop.core.sync_now().unwrap();
     settle().await;
     assert!(!space(&desktop).keyring_pending);
-    let laptop = device(&transport);
-    assert_eq!(
-        code_err(laptop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("desktop password"), "Laptop".into()).await),
-        ErrorCode::SyncWrongCredentials
-    );
-    laptop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("phone password"), "Laptop".into()).await.unwrap();
+    // Each device's master password opens the space; the one both replaced opens nothing.
+    let join = |password: &'static str| {
+        let laptop = device(&transport);
+        let sync_key = sync_key.clone();
+        async move { laptop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(password), "Laptop".into(), None).await.map_err(|e| e.code) }
+    };
+    assert_eq!(join(MASTER).await, Err(ErrorCode::SyncWrongCredentials));
+    assert_eq!(join("desktop password").await, Ok(()));
+    assert_eq!(join("phone password").await, Ok(()));
 }
 
 #[tokio::test(start_paused = true)]
@@ -497,7 +528,7 @@ async fn an_hotp_counter_never_goes_back_when_two_devices_advance_it_apart() {
     let created = desktop.core.sync_create(s3(STORAGE_SECRET), pw(MASTER), "Desktop".into()).await.unwrap();
     settle().await;
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &created.sync_key), pw(MASTER), "Phone".into()).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &created.sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
     settle().await;
     let counter = |h: &Harness| match h.core.state().entries[0].kind {
         OtpKind::Hotp { counter } => counter,
@@ -520,78 +551,87 @@ async fn an_hotp_counter_never_goes_back_when_two_devices_advance_it_apart() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn new_storage_settings_must_lead_to_this_spaces_keyring() {
+async fn new_storage_settings_must_hold_this_spaces_snapshots() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, _) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let original = transport.store(&s3(STORAGE_SECRET));
-    let keyring = original.paths().into_iter().find(|p| p.ends_with("keyring.lks")).unwrap();
-    let relative = keyring.strip_prefix("sync/").unwrap().to_owned();
-    // Moved to a WebDAV folder (no prefix): a damaged keyring there is refused, the real one taken.
+    let snapshot = original.paths().pop().unwrap();
+    let relative = snapshot.strip_prefix("sync/").unwrap().to_owned();
+    // Moved to a WebDAV folder (no prefix): a damaged snapshot there is refused, the real one taken.
     let moved = webdav();
     let there = transport.store(&moved);
-    there.set_object(&relative, b"LKSKEYR1 not a keyring".to_vec());
+    let mut damaged = original.object(&snapshot).unwrap();
+    let last = damaged.len() - 1;
+    damaged[last] ^= 1;
+    there.set_object(&relative, damaged);
     assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), pw(MASTER)).await), ErrorCode::SyncDataCorrupted);
-    there.set_object(&relative, original.object(&keyring).unwrap());
+    there.set_object(&relative, original.object(&snapshot).unwrap());
     desktop.core.sync_set_storage(moved, pw(MASTER)).await.unwrap();
     settle().await;
     assert!(matches!(space(&desktop).storage, StorageView::Webdav { .. }));
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
 }
 
-/// The fake storage, where another device writes the keyring just before this one does.
-struct Interfering {
-    remote: MemoryRemote,
-    armed: AtomicBool,
-}
+#[tokio::test(start_paused = true)]
+async fn two_devices_writing_at_once_lose_nothing_on_a_storage_without_conditions() {
+    // WebDAV's way: every write goes through, whatever is there.
+    let gate = Gate::new(false);
+    let transport: Arc<dyn SyncTransport> = Arc::new(GateTransport(Arc::clone(&gate)));
+    let desktop = harness_on(FakeUpdater::default(), Arc::clone(&transport));
+    desktop.core.create_vault(pw(MASTER)).await.unwrap();
+    let created = desktop.core.sync_create(webdav(), pw(MASTER), "Desktop".into()).await.unwrap();
+    settle().await;
+    let desktop_snapshot = gate.remote.paths().pop().unwrap();
+    let phone = harness_on(FakeUpdater::default(), Arc::clone(&transport));
+    phone.core.sync_join(manual(webdav(), &created.sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
 
-impl RemoteStore for Interfering {
-    fn conditional_puts(&self) -> bool {
-        self.remote.conditional_puts()
+    // The desktop's run is held at its write while the phone runs from start to end: both read the
+    // same space, both write, a new account and a new master password each.
+    gate.hold(&format!("put {desktop_snapshot}"));
+    desktop.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    desktop.core.change_password(pw(MASTER), pw("desktop password")).await.unwrap();
+    gate.reached.notified().await;
+    phone.core.add_uri(&otpauth("Bank", "card", "MZXW6YTBOI")).unwrap();
+    phone.core.change_password(pw(MASTER), pw("phone password")).await.unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    assert!(!space(&phone).keyring_pending, "the phone's run went through");
+    gate.release();
+    settle().await;
+    for h in [&desktop, &phone, &desktop] {
+        h.core.sync_now().unwrap();
+        settle().await;
     }
-
-    fn list<'a>(&'a self, dir: &'a str) -> RemoteFuture<'a, Vec<ObjectMeta>> {
-        self.remote.list(dir)
-    }
-
-    fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
-        self.remote.get(path)
-    }
-
-    fn put<'a>(&'a self, path: &'a str, bytes: Vec<u8>, condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
-        if path.ends_with("keyring.lks")
-            && self.armed.swap(false, Ordering::SeqCst)
-            && let Some(current) = self.remote.object(path)
-        {
-            self.remote.set_object(path, current);
-        }
-        self.remote.put(path, bytes, condition)
-    }
-
-    fn delete<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, ()> {
-        self.remote.delete(path)
-    }
-}
-
-struct OneStore(Arc<dyn RemoteStore>);
-
-impl SyncTransport for OneStore {
-    fn open(&self, _config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
-        Ok(Arc::clone(&self.0))
+    assert_eq!(issuers(&desktop), ["Bank", "Mail"]);
+    assert_eq!(issuers(&phone), ["Bank", "Mail"]);
+    // Both keyrings are there: each new master password opens the space.
+    for password in ["desktop password", "phone password"] {
+        let laptop = harness_on(FakeUpdater::default(), Arc::clone(&transport));
+        laptop.core.sync_join(manual(webdav(), &created.sync_key), pw(password), "Laptop".into(), None).await.unwrap();
+        laptop.core.sync_disable().unwrap();
     }
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_keyring_written_meanwhile_is_compared_again_before_it_is_replaced() {
-    let store = Arc::new(Interfering { remote: MemoryRemote::new(true), armed: AtomicBool::new(false) });
-    let desktop = harness_on(FakeUpdater::default(), Arc::new(OneStore(Arc::clone(&store) as Arc<dyn RemoteStore>)));
+async fn a_run_stops_before_writing_where_the_space_no_longer_is() {
+    let gate = Gate::new(true);
+    let desktop = harness_on(FakeUpdater::default(), Arc::new(GateTransport(Arc::clone(&gate))));
     desktop.core.create_vault(pw(MASTER)).await.unwrap();
     desktop.core.sync_create(s3(STORAGE_SECRET), pw(MASTER), "Desktop".into()).await.unwrap();
     settle().await;
-    store.armed.store(true, Ordering::SeqCst);
-    desktop.core.change_password(pw(MASTER), pw("a new password")).await.unwrap();
+    // The space is moved (its folder, then the settings) while a run is out reading the old place.
+    let snapshot = gate.remote.paths().pop().unwrap();
+    gate.remote.set_object(snapshot.strip_prefix("sync/").unwrap(), gate.remote.object(&snapshot).unwrap());
+    gate.hold("list sync/");
+    desktop.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    gate.reached.notified().await;
+    desktop.core.sync_set_storage(webdav(), pw(MASTER)).await.unwrap();
+    let calls = gate.remote.calls().len();
+    gate.release();
     settle().await;
-    assert!(space(&desktop).keyring_pending, "the keyring changed between reading and writing: not written over");
-    desktop.core.sync_now().unwrap();
-    settle().await;
-    assert!(!space(&desktop).keyring_pending, "compared again, then written");
+    let after: Vec<String> = gate.remote.calls()[calls..].to_vec();
+    assert!(!after.iter().any(|c| c.starts_with("put sync/")), "nothing written to the old place: {after:?}");
+    assert!(after.iter().any(|c| c.starts_with("put lockra-sync-v1/")), "the next run writes to the new one: {after:?}");
+    assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
 }

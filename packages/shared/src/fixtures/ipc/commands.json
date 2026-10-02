@@ -188,7 +188,8 @@
       "source": {
         "text": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0",
         "type": "invite"
-      }
+      },
+      "space_password": "another device's password"
     },
     {
       "command": "sync_invite",

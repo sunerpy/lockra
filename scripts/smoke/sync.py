@@ -179,6 +179,13 @@ class Phase:
         web.invoke({"command": "entry_add_uri", "uri": MAIL})
         self.open_sync()
         self.shot("sync-off-light")
+        # Joining a space from a vault: this device's master password, and another one apart.
+        web.click(web.wait(css="[data-testid=sync-join-open]"))
+        join = "//*[@data-testid='sync-join']"
+        self.fill("这台设备的主密码", PASSWORD, join)
+        self.shot("sync-join-settings-light")
+        web.click(self.button("取消", join))
+        web.gone("[data-testid=sync-join]")
         web.click(web.wait(css="[data-testid=sync-create-open]"))
         scope = "//*[@data-testid='sync-create']"
         self.storage_form(scope)
@@ -200,7 +207,8 @@ class Phase:
         if [d["name"] for d in space["devices"]] != ["台式机"]:
             sys.exit(f"smoke-sync: device A's list: {space['devices']}")
         objects = self.s3.keys(f"{PREFIX}/lockra-sync-v1/")
-        if not any(k.endswith("/keyring.lks") for k in objects) or not any("/devices/" in k for k in objects):
+        # One object per device and nothing else: device A's snapshot, its keyring inside.
+        if len(objects) != 1 or "/devices/" not in objects[0]:
             sys.exit(f"smoke-sync: the storage holds {objects}")
         for key_name in objects:
             body = self.s3.get(key_name)
@@ -208,7 +216,7 @@ class Phase:
                 if clear in body:
                     sys.exit(f"smoke-sync: {clear!r} is readable in {key_name}")
         self.shot("sync-on-light")
-        print(f"smoke-sync: A set up the space ({len(objects)} objects, none readable) and kept the sync key")
+        print(f"smoke-sync: A set up the space (1 object, nothing readable) and kept the sync key")
         web.quit()
 
     def b(self):

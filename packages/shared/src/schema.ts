@@ -624,8 +624,11 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({
     command: z.literal("sync_join"),
     source: joinSourceSchema,
+    /** This device's master password: the vault's, or the new vault's. */
     password,
     device_name: z.string(),
+    /** The master password of a device in the space, when it is not `password`. */
+    space_password: password.optional(),
   }),
   z.object({ command: z.literal("sync_invite"), password }),
   z.object({ command: z.literal("sync_set_storage"), storage: storageConfigSchema, password }),

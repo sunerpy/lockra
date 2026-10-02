@@ -16,8 +16,8 @@ crates/
   lockra-core      The application: session state machine, entries, import preview, export
                    sessions, backups, settings, the scheduler; ports for everything native.
   lockra-bridge    The wire contract: the UiCommand enum, dispatch, and the contract fixtures.
-  lockra-sync      End-to-end encrypted sync, without I/O: the keyring, the device snapshots,
-                   hybrid logical clocks, the last-writer-wins merge and one sync step.
+  lockra-sync      End-to-end encrypted sync, without I/O: the device snapshots and the keyrings
+                   they carry, hybrid logical clocks, the last-writer-wins merge, one sync step.
   lockra-remote    The sync's storage over HTTP (S3-compatible or WebDAV, through OpenDAL).
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,

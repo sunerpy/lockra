@@ -171,10 +171,14 @@ pub enum UiCommand {
     SyncJoin {
         /// How.
         source: JoinSource,
-        /// The space's master password.
+        /// This device's master password (the vault's, or the new vault's); it opens the space
+        /// too unless `space_password` is given.
         password: Zeroizing<String>,
         /// This device's name in the space.
         device_name: String,
+        /// The master password of a device in the space, when it is not `password`.
+        #[serde(default)]
+        space_password: Option<Zeroizing<String>>,
     },
     /// The invitation for another device; answers with it (a secret).
     SyncInvite {
@@ -317,7 +321,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::UpdateCheck => unit(core.update_check())?,
         UiCommand::UpdateInstall => unit(core.update_install())?,
         UiCommand::SyncCreate { storage, password, device_name } => json!(core.sync_create(storage, password, device_name).await?),
-        UiCommand::SyncJoin { source, password, device_name } => unit(core.sync_join(source, password, device_name).await)?,
+        UiCommand::SyncJoin { source, password, device_name, space_password } => unit(core.sync_join(source, password, device_name, space_password).await)?,
         UiCommand::SyncInvite { password } => json!(core.sync_invite(password).await?),
         UiCommand::SyncSetStorage { storage, password } => unit(core.sync_set_storage(storage, password).await)?,
         UiCommand::SyncRenameDevice { name } => unit(core.sync_rename_device(&name))?,

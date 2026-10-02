@@ -17,7 +17,9 @@ import { emptyStorageForm, storageComplete, storageConfig } from "./storage-form
 type Mode = "invite" | "key";
 
 /** Joining a space: another device's invitation, or the storage and the sync key typed in. On the
- *  welcome screen (`newVault`) the space's master password becomes this vault's. */
+ *  welcome screen (`newVault`) the master password of a device in the space becomes this vault's;
+ *  with a vault, its own master password is checked and opens the space unless the space's devices
+ *  use another one, typed in apart. */
 export function JoinForm({
   newVault = false,
   onCancel,
@@ -33,6 +35,7 @@ export function JoinForm({
   const [storage, setStorage] = useState(emptyStorageForm);
   const [syncKey, setSyncKey] = useState("");
   const [password, setPassword] = useState("");
+  const [spacePassword, setSpacePassword] = useState("");
   const [deviceName, setDeviceName] = useState(() => t(`sync.platformDevice.${platform}`));
   const submit = useSubmit();
   const sourceReady =
@@ -45,12 +48,22 @@ export function JoinForm({
       mode === "invite"
         ? { type: "invite", text: invite.trim() }
         : { type: "manual", storage: storageConfig(storage), sync_key: syncKey.trim() };
+    const space_password = newVault || spacePassword === "" ? undefined : spacePassword;
     await submit.run(() =>
-      backend.dispatch({ command: "sync_join", source, password, device_name: deviceName }),
+      backend.dispatch({
+        command: "sync_join",
+        source,
+        password,
+        device_name: deviceName,
+        space_password,
+      }),
     );
     setPassword("");
+    setSpacePassword("");
   };
   const error = submit.error === undefined ? undefined : errorText(t, submit.error);
+  // A space that does not open with the other password typed in says so there.
+  const spaceError = !newVault && spacePassword !== "" && submit.error === "sync_wrong_credentials";
   return (
     <form
       onSubmit={(e) => void onSubmit(e)}
@@ -103,15 +116,27 @@ export function JoinForm({
           onChange={(e) => setDeviceName(e.target.value)}
           help={t("sync.deviceNameHint")}
           maxLength={64}
+          // With a vault, the two passwords share the next row.
+          className={newVault ? undefined : "sm:col-span-2"}
         />
         <PasswordField
-          label={t("sync.spacePassword")}
+          label={t(newVault ? "sync.spacePassword" : "sync.join.vaultPassword")}
           value={password}
           onChange={setPassword}
-          help={t("sync.spacePasswordHint")}
+          help={t(newVault ? "sync.spacePasswordHint" : "sync.join.vaultPasswordHint")}
           autoComplete="current-password"
-          error={error}
+          error={spaceError ? undefined : error}
         />
+        {!newVault && (
+          <PasswordField
+            label={t("sync.join.otherPassword")}
+            value={spacePassword}
+            onChange={setSpacePassword}
+            help={t("sync.join.otherPasswordHint")}
+            autoComplete="off"
+            error={spaceError ? error : undefined}
+          />
+        )}
       </div>
       {newVault && <p className="text-[12px] text-fg-subtle">{t("sync.join.newVault")}</p>}
       <div className="flex items-center gap-2">

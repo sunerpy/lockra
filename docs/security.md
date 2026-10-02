@@ -97,23 +97,34 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   space, Lockra contacts that storage only while the vault is unlocked: at unlock, 3 s after a
   change, every 5 minutes, and on **Sync now**. Setting up, joining, showing an invitation and
   moving the storage settings ask for the master password again.
-- **The storage sees ciphertext.** A space is a keyring object and one snapshot per device under
-  `lockra-sync-v1/<space id>/` (`docs/formats.md` §9). A snapshot is the device's whole replica,
-  secrets included, encrypted under a key derived from the space's random data key, its header
-  (format, space, device tag, nonce) bound as associated data, padded to 4 KiB so that its size
-  says little about the number of accounts. The names say nothing but the number of devices:
-  device names, times and sequence numbers are inside the ciphertext.
-- **Two secrets open a space.** The keyring wraps the data key under HKDF(Argon2id(master
-  password) ‖ sync key). The sync key is 256 random bits shown once, when the space is created,
-  to be kept with the master password; it also names the space. The storage's contents and the
-  master password open nothing without it, and with it every guess of the password still costs an
-  Argon2id run. A device keeps the data key in its vault's encrypted local part and needs neither
-  secret again.
+- **The storage sees ciphertext.** A space is one snapshot per device under
+  `lockra-sync-v1/<space id>/devices/` (`docs/formats.md` §9), and nothing else. A snapshot is the
+  device's whole replica, secrets included, encrypted under a key derived from the space's random
+  data key, its header (format, space, device tag, nonce, the device's keyring) bound as
+  associated data, padded to 4 KiB so that its size says little about the number of accounts. The
+  names say nothing but the number of devices: device names, times and sequence numbers are inside
+  the ciphertext, and a keyring's header names no device and no time.
+- **Two secrets open a space.** Every snapshot carries its device's keyring: the data key wrapped
+  under HKDF(Argon2id(that device's master password) ‖ sync key), with a fresh salt, so that two
+  devices with the same password carry keyrings that do not read alike. The sync key is 256
+  random bits shown once, when the space is created, to be kept with the master password; it also
+  names the space. The storage's contents and a master password open nothing without it, and with
+  it every guess of a password still costs an Argon2id run. A device keeps the data key in its
+  vault's encrypted local part and needs neither secret again.
+- **No object has two writers.** A device writes only its own snapshot, its keyring inside, so
+  runs on different devices never write the same object: no lock and no conditional write is
+  needed, and S3 and WebDAV (which has no conditional writes) behave alike. What the space holds is
+  the merge of the snapshots, whatever order the runs take, so changes made at the same moment on
+  two devices are both kept. Another device only ever deletes a snapshot (removing a device); a
+  device still in use writes it again on its next run.
 - **Joining.** Another device shows an invitation (text and QR code): the storage settings with
-  their credentials and the sync key, everything but the master password, which the joining
-  device asks for. It is to be scanned on the user's own devices only. Without another device,
-  the storage settings and the sync key typed in do the same. A device with no vault yet becomes
-  one, under the space's master password.
+  their credentials and the sync key, everything but a master password, which the joining device
+  asks for: that of any device in the space. It is to be scanned on the user's own devices only.
+  Without another device, the storage settings and the sync key typed in do the same. A device
+  with no vault yet becomes one, under that password. A device with a vault checks its own master
+  password first, and opens the space with it, or with another device's typed in apart. Either way
+  the joining device's keyring goes in under its own master password, so the passwords that open
+  a space are those of its devices, no other.
 - **Altered, moved and older objects are refused; deletion is not prevented.** Every object
   authenticates and is bound to its space and its device's name: an altered or moved snapshot is
   reported as unreadable. An older snapshot of a device than one already seen is refused, and the
@@ -134,11 +145,13 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   plain HTTP is refused except to this computer (the tests' servers), and a redirect may not lead
   to it either. The requests carry the storage's credentials (S3 signatures, WebDAV basic
   authentication inside TLS) and ciphertext.
-- **A new master password** re-wraps the keyring on the next run (the data key stays); until then
-  the old password still joins new devices. The keyring is stamped, and a device does not write
-  its keyring over a later one: when two devices change the master password apart, the later
-  change is the one that joins new devices. New storage settings are taken only where this
-  space's keyring is.
+- **A new master password** re-wraps this device's keyring, which its next run writes with the
+  snapshot (the data key stays); until then the old password still joins new devices through this
+  device. Devices change their passwords apart, each its own keyring: neither change can be lost
+  to the other. A password no device uses any more opens nothing the storage holds; a copy of the
+  storage taken earlier still opens with it, since the data key never changes (see Residual
+  risks). New storage settings are taken only where a snapshot of this space opens under its data
+  key, and a run that started before the settings changed stops before it writes.
 
 ## Residual risks
 
@@ -159,13 +172,13 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
 - Memory is not locked (`mlock`); decrypted entries could reach swap or a crash dump.
 - A forgotten master password cannot be recovered; _reset_ keeps the old file but cannot open it.
 - Sync: whoever holds the storage's contents and the sync key (an invitation photographed, for
-  instance) can try master passwords offline at Argon2id's cost; the master password is the last
-  line. The storage's operator sees when devices write and how many there are, and can delete the
-  space. Devices of one space may keep different master passwords: the keyring follows the last
-  one changed, and joining asks for that one. On WebDAV, which has no conditional writes, a keyring
-  written by another device between this device's read and write can be replaced by an older one
-  (S3 refuses that write); joining then asks for the older password until a device changes the
-  password again.
+  instance) can try master passwords offline at Argon2id's cost, against the keyring of every
+  device: the weakest master password among the space's devices is the last line. The storage's
+  operator sees when devices write and how many there are, and can delete the space. Removing a
+  device deletes its snapshot and its keyring but revokes nothing: the device keeps the data key,
+  and a copy of the storage taken earlier keeps its keyring. To shut out a lost device, or someone
+  who has the sync key and an old master password, set up a new space and join the other devices
+  to it.
 - Importing from Microsoft Authenticator needs a rooted Android phone, and newer versions of that
   app may encrypt the field Lockra reads.
 - The packages are not code-signed (Windows SmartScreen and macOS Gatekeeper warn); the update

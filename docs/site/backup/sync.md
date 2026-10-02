@@ -43,17 +43,21 @@ invitation holds the storage's credentials and the sync key, so use it on your o
 On the new device:
 
 - **No vault yet**: on the welcome screen, choose **Join sync…**, paste the invitation, enter a
-  name for the device and **The sync space's master password**, and choose **Join**. Lockra
-  creates the vault under that master password and the accounts arrive.
-- **A vault already**: open **Settings › Sync › Join an existing sync**. The vault's accounts join
-  the space, and the vault keeps its own master password.
+  name for the device and **The sync space's master password**, the master password of any device
+  in the space, and choose **Join**. Lockra creates the vault under that master password and the
+  accounts arrive.
+- **A vault already**: open **Settings › Sync › Join an existing sync** and enter **This device's
+  master password**. If the devices in the space use another master password, also enter one of
+  theirs in **The sync space's master password (optional)**. The vault's accounts join the space,
+  and the vault keeps its own master password.
 
 Without another device, choose **Sync key** instead of **Invitation** and fill in the storage
 settings and the sync key.
 
-The space's master password is the one of the device that created the space; after a master
-password change on any device of the space, it is the newest one. A change of the master password
-reaches the space on the next sync.
+Every device in the space keeps its own copy of the space's key, encrypted with its own master
+password and the sync key. The master password of any device in the space, with the sync key,
+adds a device. After you change the master password on a device, the new one works from that
+device's next sync, and the old one no longer opens the space unless another device still uses it.
 
 ## When devices sync
 
@@ -68,8 +72,8 @@ The order of recently used accounts stays on each device.
 ## Devices
 
 **Devices** lists every device of the space and when it last wrote. To remove a lost or retired
-device, choose its remove button: its data is deleted from the storage. A device that is still in
-use appears again on its next sync. **Rename** changes this device's name for the others.
+device, choose its remove button: its data, with its copy of the space's key, is deleted from the
+storage. A device that is still in use appears again on its next sync. **Rename** changes this device's name for the others.
 
 ## Changing the storage settings or turning sync off
 
@@ -85,15 +89,21 @@ the other devices go on. You can join again later with an invitation or the sync
   encrypted on the device with XChaCha20-Poly1305 before they are written. Each device writes one
   file, padded to steps of 4 KiB, so its size says little about the number of accounts. The file
   names show only how many devices there are.
-- **Two secrets open the space.** The key that encrypts the files is itself encrypted with both
-  the master password (through Argon2id, 64 MiB of memory and three passes) and the sync key.
-  Someone with the storage's contents opens nothing without the sync key, however good their guess
-  of the master password; with the sync key, every guess still costs a full Argon2id run.
+- **Two secrets open the space.** On each device, the key that encrypts the files is itself
+  encrypted with both that device's master password (through Argon2id, 64 MiB of memory and three
+  passes) and the sync key. Someone with the storage's contents opens nothing without the sync key,
+  however good their guess of a master password; with the sync key, every guess still costs a full
+  Argon2id run. Give every device a strong master password.
+- **Devices never overwrite each other.** Each device writes only its own file, so devices that
+  sync at the same moment keep each other's changes, on S3 and WebDAV alike.
 - **Changes are detected.** A file that was altered, moved from another device or space, or put
   back to an older version is refused, and **Settings › Sync** names the device. Your accounts stay
   as they are.
 - **Deleting is not prevented.** Whoever can write to the storage can delete the space. That stops
   sync, not your vaults: every device keeps its accounts.
+- **Removing a device does not revoke it.** A removed device still has the space's key. To shut
+  out a lost device, or someone who has the sync key and an old master password, turn off sync on
+  every device, start a new sync space and add the devices to it.
 - **Backups leave sync out.** The storage settings, their credentials and the sync key are kept in
   the vault file only. A backup does not contain them; a device restored from a backup joins the
   space again.
@@ -106,6 +116,6 @@ the other devices go on. You can join again later with an invitation or the sync
 | The storage could not be reached                                                                      | Check the network and the address. A proxy configured in the system is used.                                                                   |
 | The storage answered with an error; check that the bucket or folder exists                            | Check the bucket, the region and **Path-style access**.                                                                                        |
 | There is no sync space for this sync key on that storage                                              | Check the address, the bucket and **Folder (optional)**: they must be the same as on the other devices.                                        |
-| The master password or the sync key is wrong                                                          | Enter the space's master password (above) and check the sync key.                                                                              |
+| The master password or the sync key is wrong                                                          | Enter the master password of a device in the space (above) and check the sync key.                                                             |
 | The storage must be reached over HTTPS (plain HTTP only to this computer)                             | Use the service's `https://` address.                                                                                                          |
 | The sync data of a device is older than before and was refused. The storage may have been rolled back | The storage served an older file of that device. The device writes its file again on its next change; if the message stays, remove the device. |

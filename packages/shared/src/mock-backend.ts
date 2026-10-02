@@ -727,7 +727,12 @@ export class MockBackend implements Backend {
       case "sync_create":
         return this.syncCreate(command.storage, command.password, command.device_name);
       case "sync_join":
-        return this.syncJoin(command.source, command.password, command.device_name);
+        return this.syncJoin(
+          command.source,
+          command.password,
+          command.device_name,
+          command.space_password,
+        );
       case "sync_invite":
         return this.syncInvite(command.password);
       case "sync_set_storage": {
@@ -838,7 +843,12 @@ export class MockBackend implements Backend {
     return { sync_key: MOCK_SYNC_KEY };
   }
 
-  private syncJoin(source: JoinSource, password: string, deviceName: string): null {
+  private syncJoin(
+    source: JoinSource,
+    password: string,
+    deviceName: string,
+    spacePassword?: string,
+  ): null {
     if (source.type === "invite" && !source.text.trim().startsWith("lockra-invite:1:"))
       throw new LockraError("sync_invite_invalid");
     if (
@@ -850,6 +860,7 @@ export class MockBackend implements Backend {
     if (this.state.phase === "unlocked" && this.space !== null)
       throw new LockraError("sync_already_on");
     if (this.state.phase === "no_vault") this.checkLength(password);
+    else this.checkPassword(password);
     const storage: StorageConfig =
       source.type === "manual"
         ? source.storage
@@ -861,8 +872,9 @@ export class MockBackend implements Backend {
             password: MOCK_STORAGE_SECRET,
           };
     checkStorage(storage);
-    // The space's master password is the mock's.
-    if (password !== MOCK_PASSWORD) throw new LockraError("sync_wrong_credentials");
+    // The space's device uses the mock's master password.
+    if ((spacePassword ?? password) !== MOCK_PASSWORD)
+      throw new LockraError("sync_wrong_credentials");
     const others = [
       { tag: mockTag("Pixel 8"), name: "Pixel 8", written_at_ms: this.now(), this_device: false },
     ];

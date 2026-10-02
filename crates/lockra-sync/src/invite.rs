@@ -1,6 +1,7 @@
 //! The invitation one device of a space shows another: the storage, its credentials and the sync
-//! key, as one text (and the QR code of that text). It holds everything but the master password,
-//! so the device that scans it still needs the password to open the keyring.
+//! key, as one text (and the QR code of that text). It holds everything but a master password,
+//! so the device that scans it still needs the master password of a device in the space to open
+//! that device's keyring.
 
 use std::fmt;
 

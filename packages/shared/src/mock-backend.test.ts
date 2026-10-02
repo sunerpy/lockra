@@ -493,8 +493,19 @@ describe("MockBackend", () => {
       username: "me",
       password: MOCK_STORAGE_SECRET,
     };
-    const join = (backend: MockBackend, source: JoinSource, password = MOCK_PASSWORD) =>
-      backend.dispatch({ command: "sync_join", source, password, device_name: "Phone" });
+    const join = (
+      backend: MockBackend,
+      source: JoinSource,
+      password = MOCK_PASSWORD,
+      space_password?: string,
+    ) =>
+      backend.dispatch({
+        command: "sync_join",
+        source,
+        password,
+        device_name: "Phone",
+        space_password,
+      });
     expect(await errorCode(join(fresh, { type: "invite", text: "otpauth://x" }))).toBe(
       "sync_invite_invalid",
     );
@@ -522,7 +533,13 @@ describe("MockBackend", () => {
     expect((await fresh.getState()).sync.space?.devices).toHaveLength(1);
 
     const unlocked = new MockBackend({ entries: [mockEntry("Bank", "card")] });
-    await join(unlocked, { type: "invite", text: "lockra-invite:1:abc" });
+    const invite: JoinSource = { type: "invite", text: "lockra-invite:1:abc" };
+    // This vault's own master password is checked; the space's devices may use another one.
+    expect(await errorCode(join(unlocked, invite, "a wrong password"))).toBe("wrong_password");
+    expect(await errorCode(join(unlocked, invite, MOCK_PASSWORD, "a wrong password"))).toBe(
+      "sync_wrong_credentials",
+    );
+    await join(unlocked, invite, MOCK_PASSWORD, MOCK_PASSWORD);
     expect((await unlocked.getState()).entries.map((e) => e.issuer)).toEqual(["Bank"]);
     expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
       "sync_already_on",

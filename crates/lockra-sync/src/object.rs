@@ -1,9 +1,10 @@
 //! A device's snapshot: its whole replica, encrypted under the space's data key.
 //!
 //! The header holds only what finding the key and checking the object's place need: the format,
-//! the space and the device tag, and the nonce. The sequence number, the time, the device's name
-//! and the replica are inside the ciphertext, padded to a multiple of [`PAD_TO`] bytes so that the
-//! size says little about the number of accounts.
+//! the space and the device tag, the nonce, and the device's keyring, which a device joining the
+//! space opens with this device's master password before it has the data key. The sequence
+//! number, the time, the device's name and the replica are inside the ciphertext, padded to a
+//! multiple of [`PAD_TO`] bytes so that the size says little about the number of accounts.
 
 use std::fmt;
 
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::frame::{NONCE_LEN, Parsed, b64, cipher, header_bytes, parse, random};
+use crate::frame::{NONCE_LEN, Parsed, b64, b64_bytes, cipher, header_bytes, parse, random};
 use crate::{SpaceKeys, SyncError};
 
 const SNAPSHOT_MAGIC: &[u8; 8] = b"LKSDEVS1";
@@ -32,6 +33,9 @@ pub struct Snapshot {
     pub written_at_ms: u64,
     /// The device's name as the user knows it ("Pixel 8", "Desktop").
     pub device_name: String,
+    /// The device's keyring ([`crate::seal_keyring`]), carried in the header: it opens only with
+    /// the device's master password and the sync key.
+    pub keyring: Vec<u8>,
     /// The replica, as the caller serializes it (its secrets included).
     pub payload: Zeroizing<Vec<u8>>,
 }
@@ -42,6 +46,7 @@ impl fmt::Debug for Snapshot {
             .field("seq", &self.seq)
             .field("written_at_ms", &self.written_at_ms)
             .field("device_name", &self.device_name)
+            .field("keyring_len", &self.keyring.len())
             .field("payload_len", &self.payload.len())
             .finish()
     }
@@ -59,6 +64,8 @@ struct SnapshotHeader {
     tag: String,
     #[serde(with = "b64")]
     nonce: [u8; NONCE_LEN],
+    #[serde(with = "b64_bytes")]
+    keyring: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -70,7 +77,8 @@ struct Meta {
 
 /// Encrypt `snapshot` as the object of device `tag` in `keys`' space.
 pub fn seal_snapshot(keys: &SpaceKeys, tag: &str, snapshot: &Snapshot) -> Result<Vec<u8>, SyncError> {
-    let header = SnapshotHeader { format: SNAPSHOT_FORMAT, space_id: keys.space_id(), tag: tag.to_owned(), nonce: random()? };
+    let header =
+        SnapshotHeader { format: SNAPSHOT_FORMAT, space_id: keys.space_id(), tag: tag.to_owned(), nonce: random()?, keyring: snapshot.keyring.clone() };
     let mut object = header_bytes(SNAPSHOT_MAGIC, &header)?;
     let name = device_name(&snapshot.device_name);
     let meta = serde_json::to_vec(&Meta { seq: snapshot.seq, written_at_ms: snapshot.written_at_ms, device_name: name }).map_err(|_| SyncError::Corrupted)?;
@@ -93,10 +101,7 @@ pub fn seal_snapshot(keys: &SpaceKeys, tag: &str, snapshot: &Snapshot) -> Result
 /// moved here from another device's name, is [`SyncError::Misplaced`]; one that does not
 /// authenticate (altered, or under another data key) is [`SyncError::Corrupted`].
 pub fn open_snapshot(keys: &SpaceKeys, expected_tag: &str, bytes: &[u8]) -> Result<Snapshot, SyncError> {
-    let parsed: Parsed<'_, SnapshotHeader> = parse(bytes, SNAPSHOT_MAGIC, SNAPSHOT_FORMAT)?;
-    if parsed.header.space_id != keys.space_id() || parsed.header.tag != expected_tag {
-        return Err(SyncError::Misplaced);
-    }
+    let parsed = placed(bytes, keys.space_id(), expected_tag)?;
     let plain = Zeroizing::new(
         cipher(&keys.snapshot_key())
             .decrypt(&XNonce::from(parsed.header.nonce), Payload { msg: parsed.ciphertext, aad: parsed.associated })
@@ -105,7 +110,29 @@ pub fn open_snapshot(keys: &SpaceKeys, expected_tag: &str, bytes: &[u8]) -> Resu
     let (meta_bytes, rest) = take_block(&plain)?;
     let (payload, _padding) = take_block(rest)?;
     let meta: Meta = serde_json::from_slice(meta_bytes).map_err(|_| SyncError::Corrupted)?;
-    Ok(Snapshot { seq: meta.seq, written_at_ms: meta.written_at_ms, device_name: meta.device_name, payload: Zeroizing::new(payload.to_vec()) })
+    Ok(Snapshot {
+        seq: meta.seq,
+        written_at_ms: meta.written_at_ms,
+        device_name: meta.device_name,
+        keyring: parsed.header.keyring,
+        payload: Zeroizing::new(payload.to_vec()),
+    })
+}
+
+/// The keyring in the header of the object stored under device `expected_tag` of space
+/// `space_id`, read without the data key (a device joining the space). Nothing proves it genuine
+/// until it opens.
+pub fn snapshot_keyring(bytes: &[u8], space_id: Uuid, expected_tag: &str) -> Result<Vec<u8>, SyncError> {
+    Ok(placed(bytes, space_id, expected_tag)?.header.keyring)
+}
+
+/// The object's parts, when its header names space `space_id` and device `expected_tag`.
+fn placed<'a>(bytes: &'a [u8], space_id: Uuid, expected_tag: &str) -> Result<Parsed<'a, SnapshotHeader>, SyncError> {
+    let parsed: Parsed<'_, SnapshotHeader> = parse(bytes, SNAPSHOT_MAGIC, SNAPSHOT_FORMAT)?;
+    if parsed.header.space_id != space_id || parsed.header.tag != expected_tag {
+        return Err(SyncError::Misplaced);
+    }
+    Ok(parsed)
 }
 
 /// A length-prefixed block and what follows it.
@@ -121,7 +148,13 @@ mod tests {
     use super::*;
 
     fn snapshot(payload: &[u8]) -> Snapshot {
-        Snapshot { seq: 3, written_at_ms: 1_790_000_000_000, device_name: "Pixel 8".into(), payload: Zeroizing::new(payload.to_vec()) }
+        Snapshot {
+            seq: 3,
+            written_at_ms: 1_790_000_000_000,
+            device_name: "Pixel 8".into(),
+            keyring: b"LKSKEYR1 sealed".to_vec(),
+            payload: Zeroizing::new(payload.to_vec()),
+        }
     }
 
     #[test]
@@ -134,6 +167,25 @@ mod tests {
         // Nothing of the payload or the name is visible.
         let text = String::from_utf8_lossy(&object);
         assert!(!text.contains("entries") && !text.contains("Pixel"), "{text}");
+        assert!(format!("{original:?}").contains("keyring_len: 15"));
+    }
+
+    #[test]
+    fn the_keyring_reads_without_the_data_key_and_is_bound_by_it() {
+        let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+        let tag = keys.device_tag(1);
+        let object = seal_snapshot(&keys, &tag, &snapshot(b"{}")).unwrap();
+        assert_eq!(snapshot_keyring(&object, keys.space_id(), &tag).unwrap(), b"LKSKEYR1 sealed");
+        assert_eq!(snapshot_keyring(&object, keys.space_id(), &keys.device_tag(2)).err(), Some(SyncError::Misplaced));
+        assert_eq!(snapshot_keyring(&object, Uuid::new_v4(), &tag).err(), Some(SyncError::Misplaced));
+        assert_eq!(snapshot_keyring(b"LKSKEYR1....", keys.space_id(), &tag).err(), Some(SyncError::NotLockra));
+        // Another keyring put in the header: the snapshot no longer opens.
+        let parsed: Parsed<'_, SnapshotHeader> = parse(&object, SNAPSHOT_MAGIC, SNAPSHOT_FORMAT).unwrap();
+        let swapped = SnapshotHeader { keyring: b"LKSKEYR1 planted".to_vec(), ..parsed.header };
+        let mut planted = header_bytes(SNAPSHOT_MAGIC, &swapped).unwrap();
+        planted.extend_from_slice(parsed.ciphertext);
+        assert_eq!(snapshot_keyring(&planted, keys.space_id(), &tag).unwrap(), b"LKSKEYR1 planted");
+        assert_eq!(open_snapshot(&keys, &tag, &planted).err(), Some(SyncError::Corrupted));
     }
 
     #[test]

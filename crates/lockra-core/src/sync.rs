@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
 
+use data_encoding::BASE64;
 use lockra_sync::{ConfigError, Replica, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, Tombstone, merge};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -40,9 +41,12 @@ pub(crate) struct SyncLocal {
     /// What the runs remember.
     #[serde(default)]
     pub state: SyncState,
-    /// The keyring sealed under a new master password, still to be written (Base64).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pending_keyring: Option<String>,
+    /// This device's keyring: the data key under this vault's master password and the sync key
+    /// (Base64). Its snapshots carry it; a new master password seals it again.
+    pub keyring: String,
+    /// The storage holds this keyring: a run wrote it, or found it there, since it was sealed.
+    #[serde(default)]
+    pub keyring_written: bool,
     /// When a run last finished without error, Unix milliseconds.
     #[serde(default)]
     pub last_sync_ms: Option<u64>,
@@ -55,14 +59,14 @@ impl fmt::Debug for SyncLocal {
             .field("space_id", &self.space_id)
             .field("device_name", &self.device_name)
             .field("state", &self.state)
-            .field("keyring_pending", &self.pending_keyring.is_some())
+            .field("keyring_written", &self.keyring_written)
             .finish_non_exhaustive()
     }
 }
 
 impl SyncLocal {
-    /// A space just created or joined.
-    pub fn new(storage: StorageConfig, keys: &SpaceKeys, sync_key: &SyncKey, device_name: String) -> Self {
+    /// A space just created or joined, with this device's `keyring`.
+    pub fn new(storage: StorageConfig, keys: &SpaceKeys, sync_key: &SyncKey, device_name: String, keyring: &[u8]) -> Self {
         Self {
             storage,
             space_id: keys.space_id(),
@@ -70,7 +74,8 @@ impl SyncLocal {
             sync_key: sync_key.to_text(),
             device_name,
             state: SyncState::default(),
-            pending_keyring: None,
+            keyring: BASE64.encode(keyring),
+            keyring_written: false,
             last_sync_ms: None,
         }
     }
@@ -81,6 +86,16 @@ impl SyncLocal {
 
     pub fn sync_key(&self) -> Result<SyncKey, SyncError> {
         SyncKey::from_text(&self.sync_key)
+    }
+
+    pub fn keyring(&self) -> Result<Vec<u8>, SyncError> {
+        BASE64.decode(self.keyring.as_bytes()).map_err(|_| SyncError::Corrupted)
+    }
+
+    /// A new master password's keyring is still to reach the storage: this device's snapshot
+    /// there carries the one before.
+    pub fn keyring_pending(&self) -> bool {
+        self.state.own_seq > 0 && !self.keyring_written
     }
 
     /// The devices as the last runs found them, this one (`own_tag`) first, the others by name.
@@ -192,6 +207,7 @@ pub(crate) fn sync_error(error: &SyncError) -> CoreError {
         SyncError::NotLockra | SyncError::Corrupted | SyncError::Misplaced => ErrorCode::SyncDataCorrupted,
         SyncError::Unsupported(_) => ErrorCode::SyncUnsupported,
         SyncError::WrongCredentials => ErrorCode::SyncWrongCredentials,
+        SyncError::NoSpace => ErrorCode::SyncSpaceNotFound,
         SyncError::BadSyncKey => ErrorCode::SyncKeyInvalid,
         SyncError::BadInvite => ErrorCode::SyncInviteInvalid,
         SyncError::Interrupted => ErrorCode::Locked,
@@ -272,6 +288,7 @@ mod tests {
             (SyncError::Misplaced, ErrorCode::SyncDataCorrupted),
             (SyncError::Unsupported(9), ErrorCode::SyncUnsupported),
             (SyncError::WrongCredentials, ErrorCode::SyncWrongCredentials),
+            (SyncError::NoSpace, ErrorCode::SyncSpaceNotFound),
             (SyncError::BadSyncKey, ErrorCode::SyncKeyInvalid),
             (SyncError::BadInvite, ErrorCode::SyncInviteInvalid),
             (SyncError::Interrupted, ErrorCode::Locked),

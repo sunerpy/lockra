@@ -83,14 +83,26 @@ describe("Settings › Sync", () => {
     await user.type(form.getByLabelText("用户名"), "me");
     await user.type(form.getByLabelText("密码"), MOCK_STORAGE_SECRET);
     await user.type(form.getByLabelText("同步密钥"), MOCK_SYNC_KEY);
-    await user.type(form.getByLabelText("同步空间的主密码"), "a wrong password");
+    // This vault's master password is checked first.
+    await user.type(form.getByLabelText("这台设备的主密码"), "a wrong password");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await form.findByText("密码错误")).toBeInTheDocument();
+    // The space's devices use another one: typed in apart, and said wrong there.
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.type(form.getByLabelText("同步空间的主密码（可选）"), "a wrong password");
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(await form.findByText("主密码或同步密钥不正确")).toBeInTheDocument();
-    await user.type(form.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.type(form.getByLabelText("同步空间的主密码（可选）"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(await pane.findByTestId("sync-status")).toHaveTextContent("已同步");
     expect(
-      backend.calls.find((c) => c.command === "sync_join" && c.password === MOCK_PASSWORD),
+      backend.calls.find(
+        (c) =>
+          c.command === "sync_join" &&
+          c.password === MOCK_PASSWORD &&
+          c.space_password === MOCK_PASSWORD,
+      ),
     ).toMatchObject({
       source: {
         type: "manual",
@@ -119,14 +131,14 @@ describe("Settings › Sync", () => {
       await ready();
       const pane = await openSync(user);
       expect(pane.getByTestId("sync-status-row")).toHaveTextContent(
-        "新的主密码将在下次同步时写入同步空间",
+        "这台设备的新主密码将在下次同步时写入同步空间",
       );
       expect(pane.getByTestId("sync-unreadable")).toHaveTextContent("1 个同步对象无法读取");
       act(() => backend.simulateSync({ state: "failed", code: "sync_network", at_ms: Date.now() }));
       expect(pane.getByTestId("sync-status")).toHaveTextContent("同步失败：无法连接存储服务");
       await user.click(pane.getByTestId("sync-now"));
       expect(pane.getByTestId("sync-status")).toHaveTextContent("已同步");
-      expect(pane.getByTestId("sync-status-row")).not.toHaveTextContent("新的主密码");
+      expect(pane.getByTestId("sync-status-row")).not.toHaveTextContent("新主密码");
 
       await user.click(pane.getByTestId("sync-rename"));
       const name = pane.getByRole("textbox", { name: "这台设备的名称" });

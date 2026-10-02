@@ -1,9 +1,12 @@
-//! The two secrets of a sync space, and the keyring object that joins them to the master password.
+//! The two secrets of a sync space, and the keyrings that join them to the devices' master
+//! passwords.
 //!
-//! The data key encrypts the device snapshots and never reaches the storage unwrapped. The
-//! keyring object wraps it under HKDF(Argon2id(master password) ‖ sync key): someone holding the
-//! storage's contents and guessing (or knowing) the master password opens nothing without the
-//! 256-bit sync key, and the sync key alone opens nothing without the password.
+//! The data key encrypts the device snapshots and never reaches the storage unwrapped. Every
+//! device's snapshot carries a keyring that wraps it under HKDF(Argon2id(that device's master
+//! password) ‖ sync key): someone holding the storage's contents and guessing (or knowing) a
+//! master password opens nothing without the 256-bit sync key, and the sync key alone opens
+//! nothing without a password. The data key never changes, so no keyring is shared: a device
+//! whose master password changes writes its own again, and no two devices write the same object.
 
 use std::fmt;
 
@@ -17,8 +20,8 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+use crate::SyncError;
 use crate::frame::{KEY_LEN, NONCE_LEN, Parsed, b64, cipher, header_bytes, hkdf32, parse, random};
-use crate::{Hlc, SyncError};
 
 const KEYRING_MAGIC: &[u8; 8] = b"LKSKEYR1";
 const KEYRING_FORMAT: u32 = 1;
@@ -155,48 +158,33 @@ pub(crate) fn is_tag(text: &str) -> bool {
     text.len() == TAG_BYTES * 2 && text.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// A keyring's header holds nothing about the device or the time it was sealed: it stands in
+/// every snapshot, where a device number would link the device across spaces.
 #[derive(Serialize, Deserialize)]
 struct KeyringHeader {
     format: u32,
     space_id: Uuid,
-    /// When the keyring was sealed: a new master password's keyring replaces only an older one.
-    stamp: Hlc,
     kdf: KdfParams,
     #[serde(with = "b64")]
     nonce: [u8; NONCE_LEN],
 }
 
-/// What a keyring object's header says, read without opening it: its space and when it was
-/// sealed. Not authenticated (only opening the keyring proves it), so it may decide only what is
-/// harmless to get wrong, such as not overwriting a keyring that reads as newer.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct KeyringInfo {
-    /// The space.
-    pub space_id: Uuid,
-    /// When it was sealed.
-    pub stamp: Hlc,
-}
-
-/// The header of a keyring object.
-pub fn keyring_info(bytes: &[u8]) -> Result<KeyringInfo, SyncError> {
-    let parsed: Parsed<'_, KeyringHeader> = parse(bytes, KEYRING_MAGIC, KEYRING_FORMAT)?;
-    Ok(KeyringInfo { space_id: parsed.header.space_id, stamp: parsed.header.stamp })
-}
-
-/// The keyring object of `keys`' space: the data key wrapped under `password` and `sync_key`,
-/// sealed at `stamp` (a change of the device that seals it).
-pub fn seal_keyring(keys: &SpaceKeys, sync_key: &SyncKey, password: &[u8], cost: KdfCost, stamp: Hlc) -> Result<Vec<u8>, SyncError> {
+/// A device's keyring for `keys`' space: the data key wrapped under that device's master
+/// `password` and `sync_key`. Not bound to the device, so it moves with the device to a new
+/// name; the salt and the nonce are fresh, so two devices with the same password carry keyrings
+/// that do not read alike.
+pub fn seal_keyring(keys: &SpaceKeys, sync_key: &SyncKey, password: &[u8], cost: KdfCost) -> Result<Vec<u8>, SyncError> {
     let kdf = KdfParams::fresh(cost).map_err(|_| SyncError::Random)?;
     let kek = keyring_kek(&kdf, keys.space_id, sync_key, password)?;
-    let header = KeyringHeader { format: KEYRING_FORMAT, space_id: keys.space_id, stamp, kdf, nonce: random()? };
+    let header = KeyringHeader { format: KEYRING_FORMAT, space_id: keys.space_id, kdf, nonce: random()? };
     let mut object = header_bytes(KEYRING_MAGIC, &header)?;
     let wrapped = cipher(&kek).encrypt(&XNonce::from(header.nonce), Payload { msg: keys.dek.as_ref(), aad: &object }).map_err(|_| SyncError::Corrupted)?;
     object.extend_from_slice(&wrapped);
     Ok(object)
 }
 
-/// Open the keyring object of space `space_id`. A wrong password, a wrong sync key and an altered
-/// object all read as [`SyncError::WrongCredentials`]: the authentication cannot tell them apart.
+/// Open a keyring of space `space_id`. A wrong password, a wrong sync key and an altered keyring
+/// all read as [`SyncError::WrongCredentials`]: the authentication cannot tell them apart.
 pub fn open_keyring(bytes: &[u8], space_id: Uuid, sync_key: &SyncKey, password: &[u8]) -> Result<SpaceKeys, SyncError> {
     let parsed: Parsed<'_, KeyringHeader> = parse(bytes, KEYRING_MAGIC, KEYRING_FORMAT)?;
     if parsed.header.space_id != space_id {
@@ -272,7 +260,7 @@ mod tests {
     fn the_keyring_opens_only_with_the_password_and_the_sync_key_of_its_space() {
         let keys = space();
         let sync_key = SyncKey::generate().unwrap();
-        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, Hlc::at(1_000)).unwrap();
+        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE).unwrap();
         let opened = open_keyring(&object, keys.space_id(), &sync_key, PASSWORD).unwrap();
         assert_eq!(*opened.dek, *keys.dek);
         assert_eq!(opened.space_id(), keys.space_id());
@@ -290,21 +278,26 @@ mod tests {
     }
 
     #[test]
-    fn the_header_names_the_space_and_when_it_was_sealed() {
+    fn keyrings_under_the_same_password_do_not_read_alike() {
         let keys = space();
         let sync_key = SyncKey::generate().unwrap();
-        let stamp = Hlc { wall_ms: 5, counter: 1, device: 7 };
-        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, stamp).unwrap();
-        assert_eq!(keyring_info(&object).unwrap(), KeyringInfo { space_id: keys.space_id(), stamp });
-        assert_eq!(keyring_info(b"LKSDEVS1 not a keyring").err(), Some(SyncError::NotLockra));
-        assert!(keyring_info(&object[..10]).is_err());
+        let first = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE).unwrap();
+        let second = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE).unwrap();
+        assert_ne!(first, second, "the storage cannot tell that two devices share a password");
+        assert_eq!(*open_keyring(&second, keys.space_id(), &sync_key, PASSWORD).unwrap().dek, *keys.dek);
+        // The header says nothing of the device or the time.
+        let parsed: Parsed<'_, serde_json::Value> = parse(&first, KEYRING_MAGIC, KEYRING_FORMAT).unwrap();
+        let mut fields: Vec<&str> = parsed.header.as_object().unwrap().keys().map(String::as_str).collect();
+        fields.sort_unstable();
+        assert_eq!(fields, ["format", "kdf", "nonce", "space_id"]);
+        assert_eq!(open_keyring(b"LKSDEVS1 not a keyring", keys.space_id(), &sync_key, PASSWORD).err(), Some(SyncError::NotLockra));
     }
 
     #[test]
     fn a_keyring_naming_hostile_kdf_parameters_is_refused_before_any_work() {
         let keys = space();
         let sync_key = SyncKey::generate().unwrap();
-        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, Hlc::at(1_000)).unwrap();
+        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE).unwrap();
         let parsed: Parsed<'_, KeyringHeader> = parse(&object, KEYRING_MAGIC, KEYRING_FORMAT).unwrap();
         let mut header = serde_json::to_value(&parsed.header).unwrap();
         header["kdf"]["m_kib"] = serde_json::json!(16 * 1024 * 1024);

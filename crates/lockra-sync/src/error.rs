@@ -25,9 +25,12 @@ pub enum SyncError {
     /// Written by a newer Lockra.
     #[error("the object comes from a newer Lockra (format {0})")]
     Unsupported(u32),
-    /// The master password or the sync key does not open the keyring.
+    /// The master password or the sync key opens none of the space's keyrings.
     #[error("the master password or the sync key is wrong")]
     WrongCredentials,
+    /// Nothing of the space is where it was looked for: no device snapshot at all.
+    #[error("the sync space is not at this place")]
+    NoSpace,
     /// An object of another space, or a device object under another device's name.
     #[error("the object belongs to another space or device")]
     Misplaced,

@@ -197,39 +197,45 @@ is judged from its first bytes, not its name: Lockra magic, `SQLite format 3`, a
 ## 9. Sync
 
 A sync space lives under the prefix the user chose on their storage (an S3-compatible bucket or a
-WebDAV folder):
+WebDAV folder): one snapshot per device, and nothing else.
 
 ```
-<prefix>/lockra-sync-v1/<space id>/keyring.lks
 <prefix>/lockra-sync-v1/<space id>/devices/<device tag>.lks
 ```
 
 Every object is framed like the container: `magic (8) | header length (u32 LE) | header (JSON, ≤
 16 KiB) | ciphertext`, the ciphertext authenticated with every byte before it as associated data.
 
-| Object   | Magic      | Header                                     | Ciphertext                                                                               |
-| -------- | ---------- | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| keyring  | `LKSKEYR1` | `{format: 1, space_id, stamp, kdf, nonce}` | the space's 32-byte data key                                                             |
-| snapshot | `LKSDEVS1` | `{format: 1, space_id, tag, nonce}`        | `seq`, `written_at_ms`, the device name, the payload; padded to a multiple of 4096 bytes |
+| Object   | Magic      | Header                                       | Ciphertext                                                                               |
+| -------- | ---------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| keyring  | `LKSKEYR1` | `{format: 1, space_id, kdf, nonce}`          | the space's 32-byte data key                                                             |
+| snapshot | `LKSDEVS1` | `{format: 1, space_id, tag, nonce, keyring}` | `seq`, `written_at_ms`, the device name, the payload; padded to a multiple of 4096 bytes |
 
-- **Keys.** The keyring is wrapped under HKDF-SHA256(salt = space id, ikm = Argon2id(master
-  password, `kdf`) ‖ sync key, info `lockra-sync v1 keyring`); a keyring asking for more than the
-  container's KDF limits is refused before any work. Snapshots are encrypted under
-  HKDF(salt = space id, ikm = data key, info `lockra-sync v1 snapshot`), XChaCha20-Poly1305.
+- **One writer per object.** A device writes only its own snapshot. Another device only deletes
+  one (removing a device), and a device still in use writes its snapshot again. No object is
+  shared: what the space holds is the merge of the snapshots, so no lock and no conditional write
+  is needed, and S3 and WebDAV behave alike.
+- **Keyrings.** A snapshot's `keyring` (Base64) is a keyring object, the device's own: the data
+  key wrapped under HKDF-SHA256(salt = space id, ikm = Argon2id(that device's master password,
+  `kdf`) ‖ sync key, info `lockra-sync v1 keyring`). It is sealed when the device creates or joins
+  the space and again under a new master password, each time with a fresh salt and nonce; its
+  header names no device and no time. A keyring asking for more than the container's KDF limits is
+  refused before any work. Joining reads the space's snapshots (at most 32) and tries their
+  keyrings with the password typed in; the first that opens gives the data key, and the joining
+  device seals its own keyring under its own master password.
+- **Snapshots** are encrypted under HKDF(salt = space id, ikm = data key, info
+  `lockra-sync v1 snapshot`), XChaCha20-Poly1305.
 - **Names.** The space id is derived from the sync key (HKDF, info `lockra-sync v1 space id`, as a
   version-4 UUID). A device tag is the first 16 bytes, in hex, of HMAC-SHA256 under
   HKDF(data key, info `lockra-sync v1 device tag`) of the device's random 64-bit number.
 - **Payload.** `{format: 1, entries, tombstones}` as in the vault (§2), without
-  `last_used_at_ms`. A device writes only its own snapshot, its sequence number one higher each
-  time, and only when its device name or payload changed; S3 writes carry `If-None-Match: *` or
-  `If-Match: <etag>`. An object larger than 16 MiB is never read (`MAX_OBJECT_BYTES`): it is
-  reported as unreadable.
-- **The keyring's stamp** is the stamp of the change that sealed it (creating the space, or a new
-  master password). A device writing a keyring under a new master password first reads the
-  stored one and leaves it if its stamp is later: the space follows the latest password. On S3
-  the write carries `If-Match` on the etag listed (or `If-None-Match: *`), and a keyring written
-  in between is compared again on the next run. An object is read as a stream, and no further
-  than the size the storage gave for it.
+  `last_used_at_ms`. A device writes its snapshot when its device name, keyring or payload
+  changed, under a sequence number no write of it had before: one higher than the last written or
+  attempted. S3 writes carry `If-None-Match: *` or `If-Match: <etag>`, which catch a copied vault
+  writing under the same name sooner. A snapshot under a new etag is read and merged even at a
+  sequence number already seen; one under a lower number than seen is refused. An object larger
+  than 16 MiB is never read (`MAX_OBJECT_BYTES`): it is reported as unreadable. An object is read
+  as a stream, and no further than the size the storage gave for it.
 - **Merge.** Last writer wins per account, on the stamps: a hybrid logical clock
   `(wall_ms, counter, device)` that follows wall time, never goes back on a device and comes after
   every stamp the device has seen. A tombstone at or after an account's stamp removes it; a change

@@ -58,13 +58,14 @@ pub trait RemoteStore: Send + Sync {
 }
 
 /// A storage in memory: etags count the writes. With `conditional` off it ignores conditions, the
-/// way WebDAV behaves. A planned failure answers the next call.
+/// way WebDAV behaves. A planned failure answers the next call, or the next write.
 #[derive(Debug, Default)]
 pub struct MemoryRemote {
     objects: Mutex<BTreeMap<String, (Vec<u8>, String)>>,
     writes: AtomicU64,
     conditional: bool,
     failure: Mutex<Option<SyncError>>,
+    put_failure: Mutex<Option<(SyncError, bool)>>,
     calls: Mutex<Vec<String>>,
 }
 
@@ -93,6 +94,12 @@ impl MemoryRemote {
     /// The next call fails with `error`.
     pub fn fail_next(&self, error: SyncError) {
         *self.failure.lock() = Some(error);
+    }
+
+    /// The next write answers `error`; with `landed` it is stored all the same (the answer was
+    /// lost on the way back), without it never reaches the storage.
+    pub fn fail_next_put(&self, error: SyncError, landed: bool) {
+        *self.put_failure.lock() = Some((error, landed));
     }
 
     /// The calls so far, as `list dir`, `get path`, `put path`, `delete path`.
@@ -157,9 +164,16 @@ impl RemoteStore for MemoryRemote {
                     return Err(SyncError::Conflict);
                 }
             }
+            let failure = self.put_failure.lock().take();
+            if let Some((error, false)) = failure {
+                return Err(error);
+            }
             let etag = self.next_etag();
             objects.insert(path.to_owned(), (bytes, etag.clone()));
-            Ok(Some(etag))
+            match failure {
+                Some((error, _)) => Err(error),
+                None => Ok(Some(etag)),
+            }
         })
     }
 
@@ -210,5 +224,13 @@ mod tests {
         assert!(store.get("x").await.unwrap().is_some());
         store.set_object("y", b"z".to_vec());
         assert_eq!(store.object("y"), Some(b"z".to_vec()));
+        // A write that never arrives, and one whose answer never comes back.
+        store.fail_next_put(SyncError::Network("cut".into()), false);
+        assert_eq!(store.put("x", b"3".to_vec(), PutCondition::Always).await.err(), Some(SyncError::Network("cut".into())));
+        assert_eq!(store.object("x"), Some(b"2".to_vec()));
+        store.fail_next_put(SyncError::Network("lost".into()), true);
+        assert_eq!(store.put("x", b"4".to_vec(), PutCondition::Always).await.err(), Some(SyncError::Network("lost".into())));
+        assert_eq!(store.object("x"), Some(b"4".to_vec()));
+        assert!(store.put("x", b"5".to_vec(), PutCondition::Always).await.is_ok(), "once");
     }
 }

@@ -13,7 +13,7 @@ describe("Welcome", () => {
     const join = within(screen.getByTestId("welcome-join"));
     await user.click(join.getByTestId("welcome-join-open"));
     expect(
-      join.getByText("这台电脑上还没有保险库，加入后会用同步空间的主密码创建一个。"),
+      join.getByText("这台电脑上还没有保险库，加入后会用这个主密码创建一个。"),
     ).toBeInTheDocument();
     await user.type(join.getByLabelText("邀请码"), "not an invitation");
     await user.type(join.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
