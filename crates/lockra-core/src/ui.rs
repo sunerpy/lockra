@@ -68,6 +68,9 @@ pub struct UiState {
     pub lock: LockView,
     /// The entries, without secrets; empty unless unlocked.
     pub entries: Vec<EntryView>,
+    /// The groups folded in the code list ("" for the accounts in no group); this device's, kept in
+    /// the vault, so empty unless unlocked.
+    pub collapsed_groups: Vec<String>,
     /// The settings.
     pub settings: Settings,
     /// The import being previewed.

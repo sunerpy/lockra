@@ -1,5 +1,6 @@
 // The home page: every account with its current code. Click or Enter copies; ↑ ↓ move between
-// rows; "/" or Ctrl F searches. Favourites come first, then the chosen order.
+// rows; "/" or Ctrl F searches. Favourites come first, then the chosen order. With groups, the
+// accounts are in sections that fold; a right click (or the context-menu key) opens a row's menu.
 import {
   type EntryView,
   SORT_ORDERS,
@@ -10,12 +11,15 @@ import {
 import {
   Button,
   Card,
+  ContextMenu,
   EmptyState,
   EntryRow,
   Icon,
+  IconButton,
   Input,
   Lamp,
   Menu,
+  type MenuPoint,
   type MenuSection,
   Select,
   useBackend,
@@ -25,13 +29,23 @@ import {
   useT,
   useUiState,
 } from "@lockra/ui";
-import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { motionReduced } from "../app/appearance";
 import { useDispatch, useGuarded } from "../app/dispatch";
 import { useShell } from "../app/shell-state";
 import { entryGroups } from "../features/entries/groups";
 
 const ALL_GROUPS = "";
+/** The section of the accounts in no group (its fold is kept under this name too). */
+const NO_GROUP = "";
 
 function nameOf(entry: EntryView): string {
   return (entry.issuer || entry.account).toLocaleLowerCase();
@@ -70,6 +84,65 @@ export function filterEntries(
   );
 }
 
+/** One section of the code list: a group's accounts, or those in no group (`key` ""). */
+export interface GroupSection {
+  key: string;
+  entries: EntryView[];
+}
+
+/** The accounts in sections: one per group by name, then the accounts in no group; each keeps the
+ *  order it is given. */
+export function groupSections(entries: readonly EntryView[]): GroupSection[] {
+  const byGroup = new Map<string, EntryView[]>();
+  for (const entry of entries) {
+    const key = entry.group ?? NO_GROUP;
+    const section = byGroup.get(key);
+    if (section) section.push(entry);
+    else byGroup.set(key, [entry]);
+  }
+  const keys = [...byGroup.keys()].filter((key) => key !== NO_GROUP);
+  // A sorted copy: `toSorted` is ES2023 (Safari 16), past the ES2022 lib kept for older macOS.
+  // oxlint-disable-next-line unicorn/no-array-sort
+  keys.sort((a, b) => a.localeCompare(b));
+  if (byGroup.has(NO_GROUP)) keys.push(NO_GROUP);
+  return keys.map((key) => ({ key, entries: byGroup.get(key) ?? [] }));
+}
+
+/** A row's menu: what it offers and what each choice does, shared by the "⋯" button, the right
+ *  click and the buttons beside them. */
+function useRowActions() {
+  const t = useT();
+  const shell = useShell();
+  const dispatch = useDispatch();
+  const sections = (entry: EntryView): MenuSection[] => [
+    {
+      items: [
+        {
+          kind: "action",
+          id: "favorite",
+          label: entry.favorite ? t("codes.unfavorite") : t("codes.favorite"),
+          icon: "star",
+        },
+        { kind: "action", id: "edit", label: t("codes.edit"), icon: "edit" },
+        { kind: "action", id: "reveal", label: t("codes.reveal"), icon: "qr" },
+      ],
+    },
+    { items: [{ kind: "action", id: "delete", label: t("codes.remove"), icon: "trash" }] },
+  ];
+  const run = (entry: EntryView, id: string) => {
+    if (id === "favorite")
+      void dispatch({
+        command: "entry_update",
+        id: entry.id,
+        patch: { favorite: !entry.favorite },
+      });
+    else if (id === "edit") shell.open({ type: "edit", id: entry.id });
+    else if (id === "reveal") shell.open({ type: "reveal", id: entry.id });
+    else shell.open({ type: "delete", id: entry.id });
+  };
+  return { sections, run };
+}
+
 export function Codes() {
   const t = useT();
   const state = useUiState();
@@ -81,7 +154,9 @@ export function Codes() {
   const now = useClock();
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState(ALL_GROUPS);
-  const { settings, entries } = state;
+  const [context, setContext] = useState<{ entry: EntryView; at: MenuPoint } | null>(null);
+  const actions = useRowActions();
+  const { settings, entries, collapsed_groups: collapsedGroups } = state;
   const groups = useMemo(() => entryGroups(entries), [entries]);
   // A group that no longer exists (its last account moved) shows everything again.
   const activeGroup = groups.includes(group) ? group : ALL_GROUPS;
@@ -89,6 +164,19 @@ export function Codes() {
     () => filterEntries(sortEntries(entries, settings.sort), query, activeGroup),
     [entries, settings.sort, query, activeGroup],
   );
+  const grouped = settings.group_codes && groups.length > 0;
+  const searching = query.trim() !== "";
+  const folded = useMemo(() => new Set(collapsedGroups), [collapsedGroups]);
+  const sections = useMemo(
+    () => (grouped ? groupSections(visible) : [{ key: NO_GROUP, entries: visible }]),
+    [grouped, visible],
+  );
+  // Every section of the whole list, whatever the search or the group chosen above it.
+  const allSections = useMemo(() => groupSections(entries).map((s) => s.key), [entries]);
+  const fold = (keys: readonly string[]) =>
+    void dispatch({ command: "view_collapse_groups", groups: [...keys] });
+  const toggleFold = (key: string) =>
+    fold(folded.has(key) ? [...folded].filter((k) => k !== key) : [...folded, key]);
 
   useEffect(() => {
     if (shell.searchFocus > 0) document.getElementById(searchId)?.focus();
@@ -98,11 +186,35 @@ export function Codes() {
     Array.from(list.current?.querySelectorAll<HTMLElement>('[data-testid="entry-row"]') ?? []);
   const copy = (entry: EntryView) => void dispatch({ command: "entry_copy", id: entry.id });
 
+  /** The row's menu at the pointer of a right click, or beside the row from the keyboard. */
+  const openContext = (row: HTMLElement, entry: EntryView, pointer?: MenuPoint) => {
+    row.focus();
+    const box = row.getBoundingClientRect();
+    setContext({ entry, at: pointer ?? { x: box.right - 48, y: box.top + box.height / 2 } });
+  };
+  const onRowContextMenu = (event: MouseEvent<HTMLDivElement>, entry: EntryView) => {
+    event.preventDefault();
+    // The context-menu key fires this too, at no point of its own.
+    const keyboard = event.clientX === 0 && event.clientY === 0;
+    openContext(
+      event.currentTarget,
+      entry,
+      keyboard ? undefined : { x: event.clientX, y: event.clientY },
+    );
+  };
+
   const onListKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const all = rows();
     // Only from a row itself: a menu or a button inside a row keeps its own arrow keys.
     const at = all.findIndex((row) => row === event.target);
     if (at < 0) return;
+    const row = all[at];
+    if (row && (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10"))) {
+      event.preventDefault();
+      const entry = entries.find((e) => e.id === row.dataset.entry);
+      if (entry) openContext(row, entry);
+      return;
+    }
     const next =
       event.key === "ArrowDown"
         ? at + 1
@@ -191,6 +303,43 @@ export function Codes() {
               options={SORT_ORDERS.map((value) => ({ value, label: t(`codes.sort.${value}`) }))}
               data-testid="codes-sort"
             />
+            {groups.length > 0 && (
+              <IconButton
+                icon="folder"
+                label={t("codes.groupView")}
+                size={28}
+                bordered
+                pressed={settings.group_codes}
+                className="mb-0.5"
+                onClick={() =>
+                  void dispatch({
+                    command: "settings_set",
+                    settings: { ...settings, group_codes: !settings.group_codes },
+                  })
+                }
+                data-testid="codes-group-view"
+              />
+            )}
+            {grouped && (
+              <>
+                <Button
+                  variant="outline"
+                  icon="chevronUp"
+                  disabled={allSections.every((key) => folded.has(key))}
+                  onClick={() => fold(allSections)}
+                  data-testid="codes-collapse-all">
+                  {t("codes.collapseAll")}
+                </Button>
+                <Button
+                  variant="outline"
+                  icon="chevronDown"
+                  disabled={!allSections.some((key) => folded.has(key))}
+                  onClick={() => fold([])}
+                  data-testid="codes-expand-all">
+                  {t("codes.expandAll")}
+                </Button>
+              </>
+            )}
           </div>
           {visible.length === 0 ? (
             <Card>
@@ -202,31 +351,75 @@ export function Codes() {
             </Card>
           ) : (
             <Card padding="none" className="p-1.5">
-              <div
-                ref={list}
-                role="list"
-                aria-label={t("codes.title")}
-                onKeyDown={onListKey}
-                data-testid="codes-list">
-                {visible.map((entry) => (
-                  <div role="listitem" key={entry.id}>
-                    <EntryRow
-                      entry={entry}
-                      code={codes.get(entry.id)}
-                      nowMs={now}
-                      masked={settings.hide_codes}
-                      still={motionReduced(settings)}
-                      onCopy={() => copy(entry)}
-                      onNext={
-                        entry.kind.type === "hotp"
-                          ? () => void dispatch({ command: "entry_hotp_next", id: entry.id })
-                          : undefined
-                      }
-                      menu={<RowMenu entry={entry} />}
-                    />
-                  </div>
-                ))}
+              <div ref={list} onKeyDown={onListKey} data-testid="codes-list">
+                {sections.map((section) => {
+                  const name = section.key === NO_GROUP ? t("codes.groupNone") : section.key;
+                  // A search shows what it finds in every section, folded or not.
+                  const open = !grouped || searching || !folded.has(section.key);
+                  return (
+                    <section
+                      key={section.key === NO_GROUP ? "\u0000" : section.key}
+                      aria-label={grouped ? name : undefined}
+                      data-testid={grouped ? "codes-section" : undefined}>
+                      {grouped && (
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          disabled={searching}
+                          onClick={() => toggleFold(section.key)}
+                          data-testid="codes-group-toggle"
+                          className="flex h-8 w-full items-center gap-1.5 rounded-6 px-2 text-left text-[12px] font-medium text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:bg-inset disabled:hover:bg-transparent">
+                          <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+                          <span
+                            className="min-w-0 truncate"
+                            {...(section.key === NO_GROUP ? {} : { "data-user-text": "" })}>
+                            {name}
+                          </span>
+                          <span className="ml-auto mono text-[11px] text-fg-subtle">
+                            {section.entries.length}
+                          </span>
+                        </button>
+                      )}
+                      {open && (
+                        <div role="list" aria-label={grouped ? name : t("codes.title")}>
+                          {section.entries.map((entry) => (
+                            <div role="listitem" key={entry.id}>
+                              <EntryRow
+                                entry={entry}
+                                code={codes.get(entry.id)}
+                                nowMs={now}
+                                masked={settings.hide_codes}
+                                still={motionReduced(settings)}
+                                onCopy={() => copy(entry)}
+                                onNext={
+                                  entry.kind.type === "hotp"
+                                    ? () =>
+                                        void dispatch({ command: "entry_hotp_next", id: entry.id })
+                                    : undefined
+                                }
+                                onFavorite={() => actions.run(entry, "favorite")}
+                                onEdit={() => actions.run(entry, "edit")}
+                                onContextMenu={(event) => onRowContextMenu(event, entry)}
+                                menu={<RowMenu entry={entry} />}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
+              <ContextMenu
+                at={context?.at ?? null}
+                label={t("codes.actions")}
+                sections={context === null ? [] : actions.sections(context.entry)}
+                onSelect={(id) => {
+                  if (context !== null) actions.run(context.entry, id);
+                }}
+                onClose={() => setContext(null)}
+                data-testid="row-context"
+              />
             </Card>
           )}
         </>
@@ -309,42 +502,15 @@ export function AddMenu() {
 
 function RowMenu({ entry }: { entry: EntryView }) {
   const t = useT();
-  const shell = useShell();
-  const dispatch = useDispatch();
-  const sections: MenuSection[] = [
-    {
-      items: [
-        {
-          kind: "action",
-          id: "favorite",
-          label: entry.favorite ? t("codes.unfavorite") : t("codes.favorite"),
-          icon: "star",
-        },
-        { kind: "action", id: "edit", label: t("codes.edit"), icon: "edit" },
-        { kind: "action", id: "reveal", label: t("codes.reveal"), icon: "qr" },
-      ],
-    },
-    { items: [{ kind: "action", id: "delete", label: t("codes.remove"), icon: "trash" }] },
-  ];
-  const onSelect = (id: string) => {
-    if (id === "favorite")
-      void dispatch({
-        command: "entry_update",
-        id: entry.id,
-        patch: { favorite: !entry.favorite },
-      });
-    else if (id === "edit") shell.open({ type: "edit", id: entry.id });
-    else if (id === "reveal") shell.open({ type: "reveal", id: entry.id });
-    else shell.open({ type: "delete", id: entry.id });
-  };
+  const actions = useRowActions();
   return (
     <Menu
       label={t("codes.more")}
       triggerLabel={`${t("codes.more")} · ${entryLabel(entry.issuer, entry.account)}`}
       title={t("codes.more")}
       align="end"
-      sections={sections}
-      onSelect={onSelect}
+      sections={actions.sections(entry)}
+      onSelect={(id) => actions.run(entry, id)}
       data-testid="row-menu"
       triggerClassName="inline-flex h-7 w-7 items-center justify-center rounded-6 text-fg-muted transition-colors hover:bg-inset2 hover:text-fg"
       trigger={<Icon name="more" size={16} />}

@@ -78,6 +78,13 @@
       "password": "a new password"
     },
     {
+      "command": "view_collapse_groups",
+      "groups": [
+        "Work",
+        ""
+      ]
+    },
+    {
       "command": "import_text",
       "text": "otpauth://totp/A:b?secret=GEZDGNBV"
     },
@@ -150,6 +157,7 @@
         "density": "compact",
         "follow_system_theme": false,
         "font_size_px": 13,
+        "group_codes": false,
         "hide_codes": true,
         "locale": "zh-cn",
         "reduce_motion": true,

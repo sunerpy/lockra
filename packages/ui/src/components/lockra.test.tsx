@@ -132,6 +132,32 @@ describe("EntryRow", () => {
     expect(screen.queryByTestId("countdown-ring")).toBeNull();
   });
 
+  it("shows pin and edit beside the menu, and hands a right click over", async () => {
+    const onCopy = vi.fn();
+    const onFavorite = vi.fn();
+    const onEdit = vi.fn();
+    const onContextMenu = vi.fn();
+    const props = { code: code(), nowMs: T, onCopy, onFavorite, onEdit, onContextMenu };
+    const { rerender } = render(<EntryRow entry={entry()} {...props} />);
+    const pin = screen.getByRole("button", { name: "收藏" });
+    expect(pin).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(pin);
+    await userEvent.click(screen.getByRole("button", { name: "编辑…" }));
+    expect(onFavorite).toHaveBeenCalledOnce();
+    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onCopy).not.toHaveBeenCalled();
+    fireEvent.contextMenu(screen.getByTestId("entry-row"));
+    expect(onContextMenu).toHaveBeenCalledOnce();
+    rerender(<EntryRow entry={entry({ favorite: true })} {...props} />);
+    const pinned = screen.getByRole("button", { name: "收藏" });
+    expect(pinned).toHaveAttribute("aria-pressed", "true");
+    expect(pinned.querySelector("svg")).toHaveAttribute("fill", "currentColor");
+    // Without the handlers, no buttons.
+    rerender(<EntryRow entry={entry()} code={code()} nowMs={T} onCopy={onCopy} />);
+    expect(screen.queryByRole("button", { name: "收藏" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "编辑…" })).toBeNull();
+  });
+
   it("masks until hovered, waits for the first frame, and names an account-only entry", () => {
     const { rerender } = render(
       <EntryRow entry={entry({ issuer: "" })} nowMs={T} onCopy={() => undefined} />,

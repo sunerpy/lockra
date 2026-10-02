@@ -9,6 +9,8 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
   size?: 24 | 28;
   tone?: "default" | "danger";
   bordered?: boolean;
+  /** A toggle: `aria-pressed`, and the icon filled in the accent colour while on. */
+  pressed?: boolean;
 }
 
 export function IconButton({
@@ -17,6 +19,7 @@ export function IconButton({
   size = 24,
   tone = "default",
   bordered = false,
+  pressed,
   className,
   type = "button",
   ...rest
@@ -25,17 +28,19 @@ export function IconButton({
     <button
       type={type}
       aria-label={label}
+      aria-pressed={pressed}
       title={label}
       className={cx(
         "inline-flex shrink-0 items-center justify-center rounded-6 transition-colors",
-        "text-fg-muted hover:bg-inset hover:text-fg disabled:cursor-not-allowed disabled:opacity-50",
+        "hover:bg-inset disabled:cursor-not-allowed disabled:opacity-50",
+        pressed ? "text-accent-text hover:text-accent-text-hover" : "text-fg-muted hover:text-fg",
         tone === "danger" && "hover:text-danger",
         bordered && "bg-surface hairline",
         className,
       )}
       style={{ width: size, height: size }}
       {...rest}>
-      <Icon name={icon} size={size === 24 ? 14 : 16} />
+      <Icon name={icon} size={size === 24 ? 14 : 16} fill={pressed ? "currentColor" : "none"} />
     </button>
   );
 }

@@ -114,6 +114,7 @@ fn settings() -> Settings {
         clipboard_clear_seconds: 20,
         hide_codes: true,
         sort: SortOrder::Recent,
+        group_codes: false,
         auto_backup: AutoBackup { enabled: true, dir: Some("/home/user/Backups/Lockra".into()), keep: 7 },
         auto_update: true,
     }
@@ -238,6 +239,7 @@ fn state(phase: Phase) -> UiState {
             retry_at_ms: (phase == Phase::Locked).then_some(T0 + 2000),
         },
         entries: if unlocked { entries() } else { Vec::new() },
+        collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
         settings: if unlocked { settings() } else { Settings::default() },
         import: unlocked.then(import_view),
         backup: BackupView {
@@ -300,6 +302,7 @@ fn commands() -> Vec<Value> {
         json!({"command": "entry_hotp_next", "id": entry_id}),
         json!({"command": "entry_copy", "id": entry_id}),
         json!({"command": "entry_reveal", "id": entry_id, "password": "a new password"}),
+        json!({"command": "view_collapse_groups", "groups": ["Work", ""]}),
         json!({"command": "import_text", "text": "otpauth://totp/A:b?secret=GEZDGNBV"}),
         json!({"command": "import_clipboard"}),
         json!({"command": "import_backup_password", "password": "backup password"}),
@@ -513,6 +516,7 @@ async fn dispatch_answers_and_leaks_nothing() {
     for command in [
         json!({"command": "app_state"}),
         json!({"command": "entry_update", "id": entry_id, "patch": {"favorite": true}}),
+        json!({"command": "view_collapse_groups", "groups": [""]}),
         json!({"command": "entry_copy", "id": entry_id}),
         json!({"command": "import_text", "text": "otpauth://totp/Mail:me?secret=MZXW6YTBOI"}),
         json!({"command": "import_commit"}),

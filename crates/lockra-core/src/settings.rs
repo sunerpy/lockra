@@ -127,6 +127,8 @@ pub struct Settings {
     pub hide_codes: bool,
     /// Code list order.
     pub sort: SortOrder,
+    /// Show the code list in sections, one per group, each of which folds.
+    pub group_codes: bool,
     /// Automatic backups.
     pub auto_backup: AutoBackup,
     /// Update automatically: 10 seconds after start look for a newer release and download it in the
@@ -161,6 +163,7 @@ impl Default for Settings {
             clipboard_clear_seconds: 30,
             hide_codes: false,
             sort: SortOrder::default(),
+            group_codes: true,
             auto_backup: AutoBackup::default(),
             auto_update: false,
         }

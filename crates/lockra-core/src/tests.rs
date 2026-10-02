@@ -835,3 +835,60 @@ async fn state_and_events_never_carry_a_secret() {
     }
     assert!(texts.len() > 5);
 }
+
+// ---- the code list's groups -------------------------------------------------------------------
+
+#[tokio::test(start_paused = true)]
+async fn folded_groups_are_kept_in_the_vault_for_this_device_only() {
+    let h = Harness::unlocked().await;
+    for (issuer, group, secret) in [("GitHub", Some("Work"), SECRET), ("Bank", Some("Money"), "GEZDGNBV"), ("Mail", None, "MZXW6YTBOI")] {
+        let id = h.core.add_uri(&otpauth(issuer, "me", secret)).unwrap();
+        if let Some(group) = group {
+            h.core.update_entry(id, EntryPatch { group: Some(group.into()), ..EntryPatch::default() }).unwrap();
+        }
+    }
+    assert!(h.core.state().collapsed_groups.is_empty());
+    // The groups that exist, once each and cleaned; "" folds the accounts in no group.
+    h.core.collapse_groups(vec!["Work".into(), " Work ".into(), String::new(), "Gone".into()]).unwrap();
+    assert_eq!(h.core.state().collapsed_groups, ["", "Work"]);
+    // In the vault: hidden while locked, back after unlocking and after a restart.
+    h.core.lock_vault();
+    assert!(h.core.state().collapsed_groups.is_empty());
+    assert_eq!(code_err(h.core.collapse_groups(Vec::new())), ErrorCode::Locked);
+    h.core.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(h.core.state().collapsed_groups, ["", "Work"]);
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(restarted.state().collapsed_groups, ["", "Work"]);
+
+    // Neither a backup nor a plain file carries the group names folded here; folding is not a
+    // change of the accounts, so no automatic backup follows it.
+    let folder = h.dir.path().join("backups");
+    fs::create_dir(&folder).unwrap();
+    h.core.set_auto_backup_dir(&folder).unwrap();
+    let mut settings = h.core.state().settings;
+    settings.auto_backup.enabled = true;
+    h.core.set_settings(settings).unwrap();
+    advance(Duration::from_secs(4)).await;
+    let count = || fs::read_dir(&folder).unwrap().count();
+    let backups = count();
+    h.core.collapse_groups(vec!["Money".into()]).unwrap();
+    advance(Duration::from_secs(4)).await;
+    assert_eq!(count(), backups, "no backup for a fold");
+    let file = h.dir.path().join("mine.lockrabackup");
+    h.core.backup_to(file.clone(), None).await.unwrap();
+    let backup = Sealed::open_with_password(&fs::read(&file).unwrap(), MASTER.as_bytes()).unwrap();
+    assert!(!String::from_utf8_lossy(&backup.payload).contains("collapsed"));
+    let plain = fs::read_to_string(h.dir.path().join("config").join("settings.json")).unwrap();
+    assert!(!plain.contains("Money") && !plain.contains("Work"), "{plain}");
+    // Unfolding everything.
+    h.core.collapse_groups(Vec::new()).unwrap();
+    assert!(h.core.state().collapsed_groups.is_empty());
+}
+
+#[test]
+fn the_code_list_is_grouped_by_default() {
+    assert!(Settings::default().group_codes);
+    let older: Settings = serde_json::from_str(r#"{"sort":"name"}"#).unwrap();
+    assert!(older.group_codes, "a file from before the switch groups too");
+}

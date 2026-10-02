@@ -198,6 +198,11 @@ export const en: Messages = {
     reveal: "Show secret…",
     remove: "Delete…",
     more: "More actions",
+    actions: "Account actions",
+    groupNone: "No group",
+    groupView: "Show groups",
+    collapseAll: "Collapse all",
+    expandAll: "Expand all",
     kind: { totp: "{period} s", hotp: "counter {counter}" },
   },
   entry: {

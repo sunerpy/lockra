@@ -61,6 +61,7 @@ export const settingsSchema = z.object({
   clipboard_clear_seconds: z.number().int().nonnegative(),
   hide_codes: z.boolean(),
   sort: sortOrderSchema,
+  group_codes: z.boolean(),
   auto_backup: autoBackupSchema,
   auto_update: z.boolean(),
 });
@@ -80,6 +81,7 @@ export function defaultSettings(): Settings {
     clipboard_clear_seconds: 30,
     hide_codes: false,
     sort: "name",
+    group_codes: true,
     auto_backup: { enabled: false, dir: null, keep: 10 },
     auto_update: false,
   };
@@ -426,6 +428,8 @@ export const uiStateSchema = z.object({
   data_dir: z.string(),
   lock: lockViewSchema,
   entries: z.array(entryViewSchema),
+  /** The groups folded in the code list ("" for the accounts in no group); empty unless unlocked. */
+  collapsed_groups: z.array(z.string()),
   settings: settingsSchema,
   import: importViewSchema.nullable(),
   backup: backupViewSchema,
@@ -590,6 +594,7 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("entry_hotp_next"), id: idSchema }),
   z.object({ command: z.literal("entry_copy"), id: idSchema }),
   z.object({ command: z.literal("entry_reveal"), id: idSchema, password }),
+  z.object({ command: z.literal("view_collapse_groups"), groups: z.array(z.string()) }),
   z.object({ command: z.literal("import_text"), text: z.string() }),
   z.object({ command: z.literal("import_clipboard") }),
   z.object({ command: z.literal("import_backup_password"), password }),

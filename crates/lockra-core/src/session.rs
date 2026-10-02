@@ -573,6 +573,27 @@ impl Core {
         Ok(())
     }
 
+    /// Fold `groups` in the code list ("" for the accounts in no group) and unfold the others. Kept
+    /// in the vault's local part: this device's view, never synced and never in a backup, and no
+    /// change of the accounts (no backup or sync follows).
+    pub fn collapse_groups(&self, groups: Vec<String>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let existing: std::collections::BTreeSet<String> = session.data.entries.iter().filter_map(|e| e.group.clone()).collect();
+            let folded: std::collections::BTreeSet<String> =
+                groups.iter().map(|g| clean_name(g)).filter(|g| g.is_empty() || existing.contains(g)).collect();
+            let folded: Vec<String> = folded.into_iter().collect();
+            if session.data.collapsed_groups() == folded.as_slice() {
+                return Ok(());
+            }
+            let previous = std::mem::replace(&mut session.data.local_mut().view.collapsed_groups, folded);
+            self.save(&mut st, false, move |s| s.data.local_mut().view.collapsed_groups = previous)?;
+        }
+        self.changed();
+        Ok(())
+    }
+
     /// Delete an entry.
     pub fn delete_entry(&self, id: Uuid) -> CoreResult<()> {
         let now = self.now_ms();
@@ -1742,12 +1763,15 @@ impl Core {
 
     fn view(&self, st: &State) -> UiState {
         let now = self.now_ms();
-        let (phase, entries, import) = match &st.phase {
-            PhaseState::NoVault => (Phase::NoVault, Vec::new(), None),
-            PhaseState::Locked => (Phase::Locked, Vec::new(), None),
-            PhaseState::Unlocked(session) => {
-                (Phase::Unlocked, session.data.entries.iter().map(Entry::view).collect(), session.import.as_ref().map(|i| i.view(&session.data)))
-            }
+        let (phase, entries, collapsed_groups, import) = match &st.phase {
+            PhaseState::NoVault => (Phase::NoVault, Vec::new(), Vec::new(), None),
+            PhaseState::Locked => (Phase::Locked, Vec::new(), Vec::new(), None),
+            PhaseState::Unlocked(session) => (
+                Phase::Unlocked,
+                session.data.entries.iter().map(Entry::view).collect(),
+                session.data.collapsed_groups().to_vec(),
+                session.import.as_ref().map(|i| i.view(&session.data)),
+            ),
         };
         let auto_lock_at_ms = match (&st.phase, st.settings.auto_lock_minutes) {
             (PhaseState::Unlocked(_), minutes) if minutes > 0 => {
@@ -1767,6 +1791,7 @@ impl Core {
                 retry_at_ms: st.retry_at_ms.filter(|at| *at > now),
             },
             entries,
+            collapsed_groups,
             settings: st.settings.clone(),
             import,
             backup: BackupView { last_backup_ms: st.last_backup_ms, last_auto_file: st.last_auto_file.clone(), last_auto_error: st.last_auto_error },

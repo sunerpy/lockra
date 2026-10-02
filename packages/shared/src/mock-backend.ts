@@ -70,6 +70,8 @@ export interface MockOptions {
   updateFailure?: { step: "check" | "download" | "install"; code: ErrorCode };
   /** The sync space this device belongs to (shown once unlocked). */
   sync?: SyncSpaceView | null;
+  /** The groups folded in the code list (shown once unlocked). */
+  collapsedGroups?: string[];
 }
 
 /** A release the mock's update check announces. */
@@ -341,6 +343,8 @@ export class MockBackend implements Backend {
   private pending: { release: MockRelease; downloaded: boolean } | null = null;
   /** The sync space, kept here while locked (the core keeps it in the vault). */
   private space: SyncSpaceView | null;
+  /** The folded groups, kept here while locked (the core keeps them in the vault). */
+  private collapsed: string[];
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -351,6 +355,7 @@ export class MockBackend implements Backend {
     this.release = options.release ?? null;
     this.updateFailure = options.updateFailure;
     this.space = options.sync ?? null;
+    this.collapsed = options.collapsedGroups ?? [];
     const entries = options.entries ?? [];
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
     const phase = options.phase ?? (entries.length > 0 ? "unlocked" : "no_vault");
@@ -368,6 +373,7 @@ export class MockBackend implements Backend {
         retry_at_ms: null,
       },
       entries: phase === "unlocked" ? entries.map((e) => e.view) : [],
+      collapsed_groups: phase === "unlocked" ? [...this.collapsed] : [],
       settings: { ...defaultSettings(), ...options.settings },
       import: null,
       backup: { last_backup_ms: null, last_auto_file: null, last_auto_error: null },
@@ -626,6 +632,19 @@ export class MockBackend implements Backend {
           svg: placeholderSvg(entry.id),
         };
         return revealed;
+      }
+      case "view_collapse_groups": {
+        this.requireUnlocked();
+        // As the core: the groups that exist, once each, and "" for the accounts in no group.
+        const existing = new Set(this.state.entries.map((e) => e.group ?? ""));
+        const folded = [...new Set(command.groups.map((g) => g.trim()))].filter((g) =>
+          g === "" ? true : existing.has(g),
+        );
+        // oxlint-disable-next-line unicorn/no-array-sort
+        this.collapsed = folded.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+        this.state.collapsed_groups = [...this.collapsed];
+        this.publish();
+        return null;
       }
       case "import_text":
         this.requireUnlocked();
@@ -999,6 +1018,7 @@ export class MockBackend implements Backend {
   private enterUnlocked(entries: EntryView[]): void {
     this.state.phase = "unlocked";
     this.state.entries = entries;
+    this.state.collapsed_groups = [...this.collapsed];
     this.state.sync = { space: this.space };
     this.lockedEntries = [];
     this.state.lock = { ...this.state.lock, failed_attempts: 0, retry_at_ms: null };
@@ -1011,6 +1031,7 @@ export class MockBackend implements Backend {
     if (this.state.phase !== "unlocked") return;
     this.lockedEntries = this.state.entries;
     this.state.entries = [];
+    this.state.collapsed_groups = [];
     this.state.phase = "locked";
     this.state.sync = { space: null };
     this.exports.clear();

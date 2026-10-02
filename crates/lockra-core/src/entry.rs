@@ -251,12 +251,30 @@ pub struct Local {
     /// The sync space this device belongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) sync: Option<SyncLocal>,
+    /// How this device shows the code list.
+    #[serde(default, skip_serializing_if = "View::is_empty")]
+    pub(crate) view: View,
 }
 
 impl Local {
     /// A new device: a random number, nothing stamped yet, no sync.
     pub(crate) fn new() -> Self {
-        Self { clock: Clock::new(random_device()), sync: None }
+        Self { clock: Clock::new(random_device()), sync: None, view: View::default() }
+    }
+}
+
+/// How this device shows the code list. In the vault, not in `settings.json`: group names are the
+/// vault's, and the settings file is not encrypted.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct View {
+    /// The groups folded in the code list; "" folds the accounts in no group.
+    #[serde(default)]
+    pub collapsed_groups: Vec<String>,
+}
+
+impl View {
+    fn is_empty(&self) -> bool {
+        self.collapsed_groups.is_empty()
     }
 }
 
@@ -328,7 +346,7 @@ impl VaultData {
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         serde_json::from_slice(bytes).ok().or_else(|| {
             let data: WithoutSync = serde_json::from_slice(bytes).ok()?;
-            let local = data.local.map(|local| Local { clock: local.clock, sync: None });
+            let local = data.local.map(|local| Local { clock: local.clock, sync: None, view: View::default() });
             Some(Self { format: data.format, entries: data.entries, tombstones: data.tombstones, local })
         })
     }
@@ -361,6 +379,11 @@ impl VaultData {
     /// This device's number.
     pub(crate) fn device(&self) -> u64 {
         self.local.as_ref().map_or(0, |l| l.clock.device())
+    }
+
+    /// The groups folded in this device's code list.
+    pub(crate) fn collapsed_groups(&self) -> &[String] {
+        self.local.as_ref().map_or(&[], |l| l.view.collapsed_groups.as_slice())
     }
 
     /// The sync space this device belongs to.

@@ -91,6 +91,12 @@ pub enum UiCommand {
         /// The master password.
         password: Zeroizing<String>,
     },
+    /// Fold these groups of the code list ("" for the accounts in no group), unfold the others.
+    ViewCollapseGroups {
+        /// The groups folded from now on.
+        #[serde(default)]
+        groups: Vec<String>,
+    },
     /// Import pasted or typed text.
     ImportText {
         /// The text.
@@ -210,7 +216,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 40] = [
+pub const COMMANDS: [&str; 41] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -227,6 +233,7 @@ pub const COMMANDS: [&str; 40] = [
     "entry_hotp_next",
     "entry_copy",
     "entry_reveal",
+    "view_collapse_groups",
     "import_text",
     "import_clipboard",
     "import_backup_password",
@@ -292,6 +299,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::EntryHotpNext { id } => unit(core.hotp_next(id))?,
         UiCommand::EntryCopy { id } => unit(core.copy_code(id))?,
         UiCommand::EntryReveal { id, password } => json!(core.reveal(id, password).await?),
+        UiCommand::ViewCollapseGroups { groups } => unit(core.collapse_groups(groups))?,
         UiCommand::ImportText { text } => unit(core.import_text(&text))?,
         UiCommand::ImportClipboard => unit(core.import_clipboard().await)?,
         UiCommand::ImportBackupPassword { password } => unit(core.import_backup_password(password).await)?,

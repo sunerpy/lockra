@@ -192,6 +192,11 @@ export const zhCN = {
     reveal: "显示密钥…",
     remove: "删除…",
     more: "更多操作",
+    actions: "账号操作",
+    groupNone: "未分组",
+    groupView: "按分组显示",
+    collapseAll: "全部折叠",
+    expandAll: "全部展开",
     kind: { totp: "{period} 秒", hotp: "计数器 {counter}" },
   },
   entry: {

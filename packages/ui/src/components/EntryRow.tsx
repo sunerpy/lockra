@@ -1,5 +1,5 @@
 import { type CodeView, type EntryView, groupCode } from "@lockra/shared";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { cx } from "../cx";
 import { useT } from "../i18n/I18nProvider";
 import { CountdownRing, WARNING_SECONDS, remaining } from "./CountdownRing";
@@ -18,6 +18,12 @@ export interface EntryRowProps {
   still?: boolean;
   onCopy: () => void;
   onNext?: () => void;
+  /** Pin or unpin, from a button beside the menu. */
+  onFavorite?: () => void;
+  /** Edit, from a button beside the menu. */
+  onEdit?: () => void;
+  /** A right click (or the context-menu key) on the row. */
+  onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   /** The overflow menu (edit, reveal, delete, pin). */
   menu?: ReactNode;
   className?: string;
@@ -25,7 +31,8 @@ export interface EntryRowProps {
 
 /** One account: avatar, names, the current code and its ring. The whole row copies on click,
  *  Enter or Space; in the last five seconds the next code shows beside it. HOTP rows have a
- *  "next code" button instead of a ring. */
+ *  "next code" button instead of a ring. Pin and edit sit beside the overflow menu, and a right
+ *  click is handed to `onContextMenu`. */
 export function EntryRow({
   entry,
   code,
@@ -34,6 +41,9 @@ export function EntryRow({
   still = false,
   onCopy,
   onNext,
+  onFavorite,
+  onEdit,
+  onContextMenu,
   menu,
   className,
 }: EntryRowProps) {
@@ -68,6 +78,7 @@ export function EntryRow({
       title={t("codes.copyHint")}
       onClick={onCopy}
       onKeyDown={onKeyDown}
+      onContextMenu={onContextMenu}
       className={cx(
         "group grid h-[calc(var(--row-h)+28px)] grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-10 px-3 outline-none transition-colors hover:bg-inset focus-visible:bg-inset",
         className,
@@ -124,6 +135,25 @@ export function EntryRow({
         )}
         {entry.kind.type === "hotp" && onNext && (
           <IconButton icon="refresh" label={t("codes.hotpNext")} size={28} onClick={onNext} />
+        )}
+        {onFavorite && (
+          <IconButton
+            icon="star"
+            label={t("codes.favorite")}
+            size={28}
+            pressed={entry.favorite}
+            onClick={onFavorite}
+            data-testid="row-favorite"
+          />
+        )}
+        {onEdit && (
+          <IconButton
+            icon="edit"
+            label={t("codes.edit")}
+            size={28}
+            onClick={onEdit}
+            data-testid="row-edit"
+          />
         )}
         {menu}
       </div>

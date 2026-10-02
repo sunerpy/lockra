@@ -7,6 +7,7 @@
       "last_auto_file": null,
       "last_backup_ms": null
     },
+    "collapsed_groups": [],
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [],
     "import": null,
@@ -34,6 +35,7 @@
       "density": "default",
       "follow_system_theme": true,
       "font_size_px": 14,
+      "group_codes": true,
       "hide_codes": false,
       "locale": "system",
       "reduce_motion": false,
@@ -61,6 +63,7 @@
       "last_auto_file": null,
       "last_backup_ms": null
     },
+    "collapsed_groups": [],
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [],
     "import": null,
@@ -92,6 +95,7 @@
       "density": "default",
       "follow_system_theme": true,
       "font_size_px": 14,
+      "group_codes": true,
       "hide_codes": false,
       "locale": "system",
       "reduce_motion": false,
@@ -119,6 +123,10 @@
       "last_auto_file": "lockra-auto-20260921-114640.lockrabackup",
       "last_backup_ms": 1789992800000
     },
+    "collapsed_groups": [
+      "",
+      "Work"
+    ],
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [
       {
@@ -393,6 +401,7 @@
       "density": "compact",
       "follow_system_theme": false,
       "font_size_px": 13,
+      "group_codes": false,
       "hide_codes": true,
       "locale": "zh-cn",
       "reduce_motion": true,
