@@ -11,8 +11,8 @@ use lockra_core::ui::BiometricKind;
 /// The platform's check, as the core's port.
 #[derive(Debug, Default)]
 pub struct PlatformBiometrics {
-    /// macOS cannot be asked without prompting: once a check found no Touch ID, this run of the app
-    /// no longer offers it.
+    /// macOS cannot be asked without prompting: once a check found no Touch ID (a lid closed), it is
+    /// not offered until a check passes again.
     #[cfg(target_os = "macos")]
     missing: std::sync::atomic::AtomicBool,
 }
@@ -58,7 +58,11 @@ impl Biometrics for PlatformBiometrics {
             })
             .map_err(|error| self.failure(&error))?;
         match answered.recv() {
-            Ok(Ok(())) => Ok(()),
+            Ok(Ok(())) => {
+                #[cfg(target_os = "macos")]
+                self.missing.store(false, std::sync::atomic::Ordering::SeqCst);
+                Ok(())
+            }
             Ok(Err(error)) => Err(self.failure(&error)),
             Err(_) => Err(BiometricError::Failed("the check gave no answer".into())),
         }

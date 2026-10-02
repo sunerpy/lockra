@@ -41,6 +41,11 @@ your fingerprint, or Windows Hello's fingerprint, face or PIN, is checked before
 opens the vault. Turning it on checks once that it works; turning it off asks for the master
 password. The master password always unlocks.
 
+<StatusTag status="building" /> From version 0.6.0 the switch is called **Unlock with Touch ID**
+(**Unlock with Windows Hello**) and is offered before **Remember on this device** is on: turning it
+on checks once and turns **Remember on this device** on with it. On a computer that has Touch ID or
+Windows Hello but has not turned it on, the unlock screen says where to find the switch.
+
 On Windows, if Windows Hello becomes unavailable at the moment you unlock (for example while another
 app shows its own Windows Hello prompt), Windows asks for your Windows sign-in password instead.
 

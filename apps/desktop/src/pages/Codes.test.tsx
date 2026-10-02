@@ -324,3 +324,92 @@ describe("Codes · row actions", () => {
     });
   });
 });
+
+describe("Codes · selecting several accounts", () => {
+  const rowsOf = (section: string) =>
+    within(screen.getByRole("region", { name: section })).getAllByTestId("entry-row");
+  const ticked = () =>
+    screen
+      .getAllByTestId("entry-row")
+      .filter((row) => row.getAttribute("aria-checked") === "true")
+      .map((row) => row.dataset.entry);
+
+  it("ticks rows instead of copying them, a section and everything at once", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await user.click(screen.getByRole("button", { name: "选择" }));
+    const bar = within(screen.getByTestId("codes-selection"));
+    expect(bar.getByText("已选择 0 个账号")).toBeInTheDocument();
+    expect(bar.getByRole("button", { name: "移到分组…" })).toBeDisabled();
+    expect(screen.queryAllByTestId("row-favorite")).toHaveLength(0);
+    const [loose] = rowsOf("未分组");
+    if (!loose) throw new Error("no row");
+    await user.click(loose);
+    expect(loose).toHaveAttribute("aria-checked", "true");
+    await user.click(loose);
+    expect(loose).toHaveAttribute("aria-checked", "false");
+    loose.focus();
+    await user.keyboard(" ");
+    expect(bar.getByText("已选择 1 个账号")).toBeInTheDocument();
+    expect(backend.calls.some((c) => c.command === "entry_copy")).toBe(false);
+    // A section's box ticks its accounts; a section partly ticked says so.
+    const work = screen.getByRole("checkbox", { name: "选择「工作」中的全部账号" });
+    await user.click(work);
+    expect(work).toBeChecked();
+    expect(ticked()).toHaveLength(4);
+    const none = screen.getByRole("checkbox", { name: "选择「未分组」中的全部账号" });
+    expect((none as HTMLInputElement).indeterminate).toBe(true);
+    await user.click(bar.getByRole("button", { name: "全选" }));
+    expect(ticked()).toHaveLength(8);
+    await user.click(bar.getByRole("button", { name: "全不选" }));
+    expect(ticked()).toHaveLength(0);
+  });
+
+  it("moves the ticked accounts to a group, or out of theirs, in one command each", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await user.click(screen.getByRole("button", { name: "选择" }));
+    await user.click(screen.getByRole("checkbox", { name: "选择「工作」中的全部账号" }));
+    const ids = rowsOf("工作").map((row) => row.dataset.entry);
+    await user.click(screen.getByRole("button", { name: "移到分组…" }));
+    const dialog = within(screen.getByRole("dialog", { name: "移到分组" }));
+    expect(dialog.getByText("将 3 个账号移到下面的分组。")).toBeInTheDocument();
+    await user.type(dialog.getByLabelText("分组"), "个人{Enter}");
+    expect(backend.calls.at(-1)).toEqual({ command: "entries_set_group", ids, group: "个人" });
+    expect(await screen.findByText("已将 3 个账号移到「个人」")).toBeInTheDocument();
+    // Done: out of selection, the accounts in their new section.
+    expect(screen.queryByTestId("codes-selection")).toBeNull();
+    expect(rowsOf("个人").map((row) => row.dataset.entry)).toEqual(ids);
+    // Empty takes them out of their group.
+    await user.click(screen.getByRole("button", { name: "选择" }));
+    await user.click(screen.getByRole("checkbox", { name: "选择「个人」中的全部账号" }));
+    await user.click(screen.getByRole("button", { name: "移到分组…" }));
+    await user.click(screen.getByRole("button", { name: "移动" }));
+    expect(backend.calls.at(-1)).toEqual({ command: "entries_set_group", ids, group: "" });
+    expect(await screen.findByText("已将 3 个账号移出分组")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("codes-group-toggle")).toHaveLength(0);
+  });
+
+  it("starts from a row's menu with that row ticked, and Escape leaves", async () => {
+    const { user } = renderApp();
+    await ready();
+    const row = screen.getAllByTestId("entry-row")[1];
+    if (!row) throw new Error("no row");
+    fireEvent.contextMenu(row, { clientX: 100, clientY: 60 });
+    await user.click(screen.getByRole("menuitem", { name: "选择" }));
+    expect(ticked()).toEqual([row.dataset.entry]);
+    screen.getAllByTestId("entry-row")[0]?.focus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("codes-selection")).toBeNull();
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("selects only what a search shows", async () => {
+    const { user } = renderApp();
+    await ready();
+    await user.click(screen.getByRole("button", { name: "选择" }));
+    await user.type(screen.getByTestId("codes-search"), "aws");
+    await user.click(screen.getByRole("button", { name: "全选" }));
+    expect(screen.getByText("已选择 1 个账号")).toBeInTheDocument();
+  });
+});

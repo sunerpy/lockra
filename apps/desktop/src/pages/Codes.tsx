@@ -1,6 +1,8 @@
 // The home page: every account with its current code. Click or Enter copies; ↑ ↓ move between
 // rows; "/" or Ctrl F searches. Favourites come first, then the chosen order. With groups, the
 // accounts are in sections that fold; a right click (or the context-menu key) opens a row's menu.
+// "Select" ticks several accounts (one by one, a section, or all that the search shows) to move
+// them to a group at once.
 import {
   type EntryView,
   SORT_ORDERS,
@@ -41,6 +43,7 @@ import {
 import { motionReduced } from "../app/appearance";
 import { useDispatch, useGuarded } from "../app/dispatch";
 import { useShell } from "../app/shell-state";
+import { MoveGroupDialog } from "../features/entries/MoveGroupDialog";
 import { entryGroups } from "../features/entries/groups";
 
 const ALL_GROUPS = "";
@@ -109,8 +112,8 @@ export function groupSections(entries: readonly EntryView[]): GroupSection[] {
 }
 
 /** A row's menu: what it offers and what each choice does, shared by the "⋯" button, the right
- *  click and the buttons beside them. */
-function useRowActions() {
+ *  click and the buttons beside them. `select` starts a selection with the row ticked. */
+function useRowActions(select?: (entry: EntryView) => void) {
   const t = useT();
   const shell = useShell();
   const dispatch = useDispatch();
@@ -127,10 +130,25 @@ function useRowActions() {
         { kind: "action", id: "reveal", label: t("codes.reveal"), icon: "qr" },
       ],
     },
+    ...(select
+      ? [
+          {
+            items: [
+              {
+                kind: "action" as const,
+                id: "select",
+                label: t("codes.select"),
+                icon: "check" as const,
+              },
+            ],
+          },
+        ]
+      : []),
     { items: [{ kind: "action", id: "delete", label: t("codes.remove"), icon: "trash" }] },
   ];
   const run = (entry: EntryView, id: string) => {
-    if (id === "favorite")
+    if (id === "select") select?.(entry);
+    else if (id === "favorite")
       void dispatch({
         command: "entry_update",
         id: entry.id,
@@ -155,7 +173,28 @@ export function Codes() {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState(ALL_GROUPS);
   const [context, setContext] = useState<{ entry: EntryView; at: MenuPoint } | null>(null);
-  const actions = useRowActions();
+  const [selecting, setSelecting] = useState(false);
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
+  const [moving, setMoving] = useState(false);
+  const startSelection = (entry?: EntryView) => {
+    setTicked(new Set(entry ? [entry.id] : []));
+    setSelecting(true);
+  };
+  const stopSelection = () => {
+    setSelecting(false);
+    setMoving(false);
+    setTicked(new Set());
+  };
+  const tick = (ids: readonly string[], on: boolean) =>
+    setTicked((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (on) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  const actions = useRowActions(startSelection);
   const { settings, entries, collapsed_groups: collapsedGroups } = state;
   const groups = useMemo(() => entryGroups(entries), [entries]);
   // A group that no longer exists (its last account moved) shows everything again.
@@ -163,6 +202,11 @@ export function Codes() {
   const visible = useMemo(
     () => filterEntries(sortEntries(entries, settings.sort), query, activeGroup),
     [entries, settings.sort, query, activeGroup],
+  );
+  // What a move takes: the ticked accounts the search and the group above still show.
+  const chosen = useMemo(
+    () => visible.filter((e) => ticked.has(e.id)).map((e) => e.id),
+    [visible, ticked],
   );
   const grouped = settings.group_codes && groups.length > 0;
   const searching = query.trim() !== "";
@@ -204,6 +248,19 @@ export function Codes() {
   };
 
   const onListKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (selecting && event.key === "Escape") {
+      event.preventDefault();
+      stopSelection();
+      return;
+    }
+    if (selecting && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "a") {
+      event.preventDefault();
+      tick(
+        visible.map((e) => e.id),
+        true,
+      );
+      return;
+    }
     const all = rows();
     // Only from a row itself: a menu or a button inside a row keeps its own arrow keys.
     const at = all.findIndex((row) => row === event.target);
@@ -340,7 +397,58 @@ export function Codes() {
                 </Button>
               </>
             )}
+            {!selecting && (
+              <Button
+                variant="outline"
+                icon="check"
+                onClick={() => startSelection()}
+                data-testid="codes-select">
+                {t("codes.select")}
+              </Button>
+            )}
           </div>
+          {selecting && (
+            <div
+              role="toolbar"
+              aria-label={t("codes.select")}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") return;
+                event.preventDefault();
+                stopSelection();
+              }}
+              className="flex flex-wrap items-center gap-2 rounded-10 bg-surface px-3 py-2 hairline"
+              data-testid="codes-selection">
+              <span className="text-[13px] text-fg" aria-live="polite">
+                {t("codes.selectedCount", { n: chosen.length })}
+              </span>
+              <Button
+                variant="text"
+                size="sm"
+                onClick={() =>
+                  tick(
+                    visible.map((e) => e.id),
+                    true,
+                  )
+                }>
+                {t("codes.selectAll")}
+              </Button>
+              <Button variant="text-muted" size="sm" onClick={() => setTicked(new Set())}>
+                {t("codes.selectNone")}
+              </Button>
+              <span className="flex-1" />
+              <Button
+                variant="primary"
+                icon="folder"
+                disabled={chosen.length === 0}
+                onClick={() => setMoving(true)}
+                data-testid="codes-move">
+                {t("codes.moveToGroup")}
+              </Button>
+              <Button variant="outline" onClick={stopSelection}>
+                {t("common.done")}
+              </Button>
+            </div>
+          )}
           {visible.length === 0 ? (
             <Card>
               <EmptyState
@@ -362,23 +470,33 @@ export function Codes() {
                       aria-label={grouped ? name : undefined}
                       data-testid={grouped ? "codes-section" : undefined}>
                       {grouped && (
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          disabled={searching}
-                          onClick={() => toggleFold(section.key)}
-                          data-testid="codes-group-toggle"
-                          className="flex h-8 w-full items-center gap-1.5 rounded-6 px-2 text-left text-[12px] font-medium text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:bg-inset disabled:hover:bg-transparent">
-                          <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
-                          <span
-                            className="min-w-0 truncate"
-                            {...(section.key === NO_GROUP ? {} : { "data-user-text": "" })}>
-                            {name}
-                          </span>
-                          <span className="ml-auto mono text-[11px] text-fg-subtle">
-                            {section.entries.length}
-                          </span>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {selecting && (
+                            <SectionTick
+                              label={t("codes.selectGroup", { group: name })}
+                              ids={section.entries.map((e) => e.id)}
+                              ticked={ticked}
+                              onChange={tick}
+                            />
+                          )}
+                          <button
+                            type="button"
+                            aria-expanded={open}
+                            disabled={searching}
+                            onClick={() => toggleFold(section.key)}
+                            data-testid="codes-group-toggle"
+                            className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-6 px-2 text-left text-[12px] font-medium text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:bg-inset disabled:hover:bg-transparent">
+                            <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+                            <span
+                              className="min-w-0 truncate"
+                              {...(section.key === NO_GROUP ? {} : { "data-user-text": "" })}>
+                              {name}
+                            </span>
+                            <span className="ml-auto mono text-[11px] text-fg-subtle">
+                              {section.entries.length}
+                            </span>
+                          </button>
+                        </div>
                       )}
                       {open && (
                         <div role="list" aria-label={grouped ? name : t("codes.title")}>
@@ -400,7 +518,15 @@ export function Codes() {
                                 onFavorite={() => actions.run(entry, "favorite")}
                                 onEdit={() => actions.run(entry, "edit")}
                                 onContextMenu={(event) => onRowContextMenu(event, entry)}
-                                menu={<RowMenu entry={entry} />}
+                                menu={<RowMenu entry={entry} onSelect={startSelection} />}
+                                selection={
+                                  selecting
+                                    ? {
+                                        checked: ticked.has(entry.id),
+                                        onToggle: () => tick([entry.id], !ticked.has(entry.id)),
+                                      }
+                                    : undefined
+                                }
                               />
                             </div>
                           ))}
@@ -421,6 +547,13 @@ export function Codes() {
                 data-testid="row-context"
               />
             </Card>
+          )}
+          {moving && (
+            <MoveGroupDialog
+              ids={chosen}
+              onClose={() => setMoving(false)}
+              onMoved={stopSelection}
+            />
           )}
         </>
       )}
@@ -500,9 +633,9 @@ export function AddMenu() {
   );
 }
 
-function RowMenu({ entry }: { entry: EntryView }) {
+function RowMenu({ entry, onSelect }: { entry: EntryView; onSelect: (entry: EntryView) => void }) {
   const t = useT();
-  const actions = useRowActions();
+  const actions = useRowActions(onSelect);
   return (
     <Menu
       label={t("codes.more")}
@@ -514,6 +647,34 @@ function RowMenu({ entry }: { entry: EntryView }) {
       data-testid="row-menu"
       triggerClassName="inline-flex h-7 w-7 items-center justify-center rounded-6 text-fg-muted transition-colors hover:bg-inset2 hover:text-fg"
       trigger={<Icon name="more" size={16} />}
+    />
+  );
+}
+
+/** A section's box while selecting: ticks or clears all its accounts, and shows "some" between. */
+function SectionTick({
+  label,
+  ids,
+  ticked,
+  onChange,
+}: {
+  label: string;
+  ids: readonly string[];
+  ticked: ReadonlySet<string>;
+  onChange: (ids: readonly string[], on: boolean) => void;
+}) {
+  const count = ids.filter((id) => ticked.has(id)).length;
+  const all = ids.length > 0 && count === ids.length;
+  return (
+    <input
+      type="checkbox"
+      aria-label={label}
+      checked={all}
+      ref={(box) => {
+        if (box) box.indeterminate = count > 0 && !all;
+      }}
+      onChange={() => onChange(ids, !all)}
+      className="ml-3 size-4 shrink-0 accent-accent"
     />
   );
 }

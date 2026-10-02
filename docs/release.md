@@ -226,9 +226,11 @@ What the automated gates cannot cover, before announcing a release:
    accounts arrive, work accounts are listed as unsupported.
 6. **Linux keychain**: on GNOME (Secret Service) and KDE, turn on _Remember on this device_,
    restart, unlock with it.
-7. **Touch ID** (a Mac with Touch ID): turn on _Remember on this device_, then _Ask for Touch ID to
-   unlock_ (the prompt comes once); lock; _Unlock with Touch ID_ opens the vault after the
-   fingerprint, a cancelled prompt leaves it locked without a message, the master password still
-   unlocks; turning the switch off asks for the master password.
+7. **Touch ID** (a Mac with Touch ID): locked with nothing set up, the unlock screen points to
+   _Settings › Security_; there, with _Remember on this device_ off, turn on _Unlock with Touch ID_
+   (the prompt comes once, and _Remember on this device_ turns on with it); lock; _Unlock with Touch
+   ID_ opens the vault after the fingerprint, a cancelled prompt leaves it locked without a message,
+   the master password still unlocks; turning the switch off asks for the master password and leaves
+   _Remember on this device_ on.
 8. **Windows Hello** (a PC with Windows Hello): the same steps; the Hello dialog comes up in front of
    Lockra, and its PIN is accepted as well as a fingerprint or the face.

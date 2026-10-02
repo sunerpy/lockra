@@ -141,6 +141,54 @@ describe("EntryRow", () => {
     expect(screen.queryByTestId("countdown-ring")).toBeNull();
   });
 
+  it("is a checkbox while selecting: a click, Enter or Space ticks it, and the buttons step aside", async () => {
+    const onCopy = vi.fn();
+    const onToggle = vi.fn();
+    const onContextMenu = vi.fn();
+    const props = {
+      code: code(),
+      nowMs: T,
+      onCopy,
+      onFavorite: vi.fn(),
+      onEdit: vi.fn(),
+      onContextMenu,
+    };
+    const { rerender } = render(
+      <EntryRow entry={entry()} {...props} selection={{ checked: false, onToggle }} />,
+    );
+    const row = screen.getByRole("checkbox");
+    expect(row).toHaveAttribute("aria-checked", "false");
+    expect(row).toHaveAttribute("title", "点击选择");
+    await userEvent.click(row);
+    fireEvent.keyDown(row, { key: "Enter" });
+    fireEvent.keyDown(row, { key: " " });
+    fireEvent.contextMenu(row);
+    expect(onToggle).toHaveBeenCalledTimes(3);
+    expect([onCopy, onContextMenu].map((f) => f.mock.calls.length)).toEqual([0, 0]);
+    expect(screen.queryByTestId("row-favorite")).toBeNull();
+    expect(screen.queryByTestId("row-edit")).toBeNull();
+    rerender(<EntryRow entry={entry()} {...props} selection={{ checked: true, onToggle }} />);
+    expect(screen.getByRole("checkbox")).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("row-select")).toBeChecked();
+    // A counter-based row's "next code" is an action too.
+    const hotp = entry({ kind: { type: "hotp", counter: 3 } });
+    const nextCode = code({ next_code: null, valid_from_ms: null, valid_until_ms: null });
+    rerender(
+      <EntryRow
+        entry={hotp}
+        {...props}
+        code={nextCode}
+        onNext={vi.fn()}
+        selection={{ checked: false, onToggle }}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "生成下一个" })).toBeNull();
+    // Out of selection, a button again.
+    rerender(<EntryRow entry={entry()} {...props} />);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByTestId("row-favorite")).toBeInTheDocument();
+  });
+
   it("shows the next code in the last seconds and switches by itself when a frame is late", () => {
     const { rerender } = render(
       <EntryRow entry={entry()} code={code()} nowMs={T} onCopy={() => undefined} />,

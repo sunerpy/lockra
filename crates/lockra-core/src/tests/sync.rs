@@ -637,6 +637,21 @@ async fn a_run_stops_before_writing_where_the_space_no_longer_is() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_group_set_on_several_accounts_reaches_the_other_devices() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    let phone = device(&transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
+    let ids: Vec<_> = desktop.core.state().entries.iter().map(|e| e.id).collect();
+    desktop.core.set_entries_group(&ids, "Work").unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    phone.core.sync_now().unwrap();
+    settle().await;
+    assert!(phone.core.state().entries.iter().all(|e| e.group.as_deref() == Some("Work")));
+}
+
+#[tokio::test(start_paused = true)]
 async fn an_accounts_colour_and_mark_reach_the_other_devices() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;

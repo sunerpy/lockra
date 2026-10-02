@@ -152,6 +152,10 @@ export const zhCN = {
     submit: "解锁",
     device: "使用本机记住的密钥解锁",
     biometric: { touch_id: "使用 Touch ID 解锁", windows_hello: "使用 Windows Hello 解锁" },
+    biometricOffer: {
+      touch_id: "解锁后，可以在「设置 › 安全」开启「使用 Touch ID 解锁」。",
+      windows_hello: "解锁后，可以在「设置 › 安全」开启「使用 Windows Hello 解锁」。",
+    },
     biometricReason: "解锁保险库",
     failed: { one: "密码错误（第 {n} 次）", other: "密码错误（第 {n} 次）" },
     retryIn: "请在 {s} 秒后重试",
@@ -199,6 +203,21 @@ export const zhCN = {
     groupView: "按分组显示",
     collapseAll: "全部折叠",
     expandAll: "全部展开",
+    select: "选择",
+    selectHint: "点击选择",
+    selectedCount: { one: "已选择 {n} 个账号", other: "已选择 {n} 个账号" },
+    selectAll: "全选",
+    selectNone: "全不选",
+    selectGroup: "选择「{group}」中的全部账号",
+    moveToGroup: "移到分组…",
+    move: {
+      title: "移到分组",
+      prompt: "将 {accounts}移到下面的分组。",
+      hint: "留空则移出分组。",
+      submit: "移动",
+      moved: "已将 {accounts}移到「{group}」",
+      ungrouped: "已将 {accounts}移出分组",
+    },
     kind: { totp: "{period} 秒", hotp: "计数器 {counter}" },
   },
   entry: {
@@ -435,14 +454,16 @@ export const zhCN = {
       deviceUnavailable: "这台电脑上没有可用的系统钥匙串",
       deviceDisableTitle: "关闭本机记住",
       deviceDisablePrompt: "输入主密码以关闭本机记住，钥匙串里的密钥会被删除。",
-      biometric: { touch_id: "解锁时验证 Touch ID", windows_hello: "解锁时验证 Windows Hello" },
+      biometric: { touch_id: "使用 Touch ID 解锁", windows_hello: "使用 Windows Hello 解锁" },
       biometricHint: {
-        touch_id: "用「在本机记住」解锁前先验证指纹。主密码始终可以解锁。",
+        touch_id:
+          "锁定后用指纹解锁，不用输入主密码；开启时会一并开启「在本机记住」。主密码始终可以解锁。",
         windows_hello:
-          "用「在本机记住」解锁前先通过 Windows Hello（指纹、面容或 PIN）。主密码始终可以解锁。",
+          "锁定后用 Windows Hello（指纹、面容或 PIN）解锁，不用输入主密码；开启时会一并开启「在本机记住」。主密码始终可以解锁。",
       },
       biometricReason: { touch_id: "开启 Touch ID 解锁", windows_hello: "开启 Windows Hello 解锁" },
-      biometricDisablePrompt: "输入主密码以关闭解锁前的验证。",
+      biometricDisablePrompt:
+        "输入主密码以关闭解锁前的验证。「在本机记住」会保持开启，如果不再需要，可以在上方关闭。",
       biometricDisableTitle: "关闭验证",
       changePassword: "修改主密码",
       changePasswordHint: "修改后，以前的备份仍然需要旧密码才能打开。",
