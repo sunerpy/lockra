@@ -281,6 +281,25 @@ struct BackupPayload<'a> {
     tombstones: &'a [Tombstone],
 }
 
+/// A payload read without its sync space: [`VaultData`] field for field, the local part's clock
+/// alone (serde skips the rest unread).
+#[derive(Deserialize)]
+struct WithoutSync {
+    #[serde(default = "format_one")]
+    format: u32,
+    #[serde(default)]
+    entries: Vec<Entry>,
+    #[serde(default)]
+    tombstones: Vec<Tombstone>,
+    #[serde(default)]
+    local: Option<ClockOnly>,
+}
+
+#[derive(Deserialize)]
+struct ClockOnly {
+    clock: Clock,
+}
+
 impl VaultData {
     /// A new vault's payload.
     pub fn new() -> Self {
@@ -303,9 +322,15 @@ impl VaultData {
         Zeroizing::new(serde_json::to_vec(&backup).expect("vault data serializes"))
     }
 
-    /// Parse a payload; `None` when it is not a Lockra payload.
+    /// Parse a payload; `None` when it is not a Lockra payload. A sync space this version cannot
+    /// read (kept by an earlier build) is left out, not the vault: sync is off on this device until
+    /// it is set up again.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        serde_json::from_slice(bytes).ok()
+        serde_json::from_slice(bytes).ok().or_else(|| {
+            let data: WithoutSync = serde_json::from_slice(bytes).ok()?;
+            let local = data.local.map(|local| Local { clock: local.clock, sync: None });
+            Some(Self { format: data.format, entries: data.entries, tombstones: data.tombstones, local })
+        })
     }
 
     /// A vault's or a backup's payload, ready for use: a newer format is refused, entries written
@@ -472,6 +497,33 @@ mod tests {
         // Opening again keeps the device and the stamps.
         let again = VaultData::open(&data.to_bytes()).unwrap();
         assert_eq!((again.device(), again.entries[0].stamp), (device, data.entries[0].stamp));
+    }
+
+    #[test]
+    fn a_sync_space_this_version_cannot_read_is_left_out_not_the_vault() {
+        let mut data = VaultData::new();
+        data.entries.push(Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1));
+        let storage = lockra_sync::StorageConfig::Webdav {
+            url: "https://dav.example.com/".into(),
+            prefix: String::new(),
+            username: "me".into(),
+            password: Zeroizing::new("x".into()),
+        };
+        let sync_key = lockra_sync::SyncKey::generate().unwrap();
+        let keys = lockra_sync::SpaceKeys::generate(sync_key.space_id()).unwrap();
+        data.local_mut().sync = Some(SyncLocal::new(storage, &keys, &sync_key, "Laptop".into(), b"keyring"));
+        let whole = VaultData::open(&data.to_bytes()).unwrap();
+        assert!(whole.sync().is_some());
+        // Kept by an earlier build, its space without this device's keyring: the vault opens, its
+        // accounts and its device number with it, and sync is off here until it is set up again.
+        let mut kept: serde_json::Value = serde_json::from_slice(&data.to_bytes()).unwrap();
+        kept["local"]["sync"].as_object_mut().unwrap().remove("keyring");
+        let opened = VaultData::open(&serde_json::to_vec(&kept).unwrap()).unwrap();
+        assert!(opened.sync().is_none());
+        assert_eq!((&opened.entries, opened.device()), (&whole.entries, whole.device()));
+        // Anything else damaged is still a damaged vault.
+        kept["entries"] = serde_json::json!("not a list");
+        assert_eq!(VaultData::open(&serde_json::to_vec(&kept).unwrap()).unwrap_err().code, ErrorCode::VaultCorrupted);
     }
 
     #[test]

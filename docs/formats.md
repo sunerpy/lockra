@@ -78,8 +78,10 @@ deletion), so that a deletion reaches the other devices of a sync space. Replaci
 secret through an import gives it a new id (the old id is tombstoned), so its HOTP counter starts
 again with the new secret. `local` is this device's own part and never leaves the vault file (no
 backup, no sync): `clock` (its device number and the latest stamp) and, with sync on, `sync` (the
-storage settings and credentials, the space id, its data key, the sync key, this device's name
-and what the runs remember).
+storage settings and credentials, the space id, its data key, the sync key, this device's name,
+its keyring and what the runs remember). A `sync` this version cannot read (one kept by an earlier
+build) is left out and the vault opens without it: sync is off on that device until it is set up
+again.
 
 Duplicates: the same secret and parameters is **the same account** (an import skips it); the same
 issuer and account with a different secret is a **conflict** (both are kept by default, or the

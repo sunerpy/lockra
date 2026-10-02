@@ -42,9 +42,8 @@ pub(crate) struct SyncLocal {
     #[serde(default)]
     pub state: SyncState,
     /// This device's keyring: the data key under this vault's master password and the sync key
-    /// (Base64). Its snapshots carry it; a new master password seals it again. Empty in a space
-    /// kept before the keyrings moved into the snapshots, which must still open.
-    #[serde(default)]
+    /// (Base64). Its snapshots carry it; a new master password seals it again. Required: a space
+    /// kept without one is left out of the vault (`VaultData::from_bytes`), never synced empty.
     pub keyring: String,
     /// The storage holds this keyring: a run wrote it, or found it there, since it was sealed.
     #[serde(default)]
@@ -278,9 +277,9 @@ mod tests {
     }
 
     #[test]
-    fn a_space_kept_without_a_keyring_still_opens() {
-        // Kept by a build from before the keyrings moved into the snapshots: the vault opens, and
-        // the snapshot goes out with no keyring until a new master password seals one.
+    fn a_space_without_this_devices_keyring_is_not_one_this_version_reads() {
+        // A snapshot without a keyring would leave a space nobody can join: no such space is taken
+        // in (the vault leaves it out, entry.rs).
         let storage = StorageConfig::Webdav {
             url: "https://dav.example.com/".into(),
             prefix: String::new(),
@@ -290,10 +289,7 @@ mod tests {
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
         let mut kept = serde_json::to_value(SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")).unwrap();
         kept.as_object_mut().unwrap().remove("keyring");
-        kept["pending_keyring"] = serde_json::json!("b2xk");
-        let opened: SyncLocal = serde_json::from_value(kept).unwrap();
-        assert!(opened.keyring().unwrap().is_empty());
-        assert_eq!(opened.keys().unwrap().space_id(), keys.space_id());
+        assert!(serde_json::from_value::<SyncLocal>(kept).is_err());
     }
 
     #[test]
