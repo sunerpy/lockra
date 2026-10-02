@@ -53,11 +53,25 @@ so, so mind screen sharing.
 
 **Settings › Security › Hide codes** shows dots instead of codes until you point at an account.
 
+## Sync
+
+Sync (from version 0.4.0) is off until you set it up on storage of your own. Everything a device writes there is
+encrypted on the device, and the key that encrypts it opens only with both the master password of
+a device in the space and the sync key. Each device writes only its own file, so devices never
+overwrite each other's changes; a file that was altered or put back to an older version is
+refused. The storage's
+credentials and the sync key are kept in the encrypted vault and never in a backup.
+[Sync between devices](/backup/sync#what-the-storage-can-see) explains what the storage can see.
+
 ## What Lockra cannot protect against
 
 - Malware running as your user on the computer can read what you type, including the master
   password.
 - With **Remember on this device** on, the vault is as safe as your account on the computer.
 - A forgotten master password cannot be recovered, by anyone.
+- With sync on, someone who has both the storage's contents and the sync key (a photographed
+  invitation, for example) can try master passwords on their own computer, against every device's;
+  a long master password on every device is the defence. Whoever can write to the storage can
+  delete the space, which stops sync but not your vaults. Removing a device does not revoke it.
 
 For the full design, see the [security model](/dev/security).

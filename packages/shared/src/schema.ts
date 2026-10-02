@@ -250,6 +250,19 @@ export const ERROR_CODES = [
   "update_signature",
   "update_install_failed",
   "update_cancelled",
+  "sync_off",
+  "sync_already_on",
+  "sync_config_invalid",
+  "sync_insecure",
+  "sync_network",
+  "sync_denied",
+  "sync_storage_failed",
+  "sync_space_not_found",
+  "sync_wrong_credentials",
+  "sync_key_invalid",
+  "sync_invite_invalid",
+  "sync_data_corrupted",
+  "sync_unsupported",
   "internal",
 ] as const;
 export const errorCodeSchema = z.enum(ERROR_CODES);
@@ -307,6 +320,96 @@ export const updateViewSchema = z.object({
 });
 export type UpdateView = z.infer<typeof updateViewSchema>;
 
+// ---- multi-device sync -----------------------------------------------------------------------
+
+/** Where a sync space is stored, credentials included: what the webview sends (lockra-sync
+ *  `StorageConfig`). The core never sends the secret back. */
+export const storageConfigSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("s3"),
+    endpoint: z.string(),
+    region: z.string(),
+    bucket: z.string(),
+    prefix: z.string(),
+    access_key_id: z.string(),
+    secret_access_key: z.string(),
+    path_style: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal("webdav"),
+    url: z.string(),
+    prefix: z.string(),
+    username: z.string(),
+    password: z.string(),
+  }),
+]);
+export type StorageConfig = z.infer<typeof storageConfigSchema>;
+export type StorageKind = StorageConfig["kind"];
+
+/** The storage as the core shows it: everything but the secret (lockra-core `StorageView`). */
+export const storageViewSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("s3"),
+    endpoint: z.string(),
+    region: z.string(),
+    bucket: z.string(),
+    prefix: z.string(),
+    access_key_id: z.string(),
+    path_style: z.boolean(),
+  }),
+  z.object({
+    kind: z.literal("webdav"),
+    url: z.string(),
+    prefix: z.string(),
+    username: z.string(),
+  }),
+]);
+export type StorageView = z.infer<typeof storageViewSchema>;
+
+export const syncDeviceViewSchema = z.object({
+  tag: z.string(),
+  name: z.string(),
+  written_at_ms: msSchema.nullable(),
+  this_device: z.boolean(),
+});
+export type SyncDeviceView = z.infer<typeof syncDeviceViewSchema>;
+
+export const syncStatusSchema = z.discriminatedUnion("state", [
+  z.object({ state: z.literal("idle") }),
+  z.object({ state: z.literal("syncing") }),
+  z.object({ state: z.literal("synced"), at_ms: msSchema }),
+  z.object({ state: z.literal("failed"), code: errorCodeSchema, at_ms: msSchema }),
+]);
+export type SyncStatus = z.infer<typeof syncStatusSchema>;
+
+export const syncSpaceViewSchema = z.object({
+  storage: storageViewSchema,
+  device_name: z.string(),
+  devices: z.array(syncDeviceViewSchema),
+  status: syncStatusSchema,
+  last_sync_ms: msSchema.nullable(),
+  rolled_back: z.array(z.string()),
+  unreadable: z.array(z.string()),
+  keyring_pending: z.boolean(),
+});
+export type SyncSpaceView = z.infer<typeof syncSpaceViewSchema>;
+
+export const syncViewSchema = z.object({
+  /** The space this device belongs to; absent when sync is off and while locked. */
+  space: syncSpaceViewSchema.nullable(),
+});
+export type SyncView = z.infer<typeof syncViewSchema>;
+
+/** How a device joins a space (lockra-core `JoinSource`). */
+export const joinSourceSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("invite"), text: z.string() }),
+  z.object({ type: z.literal("manual"), storage: storageConfigSchema, sync_key: z.string() }),
+]);
+export type JoinSource = z.infer<typeof joinSourceSchema>;
+
+/** The longest device name kept (lockra-core `MAX_DEVICE_NAME_CHARS`). */
+export const MAX_DEVICE_NAME_CHARS = 64;
+
 // ---- state and events ------------------------------------------------------------------------
 
 export const lockViewSchema = z.object({
@@ -329,6 +432,7 @@ export const uiStateSchema = z.object({
   restore: restoreViewSchema.nullable(),
   auto_lock_at_ms: msSchema.nullable(),
   update: updateViewSchema,
+  sync: syncViewSchema,
 });
 export type UiState = z.infer<typeof uiStateSchema>;
 
@@ -418,6 +522,18 @@ export const importOutcomeSchema = z.object({
 });
 export type ImportOutcome = z.infer<typeof importOutcomeSchema>;
 
+/** The answer to `sync_create`: the new space's sync key, shown once. */
+export const syncCreatedSchema = z.object({ sync_key: z.string() });
+export type SyncCreated = z.infer<typeof syncCreatedSchema>;
+
+/** The answer to `sync_invite`: what another device scans or pastes to join. */
+export const syncInviteSchema = z.object({
+  invite: z.string(),
+  svg: z.string(),
+  sync_key: z.string(),
+});
+export type SyncInvite = z.infer<typeof syncInviteSchema>;
+
 export const coreErrorSchema = z.object({
   code: errorCodeSchema,
   retry_at_ms: msSchema.optional(),
@@ -499,6 +615,27 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("activity") }),
   z.object({ command: z.literal("update_check") }),
   z.object({ command: z.literal("update_install") }),
+  z.object({
+    command: z.literal("sync_create"),
+    storage: storageConfigSchema,
+    password,
+    device_name: z.string(),
+  }),
+  z.object({
+    command: z.literal("sync_join"),
+    source: joinSourceSchema,
+    /** This device's master password: the vault's, or the new vault's. */
+    password,
+    device_name: z.string(),
+    /** The master password of a device in the space, when it is not `password`. */
+    space_password: password.optional(),
+  }),
+  z.object({ command: z.literal("sync_invite"), password }),
+  z.object({ command: z.literal("sync_set_storage"), storage: storageConfigSchema, password }),
+  z.object({ command: z.literal("sync_rename_device"), name: z.string() }),
+  z.object({ command: z.literal("sync_remove_device"), tag: z.string() }),
+  z.object({ command: z.literal("sync_now") }),
+  z.object({ command: z.literal("sync_disable") }),
 ]);
 export type UiCommand = z.infer<typeof uiCommandSchema>;
 export type CommandName = UiCommand["command"];
@@ -528,6 +665,8 @@ export interface CommandResults {
   import_commit: ImportOutcome;
   export_start: ExportStarted;
   export_page: ExportPage;
+  sync_create: SyncCreated;
+  sync_invite: SyncInvite;
 }
 export type ResultOf<C extends CommandName> = C extends keyof CommandResults
   ? CommandResults[C]
@@ -541,6 +680,8 @@ export const RESULT_SCHEMAS: { [C in keyof CommandResults]: z.ZodType<CommandRes
   import_commit: importOutcomeSchema,
   export_start: exportStartedSchema,
   export_page: exportPageSchema,
+  sync_create: syncCreatedSchema,
+  sync_invite: syncInviteSchema,
 };
 
 export function hasResult(name: CommandName): name is keyof CommandResults {

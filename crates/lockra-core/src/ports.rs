@@ -5,8 +5,10 @@
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub use lockra_sync::{RemoteStore, StorageConfig, SyncError};
 use parking_lot::Mutex;
 use zeroize::Zeroizing;
 
@@ -119,6 +121,24 @@ pub trait Updater: Send + Sync {
     /// Install the downloaded package and restart Lockra. On Windows the installer takes over and
     /// this does not return.
     fn install(&self) -> UpdateFuture<'_, ()>;
+}
+
+/// Opens the storage of a sync space: lockra-remote over HTTPS in the shells. Opening contacts
+/// nothing; the requests go out when the core runs the sync, which it does only for a space the
+/// user set up on storage of their own.
+pub trait SyncTransport: Send + Sync {
+    /// The storage `config` names, ready for requests.
+    fn open(&self, config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError>;
+}
+
+/// No sync storage (a build without it): every space fails to open.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoSync;
+
+impl SyncTransport for NoSync {
+    fn open(&self, _config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+        Err(SyncError::Storage("sync is not available in this build".into()))
+    }
 }
 
 /// A copy that cannot update itself: the tests' default, and the shell's when the build has no

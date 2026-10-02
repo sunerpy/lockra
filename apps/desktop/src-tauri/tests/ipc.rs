@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use lockra_bridge::SHELL_COMMANDS;
 use lockra_core::KdfCost;
-use lockra_core::fakes::{FakeClipboard, FakeUpdater};
+use lockra_core::fakes::{FakeClipboard, FakeTransport, FakeUpdater};
 use lockra_core::ports::{MemorySecretStore, Updater};
 use lockra_core::ui::InstallMethod;
 use lockra_desktop_lib::{COMMANDS, ShellOptions, build_app, dev_memory_store_requested};
@@ -43,6 +43,7 @@ fn shell_with(updater: Option<Arc<dyn Updater>>) -> Shell {
         single_instance: false,
         updater,
         plugin_updates: false,
+        sync: Some(Arc::new(FakeTransport::default())),
     };
     let mut app = build_app(mock_builder(), options).build(mock_context(noop_assets())).unwrap();
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();

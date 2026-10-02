@@ -7,11 +7,13 @@ import { About } from "./About";
 import { Appearance } from "./Appearance";
 import { General } from "./General";
 import { Security } from "./Security";
+import { Sync } from "./Sync";
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   "general",
   "appearance",
   "security",
+  "sync",
   "about",
 ];
 
@@ -126,6 +128,7 @@ export function SettingsDialog({ section }: { section: SettingsSection }) {
             {section === "general" && <General />}
             {section === "appearance" && <Appearance />}
             {section === "security" && <Security />}
+            {section === "sync" && <Sync />}
             {section === "about" && <About />}
           </div>
         </div>

@@ -36,7 +36,8 @@ impl KdfCost {
     pub const FAST_INSECURE: Self = Self { m_kib: 8, t: 1, p: 1 };
 }
 
-/// The KDF entry of a header: algorithm, cost and salt.
+/// The KDF entry of a header: algorithm, cost and salt. The sync keyring (lockra-sync) uses the
+/// same entry for the password half of its key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KdfParams {
     pub(crate) algorithm: String,
@@ -49,14 +50,14 @@ pub struct KdfParams {
 
 impl KdfParams {
     /// `cost` with a fresh random salt.
-    pub(crate) fn fresh(cost: KdfCost) -> Result<Self, VaultError> {
+    pub fn fresh(cost: KdfCost) -> Result<Self, VaultError> {
         let mut salt = [0u8; SALT_LEN];
         getrandom::fill(&mut salt).map_err(|_| VaultError::Random)?;
         Ok(Self { algorithm: ARGON2ID.to_owned(), m_kib: cost.m_kib, t: cost.t, p: cost.p, salt })
     }
 
     /// The 32-byte key for `password`. Parameters outside what Lockra writes count as a damaged file.
-    pub(crate) fn derive(&self, password: &[u8]) -> Result<Zeroizing<[u8; 32]>, VaultError> {
+    pub fn derive(&self, password: &[u8]) -> Result<Zeroizing<[u8; 32]>, VaultError> {
         if self.algorithm != ARGON2ID || self.m_kib > MAX_M_KIB || self.t > MAX_T || self.p > MAX_P {
             return Err(VaultError::Corrupted);
         }

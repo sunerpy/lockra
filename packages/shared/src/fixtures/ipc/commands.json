@@ -165,6 +165,60 @@
     },
     {
       "command": "update_install"
+    },
+    {
+      "command": "sync_create",
+      "device_name": "Desktop",
+      "password": "a new password",
+      "storage": {
+        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "bucket": "my-lockra",
+        "endpoint": "https://s3.eu-central-1.amazonaws.com",
+        "kind": "s3",
+        "path_style": false,
+        "prefix": "lockra/",
+        "region": "eu-central-1",
+        "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+      }
+    },
+    {
+      "command": "sync_join",
+      "device_name": "Pixel 8",
+      "password": "a new password",
+      "source": {
+        "text": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0",
+        "type": "invite"
+      },
+      "space_password": "another device's password"
+    },
+    {
+      "command": "sync_invite",
+      "password": "a new password"
+    },
+    {
+      "command": "sync_set_storage",
+      "password": "a new password",
+      "storage": {
+        "kind": "webdav",
+        "password": "app password",
+        "prefix": "lockra",
+        "url": "https://dav.jianguoyun.com/dav/",
+        "username": "me@example.com"
+      }
+    },
+    {
+      "command": "sync_rename_device",
+      "name": "Work desktop"
+    },
+    {
+      "command": "sync_remove_device",
+      "tag": "0a9b8c7d6e5f40312233445566778899"
+    },
+    {
+      "command": "sync_now"
+    },
+    {
+      "command": "sync_disable"
     }
   ],
   "shell_commands": [

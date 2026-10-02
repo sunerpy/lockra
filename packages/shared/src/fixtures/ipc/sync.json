@@ -1,0 +1,184 @@
+[
+  {
+    "space": {
+      "storage": {
+        "kind": "s3",
+        "endpoint": "https://s3.eu-central-1.amazonaws.com",
+        "region": "eu-central-1",
+        "bucket": "my-lockra",
+        "prefix": "lockra/",
+        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "path_style": false
+      },
+      "device_name": "Desktop",
+      "devices": [
+        {
+          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
+          "name": "Desktop",
+          "written_at_ms": 1789999940000,
+          "this_device": true
+        },
+        {
+          "tag": "0a9b8c7d6e5f40312233445566778899",
+          "name": "Pixel 8",
+          "written_at_ms": 1789996400000,
+          "this_device": false
+        }
+      ],
+      "status": {
+        "state": "idle"
+      },
+      "last_sync_ms": 1789999940000,
+      "rolled_back": [],
+      "unreadable": [
+        "ffeeddccbbaa99887766554433221100"
+      ],
+      "keyring_pending": false
+    }
+  },
+  {
+    "space": {
+      "storage": {
+        "kind": "s3",
+        "endpoint": "https://s3.eu-central-1.amazonaws.com",
+        "region": "eu-central-1",
+        "bucket": "my-lockra",
+        "prefix": "lockra/",
+        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "path_style": false
+      },
+      "device_name": "Desktop",
+      "devices": [
+        {
+          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
+          "name": "Desktop",
+          "written_at_ms": 1789999940000,
+          "this_device": true
+        },
+        {
+          "tag": "0a9b8c7d6e5f40312233445566778899",
+          "name": "Pixel 8",
+          "written_at_ms": 1789996400000,
+          "this_device": false
+        }
+      ],
+      "status": {
+        "state": "syncing"
+      },
+      "last_sync_ms": 1789999940000,
+      "rolled_back": [],
+      "unreadable": [
+        "ffeeddccbbaa99887766554433221100"
+      ],
+      "keyring_pending": false
+    }
+  },
+  {
+    "space": {
+      "storage": {
+        "kind": "s3",
+        "endpoint": "https://s3.eu-central-1.amazonaws.com",
+        "region": "eu-central-1",
+        "bucket": "my-lockra",
+        "prefix": "lockra/",
+        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "path_style": false
+      },
+      "device_name": "Desktop",
+      "devices": [
+        {
+          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
+          "name": "Desktop",
+          "written_at_ms": 1789999940000,
+          "this_device": true
+        },
+        {
+          "tag": "0a9b8c7d6e5f40312233445566778899",
+          "name": "Pixel 8",
+          "written_at_ms": 1789996400000,
+          "this_device": false
+        }
+      ],
+      "status": {
+        "state": "synced",
+        "at_ms": 1789999940000
+      },
+      "last_sync_ms": 1789999940000,
+      "rolled_back": [],
+      "unreadable": [
+        "ffeeddccbbaa99887766554433221100"
+      ],
+      "keyring_pending": false
+    }
+  },
+  {
+    "space": {
+      "storage": {
+        "kind": "s3",
+        "endpoint": "https://s3.eu-central-1.amazonaws.com",
+        "region": "eu-central-1",
+        "bucket": "my-lockra",
+        "prefix": "lockra/",
+        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+        "path_style": false
+      },
+      "device_name": "Desktop",
+      "devices": [
+        {
+          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
+          "name": "Desktop",
+          "written_at_ms": 1789999940000,
+          "this_device": true
+        },
+        {
+          "tag": "0a9b8c7d6e5f40312233445566778899",
+          "name": "Pixel 8",
+          "written_at_ms": 1789996400000,
+          "this_device": false
+        }
+      ],
+      "status": {
+        "state": "failed",
+        "code": "sync_network",
+        "at_ms": 1789999995000
+      },
+      "last_sync_ms": 1789999940000,
+      "rolled_back": [],
+      "unreadable": [
+        "ffeeddccbbaa99887766554433221100"
+      ],
+      "keyring_pending": false
+    }
+  },
+  {
+    "space": {
+      "storage": {
+        "kind": "webdav",
+        "url": "https://dav.jianguoyun.com/dav/",
+        "prefix": "lockra",
+        "username": "me@example.com"
+      },
+      "device_name": "Desktop",
+      "devices": [
+        {
+          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
+          "name": "Desktop",
+          "written_at_ms": null,
+          "this_device": true
+        }
+      ],
+      "status": {
+        "state": "idle"
+      },
+      "last_sync_ms": null,
+      "rolled_back": [
+        "0a9b8c7d6e5f40312233445566778899"
+      ],
+      "unreadable": [],
+      "keyring_pending": true
+    }
+  },
+  {
+    "space": null
+  }
+]

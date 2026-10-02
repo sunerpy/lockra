@@ -65,6 +65,14 @@ deny: ## Licences, bans and sources of the dependency graph
 smoke-desktop: ## Drive the real app under Xvfb; screenshots to docs/acceptance/screens/desktop
 	scripts/smoke-desktop-linux.sh
 
+.PHONY: sync-it
+sync-it: ## The sync storage against an S3 gateway (versitygw) and a WebDAV server (rclone) in Docker
+	scripts/sync-it.sh
+
+.PHONY: smoke-sync
+smoke-sync: ## Two real apps under Xvfb syncing through versitygw in Docker; screenshots to docs/acceptance/screens/sync
+	scripts/smoke-sync-linux.sh
+
 .PHONY: smoke-update
 smoke-update: ## An AppImage updates itself from a local manifest (two release builds, a throwaway key)
 	scripts/smoke-update-linux.sh

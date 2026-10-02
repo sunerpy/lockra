@@ -1,21 +1,28 @@
 # Roadmap
 
-This page describes what Lockra covers today and what it deliberately leaves out.
+This page describes what Lockra covers today, what is planned, and what it deliberately leaves out.
 
 ## Today
 
 Lockra covers what an authenticator on a computer needs: codes for every standard account, moving
 accounts from and to Google Authenticator and Microsoft Authenticator, otpauth links and lists,
 encrypted and automatic backups, protection for the vault, the clipboard and the screen, and signed
-in-app updates with a one-line install for every platform. No new
-features are scheduled; suggestions are welcome in the
+in-app updates with a one-line install for every platform. Suggestions are welcome in the
 [issue tracker](https://github.com/sunerpy/lockra/issues).
+
+## Planned
+
+- **Sync between devices** <StatusTag status="building" />: end-to-end encrypted, through an
+  S3-compatible bucket or a WebDAV folder of your own, with version 0.4.0
+  ([Sync between devices](/backup/sync)).
+- **An Android app** <StatusTag status="planned" />: the same vault on the phone, scanning QR codes
+  with the camera or from screenshots, unlocking with a fingerprint, and syncing with your other
+  devices.
 
 ## Deliberately left out
 
-- **Syncing between devices.** Lockra keeps the vault on one computer and syncs nothing; move
-  accounts with an export or a backup.
-- **Phone apps.** Lockra exports to the authenticator on your phone instead.
+- **A sync server.** Devices sync through storage you choose; Lockra runs none and keeps no
+  account.
 - **A browser extension or filling in codes.** Copy a code and paste it.
 - **Website icons.** Accounts show their initial; fetching icons would mean going online.
 - **Non-standard codes** such as Steam Guard.

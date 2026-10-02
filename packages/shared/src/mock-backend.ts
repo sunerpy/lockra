@@ -28,14 +28,20 @@ import {
   type ImportOutcome,
   type Incompatible,
   type InstallMethod,
+  type JoinSource,
   type Notice,
   type OtpKind,
   type Platform,
   type ResultOf,
   type Revealed,
   type Settings,
+  type StorageConfig,
+  type StorageView,
+  type SyncInvite,
+  type SyncSpaceView,
   type UiCommand,
   type UiState,
+  MAX_DEVICE_NAME_CHARS,
   defaultSettings,
 } from "./schema";
 
@@ -62,6 +68,8 @@ export interface MockOptions {
   release?: MockRelease | null;
   /** Make the update fail at this step with `code`. */
   updateFailure?: { step: "check" | "download" | "install"; code: ErrorCode };
+  /** The sync space this device belongs to (shown once unlocked). */
+  sync?: SyncSpaceView | null;
 }
 
 /** A release the mock's update check announces. */
@@ -74,6 +82,11 @@ export interface MockRelease {
 }
 
 export const MOCK_PASSWORD = "correct horse battery";
+/** The storage secret the mock accepts (any other is refused, like wrong credentials). */
+export const MOCK_STORAGE_SECRET = "storage secret";
+/** The sync key of the mock's spaces. */
+export const MOCK_SYNC_KEY =
+  "LKS1-MFRG-GZDF-MZTW-Q2LK-NNWG-23TP-OBYX-E43U-OR3W-C6DZ-PI2D-AMBR-GQ2D-ARQA";
 const MIN_PASSWORD = 8;
 const FREE_ATTEMPTS = 3;
 const EXPORT_PER_CODE = 10;
@@ -201,6 +214,87 @@ function placeholderSvg(seed: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 25 25" width="320" height="320"><rect width="25" height="25" fill="#ffffff"/><g fill="#000000">${cells.join("")}</g></svg>`;
 }
 
+/** The mock's stand-in for a device tag. */
+function mockTag(seed: string): string {
+  return Array.from({ length: 4 }, (_, i) =>
+    hash(`${seed}:${i}`).toString(16).padStart(8, "0"),
+  ).join("");
+}
+
+/** A space the mock can start with (the showcase and the page tests): S3, two devices. */
+export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpaceView {
+  return {
+    storage: {
+      kind: "s3",
+      endpoint: "https://s3.eu-central-1.amazonaws.com",
+      region: "eu-central-1",
+      bucket: "my-lockra",
+      prefix: "lockra/",
+      access_key_id: "AKIAIOSFODNN7EXAMPLE",
+      path_style: false,
+    },
+    device_name: "Desktop",
+    devices: [
+      {
+        tag: mockTag("Desktop"),
+        name: "Desktop",
+        written_at_ms: Date.UTC(2026, 9, 2, 8),
+        this_device: true,
+      },
+      {
+        tag: mockTag("Pixel 8"),
+        name: "Pixel 8",
+        written_at_ms: Date.UTC(2026, 9, 2, 7),
+        this_device: false,
+      },
+    ],
+    status: { state: "synced", at_ms: Date.UTC(2026, 9, 2, 8) },
+    last_sync_ms: Date.UTC(2026, 9, 2, 8),
+    rolled_back: [],
+    unreadable: [],
+    keyring_pending: false,
+    ...overrides,
+  };
+}
+
+/** The core's checks of a storage configuration (lockra-sync `StorageConfig::validate`). */
+function checkStorage(storage: StorageConfig): void {
+  const [address, required] =
+    storage.kind === "s3"
+      ? [
+          storage.endpoint,
+          [storage.region, storage.bucket, storage.access_key_id, storage.secret_access_key],
+        ]
+      : [storage.url, [storage.username, storage.password]];
+  if (required.some((value) => value.trim() === "")) throw new LockraError("sync_config_invalid");
+  let url: URL;
+  try {
+    url = new URL(address.trim());
+  } catch {
+    throw new LockraError("sync_config_invalid");
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol === "http:" && !loopback) throw new LockraError("sync_insecure");
+  if (url.protocol !== "https:" && url.protocol !== "http:")
+    throw new LockraError("sync_config_invalid");
+  const secret = storage.kind === "s3" ? storage.secret_access_key : storage.password;
+  if (secret !== MOCK_STORAGE_SECRET) throw new LockraError("sync_denied");
+}
+
+function storageView(storage: StorageConfig): StorageView {
+  return storage.kind === "s3"
+    ? {
+        kind: "s3",
+        endpoint: storage.endpoint,
+        region: storage.region,
+        bucket: storage.bucket,
+        prefix: storage.prefix,
+        access_key_id: storage.access_key_id,
+        path_style: storage.path_style,
+      }
+    : { kind: "webdav", url: storage.url, prefix: storage.prefix, username: storage.username };
+}
+
 function parseOtpauth(
   line: string,
 ): { issuer: string; account: string; secret: string; kind: OtpKind; digits: number } | undefined {
@@ -245,6 +339,8 @@ export class MockBackend implements Backend {
   private updateFailure: MockOptions["updateFailure"];
   /** What the last run found, and whether its package is downloaded (the core's `Pending`). */
   private pending: { release: MockRelease; downloaded: boolean } | null = null;
+  /** The sync space, kept here while locked (the core keeps it in the vault). */
+  private space: SyncSpaceView | null;
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -254,6 +350,7 @@ export class MockBackend implements Backend {
     this.clipboard = options.clipboard;
     this.release = options.release ?? null;
     this.updateFailure = options.updateFailure;
+    this.space = options.sync ?? null;
     const entries = options.entries ?? [];
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
     const phase = options.phase ?? (entries.length > 0 ? "unlocked" : "no_vault");
@@ -277,6 +374,7 @@ export class MockBackend implements Backend {
       restore: null,
       auto_lock_at_ms: null,
       update: { method: options.updateMethod ?? null, status: { state: "idle" } },
+      sync: { space: phase === "unlocked" ? this.space : null },
     };
     this.lockedEntries = phase === "unlocked" ? [] : entries.map((e) => e.view);
     this.refreshAutoLock();
@@ -423,6 +521,7 @@ export class MockBackend implements Backend {
         if (this.state.phase !== "locked") throw new LockraError("no_vault");
         this.lockedEntries = [];
         this.secrets.clear();
+        this.space = null;
         this.state.phase = "no_vault";
         this.state.lock = {
           ...this.state.lock,
@@ -625,7 +724,186 @@ export class MockBackend implements Backend {
         return this.runUpdate("check");
       case "update_install":
         return this.runUpdate("install");
+      case "sync_create":
+        return this.syncCreate(command.storage, command.password, command.device_name);
+      case "sync_join":
+        return this.syncJoin(
+          command.source,
+          command.password,
+          command.device_name,
+          command.space_password,
+        );
+      case "sync_invite":
+        return this.syncInvite(command.password);
+      case "sync_set_storage": {
+        const space = this.requireSpace();
+        this.checkPassword(command.password);
+        checkStorage(command.storage);
+        this.setSpace({ ...space, storage: storageView(command.storage) });
+        return null;
+      }
+      case "sync_rename_device": {
+        const space = this.requireSpace();
+        const name = this.deviceName(command.name);
+        this.setSpace({
+          ...space,
+          device_name: name,
+          devices: space.devices.map((d) => (d.this_device ? { ...d, name } : d)),
+        });
+        return null;
+      }
+      case "sync_remove_device": {
+        const space = this.requireSpace();
+        const device = space.devices.find((d) => d.tag === command.tag);
+        if (device?.this_device) throw new LockraError("internal");
+        this.setSpace({
+          ...space,
+          devices: space.devices.filter((d) => d.tag !== command.tag),
+          rolled_back: space.rolled_back.filter((t) => t !== command.tag),
+          unreadable: space.unreadable.filter((t) => t !== command.tag),
+        });
+        return null;
+      }
+      case "sync_now":
+        this.syncRun(this.requireSpace());
+        return null;
+      case "sync_disable":
+        this.requireSpace();
+        this.setSpace(null);
+        return null;
     }
+  }
+
+  private requireSpace(): SyncSpaceView {
+    this.requireUnlocked();
+    if (this.space === null) throw new LockraError("sync_off");
+    return this.space;
+  }
+
+  private setSpace(space: SyncSpaceView | null): void {
+    this.space = space;
+    this.state.sync = { space };
+    this.publish();
+  }
+
+  private deviceName(name: string): string {
+    const cleaned = name
+      .replace(/\p{Cc}/gu, "")
+      .trim()
+      .slice(0, MAX_DEVICE_NAME_CHARS)
+      .trim();
+    if (cleaned !== "") return cleaned;
+    return { windows: "Windows", macos: "macOS", linux: "Linux" }[this.state.platform];
+  }
+
+  /** A run, at once: syncing, then synced (or the test's failure). */
+  private syncRun(space: SyncSpaceView): void {
+    this.setSpace({ ...space, status: { state: "syncing" } });
+    const at_ms = this.now();
+    this.setSpace({
+      ...space,
+      status: { state: "synced", at_ms },
+      last_sync_ms: at_ms,
+      keyring_pending: false,
+      devices: space.devices.map((d) => (d.this_device ? { ...d, written_at_ms: at_ms } : d)),
+    });
+  }
+
+  private newSpace(
+    storage: StorageConfig,
+    deviceName: string,
+    others: SyncSpaceView["devices"],
+  ): void {
+    const name = this.deviceName(deviceName);
+    this.syncRun({
+      storage: storageView(storage),
+      device_name: name,
+      devices: [
+        { tag: mockTag(`${name}:${this.now()}`), name, written_at_ms: null, this_device: true },
+        ...others,
+      ],
+      status: { state: "idle" },
+      last_sync_ms: null,
+      rolled_back: [],
+      unreadable: [],
+      keyring_pending: false,
+    });
+  }
+
+  private syncCreate(
+    storage: StorageConfig,
+    password: string,
+    deviceName: string,
+  ): { sync_key: string } {
+    this.requireUnlocked();
+    if (this.space !== null) throw new LockraError("sync_already_on");
+    checkStorage(storage);
+    this.checkPassword(password);
+    this.newSpace(storage, deviceName, []);
+    return { sync_key: MOCK_SYNC_KEY };
+  }
+
+  private syncJoin(
+    source: JoinSource,
+    password: string,
+    deviceName: string,
+    spacePassword?: string,
+  ): null {
+    if (source.type === "invite" && !source.text.trim().startsWith("lockra-invite:1:"))
+      throw new LockraError("sync_invite_invalid");
+    if (
+      source.type === "manual" &&
+      !/^LKS1(-?[A-Z2-7]{4}){14}$/i.test(source.sync_key.replace(/\s/g, ""))
+    )
+      throw new LockraError("sync_key_invalid");
+    if (this.state.phase === "locked") throw new LockraError("locked");
+    if (this.state.phase === "unlocked" && this.space !== null)
+      throw new LockraError("sync_already_on");
+    if (this.state.phase === "no_vault") this.checkLength(password);
+    else this.checkPassword(password);
+    const storage: StorageConfig =
+      source.type === "manual"
+        ? source.storage
+        : {
+            kind: "webdav",
+            url: "https://dav.example.com/dav/",
+            prefix: "lockra",
+            username: "me@example.com",
+            password: MOCK_STORAGE_SECRET,
+          };
+    checkStorage(storage);
+    // The space's device uses the mock's master password.
+    if ((spacePassword ?? password) !== MOCK_PASSWORD)
+      throw new LockraError("sync_wrong_credentials");
+    const others = [
+      { tag: mockTag("Pixel 8"), name: "Pixel 8", written_at_ms: this.now(), this_device: false },
+    ];
+    if (this.state.phase === "no_vault") {
+      // A new device: the vault comes from the space.
+      this.password = password;
+      const entries = sampleEntries();
+      for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
+      this.enterUnlocked(entries.map((e) => e.view));
+    }
+    this.newSpace(storage, deviceName, others);
+    return null;
+  }
+
+  private syncInvite(password: string): SyncInvite {
+    this.requireSpace();
+    this.checkPassword(password);
+    return {
+      invite: `lockra-invite:1:${btoa(`mock-invite:${this.now()}`)}`,
+      svg: placeholderSvg("invite"),
+      sync_key: MOCK_SYNC_KEY,
+    };
+  }
+
+  /** Test hook: the sync reached `status` (a failure, a run in progress), as the core would
+   *  publish it. */
+  simulateSync(status: SyncSpaceView["status"]): void {
+    if (this.space === null) return;
+    this.setSpace({ ...this.space, status });
   }
 
   private updateBusy(): boolean {
@@ -721,6 +999,7 @@ export class MockBackend implements Backend {
   private enterUnlocked(entries: EntryView[]): void {
     this.state.phase = "unlocked";
     this.state.entries = entries;
+    this.state.sync = { space: this.space };
     this.lockedEntries = [];
     this.state.lock = { ...this.state.lock, failed_attempts: 0, retry_at_ms: null };
     this.refreshAutoLock();
@@ -733,6 +1012,7 @@ export class MockBackend implements Backend {
     this.lockedEntries = this.state.entries;
     this.state.entries = [];
     this.state.phase = "locked";
+    this.state.sync = { space: null };
     this.exports.clear();
     this.clearImport();
     this.state.auto_lock_at_ms = null;

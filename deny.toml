@@ -50,37 +50,45 @@ multiple-versions = "warn"
 wildcards = "warn"
 allow-wildcard-paths = true
 
-# Lockra goes online for one thing only, the in-app update, and only when the user asks or has
-# turned automatic checks on (docs/security.md, "Network"). The HTTP client and the TLS stack may
-# come in through tauri-plugin-updater and nothing else: any other crate that pulls one into the
-# desktop graph is a design change, not a dependency bump.
+# Lockra goes online for two things only (docs/security.md, "What is protected"): the in-app update, when the
+# user asks or has turned automatic updates on, and the sync of a space the user set up on storage
+# of their own (crates/lockra-remote). The HTTP client and the TLS stack may come in through
+# tauri-plugin-updater and lockra-remote and nothing else: any other crate that pulls one in is a
+# design change, not a dependency bump.
 [[bans.deny]]
 name = "reqwest"
-wrappers = ["tauri-plugin-updater"]
-reason = "The update check is Lockra's only network access; another HTTP client in the desktop graph is a design change."
+wrappers = ["tauri-plugin-updater", "lockra-remote", "opendal-http-transport-reqwest"]
+reason = "The update check and the user's own sync storage are Lockra's only network access; another HTTP client is a design change."
 [[bans.deny]]
 name = "hyper"
 wrappers = ["reqwest", "hyper-util", "hyper-rustls"]
-reason = "HTTP only for the update check, through reqwest."
+reason = "HTTP only for the update check and the sync storage, through reqwest."
 [[bans.deny]]
 name = "ureq"
-reason = "The update check is Lockra's only network access."
+reason = "Lockra's network access goes through reqwest only."
 [[bans.deny]]
 name = "rustls"
 wrappers = [
   "tauri-plugin-updater",
+  "lockra-remote",
   "reqwest",
   "hyper-rustls",
   "tokio-rustls",
   "rustls-platform-verifier",
 ]
-reason = "TLS only for the update check."
+reason = "TLS only for the update check and the sync storage."
 [[bans.deny]]
 name = "native-tls"
-reason = "The update check uses rustls; no second TLS stack."
+reason = "rustls is Lockra's only TLS stack."
 [[bans.deny]]
 name = "openssl-sys"
-reason = "The update check uses rustls; no second TLS stack."
+reason = "rustls is Lockra's only TLS stack."
+[[bans.deny]]
+name = "aws-lc-rs"
+reason = "rustls runs on ring, which the update check installs as the process's provider; no second crypto library."
+[[bans.deny]]
+name = "aws-lc-sys"
+reason = "rustls runs on ring; no second crypto library (and no C toolchain for it on every target)."
 
 [advisories]
 version = 2

@@ -5,19 +5,21 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The application core: session, entries, import, export, backup and settings."
+description = "The application core: session, entries, import, export, backup, settings and sync."
 publish = false
 
 [lints]
 workspace = true
 
 [features]
-# The fakes behind the ports (clock, clipboard, keychain, code sink) for the test suites of the
-# bridge and the desktop shell.
+# The fakes behind the ports (clock, clipboard, keychain, code sink, sync storage) for the test
+# suites of the bridge and the desktop shell.
 fakes = []
 
 [dependencies]
+data-encoding.workspace = true
 lockra-otp.workspace = true
+lockra-sync.workspace = true
 lockra-transfer.workspace = true
 lockra-vault.workspace = true
 parking_lot.workspace = true

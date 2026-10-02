@@ -1,6 +1,15 @@
 import { isLockraError } from "./backend";
-import { MOCK_PASSWORD, MockBackend, fakeCode, mockEntry, sampleEntries } from "./mock-backend";
-import type { CodesFrame, Notice, UiEvent } from "./schema";
+import {
+  MOCK_PASSWORD,
+  MOCK_STORAGE_SECRET,
+  MOCK_SYNC_KEY,
+  MockBackend,
+  fakeCode,
+  mockEntry,
+  mockSyncSpace,
+  sampleEntries,
+} from "./mock-backend";
+import type { CodesFrame, JoinSource, Notice, StorageConfig, UiEvent } from "./schema";
 
 async function errorCode(promise: Promise<unknown>): Promise<string | undefined> {
   const error = await promise.then(
@@ -392,6 +401,167 @@ describe("MockBackend", () => {
       settings: { ...(await off.getState()).settings, auto_update: false },
     });
     expect((await off.getState()).update.status).toEqual({ state: "idle" });
+  });
+
+  it("sets up sync on storage of the user's own and shows the space only while unlocked", async () => {
+    const backend = new MockBackend({ entries: sampleEntries(), now: () => Date.UTC(2026, 9, 2) });
+    const s3 = (secret: string, endpoint = "https://s3.example.com"): StorageConfig => ({
+      kind: "s3",
+      endpoint,
+      region: "us-east-1",
+      bucket: "lockra",
+      prefix: "",
+      access_key_id: "AKID",
+      secret_access_key: secret,
+      path_style: false,
+    });
+    const create = (storage: StorageConfig, password = MOCK_PASSWORD) =>
+      backend.dispatch({
+        command: "sync_create",
+        storage,
+        password,
+        device_name: "  Work laptop ",
+      });
+    expect(await errorCode(backend.dispatch({ command: "sync_now" }))).toBe("sync_off");
+    expect(await errorCode(create(s3("wrong")))).toBe("sync_denied");
+    expect(await errorCode(create(s3(MOCK_STORAGE_SECRET, "http://192.168.1.2")))).toBe(
+      "sync_insecure",
+    );
+    expect(await errorCode(create(s3(MOCK_STORAGE_SECRET, "not a url")))).toBe(
+      "sync_config_invalid",
+    );
+    expect(await errorCode(create(s3("")))).toBe("sync_config_invalid");
+    expect(await errorCode(create(s3(MOCK_STORAGE_SECRET), "wrong password"))).toBe(
+      "wrong_password",
+    );
+    expect(await create(s3(MOCK_STORAGE_SECRET, "http://127.0.0.1:9000"))).toEqual({
+      sync_key: MOCK_SYNC_KEY,
+    });
+    let space = (await backend.getState()).sync.space;
+    expect(space?.status.state).toBe("synced");
+    expect(space?.device_name).toBe("Work laptop");
+    expect(JSON.stringify(space)).not.toContain(MOCK_STORAGE_SECRET);
+    expect(await errorCode(create(s3(MOCK_STORAGE_SECRET)))).toBe("sync_already_on");
+
+    const invite = await backend.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
+    expect(invite.invite).toMatch(/^lockra-invite:1:/);
+    backend.simulateSync({ state: "failed", code: "sync_network", at_ms: 1 });
+    expect((await backend.getState()).sync.space?.status.state).toBe("failed");
+    await backend.dispatch({ command: "sync_now" });
+    expect((await backend.getState()).sync.space?.status.state).toBe("synced");
+    await backend.dispatch({ command: "sync_rename_device", name: " \u0007 " });
+    expect((await backend.getState()).sync.space?.device_name).toBe("Linux");
+    const webdav: StorageConfig = {
+      kind: "webdav",
+      url: "https://dav.example.com/dav/",
+      prefix: "lockra",
+      username: "me",
+      password: MOCK_STORAGE_SECRET,
+    };
+    await backend.dispatch({
+      command: "sync_set_storage",
+      storage: webdav,
+      password: MOCK_PASSWORD,
+    });
+    expect((await backend.getState()).sync.space?.storage).toEqual({
+      kind: "webdav",
+      url: "https://dav.example.com/dav/",
+      prefix: "lockra",
+      username: "me",
+    });
+
+    await backend.dispatch({ command: "vault_lock" });
+    expect((await backend.getState()).sync.space).toBeNull();
+    await backend.dispatch({ command: "vault_unlock", password: MOCK_PASSWORD });
+    space = (await backend.getState()).sync.space;
+    expect(space?.devices).toHaveLength(1);
+    expect(
+      await errorCode(
+        backend.dispatch({ command: "sync_remove_device", tag: space?.devices[0]?.tag ?? "" }),
+      ),
+    ).toBe("internal");
+    await backend.dispatch({ command: "sync_disable" });
+    expect((await backend.getState()).sync.space).toBeNull();
+  });
+
+  it("joins a space from an invitation or the sync key, making a vault where there was none", async () => {
+    const fresh = new MockBackend();
+    const storage: StorageConfig = {
+      kind: "webdav",
+      url: "https://dav.example.com/dav/",
+      prefix: "",
+      username: "me",
+      password: MOCK_STORAGE_SECRET,
+    };
+    const join = (
+      backend: MockBackend,
+      source: JoinSource,
+      password = MOCK_PASSWORD,
+      space_password?: string,
+    ) =>
+      backend.dispatch({
+        command: "sync_join",
+        source,
+        password,
+        device_name: "Phone",
+        space_password,
+      });
+    expect(await errorCode(join(fresh, { type: "invite", text: "otpauth://x" }))).toBe(
+      "sync_invite_invalid",
+    );
+    expect(await errorCode(join(fresh, { type: "manual", storage, sync_key: "LKS1-ABC" }))).toBe(
+      "sync_key_invalid",
+    );
+    expect(
+      await errorCode(join(fresh, { type: "manual", storage, sync_key: MOCK_SYNC_KEY }, "short")),
+    ).toBe("password_too_short");
+    expect(
+      await errorCode(
+        join(fresh, { type: "manual", storage, sync_key: MOCK_SYNC_KEY }, "a wrong password"),
+      ),
+    ).toBe("sync_wrong_credentials");
+    await join(fresh, { type: "manual", storage, sync_key: MOCK_SYNC_KEY });
+    const state = await fresh.getState();
+    expect(state.phase).toBe("unlocked");
+    expect(state.entries.length).toBeGreaterThan(0);
+    expect(state.sync.space?.devices.map((d) => [d.name, d.this_device])).toEqual([
+      ["Phone", true],
+      ["Pixel 8", false],
+    ]);
+    const tag = state.sync.space?.devices[1]?.tag ?? "";
+    await fresh.dispatch({ command: "sync_remove_device", tag });
+    expect((await fresh.getState()).sync.space?.devices).toHaveLength(1);
+
+    const unlocked = new MockBackend({ entries: [mockEntry("Bank", "card")] });
+    const invite: JoinSource = { type: "invite", text: "lockra-invite:1:abc" };
+    // This vault's own master password is checked; the space's devices may use another one.
+    expect(await errorCode(join(unlocked, invite, "a wrong password"))).toBe("wrong_password");
+    expect(await errorCode(join(unlocked, invite, MOCK_PASSWORD, "a wrong password"))).toBe(
+      "sync_wrong_credentials",
+    );
+    await join(unlocked, invite, MOCK_PASSWORD, MOCK_PASSWORD);
+    expect((await unlocked.getState()).entries.map((e) => e.issuer)).toEqual(["Bank"]);
+    expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
+      "sync_already_on",
+    );
+    await unlocked.dispatch({ command: "vault_lock" });
+    expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
+      "locked",
+    );
+  });
+
+  it("starts with a space when told to", async () => {
+    const backend = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace() });
+    expect((await backend.getState()).sync.space?.devices).toHaveLength(2);
+    const locked = new MockBackend({
+      phase: "locked",
+      entries: sampleEntries(),
+      sync: mockSyncSpace(),
+    });
+    expect((await locked.getState()).sync.space).toBeNull();
+    await locked.dispatch({ command: "vault_lock" });
+    await locked.dispatch({ command: "vault_unlock", password: MOCK_PASSWORD });
+    expect((await locked.getState()).sync.space?.device_name).toBe("Desktop");
   });
 
   it("stand-in codes are stable and padded", () => {

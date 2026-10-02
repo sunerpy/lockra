@@ -16,6 +16,9 @@ crates/
   lockra-core      The application: session state machine, entries, import preview, export
                    sessions, backups, settings, the scheduler; ports for everything native.
   lockra-bridge    The wire contract: the UiCommand enum, dispatch, and the contract fixtures.
+  lockra-sync      End-to-end encrypted sync, without I/O: the device snapshots and the keyrings
+                   they carry, hybrid logical clocks, the last-writer-wins merge, one sync step.
+  lockra-remote    The sync's storage over HTTP (S3-compatible or WebDAV, through OpenDAL).
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
                    screen-capture protection, single instance).
@@ -36,6 +39,7 @@ cheap handle; the shell injects the ports:
 | `Clock`                     | `SystemClock`                                                                 | `FakeClock`                         |
 | `CodeSink` (code frames)    | a Tauri `Channel`                                                             | `RecordingSink`                     |
 | `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy    | `FakeUpdater`, `NoUpdater`          |
+| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS (`src-tauri/src/sync.rs`)              | `FakeTransport`, `NoSync`           |
 
 State machine: **NoVault → Locked → Unlocked**. Create or restore leads from NoVault to Unlocked;
 unlock (password or device key) from Locked; lock, auto-lock and closing return to Locked; reset

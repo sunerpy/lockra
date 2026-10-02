@@ -121,7 +121,7 @@ export const en: Messages = {
   welcome: {
     title: "Welcome to Lockra",
     subtitle:
-      "A two-factor authenticator encrypted on your own computer. Codes are generated here, with no network and no sync.",
+      "A two-factor authenticator encrypted on your own devices. Codes are generated here; sync is off unless you set it up on storage of your own.",
     create: {
       title: "Create a vault",
       body: "Choose a master password. It cannot be recovered, so make sure you remember it.",
@@ -138,6 +138,11 @@ export const en: Messages = {
       password: "Backup password",
       submit: "Restore",
       file: "{name} · created {date}",
+    },
+    join: {
+      title: "Join from sync",
+      body: "Already syncing Lockra on other devices? Join with an invitation or the sync key, and this computer gets the same accounts.",
+      open: "Join sync…",
     },
   },
   strength: {
@@ -328,7 +333,7 @@ export const en: Messages = {
   backup: {
     title: "Backup",
     subtitle:
-      "Backups are encrypted and safe to keep anywhere. Lockra never goes online; sync is up to the folder you choose.",
+      "Backups are encrypted and safe to keep anywhere, a cloud-synced folder included. To keep your devices in step, use Settings › Sync.",
     manual: {
       title: "Back up now",
       body: "Writes the whole vault, encrypted, to a .lockrabackup file: under the master password, or under a separate backup password.",
@@ -368,7 +373,13 @@ export const en: Messages = {
   settings: {
     title: "Settings",
     groupsLabel: "Settings groups",
-    section: { general: "General", appearance: "Appearance", security: "Security", about: "About" },
+    section: {
+      general: "General",
+      appearance: "Appearance",
+      security: "Security",
+      sync: "Sync",
+      about: "About",
+    },
     general: {
       lede: "The interface language, the order of the codes and automatic updates.",
       locale: {
@@ -433,12 +444,136 @@ export const en: Messages = {
       fontsValue: "Instrument Sans, JetBrains Mono, Noto Sans SC (SIL OFL 1.1)",
       credits: "Credits",
       creditsValue: "Interface design derived from Voltip (Apache-2.0)",
-      privacy: "Lockra goes online only to check for and download updates, and collects nothing.",
+      privacy:
+        "Lockra goes online only to check for and download updates, and to sync with storage you set up yourself; it collects nothing.",
       update: {
         label: "Updates",
         help: "The automatic update switch is under General.",
       },
     },
+  },
+  sync: {
+    lede: "End-to-end encrypted sync between your devices, on storage of your own. Lockra runs no server; the storage holds ciphertext only.",
+    off: {
+      createTitle: "Start syncing from this device",
+      createBody:
+        "The sync space goes into your S3-compatible bucket or WebDAV folder. Its sync key is shown when it is ready: keep it safe, apart from the master password.",
+      createSubmit: "Start syncing",
+      joinTitle: "Join an existing sync",
+      joinBody:
+        "Scan or paste another device's invitation; with no other device, recover with the storage settings and the sync key.",
+    },
+    storage: {
+      kind: "Storage",
+      s3: "S3-compatible",
+      webdav: "WebDAV",
+      s3Hint: "AWS S3, Cloudflare R2, Backblaze B2, Alibaba OSS, MinIO and others.",
+      webdavHint: "Nextcloud, Jianguoyun, Synology NAS and other WebDAV services.",
+      endpoint: "Endpoint",
+      endpointHint: "Starts with https:// — s3.eu-central-1.amazonaws.com for AWS S3, for example.",
+      region: "Region",
+      regionHint: "Use auto when the service has no regions.",
+      bucket: "Bucket",
+      prefix: "Folder (optional)",
+      prefixHint: "The sync space goes under this folder.",
+      accessKeyId: "Access key ID",
+      secretAccessKey: "Secret access key",
+      pathStyle: "Path-style access",
+      pathStyleHint: "Usually needed for self-hosted services such as MinIO.",
+      url: "WebDAV address",
+      urlHint:
+        "Starts with https:// — …/remote.php/dav/files/your-name/ for Nextcloud, for example.",
+      username: "User name",
+      password: "Password",
+      passwordHint: "Use an app password where the service offers one.",
+      httpsOnly:
+        "HTTPS addresses only (plain HTTP only to this computer). The credentials are kept in the encrypted vault and never shown again.",
+    },
+    deviceName: "This device's name",
+    deviceNameHint: "The other devices list it under this name.",
+    masterPassword: "Master password",
+    spacePassword: "The sync space's master password",
+    spacePasswordHint: "The master password of any device in the space.",
+    join: {
+      fromInvite: "Invitation",
+      fromKey: "Sync key",
+      invite: "Invitation",
+      inviteHint: "From Settings › Sync › Invite another device, on a device of the space.",
+      syncKey: "Sync key",
+      submit: "Join",
+      newVault:
+        "There is no vault on this computer yet: joining creates one under this master password.",
+      vaultPassword: "This device's master password",
+      vaultPasswordHint:
+        "Checked against this vault; from then on it opens the sync space as well.",
+      otherPassword: "The sync space's master password (optional)",
+      otherPasswordHint:
+        "When the space's devices use another master password; leave it empty to use this device's.",
+    },
+    created: {
+      title: "Keep your sync key",
+      body: "Joining a new device or recovering the space takes both the sync key and the master password. Write the sync key down or keep it in a password manager, not next to the master password.",
+      key: "Sync key",
+      again: "You can see it again under Invite another device.",
+      hideIn: "The sync key hides in {s} s",
+      done: "I have kept it",
+    },
+    status: {
+      label: "Status",
+      idle: "Not synced yet",
+      syncing: "Syncing…",
+      synced: "Synced · {when}",
+      failed: "Sync failed: {error}",
+      now: "Sync now",
+      keyringPending:
+        "This device's new master password reaches the sync space on the next sync; until then, joining a device takes the old one or another device's.",
+    },
+    storageRow: "Storage",
+    storageEdit: "Change storage settings",
+    storageEditBody:
+      "A new access key, password or address. The sync space must already be at the new place.",
+    device: {
+      label: "This device",
+      rename: "Rename",
+    },
+    devices: {
+      title: "Devices",
+      description: "The devices in this sync space. Remove one that is lost or no longer used.",
+      thisDevice: "This device",
+      written: "Wrote {when}",
+      never: "Not written yet",
+      remove: "Remove",
+      removeTitle: "Remove “{name}”?",
+      removeBody:
+        "Its sync data is deleted from the storage. A device still in use shows up again on its next sync.",
+    },
+    problems: {
+      rolledBack:
+        "The sync data of {names} is older than before and was refused. The storage may have been rolled back.",
+      unreadable: {
+        one: "{n} sync object on the storage cannot be read: it was altered, belongs to another space, or comes from a newer Lockra.",
+        other:
+          "{n} sync objects on the storage cannot be read: they were altered, belong to another space, or come from a newer Lockra.",
+      },
+      removeUnreadable: "Remove the unreadable objects",
+    },
+    invite: {
+      open: "Invite another device",
+      prompt: "Enter the master password to show the invitation.",
+      submit: "Show invitation",
+      body: "On the new device, scan the QR code or paste the text below, then enter the master password.",
+      warning:
+        "The invitation holds the storage's credentials and the sync key: use it on your own devices only.",
+      text: "Invitation text",
+      hideIn: "The invitation hides in {s} s",
+    },
+    disable: {
+      open: "Turn off sync on this device",
+      title: "Turn off sync on this device?",
+      body: "This device stops syncing and keeps its accounts. The sync space on the storage and the other devices are not affected, and you can join again later.",
+      confirm: "Turn off sync",
+    },
+    platformDevice: { windows: "Windows PC", macos: "Mac", linux: "Linux PC" },
   },
   error: {
     no_vault: "There is no vault yet",
@@ -480,6 +615,21 @@ export const en: Messages = {
     update_signature: "The package is not signed with Lockra's key and was not installed",
     update_install_failed: "Installing the update failed",
     update_cancelled: "The administrator prompt was cancelled; nothing was installed",
+    sync_off: "Sync is not set up on this device",
+    sync_already_on: "Sync is already on for this device; turn it off first",
+    sync_config_invalid:
+      "The storage address is not valid (it may not hold a user name or password), or a required field is empty",
+    sync_insecure: "The storage must be reached over HTTPS (plain HTTP only to this computer)",
+    sync_network: "The storage could not be reached",
+    sync_denied: "The storage refused access; check the access key or password",
+    sync_storage_failed:
+      "The storage answered with an error; check that the bucket or folder exists",
+    sync_space_not_found: "There is no sync space for this sync key on that storage",
+    sync_wrong_credentials: "The master password or the sync key is wrong",
+    sync_key_invalid: "The sync key is mistyped",
+    sync_invite_invalid: "This is not a Lockra sync invitation",
+    sync_data_corrupted: "The sync data on the storage is damaged or was altered",
+    sync_unsupported: "The sync data comes from a newer Lockra; update Lockra first",
     internal: "An internal error occurred",
   },
   reject: {

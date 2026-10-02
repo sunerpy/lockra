@@ -1,5 +1,5 @@
-// No vault yet: create one with a master password, or restore a backup (its password becomes the
-// master password).
+// No vault yet: create one with a master password, restore a backup (its password becomes the
+// master password), or join a sync space (its master password becomes this vault's).
 import { errorText, formatDateTime } from "@lockra/shared";
 import {
   Button,
@@ -14,6 +14,7 @@ import {
 import { type SubmitEvent, useState } from "react";
 import { useGuarded, useSubmit } from "../app/dispatch";
 import { passwordLongEnough } from "../app/password";
+import { JoinForm } from "../features/sync/JoinForm";
 
 export function Welcome() {
   const { t } = useI18n();
@@ -32,7 +33,31 @@ export function Welcome() {
         <CreateVault />
         <RestoreVault />
       </CardGrid>
+      <JoinSync />
     </div>
+  );
+}
+
+function JoinSync() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <Panel eyebrow={t("welcome.join.title")} data-testid="welcome-join">
+      <div className="flex flex-col gap-3">
+        <p className="text-[13px] text-fg-muted">{t("welcome.join.body")}</p>
+        {open ? (
+          <JoinForm newVault onCancel={() => setOpen(false)} />
+        ) : (
+          <Button
+            icon="link"
+            className="self-start"
+            onClick={() => setOpen(true)}
+            data-testid="welcome-join-open">
+            {t("welcome.join.open")}
+          </Button>
+        )}
+      </div>
+    </Panel>
   );
 }
 

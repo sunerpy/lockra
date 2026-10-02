@@ -9,8 +9,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 use lockra_core::settings::Settings;
-use lockra_core::ui::ExportTarget;
-use lockra_core::{Choice, Core, CoreError, EntryDraft, EntryPatch, RestoreMode};
+use lockra_core::ui::{ExportTarget, JoinSource};
+use lockra_core::{Choice, Core, CoreError, EntryDraft, EntryPatch, RestoreMode, StorageConfig};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -157,11 +157,60 @@ pub enum UiCommand {
     UpdateCheck,
     /// Download, verify and install the newest release, then restart.
     UpdateInstall,
+    /// Set up sync on a new space at storage of the user's own; answers with the sync key.
+    SyncCreate {
+        /// Where the space goes, with the credentials.
+        storage: StorageConfig,
+        /// The master password.
+        password: Zeroizing<String>,
+        /// This device's name in the space.
+        device_name: String,
+    },
+    /// Join a space: an invitation, or the storage and the sync key. With no vault yet, the
+    /// password becomes the new vault's master password.
+    SyncJoin {
+        /// How.
+        source: JoinSource,
+        /// This device's master password (the vault's, or the new vault's); it opens the space
+        /// too unless `space_password` is given.
+        password: Zeroizing<String>,
+        /// This device's name in the space.
+        device_name: String,
+        /// The master password of a device in the space, when it is not `password`.
+        #[serde(default)]
+        space_password: Option<Zeroizing<String>>,
+    },
+    /// The invitation for another device; answers with it (a secret).
+    SyncInvite {
+        /// The master password.
+        password: Zeroizing<String>,
+    },
+    /// New storage settings for the space (an address, new credentials).
+    SyncSetStorage {
+        /// Where the space is now, with the credentials.
+        storage: StorageConfig,
+        /// The master password.
+        password: Zeroizing<String>,
+    },
+    /// Rename this device in its space.
+    SyncRenameDevice {
+        /// The new name.
+        name: String,
+    },
+    /// Remove another device from the space.
+    SyncRemoveDevice {
+        /// Its tag.
+        tag: String,
+    },
+    /// Sync now.
+    SyncNow,
+    /// Turn sync off on this device.
+    SyncDisable,
 }
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 32] = [
+pub const COMMANDS: [&str; 40] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -194,6 +243,14 @@ pub const COMMANDS: [&str; 32] = [
     "activity",
     "update_check",
     "update_install",
+    "sync_create",
+    "sync_join",
+    "sync_invite",
+    "sync_set_storage",
+    "sync_rename_device",
+    "sync_remove_device",
+    "sync_now",
+    "sync_disable",
 ];
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
@@ -204,7 +261,7 @@ pub const SHELL_COMMANDS: [&str; 8] =
 impl UiCommand {
     /// Whether the answer carries a secret (the shell turns screen-capture protection on).
     pub fn shows_secret(&self) -> bool {
-        matches!(self, Self::EntryReveal { .. } | Self::ExportStart { .. })
+        matches!(self, Self::EntryReveal { .. } | Self::ExportStart { .. } | Self::SyncCreate { .. } | Self::SyncInvite { .. })
     }
 
     /// Whether the command ends every secret view (the shell turns the protection off).
@@ -263,6 +320,14 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         }
         UiCommand::UpdateCheck => unit(core.update_check())?,
         UiCommand::UpdateInstall => unit(core.update_install())?,
+        UiCommand::SyncCreate { storage, password, device_name } => json!(core.sync_create(storage, password, device_name).await?),
+        UiCommand::SyncJoin { source, password, device_name, space_password } => unit(core.sync_join(source, password, device_name, space_password).await)?,
+        UiCommand::SyncInvite { password } => json!(core.sync_invite(password).await?),
+        UiCommand::SyncSetStorage { storage, password } => unit(core.sync_set_storage(storage, password).await)?,
+        UiCommand::SyncRenameDevice { name } => unit(core.sync_rename_device(&name))?,
+        UiCommand::SyncRemoveDevice { tag } => unit(core.sync_remove_device(&tag).await)?,
+        UiCommand::SyncNow => unit(core.sync_now())?,
+        UiCommand::SyncDisable => unit(core.sync_disable())?,
     })
 }
 
