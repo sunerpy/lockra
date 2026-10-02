@@ -12,10 +12,11 @@
 # - `deny` checks licences, bans, sources and RustSec advisories of the shipped graph.
 # - `smoke` drives the real app under Xvfb (scripts/smoke-desktop-linux.sh): it types a master
 #   password, imports from the clipboard, compares a copied code with RFC 6238, decodes the
-#   export QR code and closes the window with its own button. Then two copies of the app sync
-#   through the Versity S3 gateway in Docker (scripts/smoke-sync-linux.sh): one sets up the space
-#   in Settings › Sync, the other joins from the welcome screen with the sync key, their changes
-#   meet, and an older snapshot put back on the storage is refused.
+#   export QR code, turns Touch ID on and unlocks with it (a debug build's stand-in check, since
+#   the runner has no sensor) and closes the window with its own button. Then two copies of the
+#   app sync through the Versity S3 gateway in Docker (scripts/smoke-sync-linux.sh): one sets up
+#   the space in Settings › Sync, the other joins from the welcome screen with the sync key, their
+#   changes meet, and an older snapshot put back on the storage is refused.
 # - `sync-it` runs the sync storage against real servers in Docker (make sync-it): the Versity S3
 #   gateway, for S3's conditional writes, and rclone's WebDAV server.
 # - `windows-check` is the template's optional early warning, enabled: the shell and the

@@ -17,8 +17,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use lockra_bridge::{UiCommand, dispatch};
-use lockra_core::ports::{Clipboard, CodeSink, MemorySecretStore, NoSecretStore, NoUpdater, PortError, SecretStore, SyncTransport, SystemClock, Updater};
-use lockra_core::ui::{CodesFrame, Phase, Platform, UI_EVENT_NAME, UiEvent};
+use lockra_core::ports::{
+    Biometrics, Clipboard, CodeSink, MemorySecretStore, NoSecretStore, NoUpdater, PortError, SecretStore, SyncTransport, SystemClock, Updater,
+};
+use lockra_core::ui::{BiometricKind, CodesFrame, Phase, Platform, UI_EVENT_NAME, UiEvent};
 use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports};
 use serde_json::Value;
 use tauri::ipc::Channel;
@@ -34,6 +36,9 @@ pub const DRAG_EVENT_NAME: &str = "lockra://drag";
 /// Lets a **debug** build run without an OS keychain (headless smoke runs under Xvfb): `memory`.
 /// Release builds ignore it and never fall back to anything weaker than the OS keychain.
 pub const DEV_SECRET_STORE_ENV: &str = "LOCKRA_DEV_SECRET_STORE";
+/// Lets a **debug** build stand in a check that always passes for Touch ID or Windows Hello
+/// (headless smoke runs have no sensor): `touch_id` or `windows_hello`. Release builds ignore it.
+pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 /// The main window's label.
 pub const MAIN_WINDOW: &str = "main";
 
@@ -44,6 +49,15 @@ pub const COMMANDS: [&str; 8] =
 /// `true` only when a debug build was explicitly asked for the in-memory keychain.
 pub fn dev_memory_store_requested(value: Option<&str>, debug_build: bool) -> bool {
     debug_build && value == Some("memory")
+}
+
+/// The check a debug build was explicitly asked to stand in; never one in a release build.
+pub fn dev_biometric_requested(value: Option<&str>, debug_build: bool) -> Option<BiometricKind> {
+    match value.filter(|_| debug_build)? {
+        "touch_id" => Some(BiometricKind::TouchId),
+        "windows_hello" => Some(BiometricKind::WindowsHello),
+        _ => None,
+    }
 }
 
 /// What the shell wires into the core; tests replace the platform parts with fakes.
@@ -95,6 +109,16 @@ pub fn secret_store() -> Arc<dyn SecretStore> {
     }
     let store = keychain::KeyringStore::probe(KEYCHAIN_SERVICE);
     if store.status() == lockra_core::ports::KeychainStatus::Available { Arc::new(store) } else { Arc::new(NoSecretStore) }
+}
+
+/// The check before "remember on this device" unlocks: the platform's; in a debug build the
+/// stand-in [`DEV_BIOMETRIC_ENV`] asks for.
+pub fn biometric_check() -> Arc<dyn Biometrics> {
+    if let Some(kind) = dev_biometric_requested(std::env::var(DEV_BIOMETRIC_ENV).ok().as_deref(), cfg!(debug_assertions)) {
+        tracing::warn!("debug build: a stand-in {kind:?} check that always passes ({DEV_BIOMETRIC_ENV})");
+        return Arc::new(biometrics::StandIn(kind));
+    }
+    Arc::new(biometrics::PlatformBiometrics::default())
 }
 
 /// Code frames into a Tauri channel.
@@ -314,8 +338,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 None => Arc::new(NoUpdater),
             };
             let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
-            let biometrics = Arc::new(biometrics::PlatformBiometrics::default());
-            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics };
+            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics: biometric_check() };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());

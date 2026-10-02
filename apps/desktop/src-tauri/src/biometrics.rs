@@ -96,6 +96,20 @@ fn windows_hello_ready() -> bool {
     UserConsentVerifier::CheckAvailabilityAsync().and_then(|asked| asked.get()).is_ok_and(|answer| answer == UserConsentVerifierAvailability::Available)
 }
 
+/// A check that passes at once, for a debug build without a sensor (`LOCKRA_DEV_BIOMETRIC`).
+#[derive(Debug)]
+pub struct StandIn(pub BiometricKind);
+
+impl Biometrics for StandIn {
+    fn availability(&self) -> Option<BiometricKind> {
+        Some(self.0)
+    }
+
+    fn verify(&self, _reason: &str) -> Result<(), BiometricError> {
+        Ok(())
+    }
+}
+
 #[cfg(not(any(target_os = "macos", windows)))]
 impl Biometrics for PlatformBiometrics {
     fn availability(&self) -> Option<BiometricKind> {

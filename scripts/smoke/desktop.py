@@ -6,7 +6,9 @@ with real X input where it matters (typing the master password, Ctrl+L) and the 
 Checks: create a vault by typing; import an otpauth link from the clipboard; the copied code
 equals an independent RFC 6238 computation; lock and unlock; Google's export QR code decodes
 (rxing, scripts' decode-qr) back to the same account; then screenshots of every page at three
-window sizes in the light and dark themes, plus the empty, long and 200-account states.
+window sizes in the light and dark themes, plus the empty, long and 200-account states; Touch ID
+turned on and unlocking with it (the debug build's stand-in check); an account's colour and avatar
+text, folded groups and a row's right-click menu.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -359,6 +361,66 @@ class Smoke:
         self.x("key", "Escape")
         web.gone('[data-testid="settings-content"]')
         self.settings(theme="light")
+
+        # Touch ID before "remember on this device" (the debug build's stand-in check, which always
+        # passes): on with its switch, then the unlock screen's button opens the vault.
+        web.invoke({"command": "device_unlock_enable"})
+        self.focus()
+        self.x("key", "ctrl+comma")
+        web.wait('[data-testid="settings-content"]')
+        web.click(web.wait(xpath="//button[@role='tab'][normalize-space()='安全']"))
+        web.click(web.wait('[data-testid="biometric-unlock"] [role="switch"]'))
+        until("Touch ID turned on", lambda: web.invoke({"command": "app_state"})["lock"]["device_unlock"]["biometric"]["enabled"])
+        self.shot("settings-biometric-1280-light")
+        self.x("key", "Escape")
+        web.gone('[data-testid="settings-content"]')
+        self.focus()
+        self.x("key", "ctrl+l")
+        self.page("unlock")
+        touch_id = web.wait(xpath="//button[normalize-space()='使用 Touch ID 解锁']")
+        self.shot("unlock-touch-id-1280-light")
+        web.click(touch_id)
+        self.page("codes")
+        web.invoke({"command": "device_unlock_disable", "password": PASSWORD})
+
+        # An account's own colour and avatar text, from the row's edit button.
+        self.nav("验证码")
+        self.page("codes")
+        web.click(web.wait(css='[data-testid="row-edit"]'))
+        dialog = "//*[@role='dialog']"
+        web.click(web.wait(xpath=f"{dialog}//*[@role='radio'][@aria-label='紫色']"))
+        web.type(web.wait(xpath=f"{dialog}//label[normalize-space()='头像文字']/following::input[1]"), "GH")
+        # The avatar is aria-hidden, which WebKitWebDriver's element text reads as empty.
+        avatar = web.wait(xpath=f"{dialog}//*[@data-testid='entry-avatar']")
+        until("the preview", lambda: web.run("return [arguments[0].textContent, arguments[0].dataset.tag]", {ELEMENT: avatar}) == ["GH", "purple"])
+        self.shot("edit-appearance-1280-light")
+        web.click(web.wait(xpath=f"{dialog}//button[normalize-space()='保存']"))
+        web.gone('[role="dialog"]')
+        # Groups that fold: two accounts in a group, then every section folded, then the row menu
+        # of a right click.
+        entries = web.invoke({"command": "app_state"})["entries"]
+        for entry in entries[:2]:
+            web.invoke({"command": "entry_update", "id": entry["id"], "patch": {"group": "工作"}})
+        until("the sections", lambda: len(web.find_all('[data-testid="codes-group-toggle"]')) == 2)
+        self.shot("codes-groups-1280-light")
+        web.click(web.wait(css='[data-testid="codes-collapse-all"]'))
+        until("everything folded", lambda: not web.find_all('[data-testid="entry-row"]'))
+        self.shot("codes-groups-folded-1280-light")
+        web.click(web.wait(css='[data-testid="codes-expand-all"]'))
+        until("everything unfolded", lambda: len(web.find_all('[data-testid="entry-row"]')) == len(entries))
+        row = web.find_all('[data-testid="entry-row"]')[1]
+        web.run(
+            "const r = arguments[0].getBoundingClientRect();"
+            "arguments[0].dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: r.left + 240, clientY: r.top + r.height / 2}));",
+            {ELEMENT: row},
+        )
+        web.wait('[data-testid="row-context"]')
+        self.shot("codes-context-1280-light")
+        self.focus()
+        self.x("key", "Escape")
+        web.gone('[data-testid="row-context"]')
+        for entry in entries[:2]:
+            web.invoke({"command": "entry_update", "id": entry["id"], "patch": {"group": ""}})
 
         # Overflow: a 200-character issuer and an unbroken account; then 200 accounts.
         long_issuer = urllib.parse.quote("超长服务名称" + "Very long issuer name " * 9)
