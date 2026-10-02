@@ -7,8 +7,9 @@ Checks: create a vault by typing; import an otpauth link from the clipboard; the
 equals an independent RFC 6238 computation; lock and unlock; Google's export QR code decodes
 (rxing, scripts' decode-qr) back to the same account; then screenshots of every page at three
 window sizes in the light and dark themes, plus the empty, long and 200-account states; Touch ID
-turned on and unlocking with it (the debug build's stand-in check); an account's colour and avatar
-text, folded groups and a row's right-click menu.
+turned on from the unlock screen's pointer and unlocking with it (the debug build's stand-in check);
+an account's colour and avatar text, folded groups, a row's right-click menu, and several accounts
+ticked and moved to a group at once.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -362,15 +363,27 @@ class Smoke:
         web.gone('[data-testid="settings-content"]')
         self.settings(theme="light")
 
-        # Touch ID before "remember on this device" (the debug build's stand-in check, which always
-        # passes): on with its switch, then the unlock screen's button opens the vault.
-        web.invoke({"command": "device_unlock_enable"})
+        # Touch ID (the debug build's stand-in check, which always passes): while it is off, the
+        # unlock screen says where to turn it on; there one switch turns it and "remember on this
+        # device" on; then the unlock screen's button opens the vault.
+        self.nav("验证码")
+        self.page("codes")
+        self.focus()
+        self.x("key", "ctrl+l")
+        self.page("unlock")
+        web.wait('[data-testid="biometric-offer"]')
+        self.shot("unlock-touch-id-offer-1280-light")
+        self.focus()
+        self.x("type", "--delay", "15", PASSWORD)
+        self.x("key", "Return")
+        self.page("codes")
         self.focus()
         self.x("key", "ctrl+comma")
         web.wait('[data-testid="settings-content"]')
         web.click(web.wait(xpath="//button[@role='tab'][normalize-space()='安全']"))
         web.click(web.wait('[data-testid="biometric-unlock"] [role="switch"]'))
-        until("Touch ID turned on", lambda: web.invoke({"command": "app_state"})["lock"]["device_unlock"]["biometric"]["enabled"])
+        remembered = lambda: web.invoke({"command": "app_state"})["lock"]["device_unlock"]
+        until("Touch ID and remember on this device turned on", lambda: remembered()["enabled"] and remembered()["biometric"]["enabled"])
         self.shot("settings-biometric-1280-light")
         self.x("key", "Escape")
         web.gone('[data-testid="settings-content"]')
@@ -419,7 +432,22 @@ class Smoke:
         self.focus()
         self.x("key", "Escape")
         web.gone('[data-testid="row-context"]')
-        for entry in entries[:2]:
+        # Several accounts at once: the group's two and one more, moved to a new group in one step.
+        web.click(web.wait(css='[data-testid="codes-select"]'))
+        web.wait('[data-testid="codes-selection"]')
+        web.click(web.wait(xpath="//input[@type='checkbox'][@aria-label='选择「工作」中的全部账号']"))
+        web.click(web.find_all('[data-testid="entry-row"]')[3])
+        until("three ticked", lambda: len(web.find_all('[data-testid="entry-row"][aria-checked="true"]')) == 3)
+        self.shot("codes-select-1280-light")
+        web.click(web.wait(css='[data-testid="codes-move"]'))
+        dialog = "//*[@role='dialog']"
+        web.type(web.wait(xpath=f"{dialog}//label[normalize-space()='分组']/following::input[1]"), "Home")
+        self.shot("codes-move-1280-light")
+        web.click(web.wait(xpath=f"{dialog}//button[normalize-space()='移动']"))
+        web.gone('[role="dialog"]')
+        web.gone('[data-testid="codes-selection"]')
+        until("three accounts in Home", lambda: sum(e["group"] == "Home" for e in web.invoke({"command": "app_state"})["entries"]) == 3)
+        for entry in web.invoke({"command": "app_state"})["entries"]:
             web.invoke({"command": "entry_update", "id": entry["id"], "patch": {"group": ""}})
 
         # Overflow: a 200-character issuer and an unbroken account; then 200 accounts.

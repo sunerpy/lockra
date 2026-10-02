@@ -52,6 +52,40 @@ Found after 0.5.0 was released, and fixed:
   a busy machine outran once; they wait for the condition itself, with a deadline (ten full runs of
   the suite in a row passed).
 
+## Touch ID from the start, and several accounts at once (0.6.0)
+
+Asked for on 2026-10-02: on macOS the locked screen offered only the master password, and an
+account's group could only be changed one account at a time.
+
+Why Touch ID was missing: its switch appeared only once **Remember on this device** was on, and the
+unlock screen said nothing about it until both were on. The keychain (keyring 4.2's v1 mode uses the
+macOS Keychain) and robius-authentication's macOS path were read and behave as expected. Now:
+
+- Settings › Security offers **Unlock with Touch ID** (or **Unlock with Windows Hello**) wherever
+  the computer has it; turning it on passes one check and turns **Remember on this device** on in
+  the same write (`touch_id_turns_on_before_remember_on_this_device_and_brings_it_along`); without a
+  keychain it asks for no fingerprint
+  (`touch_id_without_a_keychain_asks_for_no_fingerprint_and_leaves_nothing_behind`).
+- Locked, a computer with Touch ID that has not turned it on says where the switch is
+  (`unlock-touch-id-offer-1280-light`); a vault that asks for Touch ID keeps its button while the
+  sensor is away (a lid closed) and says why it cannot open.
+- macOS no longer hides Touch ID for the rest of a run after a check found none: a check that
+  passes brings it back.
+
+Several accounts: **Select** ticks rows (a click or Space), a section's box (with "some" shown in
+between), **Select all** (what the search and the group menu show) or Ctrl/⌘ A; **Move to group…**
+moves the ticked accounts with one `entries_set_group` command: one write, a new stamp for each
+entry that changes so that sync carries it, and every account put back when the write fails
+(`several_accounts_change_group_in_one_write`,
+`a_group_set_on_several_accounts_reaches_the_other_devices`). A row's menu starts a selection with
+that row ticked; Esc leaves. Screens: `codes-select-1280-light`, `codes-move-1280-light`.
+
+Problems found by looking at them, and fixed:
+
+1. The unlock screen's pointer broke 解锁 across its two lines; the lines are balanced now.
+2. A counter-based (HOTP) row kept its "next code" button while selecting; it steps aside with the
+   other buttons.
+
 ## Not verified here
 
 Touch ID on a real Mac (the prompt's words, the lockout after failures, a lid closed on an external
