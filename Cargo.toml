@@ -7,6 +7,7 @@ members = [
   "crates/lockra-transfer",
   "crates/lockra-core",
   "crates/lockra-bridge",
+  "crates/lockra-sync",
   "apps/desktop/src-tauri",
 ]
 
@@ -40,6 +41,8 @@ chacha20poly1305 = { version = "=0.11.0", default-features = false, features = [
 # Base64 in its standard and URL-safe forms (Google's migration payload, Microsoft's secrets).
 data-encoding = "=2.11.1"
 getrandom = "=0.3.4"
+# The sync keyring and the per-object keys (docs/formats.md, "Sync"): HKDF-SHA256, RFC 5869.
+hkdf = "=0.13.0"
 hmac = "=0.13.0"
 # Screenshots and photos of export QR codes: decoding only, PNG / JPEG / WebP.
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
@@ -76,6 +79,7 @@ lockra-vault = { path = "crates/lockra-vault" }
 lockra-transfer = { path = "crates/lockra-transfer" }
 lockra-core = { path = "crates/lockra-core" }
 lockra-bridge = { path = "crates/lockra-bridge" }
+lockra-sync = { path = "crates/lockra-sync" }
 
 [profile.release]
 lto = "thin"

@@ -14,4 +14,4 @@ mod kdf;
 
 pub use atomic::write_atomic;
 pub use container::{BACKUP_MAGIC, DeviceKey, DeviceSlot, FileKind, HeaderInfo, MAX_HEADER_LEN, Opened, Sealed, VAULT_MAGIC, VaultError, read_header};
-pub use kdf::KdfCost;
+pub use kdf::{KdfCost, KdfParams};
