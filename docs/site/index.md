@@ -54,7 +54,7 @@ home:
             link: /accounts/codes#finding-an-account
           - title: Folding groups and account colours
             body: Fold groups one by one or all at once, give each account a colour or its own avatar text, and pin or edit from the row or a right-click.
-            status: building
+            status: available
             link: /accounts/codes#folding-groups
           - title: Every standard account
             body: Time-based (TOTP) and counter-based (HOTP) codes, SHA1, SHA256 or SHA512, 6 to 8 digits, any period.
@@ -108,7 +108,7 @@ home:
             link: /security/#remember-on-this-device
           - title: Touch ID and Windows Hello
             body: Ask for your fingerprint, or Windows Hello, before the remembered key unlocks.
-            status: building
+            status: available
             link: /security/#touch-id-and-windows-hello
           - title: Locks itself
             body: After five idle minutes by default, and at once with Ctrl L.

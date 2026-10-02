@@ -42,7 +42,7 @@ account first.
 
 ## Folding groups
 
-<StatusTag status="building" /> Comes with version 0.5.0.
+<StatusTag status="available" /> Available from version 0.5.0.
 
 When accounts have groups, the list shows a section for each group, by name, then **No group** for
 the others. Click a section's heading to fold or unfold it; **Collapse all** and **Expand all**,
@@ -52,7 +52,7 @@ beside the sort menu (**Show groups**) turns the sections off and shows a single
 
 ## Colours and avatar text
 
-<StatusTag status="building" /> Comes with version 0.5.0.
+<StatusTag status="available" /> Available from version 0.5.0.
 
 Each account's avatar has a colour: **Automatic** picks one from the service's name, the same on
 every device, so different services look different. In **Edit…**, under **Appearance**, choose
@@ -62,7 +62,7 @@ stay in backups.
 
 ## Buttons and the right-click menu
 
-<StatusTag status="building" /> Comes with version 0.5.0.
+<StatusTag status="available" /> Available from version 0.5.0.
 
 Beside each row's ⋯ button, a star pins the account to the top (or unpins it) and a pencil opens
 **Edit…**. Right-click a row, or press the context-menu key or Shift F10 on a selected row, to open

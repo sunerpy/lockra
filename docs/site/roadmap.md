@@ -7,9 +7,9 @@ This page describes what Lockra covers today, what is planned, and what it delib
 Lockra covers what an authenticator on a computer needs: codes for every standard account, moving
 accounts from and to Google Authenticator and Microsoft Authenticator, otpauth links and lists,
 encrypted and automatic backups, end-to-end encrypted [sync between devices](/backup/sync) through
-storage of your own, protection for the vault, the clipboard and the screen, and signed in-app
-updates with a one-line install for every platform. Suggestions are welcome in the
-[issue tracker](https://github.com/sunerpy/lockra/issues).
+storage of your own, protection for the vault (with Touch ID or Windows Hello where the computer
+has it), the clipboard and the screen, and signed in-app updates with a one-line install for every
+platform. Suggestions are welcome in the [issue tracker](https://github.com/sunerpy/lockra/issues).
 
 ## Planned
 
