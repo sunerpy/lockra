@@ -32,7 +32,7 @@ vault, so the deleted key opens nothing afterwards.
 
 ## Touch ID and Windows Hello
 
-<StatusTag status="building" /> Comes with version 0.5.0.
+<StatusTag status="available" /> Available from version 0.5.0.
 
 On a Mac with Touch ID, or a Windows PC with Windows Hello, turn on **Settings › Security › Ask for
 Touch ID to unlock** (**Ask for Windows Hello to unlock** on Windows) after **Remember on this

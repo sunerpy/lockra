@@ -20,7 +20,7 @@
 
 ## Touch ID 与 Windows Hello
 
-<StatusTag status="building" /> 随 0.5.0 版提供。
+<StatusTag status="available" /> 自 0.5.0 版起提供。
 
 在带 Touch ID 的 Mac 或支持 Windows Hello 的 Windows 电脑上，开启「在本机记住」后，再开启「设置 › 安全 › 解锁时验证 Touch ID」（Windows 上为「解锁时验证 Windows Hello」）。解锁页随即显示「使用 Touch ID 解锁」（或「使用 Windows Hello 解锁」）：先验证你的指纹，或 Windows Hello 的指纹、面容或 PIN，再用本机记住的密钥打开保险库。开启时会验证一次，确认可以使用；关闭时需要输入主密码。主密码始终可以解锁。
 
