@@ -521,6 +521,9 @@ mod tests {
         let opened = VaultData::open(&serde_json::to_vec(&kept).unwrap()).unwrap();
         assert!(opened.sync().is_none());
         assert_eq!((&opened.entries, opened.device()), (&whole.entries, whole.device()));
+        // The same for an empty keyring, as a build that defaulted it saved it.
+        kept["local"]["sync"]["keyring"] = serde_json::json!("");
+        assert!(VaultData::open(&serde_json::to_vec(&kept).unwrap()).unwrap().sync().is_none());
         // Anything else damaged is still a damaged vault.
         kept["entries"] = serde_json::json!("not a list");
         assert_eq!(VaultData::open(&serde_json::to_vec(&kept).unwrap()).unwrap_err().code, ErrorCode::VaultCorrupted);

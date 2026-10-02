@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use data_encoding::BASE64;
 use lockra_sync::{ConfigError, Replica, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, Tombstone, merge};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -42,8 +42,10 @@ pub(crate) struct SyncLocal {
     #[serde(default)]
     pub state: SyncState,
     /// This device's keyring: the data key under this vault's master password and the sync key
-    /// (Base64). Its snapshots carry it; a new master password seals it again. Required: a space
-    /// kept without one is left out of the vault (`VaultData::from_bytes`), never synced empty.
+    /// (Base64). Its snapshots carry it; a new master password seals it again. A space kept
+    /// without one, or with an empty one, does not read as a space: the vault leaves it out
+    /// (`VaultData::from_bytes`), and no snapshot ever goes out without a keyring.
+    #[serde(deserialize_with = "keyring_text")]
     pub keyring: String,
     /// The storage holds this keyring: a run wrote it, or found it there, since it was sealed.
     #[serde(default)]
@@ -111,6 +113,15 @@ impl SyncLocal {
         let mut devices = vec![SyncDeviceView { tag: own_tag, name: self.device_name.clone(), written_at_ms: self.state.own_written_at_ms, this_device: true }];
         devices.extend(others);
         devices
+    }
+}
+
+/// [`SyncLocal::keyring`] as the vault keeps it: Base64 of a keyring, never empty.
+fn keyring_text<'de, D: Deserializer<'de>>(deserializer: D) -> Result<String, D::Error> {
+    let text = String::deserialize(deserializer)?;
+    match BASE64.decode(text.as_bytes()) {
+        Ok(bytes) if !bytes.is_empty() => Ok(text),
+        _ => Err(serde::de::Error::custom("not a keyring")),
     }
 }
 
@@ -287,9 +298,17 @@ mod tests {
             password: Zeroizing::new("x".into()),
         };
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
-        let mut kept = serde_json::to_value(SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")).unwrap();
-        kept.as_object_mut().unwrap().remove("keyring");
-        assert!(serde_json::from_value::<SyncLocal>(kept).is_err());
+        let whole = serde_json::to_value(SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")).unwrap();
+        assert!(serde_json::from_value::<SyncLocal>(whole.clone()).is_ok());
+        let mut missing = whole.clone();
+        missing.as_object_mut().unwrap().remove("keyring");
+        assert!(serde_json::from_value::<SyncLocal>(missing).is_err());
+        // Nor an empty one (a build that defaulted it saved it so), nor one that is not Base64.
+        for text in ["", "not base64!"] {
+            let mut kept = whole.clone();
+            kept["keyring"] = serde_json::json!(text);
+            assert!(serde_json::from_value::<SyncLocal>(kept).is_err(), "{text:?}");
+        }
     }
 
     #[test]
