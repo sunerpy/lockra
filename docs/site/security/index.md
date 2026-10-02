@@ -41,6 +41,9 @@ your fingerprint, or Windows Hello's fingerprint, face or PIN, is checked before
 opens the vault. Turning it on checks once that it works; turning it off asks for the master
 password. The master password always unlocks.
 
+On Windows, if Windows Hello becomes unavailable at the moment you unlock (for example while another
+app shows its own Windows Hello prompt), Windows asks for your Windows sign-in password instead.
+
 The check guards against someone using your unlocked computer. A program running as you could
 still read the remembered key from the keychain, as without the check.
 

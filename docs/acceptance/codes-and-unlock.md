@@ -47,4 +47,11 @@ Problems found by looking at them, and fixed:
 Touch ID on a real Mac (the prompt's words, the lockout after failures, a lid closed on an external
 keyboard without Touch ID); Windows Hello on a real PC (its dialog in front of Lockra, fingerprint,
 face and PIN); emoji avatar text with each system's fonts. The manual checks are in
-`docs/release.md` ("Manual checks on real devices").
+`docs/release.md` ("Manual checks on real devices"); the owner decided on 2026-10-02 to make them
+on real devices with the 0.5.0 builds rather than hold the change for them.
+
+Known and accepted (the owner's decision, 2026-10-02): on Windows, robius-authentication looks at
+Windows Hello again just before its prompt and asks for the signed-in account's Windows password
+when Hello has become unavailable since Lockra's own look an instant earlier (`docs/security.md`).
+Avoiding that prompt altogether would take Windows' window-owned interop call, which is `unsafe` in
+Rust, or a patched copy of the dependency; neither was wanted.

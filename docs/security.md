@@ -34,8 +34,11 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   a file edited to skip it no longer opens, and a settings file cannot turn it off. The prompt's
   words come from the interface; failures and cancellations are the platform's to count (macOS and
   Windows lock the sensor out after repeated failures), and the master password always unlocks.
-  Windows Hello's own fallback is its PIN; the Windows account password is never offered in its
-  place. The platform calls go through robius-authentication, so Lockra's crates keep forbidding
+  Windows Hello's own fallback is its PIN. Lockra asks Windows whether Hello is ready before each
+  check and offers none without it; robius-authentication looks again just before its prompt and,
+  if Hello became unavailable in that instant (busy with another app's prompt, a reader unplugged),
+  asks for the password of the signed-in Windows account instead, which Windows verifies for that
+  same account: a password in place of the fingerprint, not a way around the check. The platform calls go through robius-authentication, so Lockra's crates keep forbidding
   unsafe code. A release build only ever asks the platform (only a debug build honours
   `LOCKRA_DEV_BIOMETRIC=touch_id` or `windows_hello`, a stand-in that always passes, for headless
   test runs).

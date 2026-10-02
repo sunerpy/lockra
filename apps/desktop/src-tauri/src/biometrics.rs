@@ -1,7 +1,9 @@
 //! Touch ID (macOS) and Windows Hello (Windows) before "remember on this device" unlocks. The
-//! platform calls are robius-authentication's, so this crate keeps forbidding unsafe code; whether
-//! Windows Hello is set up comes from `UserConsentVerifier`, so its password fallback (a Windows
-//! account password instead of Hello) is never offered. Elsewhere there is no check to offer.
+//! platform calls are robius-authentication's, so this crate keeps forbidding unsafe code. Without
+//! Windows Hello, robius-authentication asks for the Windows account password instead; Lockra asks
+//! `UserConsentVerifier` first and offers no check without Hello, so that prompt comes only when
+//! Hello stops being available between its look and robius-authentication's own, an instant later
+//! (docs/security.md). Elsewhere there is no check to offer.
 
 use lockra_core::ports::{BiometricError, Biometrics};
 use lockra_core::ui::BiometricKind;
@@ -31,7 +33,7 @@ impl Biometrics for PlatformBiometrics {
     fn verify(&self, reason: &str) -> Result<(), BiometricError> {
         use robius_authentication::{AndroidText, BiometricStrength, Context, PolicyBuilder, Text, WindowsText};
 
-        // Never the account password robius-authentication falls back to without Hello.
+        // Without Hello, robius-authentication would ask for the account password: no check at all.
         #[cfg(windows)]
         if !windows_hello_ready() {
             return Err(BiometricError::Unavailable);
