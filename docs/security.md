@@ -151,7 +151,9 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   to the other. A password no device uses any more opens nothing the storage holds; a copy of the
   storage taken earlier still opens with it, since the data key never changes (see Residual
   risks). New storage settings are taken only where a snapshot of this space opens under its data
-  key, and a run that started before the settings changed stops before it writes.
+  key. A run that started under the old settings writes nothing more there once they changed,
+  except a write already on its way, which may still land at the old place: the space at the new
+  place stays whole, and what lands at the old place is ciphertext like everything it held.
 
 ## Residual risks
 

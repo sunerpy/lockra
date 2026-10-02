@@ -42,7 +42,9 @@ pub(crate) struct SyncLocal {
     #[serde(default)]
     pub state: SyncState,
     /// This device's keyring: the data key under this vault's master password and the sync key
-    /// (Base64). Its snapshots carry it; a new master password seals it again.
+    /// (Base64). Its snapshots carry it; a new master password seals it again. Empty in a space
+    /// kept before the keyrings moved into the snapshots, which must still open.
+    #[serde(default)]
     pub keyring: String,
     /// The storage holds this keyring: a run wrote it, or found it there, since it was sealed.
     #[serde(default)]
@@ -273,6 +275,25 @@ mod tests {
         assert_eq!(device_name(&"x".repeat(100), Platform::Linux).chars().count(), MAX_DEVICE_NAME_CHARS);
         assert_eq!(device_name(" \u{7} ", Platform::Macos), "macOS");
         assert_eq!(device_name("", Platform::Windows), "Windows");
+    }
+
+    #[test]
+    fn a_space_kept_without_a_keyring_still_opens() {
+        // Kept by a build from before the keyrings moved into the snapshots: the vault opens, and
+        // the snapshot goes out with no keyring until a new master password seals one.
+        let storage = StorageConfig::Webdav {
+            url: "https://dav.example.com/".into(),
+            prefix: String::new(),
+            username: "me".into(),
+            password: Zeroizing::new("x".into()),
+        };
+        let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+        let mut kept = serde_json::to_value(SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")).unwrap();
+        kept.as_object_mut().unwrap().remove("keyring");
+        kept["pending_keyring"] = serde_json::json!("b2xk");
+        let opened: SyncLocal = serde_json::from_value(kept).unwrap();
+        assert!(opened.keyring().unwrap().is_empty());
+        assert_eq!(opened.keys().unwrap().space_id(), keys.space_id());
     }
 
     #[test]
