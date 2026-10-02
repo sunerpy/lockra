@@ -9,7 +9,7 @@ use lockra_transfer::{Item, Origin};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
-use crate::entry::{Entry, VaultData, clean_name};
+use crate::entry::{AccountColor, Entry, VaultData, clean_mark, clean_name};
 use crate::ui::{CandidateAction, CandidateStatus, CandidateView, GoogleBatchView, ImportSource, ImportView};
 
 /// What the user chose for one candidate.
@@ -43,8 +43,16 @@ struct Candidate {
     source: ImportSource,
     origin: Origin,
     item: Item,
-    /// Group and pin carried over from a Lockra backup.
-    extras: Option<(Option<String>, bool)>,
+    /// What a Lockra backup's entry brings along.
+    extras: Option<Extras>,
+}
+
+/// A backup entry's group, pin, colour and mark: the account is restored as it looked.
+struct Extras {
+    group: Option<String>,
+    favorite: bool,
+    color: AccountColor,
+    mark: Option<String>,
 }
 
 #[derive(Default)]
@@ -80,15 +88,16 @@ impl ImportSession {
         self.add(source, Origin::Google, items);
     }
 
-    /// Add the entries of a Lockra backup, keeping their group and pin.
+    /// Add the entries of a Lockra backup, keeping their group, pin, colour and mark.
     pub(crate) fn add_backup(&mut self, source: &ImportSource, entries: Vec<Entry>) {
         for entry in entries {
-            let extras = Some((entry.group.clone(), entry.favorite));
-            self.push(source.clone(), Origin::Backup, Item::Account(entry.to_auth()), extras);
+            let auth = entry.to_auth();
+            let extras = Extras { group: entry.group, favorite: entry.favorite, color: entry.color, mark: entry.mark };
+            self.push(source.clone(), Origin::Backup, Item::Account(auth), Some(extras));
         }
     }
 
-    fn push(&mut self, source: ImportSource, origin: Origin, item: Item, extras: Option<(Option<String>, bool)>) {
+    fn push(&mut self, source: ImportSource, origin: Origin, item: Item, extras: Option<Extras>) {
         let id = u32::try_from(self.candidates.len()).unwrap_or(u32::MAX);
         self.candidates.push(Candidate { id, source, origin, item, extras });
     }
@@ -170,22 +179,26 @@ impl ImportSession {
                 (CandidateStatus::New | CandidateStatus::Conflict { .. }, CandidateAction::Add) | (CandidateStatus::New, CandidateAction::Replace) => {
                     let mut entry = Entry::from_auth(auth.clone(), candidate.origin, now_ms);
                     entry.stamp = data.tick(now_ms);
-                    if let Some((group, favorite)) = &candidate.extras {
-                        entry.group = group.clone();
-                        entry.favorite = *favorite;
+                    if let Some(extras) = &candidate.extras {
+                        entry.group = extras.group.clone();
+                        entry.favorite = extras.favorite;
+                        entry.color = extras.color;
+                        entry.mark = extras.mark.as_deref().and_then(clean_mark);
                     }
                     data.entries.push(entry);
                     outcome.added += 1;
                 }
                 // A new secret is a new account to the other devices of a sync space (an HOTP counter
                 // starts again with it): the old entry goes, and the new one takes its place, its
-                // group and its pin.
+                // group, its pin and its look.
                 (CandidateStatus::Conflict { entry_id }, CandidateAction::Replace) => match data.remove(entry_id, now_ms) {
                     Some((index, old)) => {
                         let mut entry = Entry::from_auth(auth.clone(), candidate.origin, now_ms);
                         entry.stamp = data.tick(now_ms);
                         entry.group = old.group;
                         entry.favorite = old.favorite;
+                        entry.color = old.color;
+                        entry.mark = old.mark;
                         entry.created_at_ms = old.created_at_ms;
                         data.entries.insert(index, entry);
                         outcome.replaced += 1;
