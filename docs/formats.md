@@ -73,8 +73,10 @@ refused (`VaultUnsupported`). The entries:
 | `created_at_ms`, `updated_at_ms`, `last_used_at_ms` | `last_used_at_ms` stays on this device: it does not sync                 |
 | `stamp`                                             | `{wall_ms, counter, device}`: when it last changed (§9)                  |
 
-`tombstones` lists deleted accounts as `{id, stamp}`, so that a deletion reaches the other
-devices of a sync space. `local` is this device's own part and never leaves the vault file (no
+`tombstones` lists deleted accounts as `{id, stamp, counter?}` (an HOTP account's counter at its
+deletion), so that a deletion reaches the other devices of a sync space. Replacing an account's
+secret through an import gives it a new id (the old id is tombstoned), so its HOTP counter starts
+again with the new secret. `local` is this device's own part and never leaves the vault file (no
 backup, no sync): `clock` (its device number and the latest stamp) and, with sync on, `sync` (the
 storage settings and credentials, the space id, its data key, the sync key, this device's name
 and what the runs remember).
@@ -205,10 +207,10 @@ WebDAV folder):
 Every object is framed like the container: `magic (8) | header length (u32 LE) | header (JSON, ≤
 16 KiB) | ciphertext`, the ciphertext authenticated with every byte before it as associated data.
 
-| Object   | Magic      | Header                                             | Ciphertext                                                                               |
-| -------- | ---------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| keyring  | `LKSKEYR1` | `{format: 1, space_id, created_at_ms, kdf, nonce}` | the space's 32-byte data key                                                             |
-| snapshot | `LKSDEVS1` | `{format: 1, space_id, tag, nonce}`                | `seq`, `written_at_ms`, the device name, the payload; padded to a multiple of 4096 bytes |
+| Object   | Magic      | Header                                     | Ciphertext                                                                               |
+| -------- | ---------- | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| keyring  | `LKSKEYR1` | `{format: 1, space_id, stamp, kdf, nonce}` | the space's 32-byte data key                                                             |
+| snapshot | `LKSDEVS1` | `{format: 1, space_id, tag, nonce}`        | `seq`, `written_at_ms`, the device name, the payload; padded to a multiple of 4096 bytes |
 
 - **Keys.** The keyring is wrapped under HKDF-SHA256(salt = space id, ikm = Argon2id(master
   password, `kdf`) ‖ sync key, info `lockra-sync v1 keyring`); a keyring asking for more than the
@@ -220,11 +222,18 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
 - **Payload.** `{format: 1, entries, tombstones}` as in the vault (§2), without
   `last_used_at_ms`. A device writes only its own snapshot, its sequence number one higher each
   time, and only when its device name or payload changed; S3 writes carry `If-None-Match: *` or
-  `If-Match: <etag>`.
+  `If-Match: <etag>`. An object larger than 16 MiB is never read (`MAX_OBJECT_BYTES`): it is
+  reported as unreadable.
+- **The keyring's stamp** is the stamp of the change that sealed it (creating the space, or a new
+  master password). A device writing a keyring under a new master password first reads the
+  stored one and leaves it if its stamp is later: the space follows the latest password.
 - **Merge.** Last writer wins per account, on the stamps: a hybrid logical clock
   `(wall_ms, counter, device)` that follows wall time, never goes back on a device and comes after
   every stamp the device has seen. A tombstone at or after an account's stamp removes it; a change
-  after the deletion brings it back. Merging is commutative, associative and idempotent.
+  after the deletion brings it back. An HOTP counter is the exception to "the whole later version
+  wins": an account and its tombstone carry the highest counter any of their versions reached, so
+  a code once shown never comes back on any device. Merging is commutative, associative and
+  idempotent.
 - **The sync key** is `LKS1-` and 14 groups of four Base32 characters: the 32-byte key and three
   bytes of its SHA-256, so a mistyped character is caught. Case, spaces and dashes do not matter.
 - **An invitation** is `lockra-invite:1:` and Base64url (no padding) of

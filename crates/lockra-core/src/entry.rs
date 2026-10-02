@@ -57,6 +57,22 @@ impl Record for Entry {
     fn stamp(&self) -> Hlc {
         self.stamp
     }
+
+    /// An HOTP counter never goes back on any device: a code once shown must not come again.
+    fn counter(&self) -> Option<u64> {
+        match self.kind {
+            OtpKind::Hotp { counter } => Some(counter),
+            OtpKind::Totp { .. } => None,
+        }
+    }
+
+    fn raise_counter(&mut self, floor: u64) {
+        if let OtpKind::Hotp { counter } = &mut self.kind
+            && *counter < floor
+        {
+            *counter = floor;
+        }
+    }
 }
 
 impl Entry {
@@ -307,6 +323,9 @@ impl VaultData {
                 entry.stamp = Hlc { wall_ms: entry.updated_at_ms, counter: 0, device };
             }
         }
+        // A clock behind the payload's stamps (a new local part, another device's backup) would
+        // stamp the next change before the version it replaces.
+        data.observe_stamps();
         Ok(data)
     }
 
@@ -341,35 +360,49 @@ impl VaultData {
         }
     }
 
-    /// Delete entry `id`, leaving a tombstone: the entry and where it was.
+    /// Delete entry `id`, leaving a tombstone (with its HOTP counter): the entry and where it was.
     pub(crate) fn remove(&mut self, id: Uuid, now_ms: u64) -> Option<(usize, Entry)> {
         let index = self.entries.iter().position(|e| e.id == id)?;
         let stamp = self.tick(now_ms);
         let removed = self.entries.remove(index);
-        self.bury(id, stamp);
+        self.bury(Tombstone { id, stamp, counter: removed.counter() });
         Some((index, removed))
     }
 
-    fn bury(&mut self, id: Uuid, stamp: Hlc) {
-        match self.tombstones.iter_mut().find(|t| t.id == id) {
-            Some(tombstone) => tombstone.stamp = tombstone.stamp.max(stamp),
-            None => self.tombstones.push(Tombstone { id, stamp }),
+    /// Keep `tombstone`: the later deletion and the higher counter of the two.
+    fn bury(&mut self, tombstone: Tombstone) {
+        match self.tombstones.iter_mut().find(|t| t.id == tombstone.id) {
+            Some(own) => {
+                own.stamp = own.stamp.max(tombstone.stamp);
+                own.counter = own.counter.max(tombstone.counter);
+            }
+            None => self.tombstones.push(tombstone),
         }
     }
 
-    /// Replace the accounts by `entries` as one change made at `now_ms` (a restore that replaces):
-    /// every account gets a new stamp, and the ones that go get tombstones, so the other devices
-    /// of a sync space end up with the same accounts.
-    pub(crate) fn replace_entries(&mut self, entries: Vec<Entry>, now_ms: u64) {
-        let gone: Vec<Uuid> = self.entries.iter().map(|e| e.id).filter(|id| !entries.iter().any(|n| n.id == *id)).collect();
-        for id in gone {
-            let stamp = self.tick(now_ms);
-            self.bury(id, stamp);
+    /// Replace the accounts by a backup's `entries` as one change made at `now_ms` (a restore
+    /// that replaces): every account gets a new stamp, the ones that go get tombstones, and the
+    /// backup's own deletions are kept, so the other devices of a sync space end up with the
+    /// backup's accounts. An HOTP counter does not go back below what this vault had.
+    pub(crate) fn replace_entries(&mut self, entries: Vec<Entry>, tombstones: &[Tombstone], now_ms: u64) {
+        for tombstone in tombstones {
+            self.bury(*tombstone);
         }
-        self.entries = entries;
+        let previous = std::mem::replace(&mut self.entries, entries);
+        let gone: Vec<&Entry> = previous.iter().filter(|e| !self.entries.iter().any(|n| n.id == e.id)).collect();
+        for entry in gone {
+            let stamp = self.tick(now_ms);
+            self.bury(Tombstone { id: entry.id, stamp, counter: entry.counter() });
+        }
         for index in 0..self.entries.len() {
             let stamp = self.tick(now_ms);
-            self.entries[index].stamp = stamp;
+            let id = self.entries[index].id;
+            let floor = previous.iter().find(|p| p.id == id).and_then(Record::counter).max(self.tombstones.iter().find(|t| t.id == id).and_then(|t| t.counter));
+            let entry = &mut self.entries[index];
+            entry.stamp = stamp;
+            if let Some(floor) = floor {
+                entry.raise_counter(floor);
+            }
         }
     }
 
@@ -466,7 +499,7 @@ mod tests {
         let drop = Entry::from_auth(auth("otpauth://totp/C:d?secret=GEZDGNBV"), Origin::Uri, 1);
         let drop_id = drop.id;
         data.entries = vec![keep.clone(), drop];
-        data.replace_entries(vec![keep.clone()], 50);
+        data.replace_entries(vec![keep.clone()], &[], 50);
         assert_eq!(data.entries.len(), 1);
         assert!(data.entries[0].stamp > b, "the restore is a change made now");
         assert_eq!(data.tombstones.iter().map(|t| t.id).collect::<Vec<_>>(), [drop_id]);
@@ -500,6 +533,41 @@ mod tests {
         let hotp = Entry::from_auth(auth("otpauth://hotp/A:b?secret=JBSWY3DPEHPK3PXP&counter=5"), Origin::Uri, 1);
         assert!(hotp.same_account(&auth("otpauth://hotp/A:b?secret=JBSWY3DPEHPK3PXP&counter=9")), "a counter is state, not identity");
         let _ = Period::THIRTY;
+    }
+
+    #[test]
+    fn an_hotp_counter_survives_a_deletion_and_a_restore_but_never_goes_back() {
+        let mut data = VaultData::new();
+        let mut hotp = Entry::from_auth(auth("otpauth://hotp/Bank:card?secret=JBSWY3DPEHPK3PXP&counter=9"), Origin::Uri, 1);
+        hotp.stamp = data.tick(1);
+        let id = hotp.id;
+        data.entries.push(hotp.clone());
+        data.remove(id, 2).unwrap();
+        assert_eq!(data.tombstones[0].counter, Some(9), "the tombstone keeps the counter");
+        // A backup from before the deletion, at counter 4, with a deletion of its own.
+        let backup = Entry { kind: OtpKind::Hotp { counter: 4 }, ..hotp };
+        let elsewhere = Tombstone { id: Uuid::new_v4(), stamp: Hlc::at(3), counter: None };
+        data.replace_entries(vec![backup], &[elsewhere], 10);
+        assert_eq!(data.entries[0].kind, OtpKind::Hotp { counter: 9 }, "restored at the counter this vault reached");
+        assert!(data.entries[0].stamp > data.tombstones.iter().find(|t| t.id == id).unwrap().stamp);
+        assert!(data.tombstones.contains(&elsewhere), "the backup's deletions are kept");
+        // TOTP accounts have no counter.
+        let totp = Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1);
+        assert_eq!(totp.counter(), None);
+        let mut raised = totp.clone();
+        raised.raise_counter(5);
+        assert_eq!(raised, totp);
+    }
+
+    #[test]
+    fn opening_a_payload_moves_the_clock_past_its_stamps() {
+        let mut ahead = VaultData::new();
+        let mut entry = Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1);
+        entry.stamp = Hlc { wall_ms: 9_000_000_000_000, counter: 2, device: 77 };
+        ahead.entries.push(entry.clone());
+        // A backup: no local part, so a new clock that has seen nothing.
+        let mut restored = VaultData::open(&ahead.backup_bytes()).unwrap();
+        assert!(restored.tick(1_000) > entry.stamp, "a change made now comes after what the backup holds");
     }
 
     #[test]

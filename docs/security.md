@@ -122,16 +122,23 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   not the vaults, which keep every account. A copied vault writing under the same device name is
   found (on S3 by conditional writes, elsewhere by a snapshot this device did not write) and the
   device takes a new number; a write whose answer was lost (a dropped connection, the vault
-  locked meanwhile) is recorded before it goes out, and recognised as this device's own.
+  locked meanwhile) is recorded before it goes out, and recognised as this device's own. An
+  object larger than any snapshot (16 MiB) is not read at all. An HOTP counter never goes back on
+  any device, whichever version of the account wins.
 - **The credentials stay in the vault.** The storage settings and credentials, the data key and
   the sync key are in the vault's encrypted local part: never in `settings.json`, never in a
   backup (a restored backup joins its space again), and never sent back to the webview, which is
-  shown the storage without its secret.
+  shown the storage without its secret. An address carrying a user name or password is refused:
+  the credentials go in their own fields.
 - **Transport.** HTTPS only, rustls with the operating system's verifier and the system proxy;
-  plain HTTP is refused except to this computer (the tests' servers). The requests carry the
-  storage's credentials (S3 signatures, WebDAV basic authentication inside TLS) and ciphertext.
+  plain HTTP is refused except to this computer (the tests' servers), and a redirect may not lead
+  to it either. The requests carry the storage's credentials (S3 signatures, WebDAV basic
+  authentication inside TLS) and ciphertext.
 - **A new master password** re-wraps the keyring on the next run (the data key stays); until then
-  the old password still joins new devices.
+  the old password still joins new devices. The keyring is stamped, and a device does not write
+  its keyring over a later one: when two devices change the master password apart, the later
+  change is the one that joins new devices. New storage settings are taken only where this
+  space's keyring is.
 
 ## Residual risks
 

@@ -12,9 +12,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 pub use lockra_sync::{ConfigError, StorageConfig};
-use lockra_sync::{ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SyncError};
+use lockra_sync::{MAX_OBJECT_BYTES, ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SyncError};
 use opendal::layers::{RetryLayer, TimeoutLayer};
 use opendal::{ErrorKind, Operator};
+use url::Url;
 
 /// How long opening a connection may take.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -22,6 +23,8 @@ pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 /// Attempts of a request that failed on the way (the first one included).
 const ATTEMPTS: usize = 3;
+/// Redirects followed at most.
+const MAX_REDIRECTS: usize = 5;
 
 /// A sync space's storage, ready for requests.
 pub struct Storage {
@@ -63,35 +66,63 @@ impl Storage {
         let transport = opendal::HttpTransporter::new(opendal_http_transport_reqwest::ReqwestTransport::new(http_client()?));
         let operator = operator
             .with_context(opendal::OperationContext::new().with_http_transport(transport))
-            .layer(TimeoutLayer::new().with_timeout(REQUEST_TIMEOUT))
+            // Both: the control operations, and the reading, writing and listing themselves (whose
+            // own default is 10 s).
+            .layer(TimeoutLayer::new().with_timeout(REQUEST_TIMEOUT).with_io_timeout(REQUEST_TIMEOUT))
             .layer(RetryLayer::new().with_max_times(ATTEMPTS - 1).with_jitter());
         Ok(Self { operator, conditional: AtomicBool::new(conditional) })
     }
 }
 
 /// The HTTP client: rustls on ring (the process's provider, as the update check installs it), the
-/// system's verifier and proxy, bounded connection time.
+/// system's verifier and proxy, bounded connection time. A redirect may not leave HTTPS (plain
+/// HTTP only to this computer, as for the address itself).
 fn http_client() -> Result<reqwest::Client, SyncError> {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
+    let redirects = reqwest::redirect::Policy::custom(|attempt| {
+        if attempt.previous().len() >= MAX_REDIRECTS {
+            attempt.stop()
+        } else if redirect_allowed(attempt.url()) {
+            attempt.follow()
+        } else {
+            attempt.error("a redirect to plain HTTP")
+        }
+    });
     reqwest::Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
         .timeout(REQUEST_TIMEOUT)
         .user_agent("Lockra")
-        .https_only(false)
+        .redirect(redirects)
         .build()
         .map_err(|e| SyncError::Storage(e.to_string()))
 }
 
-/// The storage's error, as the sync engine tells them apart.
+/// Where a redirect may lead: HTTPS anywhere, plain HTTP only to this computer.
+fn redirect_allowed(url: &Url) -> bool {
+    match url.scheme() {
+        "https" => true,
+        "http" => url.host_str().is_some_and(|host| {
+            host == "localhost" || host.trim_matches(|c| c == '[' || c == ']').parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback())
+        }),
+        _ => false,
+    }
+}
+
+/// The storage's error, as the sync engine tells them apart. OpenDAL classifies by service: a
+/// WebDAV server refusing the credentials (401) is left `Unexpected` with its response attached,
+/// and a failure retried until the attempts ran out is marked persistent rather than temporary.
 fn map(error: opendal::Error) -> SyncError {
+    let text = error.to_string();
     match error.kind() {
         ErrorKind::PermissionDenied => SyncError::Denied,
-        ErrorKind::ConditionNotMatch => SyncError::Conflict,
-        ErrorKind::RateLimited => SyncError::Network(error.to_string()),
-        _ if error.is_temporary() => SyncError::Network(error.to_string()),
-        _ => SyncError::Storage(error.to_string()),
+        // A failed condition (412), or a conditional write racing another (S3's OperationAborted).
+        ErrorKind::ConditionNotMatch | ErrorKind::Conflict => SyncError::Conflict,
+        ErrorKind::RateLimited => SyncError::Network(text),
+        _ if text.contains("status: 401") => SyncError::Denied,
+        _ if error.is_temporary() || error.is_persistent() => SyncError::Network(text),
+        _ => SyncError::Storage(text),
     }
 }
 
@@ -121,7 +152,21 @@ impl RemoteStore for Storage {
 
     fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
         Box::pin(async move {
-            match self.operator.read(path).await {
+            // Its size first: a larger object than any snapshot is not read, and the read asks for
+            // no more than the size (a server sending more is not listened to). No etag: the
+            // listing's, taken before the read, is the one a run may skip by.
+            let size = match self.operator.stat(path).await {
+                Ok(meta) => meta.content_length(),
+                Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+                Err(e) => return Err(map(e)),
+            };
+            if size > MAX_OBJECT_BYTES {
+                return Err(SyncError::Corrupted);
+            }
+            if size == 0 {
+                return Ok(Some((Vec::new(), None)));
+            }
+            match self.operator.read_with(path).range(0..size).await {
                 Ok(buffer) => Ok(Some((buffer.to_vec(), None))),
                 Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
                 Err(e) => Err(map(e)),
@@ -187,9 +232,39 @@ mod tests {
     fn storage_errors_map_to_what_the_engine_distinguishes() {
         assert_eq!(map(opendal::Error::new(ErrorKind::PermissionDenied, "403")), SyncError::Denied);
         assert_eq!(map(opendal::Error::new(ErrorKind::ConditionNotMatch, "412")), SyncError::Conflict);
+        assert_eq!(map(opendal::Error::new(ErrorKind::Conflict, "OperationAborted")), SyncError::Conflict);
         assert!(matches!(map(opendal::Error::new(ErrorKind::RateLimited, "429")), SyncError::Network(_)));
         assert!(matches!(map(opendal::Error::new(ErrorKind::Unexpected, "timeout").set_temporary()), SyncError::Network(_)));
-        assert!(matches!(map(opendal::Error::new(ErrorKind::Unexpected, "500")), SyncError::Storage(_)));
+        // Retried until the attempts ran out.
+        assert!(matches!(map(opendal::Error::new(ErrorKind::Unexpected, "dns").set_temporary().set_persistent()), SyncError::Network(_)));
+        // WebDAV's 401, as OpenDAL leaves it.
+        let unauthorized = opendal::Error::new(ErrorKind::Unexpected, "").with_context("response", "Parts { status: 401, version: HTTP/1.1 }");
+        assert_eq!(map(unauthorized), SyncError::Denied);
+        assert!(matches!(map(opendal::Error::new(ErrorKind::Unexpected, "400")), SyncError::Storage(_)));
+        assert!(matches!(map(opendal::Error::new(ErrorKind::ConfigInvalid, "NoSuchBucket")), SyncError::Storage(_)));
+    }
+
+    #[test]
+    fn a_redirect_never_leaves_https_but_for_this_computer() {
+        for (url, allowed) in [
+            ("https://s3.example.com/x", true),
+            ("http://127.0.0.1:9000/x", true),
+            ("http://localhost/x", true),
+            ("http://[::1]:9000/x", true),
+            ("http://s3.example.com/x", false),
+            ("http://10.0.0.1/x", false),
+            ("ftp://example.com/x", false),
+        ] {
+            assert_eq!(redirect_allowed(&Url::parse(url).unwrap()), allowed, "{url}");
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unreachable_storage_is_a_network_failure() {
+        // A closed port on this computer: refused at once, retried, then given up.
+        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let storage = Storage::open(&webdav(&format!("http://127.0.0.1:{port}/dav/"))).unwrap();
+        assert!(matches!(storage.list("x/").await, Err(SyncError::Network(_))));
     }
 
     #[test]

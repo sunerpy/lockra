@@ -17,8 +17,8 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::SyncError;
 use crate::frame::{KEY_LEN, NONCE_LEN, Parsed, b64, cipher, header_bytes, hkdf32, parse, random};
+use crate::{Hlc, SyncError};
 
 const KEYRING_MAGIC: &[u8; 8] = b"LKSKEYR1";
 const KEYRING_FORMAT: u32 = 1;
@@ -159,17 +159,36 @@ pub(crate) fn is_tag(text: &str) -> bool {
 struct KeyringHeader {
     format: u32,
     space_id: Uuid,
-    created_at_ms: u64,
+    /// When the keyring was sealed: a new master password's keyring replaces only an older one.
+    stamp: Hlc,
     kdf: KdfParams,
     #[serde(with = "b64")]
     nonce: [u8; NONCE_LEN],
 }
 
-/// The keyring object of `keys`' space: the data key wrapped under `password` and `sync_key`.
-pub fn seal_keyring(keys: &SpaceKeys, sync_key: &SyncKey, password: &[u8], cost: KdfCost, now_ms: u64) -> Result<Vec<u8>, SyncError> {
+/// What a keyring object's header says, read without opening it: its space and when it was
+/// sealed. Not authenticated (only opening the keyring proves it), so it may decide only what is
+/// harmless to get wrong, such as not overwriting a keyring that reads as newer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyringInfo {
+    /// The space.
+    pub space_id: Uuid,
+    /// When it was sealed.
+    pub stamp: Hlc,
+}
+
+/// The header of a keyring object.
+pub fn keyring_info(bytes: &[u8]) -> Result<KeyringInfo, SyncError> {
+    let parsed: Parsed<'_, KeyringHeader> = parse(bytes, KEYRING_MAGIC, KEYRING_FORMAT)?;
+    Ok(KeyringInfo { space_id: parsed.header.space_id, stamp: parsed.header.stamp })
+}
+
+/// The keyring object of `keys`' space: the data key wrapped under `password` and `sync_key`,
+/// sealed at `stamp` (a change of the device that seals it).
+pub fn seal_keyring(keys: &SpaceKeys, sync_key: &SyncKey, password: &[u8], cost: KdfCost, stamp: Hlc) -> Result<Vec<u8>, SyncError> {
     let kdf = KdfParams::fresh(cost).map_err(|_| SyncError::Random)?;
     let kek = keyring_kek(&kdf, keys.space_id, sync_key, password)?;
-    let header = KeyringHeader { format: KEYRING_FORMAT, space_id: keys.space_id, created_at_ms: now_ms, kdf, nonce: random()? };
+    let header = KeyringHeader { format: KEYRING_FORMAT, space_id: keys.space_id, stamp, kdf, nonce: random()? };
     let mut object = header_bytes(KEYRING_MAGIC, &header)?;
     let wrapped = cipher(&kek).encrypt(&XNonce::from(header.nonce), Payload { msg: keys.dek.as_ref(), aad: &object }).map_err(|_| SyncError::Corrupted)?;
     object.extend_from_slice(&wrapped);
@@ -253,7 +272,7 @@ mod tests {
     fn the_keyring_opens_only_with_the_password_and_the_sync_key_of_its_space() {
         let keys = space();
         let sync_key = SyncKey::generate().unwrap();
-        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, 1_000).unwrap();
+        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, Hlc::at(1_000)).unwrap();
         let opened = open_keyring(&object, keys.space_id(), &sync_key, PASSWORD).unwrap();
         assert_eq!(*opened.dek, *keys.dek);
         assert_eq!(opened.space_id(), keys.space_id());
@@ -271,10 +290,21 @@ mod tests {
     }
 
     #[test]
+    fn the_header_names_the_space_and_when_it_was_sealed() {
+        let keys = space();
+        let sync_key = SyncKey::generate().unwrap();
+        let stamp = Hlc { wall_ms: 5, counter: 1, device: 7 };
+        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, stamp).unwrap();
+        assert_eq!(keyring_info(&object).unwrap(), KeyringInfo { space_id: keys.space_id(), stamp });
+        assert_eq!(keyring_info(b"LKSDEVS1 not a keyring").err(), Some(SyncError::NotLockra));
+        assert!(keyring_info(&object[..10]).is_err());
+    }
+
+    #[test]
     fn a_keyring_naming_hostile_kdf_parameters_is_refused_before_any_work() {
         let keys = space();
         let sync_key = SyncKey::generate().unwrap();
-        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, 1_000).unwrap();
+        let object = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, Hlc::at(1_000)).unwrap();
         let parsed: Parsed<'_, KeyringHeader> = parse(&object, KEYRING_MAGIC, KEYRING_FORMAT).unwrap();
         let mut header = serde_json::to_value(&parsed.header).unwrap();
         header["kdf"]["m_kib"] = serde_json::json!(16 * 1024 * 1024);

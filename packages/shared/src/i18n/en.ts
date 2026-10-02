@@ -612,7 +612,8 @@ export const en: Messages = {
     update_cancelled: "The administrator prompt was cancelled; nothing was installed",
     sync_off: "Sync is not set up on this device",
     sync_already_on: "Sync is already on for this device; turn it off first",
-    sync_config_invalid: "The storage address is not valid, or a required field is empty",
+    sync_config_invalid:
+      "The storage address is not valid (it may not hold a user name or password), or a required field is empty",
     sync_insecure: "The storage must be reached over HTTPS (plain HTTP only to this computer)",
     sync_network: "The storage could not be reached",
     sync_denied: "The storage refused access; check the access key or password",

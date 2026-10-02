@@ -4,10 +4,11 @@
 
 ## 当前版本
 
-Lockra 提供电脑上的验证器所需的功能：支持所有标准账号的验证码，在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，otpauth 链接与列表，加密备份与自动备份，通过你自己的存储进行端到端加密的多设备同步，对保险库、剪贴板和屏幕的保护，以及经过签名校验的应用内更新和各平台的一键安装。欢迎在[问题跟踪](https://github.com/sunerpy/lockra/issues)中提出建议。
+Lockra 提供电脑上的验证器所需的功能：支持所有标准账号的验证码，在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，otpauth 链接与列表，加密备份与自动备份，对保险库、剪贴板和屏幕的保护，以及经过签名校验的应用内更新和各平台的一键安装。欢迎在[问题跟踪](https://github.com/sunerpy/lockra/issues)中提出建议。
 
 ## 计划中
 
+- **多设备同步** <StatusTag status="building" />：通过你自己的 S3 兼容存储桶或 WebDAV 文件夹进行端到端加密同步，随 0.4.0 版提供（[多设备同步](/zh/backup/sync)）。
 - **Android 应用** <StatusTag status="planned" />：在手机上使用同一个保险库，用相机或截图扫描二维码，用指纹解锁，并与其他设备同步。
 
 ## 有意不做的功能

@@ -13,8 +13,8 @@ use std::time::Duration;
 use data_encoding::BASE64;
 use lockra_otp::{OtpKind, base32, hotp, totp_window, uri};
 use lockra_sync::{
-    Invite, Outcome as SyncOutcome, PutCondition, RemoteStore, Space, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, keyring_path, open_keyring,
-    remove_device, seal_keyring, step_with,
+    Invite, Outcome as SyncOutcome, PutCondition, RemoteStore, Space, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, keyring_info, keyring_path,
+    open_keyring, remove_device, seal_keyring, step_with,
 };
 use lockra_transfer::{Item, Origin, detect, microsoft, qr, text};
 use lockra_vault::{DeviceKey, DeviceSlot, FileKind, KdfCost, Opened, Sealed, read_header, write_atomic};
@@ -392,19 +392,23 @@ impl Core {
     /// returns its key.
     pub async fn change_password(&self, current: Zeroizing<String>, new: Zeroizing<String>) -> CoreResult<()> {
         check_password(&new)?;
+        let now = self.now_ms();
         let (mut sealed, vault_id, device, space) = {
-            let st = self.lock();
-            let session = unlocked(&st)?;
-            let space = session.data.sync().map(|sync| (sync.keys(), sync.sync_key()));
-            (session.sealed.clone(), session.sealed.vault_id(), st.device_slot, space)
+            let mut st = self.lock();
+            let device = st.device_slot;
+            let session = unlocked_mut(&mut st)?;
+            // Stamped now: the newest master password's keyring is the one the space keeps.
+            let stamp = session.data.tick(now);
+            let space = session.data.sync().map(|sync| (sync.keys(), sync.sync_key(), stamp));
+            (session.sealed.clone(), session.sealed.vault_id(), device, space)
         };
         let key = if device { self.device_key(vault_id).ok() } else { None };
-        let (cost, now) = (self.shared.config.kdf, self.now_ms());
+        let cost = self.shared.config.kdf;
         let (sealed, outcome, keyring) = blocking(move || {
             let outcome = sealed.change_password(current.as_bytes(), new.as_bytes(), cost, key.as_ref())?;
             // The sync space's keyring follows the master password; the next run writes it.
             let keyring = match space {
-                Some((Ok(keys), Ok(sync_key))) => Some(seal_keyring(&keys, &sync_key, new.as_bytes(), cost, now).map_err(|e| sync_error(&e))?),
+                Some((Ok(keys), Ok(sync_key), stamp)) => Some(seal_keyring(&keys, &sync_key, new.as_bytes(), cost, stamp).map_err(|e| sync_error(&e))?),
                 _ => None,
             };
             Ok((sealed, outcome, keyring))
@@ -973,7 +977,7 @@ impl Core {
                         let before = session.data.clone();
                         // A change made now: this device's part stays, and a sync space ends up
                         // with the backup's accounts.
-                        session.data.replace_entries(data.entries, now);
+                        session.data.replace_entries(data.entries, &data.tombstones, now);
                         let entries = u32::try_from(session.data.entries.len()).unwrap_or(u32::MAX);
                         self.save(&mut st, true, move |s| s.data = before)?;
                         Some(Notice::Restored { entries })
@@ -1166,22 +1170,23 @@ impl Core {
     /// run follows.
     pub async fn sync_create(&self, storage: StorageConfig, password: Zeroizing<String>, device: String) -> CoreResult<SyncCreated> {
         storage.validate().map_err(config_error)?;
-        let sealed = {
-            let st = self.lock();
-            let session = unlocked(&st)?;
+        let now = self.now_ms();
+        let (sealed, stamp) = {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
             if session.data.sync().is_some() {
                 return Err(ErrorCode::SyncAlreadyOn.into());
             }
-            session.sealed.clone()
+            (session.sealed.clone(), session.data.tick(now))
         };
         let vault_id = sealed.vault_id();
         let remote = self.open_storage(&storage)?;
-        let (cost, now) = (self.shared.config.kdf, self.now_ms());
+        let cost = self.shared.config.kdf;
         let (keys, sync_key, keyring) = blocking(move || {
             sealed.verify_password(password.as_bytes())?;
             let sync_key = SyncKey::generate().map_err(|e| sync_error(&e))?;
             let keys = SpaceKeys::generate(sync_key.space_id()).map_err(|e| sync_error(&e))?;
-            let keyring = seal_keyring(&keys, &sync_key, password.as_bytes(), cost, now).map_err(|e| sync_error(&e))?;
+            let keyring = seal_keyring(&keys, &sync_key, password.as_bytes(), cost, stamp).map_err(|e| sync_error(&e))?;
             Ok((keys, sync_key, keyring))
         })
         .await?;
@@ -1313,15 +1318,32 @@ impl Core {
     /// password was entered again; the space must be found there.
     pub async fn sync_set_storage(&self, storage: StorageConfig, password: Zeroizing<String>) -> CoreResult<()> {
         storage.validate().map_err(config_error)?;
-        let (sealed, space_id) = {
+        let (sealed, space_id, sync_key, data_key) = {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (session.sealed.clone(), sync.space_id)
+            (session.sealed.clone(), sync.space_id, sync.sync_key.clone(), sync.data_key.clone())
         };
-        blocking(move || Ok(sealed.verify_password(password.as_bytes())?)).await?;
+        let checked = password.clone();
+        blocking(move || Ok(sealed.verify_password(checked.as_bytes())?)).await?;
         let remote = self.open_storage(&storage)?;
-        remote.get(&keyring_path(storage.prefix(), space_id)).await.map_err(|e| sync_error(&e))?.ok_or(ErrorCode::SyncSpaceNotFound)?;
+        let (bytes, _) = remote.get(&keyring_path(storage.prefix(), space_id)).await.map_err(|e| sync_error(&e))?.ok_or(ErrorCode::SyncSpaceNotFound)?;
+        // This space's keyring, not just an object at its place: its header names the space, and
+        // when it opens with this device's master password it holds this space's data key (under
+        // another device's newer password it does not open here, which is no sign of damage).
+        if keyring_info(&bytes).map_err(|e| sync_error(&e))?.space_id != space_id {
+            return Err(ErrorCode::SyncDataCorrupted.into());
+        }
+        blocking(move || {
+            let sync_key = SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?;
+            match open_keyring(&bytes, space_id, &sync_key, password.as_bytes()) {
+                Ok(keys) if *keys.data_key_text() == *data_key => Ok(()),
+                Ok(_) => Err(ErrorCode::SyncDataCorrupted.into()),
+                Err(SyncError::WrongCredentials) => Ok(()),
+                Err(error) => Err(sync_error(&error)),
+            }
+        })
+        .await?;
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
@@ -1495,7 +1517,14 @@ impl Core {
         let SyncJob { space_id, remote, prefix, keys, device, device_name, mut state, mut working, pending_keyring } = self.sync_job()?;
         let remote = remote.ok_or(SyncError::Interrupted)?;
         if let Some(keyring) = pending_keyring {
-            remote.put(&keyring_path(&prefix, space_id), keyring.clone(), PutCondition::Always).await?;
+            let path = keyring_path(&prefix, space_id);
+            let ours = keyring_info(&keyring)?.stamp;
+            // Another device's later master password is the space's now: ours does not go over it.
+            let newer =
+                remote.get(&path).await?.is_some_and(|(bytes, _)| keyring_info(&bytes).is_ok_and(|theirs| theirs.space_id == space_id && theirs.stamp > ours));
+            if !newer {
+                remote.put(&path, keyring.clone(), PutCondition::Always).await?;
+            }
             self.sync_keyring_written(space_id, &keyring);
         }
         let space = Space { prefix: &prefix, keys: &keys, device, device_name: &device_name };

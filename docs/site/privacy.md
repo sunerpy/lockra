@@ -1,7 +1,7 @@
 # Privacy
 
 This page lists what Lockra stores, where, and what it sends: update checks and downloads, and,
-once you turn on sync, encrypted files to storage of your own.
+from version 0.4.0 once you turn on sync, encrypted files to storage of your own.
 
 ## What Lockra stores
 
@@ -25,8 +25,8 @@ Automatic updates** on, it also asks 10 seconds after each start and downloads a
 the background. Nothing from your accounts, your vault or your settings goes with these requests; GitHub sees the request and the address it came from, as for any download
 ([Updating](/guide/updates#updating)).
 
-With sync on, each device writes encrypted files to the S3-compatible bucket or WebDAV folder you
-set up and reads the other devices' files from there, and contacts nothing else for it. The
+With sync on (from version 0.4.0), each device writes encrypted files to the S3-compatible bucket
+or WebDAV folder you set up and reads the other devices' files from there, and contacts nothing else for it. The
 storage sees encrypted files, their sizes in steps of 4 KiB, the number of devices and when they
 write; never an account, a secret or a device name ([Sync between devices](/backup/sync)).
 

@@ -16,7 +16,7 @@ use zeroize::Zeroizing;
 
 use crate::keys::is_tag;
 use crate::object::device_name;
-use crate::{ObjectMeta, PutCondition, RemoteStore, Snapshot, SpaceKeys, SyncError, open_snapshot, seal_snapshot};
+use crate::{MAX_OBJECT_BYTES, ObjectMeta, PutCondition, RemoteStore, Snapshot, SpaceKeys, SyncError, open_snapshot, seal_snapshot};
 
 const ROOT: &str = "lockra-sync-v1";
 const EXTENSION: &str = ".lks";
@@ -185,10 +185,24 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
             continue;
         }
         others.push(tag.clone());
+        // Larger than any snapshot Lockra writes: not read at all.
+        if meta.size > MAX_OBJECT_BYTES {
+            outcome.unreadable.push(tag);
+            continue;
+        }
         if state.seen.get(&tag).is_some_and(|seen| seen.etag.is_some() && seen.etag == meta.etag) {
             continue;
         }
-        let Some((bytes, etag)) = remote.get(&format!("{dir}{}", meta.name)).await? else { continue };
+        let (bytes, etag) = match remote.get(&format!("{dir}{}", meta.name)).await {
+            Ok(Some(found)) => found,
+            Ok(None) => continue,
+            // Larger than the listing said: refused by the storage's read.
+            Err(SyncError::Corrupted) => {
+                outcome.unreadable.push(tag);
+                continue;
+            }
+            Err(other) => return Err(other),
+        };
         let snapshot = match open_snapshot(keys, &tag, &bytes) {
             Ok(snapshot) => snapshot,
             Err(SyncError::Corrupted | SyncError::Misplaced | SyncError::NotLockra | SyncError::Unsupported(_)) => {
@@ -223,10 +237,23 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
             state.own_etag = None;
             state.written_digest = None;
         }
+        // Not a snapshot of this device's, whatever it is: written again.
+        Some(meta) if meta.size > MAX_OBJECT_BYTES => {
+            state.own_etag = meta.etag.clone();
+            state.written_digest = None;
+        }
         // Not what this device last wrote: another device writing under its name, or the storage
         // went back.
         Some(meta) if meta.etag.is_none() || meta.etag != state.own_etag => {
-            if let Some((bytes, etag)) = remote.get(&own_path).await? {
+            let found = match remote.get(&own_path).await {
+                Ok(found) => found,
+                Err(SyncError::Corrupted) => {
+                    state.written_digest = None;
+                    None
+                }
+                Err(other) => return Err(other),
+            };
+            if let Some((bytes, etag)) = found {
                 match open_snapshot(keys, &own_tag, &bytes) {
                     // This device's own write, whose answer never arrived.
                     Ok(snapshot)
@@ -360,7 +387,7 @@ mod tests {
         fn delete(&mut self, n: u8, wall_ms: u64, device: u64) {
             let id = Uuid::from_bytes([n; 16]);
             self.items.retain(|i| i.id != id);
-            self.tombstones.push(Tombstone { id, stamp: Hlc { wall_ms, counter: 0, device } });
+            self.tombstones.push(Tombstone { id, stamp: Hlc { wall_ms, counter: 0, device }, counter: None });
         }
 
         fn values(&self) -> Vec<String> {
@@ -616,7 +643,7 @@ mod tests {
         let keys = keys();
         let sync_key = SyncKey::generate().unwrap();
         let path = keyring_path(PREFIX, keys.space_id());
-        let keyring = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, 1).unwrap();
+        let keyring = seal_keyring(&keys, &sync_key, PASSWORD, KdfCost::FAST_INSECURE, Hlc::at(1)).unwrap();
         remote.put(&path, keyring.clone(), PutCondition::IfAbsent).await.unwrap();
         assert_eq!(remote.put(&path, keyring, PutCondition::IfAbsent).await.err(), Some(SyncError::Conflict), "a space is never overwritten");
         let mut laptop = Device::new(1, "Laptop");
@@ -709,5 +736,25 @@ mod tests {
         laptop.name = "A very long device name that goes on and on beyond the sixty-four characters";
         assert!(laptop.sync(&remote, &keys, 400).await.unwrap().wrote);
         assert!(!laptop.sync(&remote, &keys, 500).await.unwrap().wrote);
+    }
+
+    #[tokio::test]
+    async fn an_object_too_large_to_be_a_snapshot_is_never_read() {
+        let remote = MemoryRemote::new(true);
+        let keys = keys();
+        let huge = vec![0u8; usize::try_from(MAX_OBJECT_BYTES).unwrap() + 1];
+        let other = keys.device_tag(9);
+        remote.set_object(&device_path(PREFIX, keys.space_id(), &other), huge.clone());
+        let mut laptop = Device::new(1, "Laptop");
+        // This device's own name, filled with garbage: written over.
+        remote.set_object(&laptop.path(&keys), huge.clone());
+        laptop.doc.put(1, "GitHub", 10, 1);
+        let outcome = laptop.sync(&remote, &keys, 100).await.unwrap();
+        assert_eq!(outcome.unreadable, std::slice::from_ref(&other));
+        assert!(outcome.wrote);
+        assert!(remote.calls().iter().all(|c| !c.starts_with("get ")), "{:?}", remote.calls());
+        assert!(remote.object(&laptop.path(&keys)).unwrap().len() < 64 * 1024);
+        // A storage whose listing lies about the size still refuses the read.
+        assert_eq!(remote.get(&device_path(PREFIX, keys.space_id(), &other)).await.err(), Some(SyncError::Corrupted));
     }
 }

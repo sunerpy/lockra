@@ -27,10 +27,10 @@ mod storage;
 pub use clock::{Clock, Hlc};
 pub use error::SyncError;
 pub use invite::Invite;
-pub use keys::{SYNC_KEY_TEXT_LEN, SpaceKeys, SyncKey, open_keyring, seal_keyring};
+pub use keys::{KeyringInfo, SYNC_KEY_TEXT_LEN, SpaceKeys, SyncKey, keyring_info, open_keyring, seal_keyring};
 pub use lww::{Record, Tombstone, merge};
 pub use object::{PAD_TO, Snapshot, open_snapshot, seal_snapshot};
-pub use remote::{MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteStore};
+pub use remote::{MAX_OBJECT_BYTES, MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteStore};
 pub use step::{
     DeviceView, Outcome, PendingWrite, Persist, Replica, Seen, Space, SyncState, device_path, devices_dir, keyring_path, remove_device, spaces_dir, step,
     step_with,

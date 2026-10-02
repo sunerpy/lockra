@@ -6,6 +6,7 @@ import {
   mockSyncSpace,
   sampleEntries,
 } from "@lockra/shared/mock";
+import type { CommandName, CommandOf, ResultOf } from "@lockra/shared";
 import { act, screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../../test/render";
 
@@ -205,5 +206,66 @@ describe("Settings › Sync", () => {
     expect((await backend.getState()).sync.space).not.toBeNull();
     await backend.dispatch({ command: "vault_lock" });
     expect((await backend.getState()).sync.space).toBeNull();
+  });
+
+  it("a secret that arrives after Settings closed ends the secret view at once", async () => {
+    /** A core whose `slow` command answers only when told to. */
+    class SlowBackend extends MockBackend {
+      go: () => void = () => undefined;
+      constructor(private readonly slow: CommandName) {
+        super({
+          entries: sampleEntries(),
+          sync: slow === "sync_invite" ? mockSyncSpace() : null,
+          settings: { locale: "zh-cn" },
+        });
+      }
+      override dispatch<C extends CommandName>(command: CommandOf<C>): Promise<ResultOf<C>> {
+        if (command.command !== this.slow) return super.dispatch(command);
+        return new Promise<void>((resolve) => {
+          this.go = resolve;
+        }).then(() => super.dispatch(command));
+      }
+    }
+    // The invitation.
+    const inviting = new SlowBackend("sync_invite");
+    const first = renderApp({ backend: inviting });
+    await ready();
+    let pane = await openSync(first.user);
+    await first.user.click(pane.getByTestId("sync-invite-open"));
+    const prompt = await screen.findByRole("dialog", { name: "邀请其他设备" });
+    await first.user.type(within(prompt).getByLabelText("主密码"), MOCK_PASSWORD);
+    await first.user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
+    await first.user.keyboard("{Escape}");
+    await first.user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await act(async () => inviting.go());
+    expect(inviting.calls.map((c) => c.command).slice(-2)).toEqual([
+      "sync_invite",
+      "secret_view_closed",
+    ]);
+    first.unmount();
+
+    // The new space's sync key.
+    const creating = new SlowBackend("sync_create");
+    const second = renderApp({ backend: creating });
+    await ready();
+    pane = await openSync(second.user);
+    await second.user.click(pane.getByTestId("sync-create-open"));
+    const form = within(pane.getByTestId("sync-create"));
+    await second.user.type(form.getByLabelText("服务地址"), "https://s3.example.com");
+    await second.user.type(form.getByLabelText("区域"), "auto");
+    await second.user.type(form.getByLabelText("存储桶"), "b");
+    await second.user.type(form.getByLabelText("访问密钥 ID"), "a");
+    await second.user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
+    await second.user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
+    await second.user.click(form.getByRole("button", { name: "开始同步" }));
+    await second.user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await act(async () => creating.go());
+    expect(creating.calls.map((c) => c.command).slice(-2)).toEqual([
+      "sync_create",
+      "secret_view_closed",
+    ]);
+    expect(screen.queryByTestId("sync-created")).not.toBeInTheDocument();
   });
 });

@@ -457,3 +457,83 @@ async fn the_storage_is_opened_once_for_its_settings() {
     settle().await;
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
 }
+
+#[tokio::test(start_paused = true)]
+async fn the_latest_master_password_keeps_the_keyring_when_two_devices_change_it_apart() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    let phone = device(&transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into()).await.unwrap();
+    settle().await;
+    let store = transport.store(&s3(STORAGE_SECRET));
+    // The desktop changes its password offline: its keyring waits.
+    store.fail_next(SyncError::Network("offline".into()));
+    desktop.core.change_password(pw(MASTER), pw("desktop password")).await.unwrap();
+    settle().await;
+    assert!(space(&desktop).keyring_pending);
+    // Later, the phone changes its own, online.
+    advance(Duration::from_secs(10)).await;
+    phone.core.change_password(pw(MASTER), pw("phone password")).await.unwrap();
+    settle().await;
+    assert!(!space(&phone).keyring_pending);
+    // Back online, the desktop's older keyring does not go over the phone's.
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert!(!space(&desktop).keyring_pending);
+    let laptop = device(&transport);
+    assert_eq!(
+        code_err(laptop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("desktop password"), "Laptop".into()).await),
+        ErrorCode::SyncWrongCredentials
+    );
+    laptop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("phone password"), "Laptop".into()).await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_hotp_counter_never_goes_back_when_two_devices_advance_it_apart() {
+    let transport = Arc::new(FakeTransport::default());
+    let desktop = device(&transport);
+    desktop.core.create_vault(pw(MASTER)).await.unwrap();
+    let id = desktop.core.add_uri("otpauth://hotp/Bank:card?secret=MZXW6YTBOI&counter=0&issuer=Bank").unwrap();
+    let created = desktop.core.sync_create(s3(STORAGE_SECRET), pw(MASTER), "Desktop".into()).await.unwrap();
+    settle().await;
+    let phone = device(&transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &created.sync_key), pw(MASTER), "Phone".into()).await.unwrap();
+    settle().await;
+    let counter = |h: &Harness| match h.core.state().entries[0].kind {
+        OtpKind::Hotp { counter } => counter,
+        OtpKind::Totp { .. } => unreachable!(),
+    };
+    // Apart: the desktop shows three more codes and syncs them; the phone, not synced since, shows
+    // one more code later, from the counter it had.
+    for _ in 0..3 {
+        desktop.core.hotp_next(id).unwrap();
+    }
+    advance(SYNC_DEBOUNCE).await;
+    assert_eq!(counter(&phone), 0);
+    phone.core.hotp_next(id).unwrap();
+    assert_eq!(counter(&phone), 1);
+    for h in [&phone, &desktop] {
+        h.core.sync_now().unwrap();
+        settle().await;
+    }
+    assert_eq!((counter(&desktop), counter(&phone)), (3, 3), "the later change wins, but no code is shown twice");
+}
+
+#[tokio::test(start_paused = true)]
+async fn new_storage_settings_must_lead_to_this_spaces_keyring() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, _) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    let original = transport.store(&s3(STORAGE_SECRET));
+    let keyring = original.paths().into_iter().find(|p| p.ends_with("keyring.lks")).unwrap();
+    let relative = keyring.strip_prefix("sync/").unwrap().to_owned();
+    // Moved to a WebDAV folder (no prefix): a damaged keyring there is refused, the real one taken.
+    let moved = webdav();
+    let there = transport.store(&moved);
+    there.set_object(&relative, b"LKSKEYR1 not a keyring".to_vec());
+    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), pw(MASTER)).await), ErrorCode::SyncDataCorrupted);
+    there.set_object(&relative, original.object(&keyring).unwrap());
+    desktop.core.sync_set_storage(moved, pw(MASTER)).await.unwrap();
+    settle().await;
+    assert!(matches!(space(&desktop).storage, StorageView::Webdav { .. }));
+    assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
+}

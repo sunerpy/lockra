@@ -21,7 +21,7 @@ import {
 import { type SubmitEvent, useState } from "react";
 import { useDispatch, useSubmit } from "../../app/dispatch";
 import { JoinForm } from "../../features/sync/JoinForm";
-import { InviteDialog, SyncKeyDialog } from "../../features/sync/SecretDialogs";
+import { InviteDialog, SyncKeyDialog, useSecretAnswer } from "../../features/sync/SecretDialogs";
 import { StorageFields } from "../../features/sync/StorageFields";
 import {
   emptyStorageForm,
@@ -38,9 +38,11 @@ export function Sync() {
   const { sync } = useUiState();
   // Above the switch between the two panes: creating a space switches to the second one.
   const [created, setCreated] = useState<string | undefined>(undefined);
+  const deliver = useSecretAnswer();
+  const onCreated = (syncKey: string) => deliver(() => setCreated(syncKey));
   return (
     <SettingsPane title={t("settings.section.sync")} lede={t("sync.lede")}>
-      {sync.space === null ? <SyncOff onCreated={setCreated} /> : <SyncOn space={sync.space} />}
+      {sync.space === null ? <SyncOff onCreated={onCreated} /> : <SyncOn space={sync.space} />}
       {created !== undefined && (
         <SyncKeyDialog syncKey={created} onClose={() => setCreated(undefined)} />
       )}

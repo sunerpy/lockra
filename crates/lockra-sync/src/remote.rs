@@ -11,6 +11,10 @@ use parking_lot::Mutex;
 
 use crate::SyncError;
 
+/// The largest object a sync space holds: far above any snapshot of an authenticator's accounts, far
+/// below what would exhaust a phone's memory. A larger one is never read in full.
+pub const MAX_OBJECT_BYTES: u64 = 16 * 1024 * 1024;
+
 /// A storage call in flight.
 pub type RemoteFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, SyncError>> + Send + 'a>>;
 
@@ -43,7 +47,8 @@ pub trait RemoteStore: Send + Sync {
     fn conditional_puts(&self) -> bool;
     /// The objects directly in `dir` (a path ending in `/`); empty when the directory is absent.
     fn list<'a>(&'a self, dir: &'a str) -> RemoteFuture<'a, Vec<ObjectMeta>>;
-    /// The object at `path` and its etag; `None` when absent.
+    /// The object at `path` and its etag; `None` when absent. An object larger than
+    /// [`MAX_OBJECT_BYTES`] is [`SyncError::Corrupted`], read no further than that.
     fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>>;
     /// Write `bytes` to `path`, creating directories as needed; the new etag when the storage says.
     /// A condition that fails is [`SyncError::Conflict`].
@@ -130,7 +135,10 @@ impl RemoteStore for MemoryRemote {
     fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
         Box::pin(async move {
             self.enter(format!("get {path}"))?;
-            Ok(self.objects.lock().get(path).map(|(bytes, etag)| (bytes.clone(), Some(etag.clone()))))
+            match self.objects.lock().get(path) {
+                Some((bytes, _)) if bytes.len() as u64 > MAX_OBJECT_BYTES => Err(SyncError::Corrupted),
+                found => Ok(found.map(|(bytes, etag)| (bytes.clone(), Some(etag.clone())))),
+            }
         })
     }
 

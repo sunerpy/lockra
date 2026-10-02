@@ -177,23 +177,21 @@ impl ImportSession {
                     data.entries.push(entry);
                     outcome.added += 1;
                 }
-                (CandidateStatus::Conflict { entry_id }, CandidateAction::Replace) => {
-                    let stamp = data.tick(now_ms);
-                    if let Some(entry) = data.get_mut(entry_id) {
-                        entry.stamp = stamp;
-                        entry.issuer = clean_name(&auth.issuer);
-                        entry.account = clean_name(&auth.account);
-                        entry.kind = auth.kind;
-                        entry.algorithm = auth.algorithm;
-                        entry.digits = auth.digits;
-                        entry.secret = auth.secret.clone();
-                        entry.origin = candidate.origin;
-                        entry.updated_at_ms = now_ms;
+                // A new secret is a new account to the other devices of a sync space (an HOTP counter
+                // starts again with it): the old entry goes, and the new one takes its place, its
+                // group and its pin.
+                (CandidateStatus::Conflict { entry_id }, CandidateAction::Replace) => match data.remove(entry_id, now_ms) {
+                    Some((index, old)) => {
+                        let mut entry = Entry::from_auth(auth.clone(), candidate.origin, now_ms);
+                        entry.stamp = data.tick(now_ms);
+                        entry.group = old.group;
+                        entry.favorite = old.favorite;
+                        entry.created_at_ms = old.created_at_ms;
+                        data.entries.insert(index, entry);
                         outcome.replaced += 1;
-                    } else {
-                        outcome.skipped += 1;
                     }
-                }
+                    None => outcome.skipped += 1,
+                },
                 _ => outcome.skipped += 1,
             }
         }
@@ -278,10 +276,14 @@ mod tests {
         data.entries[0].favorite = true;
         let outcome = session.commit(&mut data, &[Choice { id: 0, action: CandidateAction::Replace }], 99);
         assert_eq!(outcome, Outcome { added: 1, replaced: 1, skipped: 0 });
-        let replaced = data.get(original_id).unwrap();
+        // In the old entry's place, as a new account: the old one leaves a tombstone.
+        let replaced = &data.entries[0];
         assert_eq!(replaced.secret.as_slice(), b"foobar");
         assert!(replaced.favorite, "a replace keeps the pin");
         assert_eq!((replaced.origin, replaced.updated_at_ms), (Origin::Google, 99));
+        assert_ne!(replaced.id, original_id);
+        assert!(data.get(original_id).is_none());
+        assert!(data.tombstones.iter().any(|t| t.id == original_id));
         assert_eq!(data.entries.len(), 2);
     }
 

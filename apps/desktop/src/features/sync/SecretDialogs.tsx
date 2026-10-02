@@ -13,7 +13,7 @@ import {
   useT,
   useUiState,
 } from "@lockra/ui";
-import { type SubmitEvent, useEffect, useId, useState } from "react";
+import { type SubmitEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useSubmit } from "../../app/dispatch";
 import { REVEAL_SECONDS } from "../entries/EntryDialogs";
 
@@ -23,6 +23,28 @@ function secondsLeft(now: number, at: number | undefined): number {
   return at === undefined
     ? REVEAL_SECONDS
     : Math.max(0, REVEAL_SECONDS - Math.max(0, Math.floor((now - at) / 1000)));
+}
+
+/** Ends the secret view a command opened in the shell (screen-capture protection on) when its
+ *  answer arrives after the view that asked for it went (Settings closed meanwhile): nothing shows
+ *  the secret, so nothing would end the view either. Returns `deliver(show)`: it shows the answer
+ *  while the asker is still on screen, and otherwise ends the secret view. */
+export function useSecretAnswer(): (show: () => void) => void {
+  const { backend } = useBackend();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  return useCallback(
+    (show: () => void) => {
+      if (mounted.current) show();
+      else void backend.dispatch({ command: "secret_view_closed" }).catch(() => undefined);
+    },
+    [backend],
+  );
 }
 
 /** While `shown`, a secret is on screen: closing (or unmounting) ends the secret view; at zero
@@ -91,6 +113,7 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
   const [password, setPassword] = useState("");
   const [invite, setInvite] = useState<{ answer: SyncInvite; at: number } | undefined>(undefined);
   const submit = useSubmit();
+  const deliver = useSecretAnswer();
   const left = secondsLeft(now, invite?.at);
   useSecretView(invite !== undefined, left, onClose);
   const onSubmit = async (event: SubmitEvent) => {
@@ -98,7 +121,7 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
     if (password === "") return;
     const answer = await submit.run(() => backend.dispatch({ command: "sync_invite", password }));
     setPassword("");
-    if (answer !== undefined) setInvite({ answer, at: Date.now() });
+    if (answer !== undefined) deliver(() => setInvite({ answer, at: Date.now() }));
   };
   if (invite === undefined) {
     return (

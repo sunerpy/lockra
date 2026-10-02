@@ -55,7 +55,7 @@ so, so mind screen sharing.
 
 ## Sync
 
-Sync is off until you set it up on storage of your own. Everything a device writes there is
+Sync (from version 0.4.0) is off until you set it up on storage of your own. Everything a device writes there is
 encrypted on the device, and the key that encrypts it opens only with both the master password and
 the sync key; a file that was altered or put back to an older version is refused. The storage's
 credentials and the sync key are kept in the encrypted vault and never in a backup.

@@ -90,7 +90,7 @@ home:
             link: /backup/#restoring-a-backup
           - title: Sync between your devices
             body: End-to-end encrypted, through an S3-compatible bucket or a WebDAV folder of your own. Lockra runs no server, and the storage sees only encrypted files.
-            status: available
+            status: building
             link: /backup/sync
       - name: Protection
         items:

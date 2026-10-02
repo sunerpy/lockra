@@ -62,7 +62,8 @@ impl fmt::Debug for StorageConfig {
 /// Why a [`StorageConfig`] cannot be used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigError {
-    /// The endpoint or URL is not an address.
+    /// The endpoint or URL is not an address, or carries a user name or password (which would be
+    /// kept and shown with the address; they go in their own fields).
     Address,
     /// Plain HTTP to another computer: the credentials would cross the network readable.
     Insecure,
@@ -100,6 +101,9 @@ impl StorageConfig {
             return Err(ConfigError::Missing);
         }
         let parsed = Url::parse(address.trim()).map_err(|_| ConfigError::Address)?;
+        if !parsed.username().is_empty() || parsed.password().is_some() {
+            return Err(ConfigError::Address);
+        }
         let host = parsed.host_str().ok_or(ConfigError::Address)?;
         match parsed.scheme() {
             "https" => Ok(()),
@@ -146,6 +150,9 @@ mod tests {
         assert_eq!(s3("ftp://example.com").validate(), Err(ConfigError::Address));
         assert_eq!(s3("not a url").validate(), Err(ConfigError::Address));
         assert_eq!(s3("https://").validate(), Err(ConfigError::Address));
+        // Credentials in the address would be kept, and shown, with it.
+        assert_eq!(webdav("https://me:app-password@dav.example.com/dav/").validate(), Err(ConfigError::Address));
+        assert_eq!(s3("https://AKID@s3.example.com").validate(), Err(ConfigError::Address));
     }
 
     #[test]

@@ -581,7 +581,7 @@ export const zhCN = {
     update_cancelled: "已取消管理员授权，未安装更新",
     sync_off: "这台设备没有开启同步",
     sync_already_on: "这台设备已开启同步，请先关闭",
-    sync_config_invalid: "存储地址无效，或有必填项未填",
+    sync_config_invalid: "存储地址无效（地址中不能包含用户名或密码），或有必填项未填",
     sync_insecure: "只能通过 HTTPS 连接存储（本机地址除外）",
     sync_network: "无法连接存储服务",
     sync_denied: "存储服务拒绝访问，请检查访问密钥或密码",

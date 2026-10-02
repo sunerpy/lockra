@@ -6,8 +6,8 @@
 
 use lockra_remote::{Storage, StorageConfig};
 use lockra_sync::{
-    Hlc, MemoryRemote, PutCondition, Record, RemoteStore, Replica, Space, SpaceKeys, SyncError, SyncKey, SyncState, Tombstone, keyring_path, merge,
-    open_keyring, seal_keyring, step,
+    Hlc, MAX_OBJECT_BYTES, MemoryRemote, PutCondition, Record, RemoteStore, Replica, Space, SpaceKeys, SyncError, SyncKey, SyncState, Tombstone, keyring_path,
+    merge, open_keyring, seal_keyring, step,
 };
 use lockra_vault::KdfCost;
 use serde::{Deserialize, Serialize};
@@ -80,6 +80,18 @@ async fn the_store_contract(storage: &dyn RemoteStore, prefix: &str) {
     storage.delete(&path).await.unwrap();
     storage.delete(&path).await.unwrap();
     assert_eq!(storage.get(&path).await.unwrap(), None);
+
+    // An empty object reads as empty; one larger than any snapshot is refused, not read whole.
+    let limits = format!("{prefix}limits/");
+    let empty = format!("{limits}empty.lks");
+    storage.put(&empty, Vec::new(), PutCondition::Always).await.unwrap();
+    assert_eq!(storage.get(&empty).await.unwrap().map(|(bytes, _)| bytes), Some(Vec::new()));
+    let huge = format!("{limits}huge.lks");
+    storage.put(&huge, vec![7; usize::try_from(MAX_OBJECT_BYTES).unwrap() + 1], PutCondition::Always).await.unwrap();
+    assert!(storage.list(&limits).await.unwrap().iter().any(|m| m.name == "huge.lks" && m.size > MAX_OBJECT_BYTES));
+    assert_eq!(storage.get(&huge).await.err(), Some(SyncError::Corrupted));
+    storage.delete(&empty).await.unwrap();
+    storage.delete(&huge).await.unwrap();
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -121,7 +133,7 @@ async fn two_devices_sync(storage: &dyn RemoteStore, prefix: &str) {
     let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
     let sync_key = SyncKey::generate().unwrap();
     let password = b"correct horse battery";
-    let keyring = seal_keyring(&keys, &sync_key, password, KdfCost::FAST_INSECURE, 1).unwrap();
+    let keyring = seal_keyring(&keys, &sync_key, password, KdfCost::FAST_INSECURE, Hlc::at(1)).unwrap();
     storage.put(&keyring_path(prefix, keys.space_id()), keyring, PutCondition::IfAbsent).await.unwrap();
 
     let mut laptop = (SyncState::default(), Vault::default());
@@ -140,7 +152,7 @@ async fn two_devices_sync(storage: &dyn RemoteStore, prefix: &str) {
 
     let id = phone.1.accounts[0].id;
     phone.1.accounts.clear();
-    phone.1.tombstones.push(Tombstone { id, stamp: Hlc { wall_ms: 300, counter: 0, device: 2 } });
+    phone.1.tombstones.push(Tombstone { id, stamp: Hlc { wall_ms: 300, counter: 0, device: 2 }, counter: None });
     step(storage, &phone_space, &mut phone.0, &mut phone.1, 300).await.unwrap();
     assert!(step(storage, &space, &mut laptop.0, &mut laptop.1, 400).await.unwrap().changed);
     assert!(laptop.1.accounts.is_empty(), "the deletion arrived");
@@ -178,6 +190,15 @@ async fn wrong_credentials_are_denied() {
         secret_access_key: Zeroizing::new("wrong secret".into()),
         path_style,
     };
+    let storage = Storage::open(&wrong).unwrap();
+    assert_eq!(storage.list(&prefix).await.err(), Some(SyncError::Denied));
+}
+
+/// WebDAV refuses with 401, which OpenDAL leaves unclassified.
+#[tokio::test]
+async fn a_wrong_webdav_password_is_denied() {
+    let Some(StorageConfig::Webdav { url, prefix, username, .. }) = webdav() else { return };
+    let wrong = StorageConfig::Webdav { url, prefix: prefix.clone(), username, password: Zeroizing::new("wrong password".into()) };
     let storage = Storage::open(&wrong).unwrap();
     assert_eq!(storage.list(&prefix).await.err(), Some(SyncError::Denied));
 }
