@@ -630,6 +630,7 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("entry_add_manual"), draft: entryDraftSchema }),
   z.object({ command: z.literal("entry_update"), id: idSchema, patch: entryPatchSchema }),
   z.object({ command: z.literal("entry_delete"), id: idSchema }),
+  z.object({ command: z.literal("entries_set_group"), ids: z.array(idSchema), group: z.string() }),
   z.object({ command: z.literal("entry_hotp_next"), id: idSchema }),
   z.object({ command: z.literal("entry_copy"), id: idSchema }),
   z.object({ command: z.literal("entry_reveal"), id: idSchema, password }),

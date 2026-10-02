@@ -1,4 +1,9 @@
-import { platformFromIdentity, platformFromUserAgent, resolvePlatform } from "./platform";
+import {
+  biometricName,
+  platformFromIdentity,
+  platformFromUserAgent,
+  resolvePlatform,
+} from "./platform";
 
 const UA = {
   windows:
@@ -73,5 +78,13 @@ describe("resolvePlatform", () => {
     expect(platformFromIdentity("windows")).toBe("windows");
     expect(platformFromIdentity("linux")).toBe("linux");
     expect(platformFromIdentity(undefined)).toBe("unknown");
+  });
+});
+
+describe("biometricName", () => {
+  it("keeps what the computer offers, else names the platform's", () => {
+    expect(biometricName("windows_hello", "macos")).toBe("windows_hello");
+    expect(biometricName(null, "macos")).toBe("touch_id");
+    expect(biometricName(null, "windows")).toBe("windows_hello");
   });
 });

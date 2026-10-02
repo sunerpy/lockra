@@ -1,4 +1,4 @@
-import type { Platform } from "@lockra/shared";
+import type { BiometricKind, Platform } from "@lockra/shared";
 import type { TitleBarPlatform } from "@lockra/ui";
 
 /**
@@ -37,4 +37,10 @@ export function resolvePlatform(
 
 function currentUserAgent(): string | undefined {
   return typeof navigator === "undefined" ? undefined : navigator.userAgent;
+}
+
+/** The check a vault asks for, named while the computer cannot offer it (a Mac with its lid closed):
+ *  Windows Hello on Windows, Touch ID elsewhere. */
+export function biometricName(kind: BiometricKind | null, platform: Platform): BiometricKind {
+  return kind ?? (platform === "windows" ? "windows_hello" : "touch_id");
 }

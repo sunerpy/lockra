@@ -14,11 +14,12 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useSubmit } from "../app/dispatch";
+import { biometricName } from "../app/platform";
 
 export function Unlock() {
   const { t } = useI18n();
   const { backend } = useBackend();
-  const { lock } = useUiState();
+  const { lock, platform } = useUiState();
   const now = useClock();
   const [password, setPassword] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
@@ -88,8 +89,8 @@ export function Unlock() {
                   }),
                 )
               }>
-              {biometric.enabled && biometric.kind !== null
-                ? t(`unlock.biometric.${biometric.kind}`)
+              {biometric.enabled
+                ? t(`unlock.biometric.${biometricName(biometric.kind, platform)}`)
                 : t("unlock.device")}
             </Button>
             {/* A cancelled check is the user's own choice: nothing to say. */}
@@ -99,6 +100,14 @@ export function Unlock() {
               </p>
             )}
           </div>
+        )}
+        {/* Touch ID here but not set up: where to turn it on, once unlocked. */}
+        {!biometric.enabled && biometric.kind !== null && (
+          <p
+            className="text-center text-[12px] text-balance text-fg-muted"
+            data-testid="biometric-offer">
+            {t(`unlock.biometricOffer.${biometric.kind}`)}
+          </p>
         )}
         <Button
           variant="text-muted"

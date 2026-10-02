@@ -594,8 +594,11 @@ export class MockBackend implements Backend {
         return null;
       case "device_biometric_enable":
         this.requireUnlocked();
-        if (!this.state.lock.device_unlock.enabled) throw new LockraError("device_unlock_off");
+        // As the core: "remember on this device" comes with it, so the key needs the keychain.
+        if (!this.state.lock.device_unlock.enabled && !this.state.lock.device_unlock.available)
+          throw new LockraError("keychain_unavailable");
         this.checkUser(command.reason);
+        this.state.lock.device_unlock.enabled = true;
         this.state.lock.device_unlock.biometric.enabled = true;
         this.publish();
         return null;
@@ -659,6 +662,18 @@ export class MockBackend implements Backend {
         this.secrets.delete(command.id);
         this.changed();
         return null;
+      case "entries_set_group": {
+        // Every account first: none changes when one is missing.
+        const targets = command.ids.map((id) => this.entry(id));
+        const group = command.group.trim() === "" ? null : command.group.trim();
+        for (const entry of targets)
+          if (entry.group !== group) {
+            entry.group = group;
+            entry.updated_at_ms = this.now();
+          }
+        this.changed();
+        return null;
+      }
       case "entry_hotp_next": {
         const entry = this.entry(command.id);
         if (entry.kind.type !== "hotp") throw new LockraError("invalid_parameters");

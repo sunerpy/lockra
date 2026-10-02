@@ -74,6 +74,13 @@
       "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
     },
     {
+      "command": "entries_set_group",
+      "group": "Work",
+      "ids": [
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+      ]
+    },
+    {
       "command": "entry_hotp_next",
       "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
     },

@@ -80,6 +80,31 @@ describe("Unlock", () => {
     expect(backend.biometricReasons).toEqual(["解锁保险库", "解锁保险库", "解锁保险库"]);
   });
 
+  it("points to Settings on a computer with Touch ID that is not set up", async () => {
+    renderApp({ backend: locked({ biometric: "touch_id", platform: "macos" }) });
+    await ready();
+    expect(
+      screen.getByText("解锁后，可以在「设置 › 安全」开启「使用 Touch ID 解锁」。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "使用 Touch ID 解锁" })).toBeNull();
+  });
+
+  it("says nothing of a fingerprint where there is none", async () => {
+    renderApp({ backend: locked() });
+    await ready();
+    expect(screen.queryByText(/设置 › 安全/)).toBeNull();
+  });
+
+  it("keeps the Touch ID button while the sensor is away, and says why it cannot open", async () => {
+    const backend = locked({ deviceUnlock: true, biometricUnlock: true, platform: "macos" });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.click(screen.getByRole("button", { name: "使用 Touch ID 解锁" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "这台电脑现在无法使用指纹或 Windows Hello，请输入主密码",
+    );
+  });
+
   it("names Windows Hello on Windows", async () => {
     renderApp({
       backend: locked({ deviceUnlock: true, biometric: "windows_hello", biometricUnlock: true }),

@@ -26,13 +26,16 @@ export interface EntryRowProps {
   onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
   /** The overflow menu (edit, reveal, delete, pin). */
   menu?: ReactNode;
+  /** Selecting several accounts: the row is a checkbox that a click, Enter or Space ticks, and its
+   *  buttons, menu and right click step aside. */
+  selection?: { checked: boolean; onToggle: () => void };
   className?: string;
 }
 
 /** One account: avatar, names, the current code and its ring. The whole row copies on click,
  *  Enter or Space; in the last five seconds the next code shows beside it. HOTP rows have a
  *  "next code" button instead of a ring. Pin and edit sit beside the overflow menu, and a right
- *  click is handed to `onContextMenu`. */
+ *  click is handed to `onContextMenu`; while selecting, the row is a checkbox instead. */
 export function EntryRow({
   entry,
   code,
@@ -45,9 +48,12 @@ export function EntryRow({
   onEdit,
   onContextMenu,
   menu,
+  selection,
   className,
 }: EntryRowProps) {
   const t = useT();
+  const selecting = selection !== undefined;
+  const activate = selection?.onToggle ?? onCopy;
   const totp = code !== undefined && code.valid_from_ms !== null && code.valid_until_ms !== null;
   // A frame late at the window's end: the next code is already the right one.
   const expired = totp && code.valid_until_ms !== null && nowMs >= code.valid_until_ms;
@@ -66,23 +72,39 @@ export function EntryRow({
     if (event.target !== event.currentTarget) return;
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      onCopy();
+      activate();
     }
   };
   return (
     <div
-      role="button"
+      role={selecting ? "checkbox" : "button"}
+      aria-checked={selection?.checked}
       tabIndex={0}
       data-testid="entry-row"
       data-entry={entry.id}
-      title={t("codes.copyHint")}
-      onClick={onCopy}
+      title={selecting ? t("codes.selectHint") : t("codes.copyHint")}
+      onClick={activate}
       onKeyDown={onKeyDown}
-      onContextMenu={onContextMenu}
+      onContextMenu={selecting ? (event) => event.preventDefault() : onContextMenu}
       className={cx(
-        "group grid h-[calc(var(--row-h)+28px)] grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-10 px-3 outline-none transition-colors hover:bg-inset focus-visible:bg-inset",
+        "group grid h-[calc(var(--row-h)+28px)] items-center gap-3 rounded-10 px-3 outline-none transition-colors hover:bg-inset focus-visible:bg-inset",
+        selecting
+          ? "grid-cols-[auto_auto_minmax(0,1fr)_auto_auto]"
+          : "grid-cols-[auto_minmax(0,1fr)_auto_auto]",
         className,
       )}>
+      {selection && (
+        // The row is the checkbox; this one only shows it.
+        <input
+          type="checkbox"
+          tabIndex={-1}
+          aria-hidden
+          readOnly
+          checked={selection.checked}
+          className="pointer-events-none size-4 shrink-0 accent-accent"
+          data-testid="row-select"
+        />
+      )}
       <EntryAvatar
         issuer={entry.issuer}
         account={entry.account}
@@ -141,10 +163,10 @@ export function EntryRow({
             still={still}
           />
         )}
-        {entry.kind.type === "hotp" && onNext && (
+        {entry.kind.type === "hotp" && onNext && !selecting && (
           <IconButton icon="refresh" label={t("codes.hotpNext")} size={28} onClick={onNext} />
         )}
-        {onFavorite && (
+        {onFavorite && !selecting && (
           <IconButton
             icon="star"
             label={t("codes.favorite")}
@@ -154,7 +176,7 @@ export function EntryRow({
             data-testid="row-favorite"
           />
         )}
-        {onEdit && (
+        {onEdit && !selecting && (
           <IconButton
             icon="edit"
             label={t("codes.edit")}
@@ -163,7 +185,7 @@ export function EntryRow({
             data-testid="row-edit"
           />
         )}
-        {menu}
+        {!selecting && menu}
       </div>
     </div>
   );

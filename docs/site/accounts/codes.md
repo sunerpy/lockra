@@ -68,6 +68,16 @@ Beside each row's ⋯ button, a star pins the account to the top (or unpins it) 
 **Edit…**. Right-click a row, or press the context-menu key or Shift F10 on a selected row, to open
 the same menu as ⋯ where you are.
 
+## Selecting several accounts
+
+<StatusTag status="building" /> Comes with version 0.6.0.
+
+Click **Select** beside the sort menu, or choose **Select** in an account's menu, to tick accounts:
+click a row or press Space on it, tick a section's box for all of its accounts, or click **Select
+all** for every account the search and the group menu show. **Move to group…** then puts the ticked
+accounts in one group in a single step: type a group or pick one, or leave it empty to take them out
+of their groups. **Done**, or Esc, leaves without changing anything.
+
 ## Order
 
 The sort menu orders the list by name, by the most recently added, or by the most recently used.

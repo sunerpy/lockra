@@ -158,6 +158,12 @@ export const en: Messages = {
     submit: "Unlock",
     device: "Unlock with the key remembered on this device",
     biometric: { touch_id: "Unlock with Touch ID", windows_hello: "Unlock with Windows Hello" },
+    biometricOffer: {
+      touch_id:
+        "After unlocking, turn on Settings › Security › Unlock with Touch ID to use your fingerprint next time.",
+      windows_hello:
+        "After unlocking, turn on Settings › Security › Unlock with Windows Hello to use it next time.",
+    },
     biometricReason: "unlock your vault",
     failed: { one: "Wrong password ({n} attempt)", other: "Wrong password ({n} attempts)" },
     retryIn: "Try again in {s} s",
@@ -205,6 +211,21 @@ export const en: Messages = {
     groupView: "Show groups",
     collapseAll: "Collapse all",
     expandAll: "Expand all",
+    select: "Select",
+    selectHint: "Click to select",
+    selectedCount: { one: "{n} account selected", other: "{n} accounts selected" },
+    selectAll: "Select all",
+    selectNone: "Select none",
+    selectGroup: "Select every account in {group}",
+    moveToGroup: "Move to group…",
+    move: {
+      title: "Move to a group",
+      prompt: "Move {accounts} to the group below.",
+      hint: "Leave it empty to take them out of their group.",
+      submit: "Move",
+      moved: "Moved {accounts} to {group}",
+      ungrouped: "Took {accounts} out of their group",
+    },
     kind: { totp: "{period} s", hotp: "counter {counter}" },
   },
   entry: {
@@ -456,20 +477,21 @@ export const en: Messages = {
       deviceDisablePrompt:
         "Enter the master password to stop remembering; the keychain key is deleted.",
       biometric: {
-        touch_id: "Ask for Touch ID to unlock",
-        windows_hello: "Ask for Windows Hello to unlock",
+        touch_id: "Unlock with Touch ID",
+        windows_hello: "Unlock with Windows Hello",
       },
       biometricHint: {
         touch_id:
-          "Your fingerprint is checked before Remember on this device unlocks. The master password always unlocks.",
+          "Unlock with your fingerprint instead of the master password; turning it on also turns on Remember on this device. The master password always unlocks.",
         windows_hello:
-          "Windows Hello (fingerprint, face or PIN) checks you before Remember on this device unlocks. The master password always unlocks.",
+          "Unlock with Windows Hello (fingerprint, face or PIN) instead of the master password; turning it on also turns on Remember on this device. The master password always unlocks.",
       },
       biometricReason: {
         touch_id: "turn on unlocking with Touch ID",
         windows_hello: "turn on unlocking with Windows Hello",
       },
-      biometricDisablePrompt: "Enter the master password to stop asking before unlocking.",
+      biometricDisablePrompt:
+        "Enter the master password to stop asking before unlocking. Remember on this device stays on; turn it off above if you no longer want it.",
       biometricDisableTitle: "Stop asking",
       changePassword: "Change master password",
       changePasswordHint: "Earlier backups still open with the old password.",

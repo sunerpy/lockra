@@ -28,7 +28,10 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   `LOCKRA_DEV_SECRET_STORE=memory`, for headless test runs).
 - **Touch ID or Windows Hello first** (macOS, Windows): with "remember on this device" on, the
   device slot can ask the platform to check the user before its key is used. Turning it on passes
-  one check; turning it off takes the master password. The check is Lockra's, made before the
+  one check; with "remember on this device" off, it is turned on as well, the slot and its check in
+  the same write, so the remembered key never exists without the check (no fingerprint is asked for
+  when the keychain cannot take the key). Turning it off takes the master password and leaves
+  "remember on this device" on, as its own switch shows. The check is Lockra's, made before the
   keychain is read: it stops someone at the unlocked computer, not a program running as the user,
   which could read the keychain item itself. It is recorded in the vault's header (formats §1), so
   a file edited to skip it no longer opens, and a settings file cannot turn it off. The prompt's

@@ -89,6 +89,13 @@ pub enum UiCommand {
         /// Which.
         id: Uuid,
     },
+    /// Put several entries in one group ("" takes them out of theirs), in one change.
+    EntriesSetGroup {
+        /// Which.
+        ids: Vec<Uuid>,
+        /// The group.
+        group: String,
+    },
     /// HOTP: next code.
     EntryHotpNext {
         /// Which.
@@ -231,7 +238,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 43] = [
+pub const COMMANDS: [&str; 44] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -247,6 +254,7 @@ pub const COMMANDS: [&str; 43] = [
     "entry_add_manual",
     "entry_update",
     "entry_delete",
+    "entries_set_group",
     "entry_hotp_next",
     "entry_copy",
     "entry_reveal",
@@ -315,6 +323,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::EntryAddManual { draft } => json!({ "id": core.add_manual(draft)? }),
         UiCommand::EntryUpdate { id, patch } => unit(core.update_entry(id, patch))?,
         UiCommand::EntryDelete { id } => unit(core.delete_entry(id))?,
+        UiCommand::EntriesSetGroup { ids, group } => unit(core.set_entries_group(&ids, &group))?,
         UiCommand::EntryHotpNext { id } => unit(core.hotp_next(id))?,
         UiCommand::EntryCopy { id } => unit(core.copy_code(id))?,
         UiCommand::EntryReveal { id, password } => json!(core.reveal(id, password).await?),

@@ -118,7 +118,17 @@ export function parseKind(
     : undefined;
 }
 
-function GroupField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+/** A group's name, suggesting the groups the accounts are in. */
+export function GroupField({
+  value,
+  onChange,
+  autoFocus = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  /** The dialog's first field. */
+  autoFocus?: boolean;
+}) {
   const t = useT();
   const { entries } = useUiState();
   const listId = useId();
@@ -130,6 +140,7 @@ function GroupField({ value, onChange }: { value: string; onChange: (value: stri
         onChange={(e) => onChange(e.target.value)}
         placeholder={t("entry.groupPlaceholder")}
         list={listId}
+        {...(autoFocus ? { "data-autofocus": true } : {})}
       />
       <datalist id={listId}>
         {entryGroups(entries).map((group) => (

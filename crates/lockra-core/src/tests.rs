@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use lockra_otp::{Algorithm, Digits, OtpKind, Period, hotp, totp, uri};
-use lockra_vault::{FileKind, KdfCost, Sealed, read_header};
+use lockra_vault::{DeviceCheck, FileKind, KdfCost, Sealed, read_header};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -948,6 +948,35 @@ async fn an_account_takes_a_colour_and_a_mark_and_a_backup_keeps_them() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn several_accounts_change_group_in_one_write() {
+    let h = Harness::unlocked().await;
+    let a = h.core.add_uri(&otpauth("A", "a", "GEZDGNBV")).unwrap();
+    let b = h.core.add_uri(&otpauth("B", "b", "MZXW6YTBOI")).unwrap();
+    let c = h.core.add_uri(&otpauth("C", "c", "MFRGGZDF")).unwrap();
+    let groups = || {
+        let state = h.core.state();
+        [a, b, c].map(|id| state.entries.iter().find(|e| e.id == id).unwrap().group.clone())
+    };
+    let work = || Some("工作".to_owned());
+    h.core.set_entries_group(&[a, b], " 工作\u{7} ").unwrap();
+    assert_eq!(groups(), [work(), work(), None], "cleaned like a name typed for one account");
+    h.core.lock_vault();
+    h.core.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(groups(), [work(), work(), None], "kept by the vault file");
+    // Empty takes them out of their group; one already out is left as it is.
+    h.core.set_entries_group(&[b, c], "").unwrap();
+    assert_eq!(groups(), [work(), None, None]);
+    // An account that is not there changes none of them.
+    assert_eq!(code_err(h.core.set_entries_group(&[a, Uuid::new_v4()], "Other")), ErrorCode::EntryNotFound);
+    assert_eq!(groups(), [work(), None, None]);
+    // A write that fails puts every account back.
+    fs::remove_file(h.vault_path()).unwrap();
+    fs::create_dir(h.vault_path()).unwrap();
+    assert!(h.core.set_entries_group(&[a, b, c], "Other").is_err());
+    assert_eq!(groups(), [work(), None, None]);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_merged_backup_and_a_replaced_secret_keep_an_accounts_colour_and_mark() {
     let source = Harness::unlocked().await;
     let id = source.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
@@ -992,8 +1021,6 @@ async fn remembered_unlock_can_ask_for_the_fingerprint_first() {
     let biometric = || h.core.state().lock.device_unlock.biometric;
     until("the first look at the sensor", || biometric().kind.is_some()).await;
     assert_eq!(biometric(), BiometricView { kind: Some(BiometricKind::TouchId), enabled: false });
-    // Without "remember on this device" there is nothing to guard.
-    assert_eq!(code_err(h.core.enable_device_biometric(None).await), ErrorCode::DeviceUnlockOff);
     h.core.enable_device_unlock().unwrap();
     // Turning it on asks once, to be sure it works.
     h.biometrics.answer(Err(BiometricError::Cancelled));
@@ -1035,6 +1062,43 @@ async fn remembered_unlock_can_ask_for_the_fingerprint_first() {
     h.core.lock_vault();
     h.biometrics.answer(Err(BiometricError::Cancelled));
     h.core.unlock_with_device(None).await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn touch_id_turns_on_before_remember_on_this_device_and_brings_it_along() {
+    let h = Harness::unlocked().await;
+    until("the first look at the sensor", || h.core.state().lock.device_unlock.biometric.kind.is_some()).await;
+    assert!(!h.core.state().lock.device_unlock.enabled);
+    // One check, then the device slot and its check in one write: never a remembered key without it.
+    h.core.enable_device_biometric(Some("turn on Touch ID".into())).await.unwrap();
+    let view = h.core.state().lock.device_unlock;
+    assert!(view.enabled && view.biometric.enabled);
+    assert_eq!(h.biometrics.reasons(), ["turn on Touch ID"]);
+    let info = read_header(&fs::read(h.vault_path()).unwrap()).unwrap();
+    assert_eq!((info.has_device_slot, info.device_check), (true, Some(DeviceCheck::Biometric)));
+    h.core.lock_vault();
+    h.core.unlock_with_device(None).await.unwrap();
+    assert_eq!(h.biometrics.reasons().len(), 2, "asked before the remembered key opened the vault");
+    // Turning Touch ID off leaves "remember on this device" on, as its own switch shows.
+    h.core.disable_device_biometric(pw(MASTER)).await.unwrap();
+    let view = h.core.state().lock.device_unlock;
+    assert!(view.enabled && !view.biometric.enabled);
+}
+
+#[tokio::test(start_paused = true)]
+async fn touch_id_without_a_keychain_asks_for_no_fingerprint_and_leaves_nothing_behind() {
+    let h = Harness::unlocked().await;
+    until("the first look at the sensor", || h.core.state().lock.device_unlock.biometric.kind.is_some()).await;
+    h.keychain.unavailable.store(true, Ordering::SeqCst);
+    assert_eq!(code_err(h.core.enable_device_biometric(None).await), ErrorCode::KeychainUnavailable);
+    assert!(h.biometrics.reasons().is_empty(), "no fingerprint asked for when the key has nowhere to go");
+    // A keychain that refuses the key: no slot and no check either.
+    h.keychain.unavailable.store(false, Ordering::SeqCst);
+    h.keychain.fail_set.store(true, Ordering::SeqCst);
+    assert_eq!(code_err(h.core.enable_device_biometric(None).await), ErrorCode::KeychainFailed);
+    let view = h.core.state().lock.device_unlock;
+    assert!(!view.enabled && !view.biometric.enabled);
+    assert!(!read_header(&fs::read(h.vault_path()).unwrap()).unwrap().has_device_slot);
 }
 
 #[tokio::test(start_paused = true)]

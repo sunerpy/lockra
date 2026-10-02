@@ -16,6 +16,7 @@ import { type SubmitEvent, useState } from "react";
 import { useSubmit } from "../../app/dispatch";
 import { useToaster } from "../../app/notices";
 import { passwordLongEnough } from "../../app/password";
+import { biometricName } from "../../app/platform";
 import { useUpdateSettings } from "../../app/settings";
 
 /** Settings › Security: auto-lock, clipboard clearing, hidden codes, "remember on this device"
@@ -219,20 +220,22 @@ function ChangePassword() {
   );
 }
 
-/** Touch ID or Windows Hello before "remember on this device" unlocks: on after one check passes,
- *  off with the master password. Offered only where the computer has it and the vault is
- *  remembered. */
+/** Touch ID or Windows Hello before "remember on this device" unlocks: on after one check passes
+ *  (bringing "remember on this device" along when it is off), off with the master password.
+ *  Offered where the computer has it, and kept while the vault asks for it. */
 function BiometricUnlock() {
   const t = useT();
   const { backend } = useBackend();
-  const { lock } = useUiState();
-  const { enabled: remembered, biometric } = lock.device_unlock;
+  const { lock, platform } = useUiState();
+  const { available, enabled: remembered, biometric } = lock.device_unlock;
   const [confirming, setConfirming] = useState(false);
   const [password, setPassword] = useState("");
   const toggle = useSubmit();
   const disable = useSubmit();
-  const kind = biometric.kind;
-  if (!remembered || kind === null) return null;
+  if (biometric.kind === null && !biometric.enabled) return null;
+  const kind = biometricName(biometric.kind, platform);
+  // The key "remember on this device" keeps has to go into the keychain.
+  const blocked = !remembered && !available;
   const onChange = (on: boolean) => {
     if (on)
       void toggle.run(() =>
@@ -256,7 +259,11 @@ function BiometricUnlock() {
     <>
       <StatusRow
         label={t(`settings.security.biometric.${kind}`)}
-        help={t(`settings.security.biometricHint.${kind}`)}
+        help={
+          blocked
+            ? t("settings.security.deviceUnavailable")
+            : t(`settings.security.biometricHint.${kind}`)
+        }
         data-testid="biometric-unlock"
         note={
           toggle.error === undefined || toggle.error === "biometric_cancelled" ? undefined : (
@@ -265,7 +272,7 @@ function BiometricUnlock() {
         }>
         <Toggle
           checked={biometric.enabled}
-          disabled={toggle.busy}
+          disabled={toggle.busy || blocked}
           onChange={onChange}
           ariaLabel={t(`settings.security.biometric.${kind}`)}
         />

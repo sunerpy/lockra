@@ -373,10 +373,13 @@ impl Core {
     }
 
     /// Make "remember on this device" ask for Touch ID or Windows Hello before it unlocks; the user
-    /// passes one check now, so that it is known to work.
+    /// passes one check now, so that it is known to work. With "remember on this device" off, it is
+    /// turned on with it.
     pub async fn enable_device_biometric(&self, reason: Option<String>) -> CoreResult<()> {
-        if !unlocked(&self.lock())?.sealed.has_device_slot() {
-            return Err(ErrorCode::DeviceUnlockOff.into());
+        let remembered = unlocked(&self.lock())?.sealed.has_device_slot();
+        // The key needs somewhere to go before a fingerprint is asked for.
+        if !remembered && self.shared.ports.secrets.status() == KeychainStatus::Unavailable {
+            return Err(ErrorCode::KeychainUnavailable.into());
         }
         let biometrics = Arc::clone(&self.shared.ports.biometrics);
         let kind = tokio::task::spawn_blocking(move || biometrics.availability()).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
@@ -386,7 +389,34 @@ impl Core {
             return Err(ErrorCode::BiometricUnavailable.into());
         }
         self.check_user(reason).await?;
-        self.set_device_check(Some(DeviceCheck::Biometric))
+        self.turn_on_device_check()
+    }
+
+    /// The device slot asking for the check, the slot made first when there is none: one write, so
+    /// the remembered key never exists without its check.
+    fn turn_on_device_check(&self) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let mut next = session.sealed.clone();
+            let key = if next.has_device_slot() { None } else { Some(next.enable_device()?) };
+            next.set_device_check(Some(DeviceCheck::Biometric))?;
+            let account = next.vault_id().to_string();
+            if let Some(key) = &key {
+                self.shared.ports.secrets.set(&account, &key.to_text()).map_err(|_| ErrorCode::KeychainFailed)?;
+            }
+            let previous = std::mem::replace(&mut session.sealed, next);
+            if let Err(error) = self.write_vault(session) {
+                session.sealed = previous;
+                if key.is_some() {
+                    let _ = self.shared.ports.secrets.delete(&account);
+                }
+                return Err(error);
+            }
+            st.device_slot = true;
+        }
+        self.changed();
+        Ok(())
     }
 
     /// Stop asking for Touch ID or Windows Hello, after the master password was entered again.
@@ -674,6 +704,46 @@ impl Core {
             self.save(&mut st, true, move |s| {
                 if let Some(e) = s.data.get_mut(id) {
                     *e = before;
+                }
+            })?;
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// Put the entries `ids` in `group` (out of any group when it is empty), in one write. Each
+    /// entry that changes gets a new stamp, as an edit of that one account would; none changes when
+    /// one of them is not there.
+    pub fn set_entries_group(&self, ids: &[Uuid], group: &str) -> CoreResult<()> {
+        let group = Some(clean_name(group)).filter(|g| !g.is_empty());
+        let now = self.now_ms();
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let wanted: std::collections::BTreeSet<Uuid> = ids.iter().copied().collect();
+            if !wanted.iter().all(|id| session.data.entries.iter().any(|e| e.id == *id)) {
+                return Err(ErrorCode::EntryNotFound.into());
+            }
+            let mut before = Vec::new();
+            for id in wanted {
+                if session.data.entries.iter().any(|e| e.id == id && e.group == group) {
+                    continue;
+                }
+                let stamp = session.data.tick(now);
+                let entry = session.data.get_mut(id).ok_or(ErrorCode::EntryNotFound)?;
+                before.push(entry.clone());
+                entry.group.clone_from(&group);
+                entry.stamp = stamp;
+                entry.updated_at_ms = now;
+            }
+            if before.is_empty() {
+                return Ok(());
+            }
+            self.save(&mut st, true, move |s| {
+                for old in before {
+                    if let Some(entry) = s.data.get_mut(old.id) {
+                        *entry = old;
+                    }
                 }
             })?;
         }
