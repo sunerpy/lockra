@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/sunerpy/lockra/compare/v0.5.0...v0.5.1) (2026-10-02)
+
+
+### Bug Fixes
+
+* **core:** 合并恢复备份与替换密钥时保留账号的颜色与头像文字 ([#25](https://github.com/sunerpy/lockra/issues/25)) ([a2752d4](https://github.com/sunerpy/lockra/commit/a2752d4627f53ed6ec874cae432094e7bb461d15))
+
 ## [0.5.0](https://github.com/sunerpy/lockra/compare/v0.4.0...v0.5.0) (2026-10-02)
 
 
