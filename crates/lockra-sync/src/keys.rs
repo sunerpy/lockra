@@ -25,6 +25,7 @@ const KEYRING_FORMAT: u32 = 1;
 const KEYRING_INFO: &[u8] = b"lockra-sync v1 keyring";
 const SNAPSHOT_INFO: &[u8] = b"lockra-sync v1 snapshot";
 const TAG_INFO: &[u8] = b"lockra-sync v1 device tag";
+const SPACE_ID_INFO: &[u8] = b"lockra-sync v1 space id";
 const SYNC_KEY_PREFIX: &str = "LKS1";
 /// Bytes of SHA-256 appended to the sync key text: a mistyped character is caught on entry.
 const CHECK_LEN: usize = 3;
@@ -38,7 +39,9 @@ pub const SYNC_KEY_TEXT_LEN: usize = SYNC_KEY_PREFIX.len() + 1 + 56 + 13;
 
 /// The sync key: 32 random bytes the user keeps (written down, or in a password manager). With the
 /// master password it joins a device to the space, or recovers the space when every device is
-/// lost.
+/// lost; it also names the space ([`Self::space_id`]), so the storage and the key are all a
+/// recovery has to type.
+#[derive(Clone, PartialEq, Eq)]
 pub struct SyncKey(Zeroizing<[u8; KEY_LEN]>);
 
 impl SyncKey {
@@ -76,6 +79,15 @@ impl SyncKey {
         let mut key = Zeroizing::new([0u8; KEY_LEN]);
         key.copy_from_slice(&bytes[..KEY_LEN]);
         Ok(Self(key))
+    }
+
+    /// The id of the space this key belongs to: a one-way function of the key, so the id the
+    /// storage shows in its paths says nothing about the key.
+    pub fn space_id(&self) -> Uuid {
+        let derived = hkdf32(SYNC_KEY_PREFIX.as_bytes(), self.0.as_ref(), SPACE_ID_INFO);
+        let mut bytes = [0u8; 16];
+        bytes.copy_from_slice(&derived[..16]);
+        uuid::Builder::from_random_bytes(bytes).into_uuid()
     }
 }
 
@@ -211,6 +223,16 @@ mod tests {
         let sloppy = text.to_ascii_lowercase().replace('-', " ");
         assert_eq!(*SyncKey::from_text(&sloppy).unwrap().0, *key.0);
         assert_eq!(format!("{key:?}"), "SyncKey(…)");
+    }
+
+    #[test]
+    fn the_sync_key_names_its_space() {
+        let key = SyncKey::generate().unwrap();
+        let id = key.space_id();
+        assert_eq!(SyncKey::from_text(&key.to_text()).unwrap().space_id(), id, "the same key, the same space");
+        assert_ne!(SyncKey::generate().unwrap().space_id(), id);
+        assert_eq!(id.get_version_num(), 4);
+        assert!(!key.to_text().to_ascii_lowercase().contains(&id.simple().to_string()[..8]));
     }
 
     #[test]

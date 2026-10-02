@@ -2657,8 +2657,10 @@ dependencies = [
 name = "lockra-core"
 version = "0.0.0"
 dependencies = [
+ "data-encoding",
  "image",
  "lockra-otp",
+ "lockra-sync",
  "lockra-transfer",
  "lockra-vault",
  "parking_lot",
@@ -2682,6 +2684,7 @@ dependencies = [
  "keyring",
  "lockra-bridge",
  "lockra-core",
+ "lockra-remote",
  "lockra-vault",
  "parking_lot",
  "serde",
@@ -2733,7 +2736,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "url",
  "uuid",
  "zeroize",
 ]
@@ -2755,6 +2757,7 @@ dependencies = [
  "sha2 0.11.0",
  "thiserror 2.0.21",
  "tokio",
+ "url",
  "uuid",
  "zeroize",
 ]

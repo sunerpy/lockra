@@ -80,6 +80,141 @@ pub struct UiState {
     pub auto_lock_at_ms: Option<u64>,
     /// The in-app update.
     pub update: UpdateView,
+    /// Multi-device sync.
+    pub sync: SyncView,
+}
+
+/// Multi-device sync, as Settings › Sync shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SyncView {
+    /// The space this device belongs to; absent when sync is off, and while locked (the vault
+    /// holds the space).
+    pub space: Option<SyncSpaceView>,
+}
+
+/// The sync space this device belongs to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SyncSpaceView {
+    /// Where it is stored, without the secret.
+    pub storage: StorageView,
+    /// This device's name in the space.
+    pub device_name: String,
+    /// The devices of the space, this one first.
+    pub devices: Vec<SyncDeviceView>,
+    /// What the sync is doing.
+    pub status: SyncStatus,
+    /// When a run last finished without error, Unix milliseconds.
+    pub last_sync_ms: Option<u64>,
+    /// Devices (tags) whose snapshot went back in sequence on the last run: refused.
+    pub rolled_back: Vec<String>,
+    /// Devices (tags) whose snapshot does not open: altered, of another space, or from a newer
+    /// Lockra.
+    pub unreadable: Vec<String>,
+    /// A new master password still has to reach the space's keyring.
+    pub keyring_pending: bool,
+}
+
+/// A sync storage as the interface shows it: everything but the secret.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum StorageView {
+    /// S3-compatible object storage.
+    S3 {
+        /// The endpoint.
+        endpoint: String,
+        /// The region.
+        region: String,
+        /// The bucket.
+        bucket: String,
+        /// The folder inside the bucket.
+        prefix: String,
+        /// The access key id (the secret key is never shown).
+        access_key_id: String,
+        /// The bucket is addressed in the path.
+        path_style: bool,
+    },
+    /// A WebDAV server.
+    Webdav {
+        /// Its address.
+        url: String,
+        /// The folder under it.
+        prefix: String,
+        /// The user name (the password is never shown).
+        username: String,
+    },
+}
+
+/// A device of the sync space.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SyncDeviceView {
+    /// Its tag, the name of its snapshot (for `sync_remove_device`).
+    pub tag: String,
+    /// Its name.
+    pub name: String,
+    /// When it last wrote, Unix milliseconds.
+    pub written_at_ms: Option<u64>,
+    /// This device.
+    pub this_device: bool,
+}
+
+/// Where the sync is.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum SyncStatus {
+    /// Nothing run since unlocking.
+    #[default]
+    Idle,
+    /// A run is in progress.
+    Syncing,
+    /// The last run finished.
+    Synced {
+        /// When, Unix milliseconds.
+        at_ms: u64,
+    },
+    /// The last run failed.
+    Failed {
+        /// Why.
+        code: ErrorCode,
+        /// When, Unix milliseconds.
+        at_ms: u64,
+    },
+}
+
+/// The answer to `sync_create`: the new space's sync key, shown once.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SyncCreated {
+    /// `LKS1-…`.
+    pub sync_key: String,
+}
+
+/// The answer to `sync_invite`: what another device scans or pastes to join, with the master
+/// password.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SyncInvite {
+    /// The invitation text (`lockra-invite:1:…`): the storage, its credentials and the sync key.
+    pub invite: String,
+    /// The invitation as a QR code (SVG).
+    pub svg: String,
+    /// The sync key alone, for writing down.
+    pub sync_key: String,
+}
+
+/// How a device joins a space.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum JoinSource {
+    /// An invitation another device of the space showed.
+    Invite {
+        /// Its text (scanned or pasted).
+        text: zeroize::Zeroizing<String>,
+    },
+    /// The storage and the sync key, typed in (recovery without another device).
+    Manual {
+        /// Where the space is stored.
+        storage: lockra_sync::StorageConfig,
+        /// The sync key.
+        sync_key: zeroize::Zeroizing<String>,
+    },
 }
 
 /// How this copy of Lockra was installed, which is how an update installs: the package format the

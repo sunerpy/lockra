@@ -82,6 +82,32 @@ pub enum ErrorCode {
     UpdateInstallFailed,
     /// The administrator password prompt was cancelled.
     UpdateCancelled,
+    /// Sync is not set up on this device.
+    SyncOff,
+    /// Sync is already set up on this device (turn it off first).
+    SyncAlreadyOn,
+    /// The storage's address is not one, or a required field is empty.
+    SyncConfigInvalid,
+    /// Plain HTTP to another computer: the storage must be reached over HTTPS.
+    SyncInsecure,
+    /// The storage could not be reached (offline, DNS, TLS, timeout, a server error).
+    SyncNetwork,
+    /// The storage refused the credentials or the request.
+    SyncDenied,
+    /// The storage answered with an error (a missing bucket or folder, a full disk).
+    SyncStorageFailed,
+    /// There is no sync space for this sync key at that storage.
+    SyncSpaceNotFound,
+    /// The master password or the sync key does not open the space.
+    SyncWrongCredentials,
+    /// The sync key is mistyped or not a Lockra sync key.
+    SyncKeyInvalid,
+    /// The invitation is not one Lockra made.
+    SyncInviteInvalid,
+    /// The space's data on the storage is damaged or was altered.
+    SyncDataCorrupted,
+    /// The space was written by a newer Lockra.
+    SyncUnsupported,
     /// Anything else (a bug); details are in the log.
     Internal,
 }

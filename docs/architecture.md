@@ -39,6 +39,7 @@ cheap handle; the shell injects the ports:
 | `Clock`                     | `SystemClock`                                                                 | `FakeClock`                         |
 | `CodeSink` (code frames)    | a Tauri `Channel`                                                             | `RecordingSink`                     |
 | `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy    | `FakeUpdater`, `NoUpdater`          |
+| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS (`src-tauri/src/sync.rs`)              | `FakeTransport`, `NoSync`           |
 
 State machine: **NoVault → Locked → Unlocked**. Create or restore leads from NoVault to Unlocked;
 unlock (password or device key) from Locked; lock, auto-lock and closing return to Locked; reset

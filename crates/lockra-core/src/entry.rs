@@ -1,10 +1,14 @@
 //! Entries: what the vault payload stores, and the secret-free view the webview receives.
 
 use lockra_otp::{Algorithm, Digits, OtpAuth, OtpKind, base32};
+use lockra_sync::{Clock, Hlc, Record, Tombstone};
 use lockra_transfer::{Incompatible, Origin, google, microsoft};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 use zeroize::Zeroizing;
+
+use crate::error::{CoreResult, ErrorCode};
+use crate::sync::SyncLocal;
 
 /// The longest issuer, account or group name kept (characters).
 pub const MAX_NAME_CHARS: usize = 200;
@@ -37,8 +41,22 @@ pub struct Entry {
     pub created_at_ms: u64,
     /// Unix milliseconds.
     pub updated_at_ms: u64,
-    /// Last copy, Unix milliseconds.
+    /// Last copy, Unix milliseconds. This device's own: it does not sync.
     pub last_used_at_ms: Option<u64>,
+    /// When it last changed, as the sync orders changes: a hybrid logical clock stamp, renewed by
+    /// every change that syncs (names, group, pin, the next HOTP counter).
+    #[serde(default)]
+    pub stamp: Hlc,
+}
+
+impl Record for Entry {
+    fn id(&self) -> Uuid {
+        self.id
+    }
+
+    fn stamp(&self) -> Hlc {
+        self.stamp
+    }
 }
 
 impl Entry {
@@ -58,6 +76,7 @@ impl Entry {
             created_at_ms: now_ms,
             updated_at_ms: now_ms,
             last_used_at_ms: None,
+            stamp: Hlc::default(),
         }
     }
 
@@ -187,32 +206,171 @@ pub struct EntryPatch {
     pub favorite: Option<bool>,
 }
 
+/// The payload format this Lockra writes: 2 added the stamps, the tombstones and the local part.
+pub const VAULT_DATA_FORMAT: u32 = 2;
+
 /// The decrypted payload of the vault.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VaultData {
-    /// Payload format; 1.
+    /// Payload format ([`VAULT_DATA_FORMAT`]; 1 before sync).
     #[serde(default = "format_one")]
     pub format: u32,
     /// The accounts, in insertion order.
     #[serde(default)]
     pub entries: Vec<Entry>,
+    /// The accounts deleted, so that a deletion on one device removes the account on the others.
+    #[serde(default)]
+    pub tombstones: Vec<Tombstone>,
+    /// This device's own part: its clock and its sync space. In the vault file only: never in a
+    /// backup, never synced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local: Option<Local>,
+}
+
+/// What only this device keeps.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Local {
+    /// Stamps this device's changes; its device number names this device in its sync space too.
+    pub(crate) clock: Clock,
+    /// The sync space this device belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) sync: Option<SyncLocal>,
+}
+
+impl Local {
+    /// A new device: a random number, nothing stamped yet, no sync.
+    pub(crate) fn new() -> Self {
+        Self { clock: Clock::new(random_device()), sync: None }
+    }
+}
+
+/// A random device number (nonzero: zero marks stamps written before devices had numbers).
+pub(crate) fn random_device() -> u64 {
+    loop {
+        let (high, _) = Uuid::new_v4().as_u64_pair();
+        if high != 0 {
+            return high;
+        }
+    }
 }
 
 fn format_one() -> u32 {
     1
 }
 
+#[derive(Serialize)]
+struct BackupPayload<'a> {
+    format: u32,
+    entries: &'a [Entry],
+    tombstones: &'a [Tombstone],
+}
+
 impl VaultData {
-    /// The payload bytes for `lockra-vault`.
+    /// A new vault's payload.
+    pub fn new() -> Self {
+        Self { format: VAULT_DATA_FORMAT, entries: Vec::new(), tombstones: Vec::new(), local: Some(Local::new()) }
+    }
+
+    /// The vault file's payload bytes for `lockra-vault`: everything, the local part included.
     pub fn to_bytes(&self) -> Zeroizing<Vec<u8>> {
         // Serializing plain data structures to JSON cannot fail.
         #[allow(clippy::expect_used)]
         Zeroizing::new(serde_json::to_vec(self).expect("vault data serializes"))
     }
 
+    /// A backup's payload bytes: the accounts and the deletions, without this device's part (its
+    /// sync space and the storage's credentials stay in the vault file).
+    pub fn backup_bytes(&self) -> Zeroizing<Vec<u8>> {
+        let backup = BackupPayload { format: VAULT_DATA_FORMAT, entries: &self.entries, tombstones: &self.tombstones };
+        // Serializing plain data structures to JSON cannot fail.
+        #[allow(clippy::expect_used)]
+        Zeroizing::new(serde_json::to_vec(&backup).expect("vault data serializes"))
+    }
+
     /// Parse a payload; `None` when it is not a Lockra payload.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         serde_json::from_slice(bytes).ok()
+    }
+
+    /// A vault's or a backup's payload, ready for use: a newer format is refused, entries written
+    /// before stamps get one (their last change, from this device), and a payload without a local
+    /// part (a backup, an older vault) gets a new one.
+    pub(crate) fn open(bytes: &[u8]) -> CoreResult<Self> {
+        let mut data = Self::from_bytes(bytes).ok_or(ErrorCode::VaultCorrupted)?;
+        if data.format > VAULT_DATA_FORMAT {
+            return Err(ErrorCode::VaultUnsupported.into());
+        }
+        data.format = VAULT_DATA_FORMAT;
+        let device = data.local_mut().clock.device();
+        for entry in &mut data.entries {
+            if entry.stamp == Hlc::default() {
+                entry.stamp = Hlc { wall_ms: entry.updated_at_ms, counter: 0, device };
+            }
+        }
+        Ok(data)
+    }
+
+    pub(crate) fn local_mut(&mut self) -> &mut Local {
+        self.local.get_or_insert_with(Local::new)
+    }
+
+    /// This device's number.
+    pub(crate) fn device(&self) -> u64 {
+        self.local.as_ref().map_or(0, |l| l.clock.device())
+    }
+
+    /// The sync space this device belongs to.
+    pub(crate) fn sync(&self) -> Option<&SyncLocal> {
+        self.local.as_ref().and_then(|l| l.sync.as_ref())
+    }
+
+    pub(crate) fn sync_mut(&mut self) -> Option<&mut SyncLocal> {
+        self.local.as_mut().and_then(|l| l.sync.as_mut())
+    }
+
+    /// A stamp for a change made at `now_ms`.
+    pub(crate) fn tick(&mut self, now_ms: u64) -> Hlc {
+        self.local_mut().clock.tick(now_ms)
+    }
+
+    /// Note the latest stamp of what a sync brought in: changes made here later come after it.
+    pub(crate) fn observe_stamps(&mut self) {
+        let latest = self.entries.iter().map(|e| e.stamp).chain(self.tombstones.iter().map(|t| t.stamp)).max();
+        if let Some(latest) = latest {
+            self.local_mut().clock.observe(latest);
+        }
+    }
+
+    /// Delete entry `id`, leaving a tombstone: the entry and where it was.
+    pub(crate) fn remove(&mut self, id: Uuid, now_ms: u64) -> Option<(usize, Entry)> {
+        let index = self.entries.iter().position(|e| e.id == id)?;
+        let stamp = self.tick(now_ms);
+        let removed = self.entries.remove(index);
+        self.bury(id, stamp);
+        Some((index, removed))
+    }
+
+    fn bury(&mut self, id: Uuid, stamp: Hlc) {
+        match self.tombstones.iter_mut().find(|t| t.id == id) {
+            Some(tombstone) => tombstone.stamp = tombstone.stamp.max(stamp),
+            None => self.tombstones.push(Tombstone { id, stamp }),
+        }
+    }
+
+    /// Replace the accounts by `entries` as one change made at `now_ms` (a restore that replaces):
+    /// every account gets a new stamp, and the ones that go get tombstones, so the other devices
+    /// of a sync space end up with the same accounts.
+    pub(crate) fn replace_entries(&mut self, entries: Vec<Entry>, now_ms: u64) {
+        let gone: Vec<Uuid> = self.entries.iter().map(|e| e.id).filter(|id| !entries.iter().any(|n| n.id == *id)).collect();
+        for id in gone {
+            let stamp = self.tick(now_ms);
+            self.bury(id, stamp);
+        }
+        self.entries = entries;
+        for index in 0..self.entries.len() {
+            let stamp = self.tick(now_ms);
+            self.entries[index].stamp = stamp;
+        }
     }
 
     /// The entry with `id`.
@@ -253,13 +411,70 @@ mod tests {
     #[test]
     fn payload_round_trips_with_the_secret_in_base32() {
         let entry = Entry::from_auth(auth("otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 5);
-        let data = VaultData { format: 1, entries: vec![entry.clone()] };
+        let data = VaultData { entries: vec![entry.clone()], ..VaultData::new() };
         let bytes = data.to_bytes();
         let text = std::str::from_utf8(&bytes).unwrap();
         assert!(text.contains("\"secret\":\"JBSWY3DPEHPK3PXP\""), "{text}");
         assert_eq!(VaultData::from_bytes(&bytes).unwrap(), data);
         assert!(VaultData::from_bytes(b"[1,2]").is_none());
-        assert_eq!(VaultData::from_bytes(b"{}").unwrap(), VaultData { format: 1, entries: vec![] });
+        assert_eq!(VaultData::from_bytes(b"{}").unwrap(), VaultData { format: 1, ..VaultData::default() });
+    }
+
+    #[test]
+    fn a_format_one_payload_opens_with_stamps_and_a_local_part_and_newer_formats_are_refused() {
+        let legacy = br#"{"format":1,"entries":[{"id":"0f3f1a1e-8d4b-4c8e-9f7a-000000000001","issuer":"GitHub","account":"octocat","kind":{"type":"totp","period":30},"algorithm":"sha1","digits":6,"secret":"JBSWY3DPEHPK3PXP","group":null,"favorite":false,"origin":"uri","created_at_ms":5,"updated_at_ms":7,"last_used_at_ms":null}]}"#;
+        let data = VaultData::open(legacy).unwrap();
+        assert_eq!(data.format, VAULT_DATA_FORMAT);
+        let device = data.device();
+        assert_ne!(device, 0);
+        assert_eq!(data.entries[0].stamp, Hlc { wall_ms: 7, counter: 0, device }, "the last change, from this device");
+        assert!(data.tombstones.is_empty() && data.sync().is_none());
+        assert_eq!(VaultData::open(br#"{"format":3}"#).unwrap_err().code, ErrorCode::VaultUnsupported);
+        assert_eq!(VaultData::open(b"not json").unwrap_err().code, ErrorCode::VaultCorrupted);
+        // Opening again keeps the device and the stamps.
+        let again = VaultData::open(&data.to_bytes()).unwrap();
+        assert_eq!((again.device(), again.entries[0].stamp), (device, data.entries[0].stamp));
+    }
+
+    #[test]
+    fn a_backup_carries_the_accounts_and_deletions_but_not_the_local_part() {
+        let mut data = VaultData::new();
+        data.entries.push(Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1));
+        let gone = Entry::from_auth(auth("otpauth://totp/C:d?secret=GEZDGNBV"), Origin::Uri, 1);
+        let gone_id = gone.id;
+        data.entries.push(gone);
+        assert!(data.remove(gone_id, 10).is_some());
+        assert_eq!(data.tombstones.len(), 1);
+        let backup = data.backup_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&backup).unwrap();
+        assert!(value.get("local").is_none(), "{value}");
+        let restored = VaultData::open(&backup).unwrap();
+        assert_eq!(restored.entries.len(), 1);
+        assert_eq!(restored.tombstones, data.tombstones);
+        assert_ne!(restored.device(), data.device(), "a restored backup is a new device");
+        assert!(serde_json::from_slice::<serde_json::Value>(&data.to_bytes()).unwrap().get("local").is_some());
+    }
+
+    #[test]
+    fn changes_are_stamped_in_order_and_a_replace_buries_what_goes() {
+        let mut data = VaultData::new();
+        let a = data.tick(100);
+        let b = data.tick(100);
+        assert!(b > a && b.device == data.device());
+        let mut keep = Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1);
+        keep.stamp = a;
+        let drop = Entry::from_auth(auth("otpauth://totp/C:d?secret=GEZDGNBV"), Origin::Uri, 1);
+        let drop_id = drop.id;
+        data.entries = vec![keep.clone(), drop];
+        data.replace_entries(vec![keep.clone()], 50);
+        assert_eq!(data.entries.len(), 1);
+        assert!(data.entries[0].stamp > b, "the restore is a change made now");
+        assert_eq!(data.tombstones.iter().map(|t| t.id).collect::<Vec<_>>(), [drop_id]);
+        assert!(data.remove(Uuid::new_v4(), 60).is_none());
+        // A stamp seen from another device moves the clock past it.
+        data.entries[0].stamp = Hlc { wall_ms: 9_999_999, counter: 3, device: 1 };
+        data.observe_stamps();
+        assert!(data.tick(200) > data.entries[0].stamp);
     }
 
     #[test]

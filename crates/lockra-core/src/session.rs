@@ -10,7 +10,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use data_encoding::BASE64;
 use lockra_otp::{OtpKind, base32, hotp, totp_window, uri};
+use lockra_sync::{
+    Invite, Outcome as SyncOutcome, PutCondition, RemoteStore, Space, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, keyring_path, open_keyring,
+    remove_device, seal_keyring, step_with,
+};
 use lockra_transfer::{Item, Origin, detect, microsoft, qr, text};
 use lockra_vault::{DeviceKey, DeviceSlot, FileKind, KdfCost, Opened, Sealed, read_header, write_atomic};
 use parking_lot::{Mutex, MutexGuard};
@@ -20,15 +25,16 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::backup::{auto_file_name, pre_restore_file_name, prune};
-use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_name};
+use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_name, random_device};
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
-use crate::ports::{Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, Updater};
+use crate::ports::{Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, SyncTransport, Updater};
 use crate::settings::{Settings, SettingsStore};
+use crate::sync::{SYNC_DEBOUNCE, SYNC_INTERVAL, SyncLocal, Working, config_error, device_name, merge_entries, storage_view, sync_error};
 use crate::ui::{
-    BackupFailure, BackupView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource, LockView, Notice, Phase,
-    Platform, RestoreView, Revealed, UiEvent, UiState, UpdateStatus, UpdateView,
+    BackupFailure, BackupView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource, JoinSource, LockView, Notice,
+    Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
 
@@ -70,6 +76,8 @@ pub struct Ports {
     pub clock: Arc<dyn Clock>,
     /// The in-app update.
     pub updater: Arc<dyn Updater>,
+    /// The storage of a sync space.
+    pub sync: Arc<dyn SyncTransport>,
 }
 
 /// How a backup is restored into an unlocked vault.
@@ -116,6 +124,38 @@ struct State {
     restore: Option<Restore>,
     last_activity: Instant,
     update: UpdateState,
+    sync: SyncRuntime,
+}
+
+/// The sync as it runs; the vault keeps the space itself.
+#[derive(Default)]
+struct SyncRuntime {
+    /// A run is in progress.
+    busy: bool,
+    /// A run was asked for while one was in progress: another follows it.
+    again: bool,
+    /// When the next run is due.
+    at: Option<Instant>,
+    /// What the last run did.
+    status: SyncStatus,
+    /// The last run's refused rollbacks and unreadable snapshots (device tags).
+    rolled_back: Vec<String>,
+    unreadable: Vec<String>,
+    /// The storage, opened once per space and storage settings.
+    remote: Option<(Uuid, StorageConfig, Arc<dyn RemoteStore>)>,
+}
+
+/// What one run needs, taken from the vault when it starts.
+struct SyncJob {
+    space_id: Uuid,
+    remote: Option<Arc<dyn RemoteStore>>,
+    prefix: String,
+    keys: SpaceKeys,
+    device: u64,
+    device_name: String,
+    state: SyncState,
+    working: Working,
+    pending_keyring: Option<Vec<u8>>,
 }
 
 enum PhaseState {
@@ -169,6 +209,7 @@ impl Core {
             restore: None,
             last_activity: Instant::now(),
             update,
+            sync: SyncRuntime::default(),
         };
         let (events, _) = broadcast::channel(64);
         let shared = Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new() });
@@ -208,7 +249,7 @@ impl Core {
             if !matches!(st.phase, PhaseState::NoVault) {
                 return Err(ErrorCode::VaultExists.into());
             }
-            let session = Session { sealed, data: VaultData::default(), import: None, exports: Vec::new() };
+            let session = Session { sealed, data: VaultData::new(), import: None, exports: Vec::new() };
             self.write_vault(&session)?;
             st.vault_id = Some(session.sealed.vault_id());
             st.device_slot = false;
@@ -279,7 +320,7 @@ impl Core {
         if opened.kind != FileKind::Vault {
             return Err(ErrorCode::VaultCorrupted.into());
         }
-        let data = VaultData::from_bytes(&opened.payload).ok_or(ErrorCode::VaultCorrupted)?;
+        let data = VaultData::open(&opened.payload)?;
         {
             let mut st = self.lock();
             st.vault_id = Some(opened.sealed.vault_id());
@@ -287,6 +328,10 @@ impl Core {
             st.failed_attempts = 0;
             st.retry_at_ms = None;
             st.last_activity = Instant::now();
+            // A device of a sync space syncs as soon as it is unlocked.
+            if data.sync().is_some() {
+                st.sync.at = Some(Instant::now());
+            }
             st.phase = PhaseState::Unlocked(Box::new(Session { sealed: opened.sealed, data, import: None, exports: Vec::new() }));
         }
         self.changed();
@@ -305,6 +350,8 @@ impl Core {
             if was_unlocked {
                 st.phase = PhaseState::Locked;
                 st.auto_backup_at = None;
+                // A run in progress finds the vault locked and keeps nothing.
+                st.sync = SyncRuntime { busy: st.sync.busy, ..SyncRuntime::default() };
             }
             was_unlocked
         };
@@ -345,16 +392,22 @@ impl Core {
     /// returns its key.
     pub async fn change_password(&self, current: Zeroizing<String>, new: Zeroizing<String>) -> CoreResult<()> {
         check_password(&new)?;
-        let (mut sealed, vault_id, device) = {
+        let (mut sealed, vault_id, device, space) = {
             let st = self.lock();
             let session = unlocked(&st)?;
-            (session.sealed.clone(), session.sealed.vault_id(), st.device_slot)
+            let space = session.data.sync().map(|sync| (sync.keys(), sync.sync_key()));
+            (session.sealed.clone(), session.sealed.vault_id(), st.device_slot, space)
         };
         let key = if device { self.device_key(vault_id).ok() } else { None };
-        let cost = self.shared.config.kdf;
-        let (sealed, outcome) = blocking(move || {
+        let (cost, now) = (self.shared.config.kdf, self.now_ms());
+        let (sealed, outcome, keyring) = blocking(move || {
             let outcome = sealed.change_password(current.as_bytes(), new.as_bytes(), cost, key.as_ref())?;
-            Ok((sealed, outcome))
+            // The sync space's keyring follows the master password; the next run writes it.
+            let keyring = match space {
+                Some((Ok(keys), Ok(sync_key))) => Some(seal_keyring(&keys, &sync_key, new.as_bytes(), cost, now).map_err(|e| sync_error(&e))?),
+                _ => None,
+            };
+            Ok((sealed, outcome, keyring))
         })
         .await?;
         {
@@ -364,12 +417,22 @@ impl Core {
                 return Err(ErrorCode::Internal.into());
             }
             let previous = std::mem::replace(&mut session.sealed, sealed);
+            let previous_keyring = match (&keyring, session.data.sync_mut()) {
+                (Some(keyring), Some(sync)) => Some(sync.pending_keyring.replace(BASE64.encode(keyring))),
+                _ => None,
+            };
             if let Err(error) = self.write_vault(session) {
                 session.sealed = previous;
+                if let (Some(previous_keyring), Some(sync)) = (previous_keyring, session.data.sync_mut()) {
+                    sync.pending_keyring = previous_keyring;
+                }
                 return Err(error);
             }
             st.device_slot = session_device(&st);
             self.schedule_auto_backup(&mut st);
+            if keyring.is_some() {
+                st.sync.at = Some(Instant::now());
+            }
         }
         if outcome == DeviceSlot::Dropped {
             let _ = self.shared.ports.secrets.delete(&vault_id.to_string());
@@ -453,14 +516,16 @@ impl Core {
         self.add_entry(entry)
     }
 
-    fn add_entry(&self, entry: Entry) -> CoreResult<Uuid> {
+    fn add_entry(&self, mut entry: Entry) -> CoreResult<Uuid> {
         let id = entry.id;
+        let now = self.now_ms();
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
             if session.data.entries.iter().any(|e| e.same_account(&entry.to_auth())) {
                 return Err(ErrorCode::DuplicateEntry.into());
             }
+            entry.stamp = session.data.tick(now);
             session.data.entries.push(entry);
             self.save(&mut st, true, |s| {
                 s.data.entries.pop();
@@ -476,8 +541,10 @@ impl Core {
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
+            let stamp = session.data.tick(now);
             let entry = session.data.get_mut(id).ok_or(ErrorCode::EntryNotFound)?;
             let before = entry.clone();
+            entry.stamp = stamp;
             if let Some(issuer) = patch.issuer {
                 entry.issuer = clean_name(&issuer);
             }
@@ -503,12 +570,16 @@ impl Core {
 
     /// Delete an entry.
     pub fn delete_entry(&self, id: Uuid) -> CoreResult<()> {
+        let now = self.now_ms();
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
-            let index = session.data.entries.iter().position(|e| e.id == id).ok_or(ErrorCode::EntryNotFound)?;
-            let removed = session.data.entries.remove(index);
-            self.save(&mut st, true, move |s| s.data.entries.insert(index, removed))?;
+            let tombstones = session.data.tombstones.clone();
+            let (index, removed) = session.data.remove(id, now).ok_or(ErrorCode::EntryNotFound)?;
+            self.save(&mut st, true, move |s| {
+                s.data.entries.insert(index, removed);
+                s.data.tombstones = tombstones;
+            })?;
         }
         self.changed();
         Ok(())
@@ -517,15 +588,21 @@ impl Core {
     /// HOTP: advance the counter. It is written to disk before the new code is shown, so a crash
     /// can never show the same code twice.
     pub fn hotp_next(&self, id: Uuid) -> CoreResult<()> {
+        let now = self.now_ms();
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
+            let stamp = session.data.tick(now);
             let entry = session.data.get_mut(id).ok_or(ErrorCode::EntryNotFound)?;
             let OtpKind::Hotp { counter } = entry.kind else { return Err(ErrorCode::InvalidParameters.into()) };
+            let before = entry.stamp;
             entry.kind = OtpKind::Hotp { counter: counter.checked_add(1).ok_or(ErrorCode::InvalidParameters)? };
+            // The next counter is a change like any other: it syncs.
+            entry.stamp = stamp;
             self.save(&mut st, true, move |s| {
                 if let Some(e) = s.data.get_mut(id) {
                     e.kind = OtpKind::Hotp { counter };
+                    e.stamp = before;
                 }
             })?;
         }
@@ -670,7 +747,7 @@ impl Core {
         };
         let data = blocking(move || {
             let opened = Sealed::open_with_password(&bytes, password.as_bytes())?;
-            VaultData::from_bytes(&opened.payload).ok_or_else(|| ErrorCode::VaultCorrupted.into())
+            VaultData::open(&opened.payload)
         })
         .await?;
         {
@@ -800,7 +877,7 @@ impl Core {
         let (sealed, payload) = {
             let st = self.lock();
             let session = unlocked(&st)?;
-            (session.sealed.clone(), session.data.to_bytes())
+            (session.sealed.clone(), session.data.backup_bytes())
         };
         let cost = self.shared.config.kdf;
         let name = blocking(move || {
@@ -856,7 +933,7 @@ impl Core {
     pub async fn restore_commit(&self, password: Zeroizing<String>, mode: RestoreMode) -> CoreResult<()> {
         let bytes = self.lock().restore.as_ref().map(|r| r.bytes.clone()).ok_or(ErrorCode::NoRestore)?;
         let opened = blocking(move || Ok(Sealed::open_with_password(&bytes, password.as_bytes())?)).await?;
-        let data = VaultData::from_bytes(&opened.payload).ok_or(ErrorCode::VaultCorrupted)?;
+        let data = VaultData::open(&opened.payload)?;
         let now = self.now_ms();
         let notice = {
             let mut st = self.lock();
@@ -873,6 +950,10 @@ impl Core {
                     let entries = u32::try_from(session.data.entries.len()).unwrap_or(u32::MAX);
                     st.vault_id = Some(session.sealed.vault_id());
                     st.device_slot = false;
+                    // A vault file (not a backup) brings its sync space along.
+                    if session.data.sync().is_some() {
+                        st.sync.at = Some(Instant::now());
+                    }
                     st.phase = PhaseState::Unlocked(Box::new(session));
                     st.last_activity = Instant::now();
                     Some(Notice::Restored { entries })
@@ -887,9 +968,12 @@ impl Core {
                         None
                     }
                     RestoreMode::Replace => {
-                        let keep = session.sealed.seal(FileKind::Backup, &session.data.to_bytes())?;
+                        let keep = session.sealed.seal(FileKind::Backup, &session.data.backup_bytes())?;
                         write_private(&self.shared.config.data_dir.join(pre_restore_file_name(now)), &keep)?;
-                        let before = std::mem::replace(&mut session.data, data);
+                        let before = session.data.clone();
+                        // A change made now: this device's part stays, and a sync space ends up
+                        // with the backup's accounts.
+                        session.data.replace_entries(data.entries, now);
                         let entries = u32::try_from(session.data.entries.len()).unwrap_or(u32::MAX);
                         self.save(&mut st, true, move |s| s.data = before)?;
                         Some(Notice::Restored { entries })
@@ -1075,6 +1159,464 @@ impl Core {
         let _ = self.shared.events.send(UiEvent::State { state: Box::new(self.state()) });
     }
 
+    // ---- sync -----------------------------------------------------------------------------
+
+    /// Set up sync on a new space at `storage` (Settings › Sync): its keyring goes up under the
+    /// master password and a new sync key, which the answer carries to be shown once. The first
+    /// run follows.
+    pub async fn sync_create(&self, storage: StorageConfig, password: Zeroizing<String>, device: String) -> CoreResult<SyncCreated> {
+        storage.validate().map_err(config_error)?;
+        let sealed = {
+            let st = self.lock();
+            let session = unlocked(&st)?;
+            if session.data.sync().is_some() {
+                return Err(ErrorCode::SyncAlreadyOn.into());
+            }
+            session.sealed.clone()
+        };
+        let vault_id = sealed.vault_id();
+        let remote = self.open_storage(&storage)?;
+        let (cost, now) = (self.shared.config.kdf, self.now_ms());
+        let (keys, sync_key, keyring) = blocking(move || {
+            sealed.verify_password(password.as_bytes())?;
+            let sync_key = SyncKey::generate().map_err(|e| sync_error(&e))?;
+            let keys = SpaceKeys::generate(sync_key.space_id()).map_err(|e| sync_error(&e))?;
+            let keyring = seal_keyring(&keys, &sync_key, password.as_bytes(), cost, now).map_err(|e| sync_error(&e))?;
+            Ok((keys, sync_key, keyring))
+        })
+        .await?;
+        remote.put(&keyring_path(storage.prefix(), keys.space_id()), keyring, PutCondition::IfAbsent).await.map_err(|e| sync_error(&e))?;
+        let name = device_name(&device, self.shared.config.platform);
+        let text = sync_key.to_text();
+        self.join_space(vault_id, SyncLocal::new(storage, &keys, &sync_key, name), remote)?;
+        Ok(SyncCreated { sync_key: text.to_string() })
+    }
+
+    /// Join an existing space, from another device's invitation or from the storage and the sync
+    /// key typed in, with the master password of the space. Unlocked, the vault's accounts join
+    /// the space; with no vault yet, this creates one under that password (a new device).
+    pub async fn sync_join(&self, source: JoinSource, password: Zeroizing<String>, device: String) -> CoreResult<()> {
+        let (storage, sync_key) = match source {
+            JoinSource::Invite { text } => {
+                let invite = Invite::from_text(&text).map_err(|e| sync_error(&e))?;
+                (invite.storage, invite.sync_key)
+            }
+            JoinSource::Manual { storage, sync_key } => (storage, SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?),
+        };
+        storage.validate().map_err(config_error)?;
+        let existing = {
+            let st = self.lock();
+            match &st.phase {
+                PhaseState::Locked => return Err(ErrorCode::Locked.into()),
+                PhaseState::NoVault => {
+                    check_password(&password)?;
+                    None
+                }
+                PhaseState::Unlocked(session) => {
+                    if session.data.sync().is_some() {
+                        return Err(ErrorCode::SyncAlreadyOn.into());
+                    }
+                    Some(session.sealed.vault_id())
+                }
+            }
+        };
+        let remote = self.open_storage(&storage)?;
+        let space_id = sync_key.space_id();
+        let (bytes, _) = remote.get(&keyring_path(storage.prefix(), space_id)).await.map_err(|e| sync_error(&e))?.ok_or(ErrorCode::SyncSpaceNotFound)?;
+        let (cost, now, data_dir) = (self.shared.config.kdf, self.now_ms(), self.shared.config.data_dir.clone());
+        let create = existing.is_none();
+        let (keys, sealed, sync_key) = blocking(move || {
+            let keys = open_keyring(&bytes, space_id, &sync_key, password.as_bytes()).map_err(|e| sync_error(&e))?;
+            let sealed = if create {
+                let sealed = Sealed::create(password.as_bytes(), cost, now)?;
+                fs::create_dir_all(&data_dir)?;
+                restrict_dir(&data_dir);
+                Some(sealed)
+            } else {
+                None
+            };
+            Ok((keys, sealed, sync_key))
+        })
+        .await?;
+        let space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform));
+        match (existing, sealed) {
+            (Some(vault_id), _) => self.join_space(vault_id, space, remote),
+            (None, Some(sealed)) => self.create_joined(sealed, space, remote),
+            (None, None) => Err(ErrorCode::Internal.into()),
+        }
+    }
+
+    /// Record `space` in the unlocked vault `vault_id`; the first run follows.
+    fn join_space(&self, vault_id: Uuid, space: SyncLocal, remote: Arc<dyn RemoteStore>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            if session.sealed.vault_id() != vault_id {
+                return Err(ErrorCode::Internal.into());
+            }
+            if session.data.sync().is_some() {
+                return Err(ErrorCode::SyncAlreadyOn.into());
+            }
+            let cache = (space.space_id, space.storage.clone(), remote);
+            session.data.local_mut().sync = Some(space);
+            self.save(&mut st, false, |s| s.data.local_mut().sync = None)?;
+            st.sync.remote = Some(cache);
+            st.sync.at = Some(Instant::now());
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// A new vault, made by joining `space` where there was none.
+    fn create_joined(&self, sealed: Sealed, space: SyncLocal, remote: Arc<dyn RemoteStore>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            if !matches!(st.phase, PhaseState::NoVault) {
+                return Err(ErrorCode::VaultExists.into());
+            }
+            let cache = (space.space_id, space.storage.clone(), remote);
+            let mut data = VaultData::new();
+            data.local_mut().sync = Some(space);
+            let session = Session { sealed, data, import: None, exports: Vec::new() };
+            self.write_vault(&session)?;
+            st.vault_id = Some(session.sealed.vault_id());
+            st.device_slot = false;
+            st.phase = PhaseState::Unlocked(Box::new(session));
+            st.last_activity = Instant::now();
+            st.sync.remote = Some(cache);
+            st.sync.at = Some(Instant::now());
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// The invitation for another device, after the master password was entered again: the
+    /// storage, its credentials and the sync key, as text and as a QR code.
+    pub async fn sync_invite(&self, password: Zeroizing<String>) -> CoreResult<SyncInvite> {
+        let (sealed, storage, sync_key) = {
+            let st = self.lock();
+            let session = unlocked(&st)?;
+            let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
+            (session.sealed.clone(), sync.storage.clone(), sync.sync_key.clone())
+        };
+        blocking(move || {
+            sealed.verify_password(password.as_bytes())?;
+            let sync_key = SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?;
+            let text = Invite { storage, sync_key: sync_key.clone() }.to_text();
+            let svg = qr::svg(&text).map_err(|_| ErrorCode::Internal)?;
+            Ok(SyncInvite { invite: text.to_string(), svg: svg.to_string(), sync_key: sync_key.to_text().to_string() })
+        })
+        .await
+    }
+
+    /// Move the space's storage settings on (a new address or new credentials), after the master
+    /// password was entered again; the space must be found there.
+    pub async fn sync_set_storage(&self, storage: StorageConfig, password: Zeroizing<String>) -> CoreResult<()> {
+        storage.validate().map_err(config_error)?;
+        let (sealed, space_id) = {
+            let st = self.lock();
+            let session = unlocked(&st)?;
+            let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
+            (session.sealed.clone(), sync.space_id)
+        };
+        blocking(move || Ok(sealed.verify_password(password.as_bytes())?)).await?;
+        let remote = self.open_storage(&storage)?;
+        remote.get(&keyring_path(storage.prefix(), space_id)).await.map_err(|e| sync_error(&e))?.ok_or(ErrorCode::SyncSpaceNotFound)?;
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let sync = session.data.sync_mut().filter(|s| s.space_id == space_id).ok_or(ErrorCode::SyncOff)?;
+            let cache = (space_id, storage.clone(), remote);
+            let previous = std::mem::replace(&mut sync.storage, storage);
+            self.save(&mut st, false, move |s| {
+                if let Some(sync) = s.data.sync_mut() {
+                    sync.storage = previous;
+                }
+            })?;
+            st.sync.remote = Some(cache);
+            st.sync.at = Some(Instant::now());
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// Rename this device in its space; the other devices see the name after the next run.
+    pub fn sync_rename_device(&self, name: &str) -> CoreResult<()> {
+        let name = device_name(name, self.shared.config.platform);
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let sync = session.data.sync_mut().ok_or(ErrorCode::SyncOff)?;
+            let previous = std::mem::replace(&mut sync.device_name, name);
+            self.save(&mut st, false, move |s| {
+                if let Some(sync) = s.data.sync_mut() {
+                    sync.device_name = previous;
+                }
+            })?;
+            st.sync.at = Some(Instant::now());
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// Remove another device's snapshot from the space (a lost or retired device): it stops being
+    /// listed. A device still in use writes its snapshot again on its next run.
+    pub async fn sync_remove_device(&self, tag: &str) -> CoreResult<()> {
+        let (storage, keys, device) = {
+            let st = self.lock();
+            let session = unlocked(&st)?;
+            let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
+            (sync.storage.clone(), sync.keys().map_err(|e| sync_error(&e))?, session.data.device())
+        };
+        let remote = self.space_storage(keys.space_id(), &storage).map_err(|e| sync_error(&e))?;
+        let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: "" };
+        match remove_device(&*remote, &space, &mut SyncState::default(), tag).await {
+            Ok(()) => {}
+            // This device, or not a device's name: nothing the interface offers.
+            Err(SyncError::Misplaced) => return Err(ErrorCode::Internal.into()),
+            Err(error) => return Err(sync_error(&error)),
+        }
+        {
+            let mut st = self.lock();
+            if let PhaseState::Unlocked(session) = &mut st.phase
+                && let Some(sync) = session.data.sync_mut().filter(|s| s.space_id == keys.space_id())
+                && let Some(seen) = sync.state.seen.remove(tag)
+            {
+                let tag = tag.to_owned();
+                self.save(&mut st, false, move |s| {
+                    if let Some(sync) = s.data.sync_mut() {
+                        sync.state.seen.insert(tag, seen);
+                    }
+                })?;
+            }
+            st.sync.rolled_back.retain(|t| t != tag);
+            st.sync.unreadable.retain(|t| t != tag);
+            st.sync.at = Some(Instant::now());
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// Run the sync now (Settings › Sync › "sync now").
+    pub fn sync_now(&self) -> CoreResult<()> {
+        {
+            let st = self.lock();
+            unlocked(&st)?.data.sync().ok_or(ErrorCode::SyncOff)?;
+        }
+        self.start_sync();
+        Ok(())
+    }
+
+    /// Turn sync off on this device: the space is forgotten here (the storage keeps it, and the
+    /// other devices go on).
+    pub fn sync_disable(&self) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let previous = session.data.local_mut().sync.take().ok_or(ErrorCode::SyncOff)?;
+            self.save(&mut st, false, move |s| s.data.local_mut().sync = Some(previous))?;
+            st.sync = SyncRuntime { busy: st.sync.busy, ..SyncRuntime::default() };
+        }
+        self.changed();
+        Ok(())
+    }
+
+    fn open_storage(&self, storage: &StorageConfig) -> CoreResult<Arc<dyn RemoteStore>> {
+        self.shared.ports.sync.open(storage).map_err(|e| sync_error(&e))
+    }
+
+    /// Start a run unless one is in progress, which another then follows.
+    fn start_sync(&self) {
+        {
+            let mut st = self.lock();
+            if !matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some()) {
+                return;
+            }
+            st.sync.at = None;
+            if st.sync.busy {
+                st.sync.again = true;
+                return;
+            }
+            st.sync.busy = true;
+            st.sync.status = SyncStatus::Syncing;
+        }
+        self.changed();
+        let core = self.clone();
+        tokio::spawn(async move { core.run_sync().await });
+    }
+
+    async fn run_sync(&self) {
+        let mut renumbered = false;
+        loop {
+            let result = self.sync_once().await;
+            let now = self.now_ms();
+            let again = {
+                let mut st = self.lock();
+                let mut again = std::mem::take(&mut st.sync.again);
+                match &result {
+                    Ok(outcome) => {
+                        st.sync.status = SyncStatus::Synced { at_ms: now };
+                        st.sync.rolled_back.clone_from(&outcome.rolled_back);
+                        st.sync.unreadable.clone_from(&outcome.unreadable);
+                    }
+                    // Another device writes under this one's name: a copied vault, or this vault's
+                    // own state put back. This device becomes a new one of the space, once.
+                    Err(SyncError::DeviceClash) if !renumbered => {
+                        renumbered = true;
+                        match self.renumber(&mut st) {
+                            Ok(()) => again = true,
+                            Err(error) => st.sync.status = SyncStatus::Failed { code: error.code, at_ms: now },
+                        }
+                    }
+                    // Locked meanwhile, the space changed, or the vault could not be written (the
+                    // status says so already).
+                    Err(SyncError::Interrupted) => {}
+                    Err(error) => st.sync.status = SyncStatus::Failed { code: sync_error(error).code, at_ms: now },
+                }
+                let configured = matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some());
+                again &= configured;
+                if !again {
+                    st.sync.busy = false;
+                    if configured && st.sync.at.is_none() {
+                        st.sync.at = Some(Instant::now() + SYNC_INTERVAL);
+                    }
+                }
+                again
+            };
+            self.changed();
+            if !again {
+                break;
+            }
+        }
+    }
+
+    /// One run: a keyring under a new password goes up first, then the snapshots.
+    async fn sync_once(&self) -> Result<SyncOutcome, SyncError> {
+        let SyncJob { space_id, remote, prefix, keys, device, device_name, mut state, mut working, pending_keyring } = self.sync_job()?;
+        let remote = remote.ok_or(SyncError::Interrupted)?;
+        if let Some(keyring) = pending_keyring {
+            remote.put(&keyring_path(&prefix, space_id), keyring.clone(), PutCondition::Always).await?;
+            self.sync_keyring_written(space_id, &keyring);
+        }
+        let space = Space { prefix: &prefix, keys: &keys, device, device_name: &device_name };
+        let core = self.clone();
+        let mut persist = move |state: &SyncState, working: &Working| core.sync_keep(space_id, state, working, None);
+        let outcome = step_with(&*remote, &space, &mut state, &mut working, self.now_ms(), &mut persist).await?;
+        self.sync_keep(space_id, &state, &working, Some(self.now_ms()))?;
+        Ok(outcome)
+    }
+
+    fn sync_job(&self) -> Result<SyncJob, SyncError> {
+        let (job, storage) = {
+            let st = self.lock();
+            let PhaseState::Unlocked(session) = &st.phase else { return Err(SyncError::Interrupted) };
+            let Some(sync) = session.data.sync() else { return Err(SyncError::Interrupted) };
+            let pending_keyring = sync.pending_keyring.as_deref().map(|text| BASE64.decode(text.as_bytes())).transpose().map_err(|_| SyncError::Corrupted)?;
+            let job = SyncJob {
+                space_id: sync.space_id,
+                remote: None,
+                prefix: sync.storage.prefix().to_owned(),
+                keys: sync.keys()?,
+                device: session.data.device(),
+                device_name: sync.device_name.clone(),
+                state: sync.state.clone(),
+                working: Working { entries: session.data.entries.clone(), tombstones: session.data.tombstones.clone() },
+                pending_keyring,
+            };
+            (job, sync.storage.clone())
+        };
+        let remote = self.space_storage(job.space_id, &storage)?;
+        Ok(SyncJob { remote: Some(remote), ..job })
+    }
+
+    /// The space's storage: opened once and kept for the next runs, until the space or its
+    /// storage settings change. Opening (an HTTP client, the system's certificates) happens
+    /// outside the state's lock.
+    fn space_storage(&self, space_id: Uuid, storage: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+        if let Some((id, config, remote)) = &self.lock().sync.remote
+            && *id == space_id
+            && config == storage
+        {
+            return Ok(Arc::clone(remote));
+        }
+        let remote = self.shared.ports.sync.open(storage)?;
+        self.lock().sync.remote = Some((space_id, storage.clone(), Arc::clone(&remote)));
+        Ok(remote)
+    }
+
+    /// Fold a run's replica into the vault and keep its state; `finished_at` marks the end of a
+    /// run. The accounts merge rather than replace: a change made while the run was out stays,
+    /// and the next run takes it along.
+    fn sync_keep(&self, space_id: Uuid, state: &SyncState, working: &Working, finished_at: Option<u64>) -> Result<(), SyncError> {
+        let now = self.now_ms();
+        let changed = {
+            let mut st = self.lock();
+            let PhaseState::Unlocked(session) = &mut st.phase else { return Err(SyncError::Interrupted) };
+            if session.data.sync().map(|s| s.space_id) != Some(space_id) {
+                return Err(SyncError::Interrupted);
+            }
+            let before = session.data.clone();
+            let changed = merge_entries(&mut session.data.entries, &mut session.data.tombstones, &working.entries, &working.tombstones);
+            if changed {
+                session.data.observe_stamps();
+            }
+            if let Some(sync) = session.data.sync_mut() {
+                sync.state = state.clone();
+                if finished_at.is_some() {
+                    sync.last_sync_ms = finished_at;
+                }
+            }
+            if let Err(error) = self.write_vault(session) {
+                session.data = before;
+                st.sync.status = SyncStatus::Failed { code: error.code, at_ms: now };
+                return Err(SyncError::Interrupted);
+            }
+            if changed {
+                self.schedule_auto_backup(&mut st);
+            }
+            changed
+        };
+        if changed {
+            self.changed();
+        }
+        Ok(())
+    }
+
+    /// The keyring under the new master password reached the storage: unless a newer one waits.
+    fn sync_keyring_written(&self, space_id: Uuid, keyring: &[u8]) {
+        let mut st = self.lock();
+        let Ok(session) = unlocked_mut(&mut st) else { return };
+        let written = BASE64.encode(keyring);
+        let Some(sync) = session.data.sync_mut().filter(|s| s.space_id == space_id && s.pending_keyring.as_deref() == Some(written.as_str())) else {
+            return;
+        };
+        sync.pending_keyring = None;
+        let _ = self.save(&mut st, false, move |s| {
+            if let Some(sync) = s.data.sync_mut() {
+                sync.pending_keyring = Some(written);
+            }
+        });
+    }
+
+    /// Become a new device of the space: a new number (and clock), a fresh state. The snapshot
+    /// under the old number stays, as another device's, until it is removed.
+    fn renumber(&self, st: &mut State) -> CoreResult<()> {
+        let PhaseState::Unlocked(session) = &mut st.phase else { return Err(ErrorCode::Locked.into()) };
+        let before = session.data.clone();
+        let local = session.data.local_mut();
+        let mut clock = lockra_sync::Clock::new(random_device());
+        clock.observe(local.clock.last());
+        local.clock = clock;
+        if let Some(sync) = local.sync.as_mut() {
+            sync.state = SyncState::default();
+        }
+        if let Err(error) = self.write_vault(session) {
+            session.data = before;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     // ---- internals ------------------------------------------------------------------------
 
     fn lock(&self) -> MutexGuard<'_, State> {
@@ -1119,6 +1661,7 @@ impl Core {
         st.last_activity = Instant::now();
         if content {
             self.schedule_auto_backup(st);
+            schedule_sync(st);
         }
         Ok(())
     }
@@ -1142,7 +1685,7 @@ impl Core {
                         if !dir.is_dir() {
                             return Err(ErrorCode::BackupDirUnavailable.into());
                         }
-                        let bytes = session.sealed.seal(FileKind::Backup, &session.data.to_bytes())?;
+                        let bytes = session.sealed.seal(FileKind::Backup, &session.data.backup_bytes())?;
                         let name = auto_file_name(now, |n| dir.join(n).exists());
                         write_private(&dir.join(&name), &bytes).map_err(|_| ErrorCode::BackupDirUnavailable)?;
                         prune(&dir, keep).map_err(|_| ErrorCode::BackupDirUnavailable)?;
@@ -1203,6 +1746,7 @@ impl Core {
             restore: st.restore.as_ref().map(|r| r.view.clone()),
             auto_lock_at_ms,
             update: UpdateView { method: self.shared.ports.updater.method(), status: st.update.status.clone() },
+            sync: sync_view(st),
         }
     }
 
@@ -1272,6 +1816,7 @@ impl Core {
             }
             deadlines.extend(session.exports.iter().map(|e| e.expires_at));
             deadlines.extend(st.auto_backup_at);
+            deadlines.extend(st.sync.at);
         }
         deadlines.extend(st.clipboard.as_ref().map(|(_, at)| *at));
         deadlines.extend(st.update.auto_at);
@@ -1281,11 +1826,15 @@ impl Core {
     /// Everything that is due.
     fn on_timer(&self) {
         let now = Instant::now();
-        let (auto_lock, clear, backup, expired, auto_update) = {
+        let (auto_lock, clear, backup, expired, auto_update, sync) = {
             let mut st = self.lock();
             let auto_update = st.update.auto_at.is_some_and(|at| now >= at);
             if auto_update {
                 st.update.auto_at = None;
+            }
+            let sync = st.sync.at.is_some_and(|at| now >= at);
+            if sync {
+                st.sync.at = None;
             }
             let auto_lock = matches!(st.phase, PhaseState::Unlocked(_))
                 && st.settings.auto_lock_minutes > 0
@@ -1303,7 +1852,7 @@ impl Core {
                     keep
                 });
             }
-            (auto_lock, clear, backup, expired, auto_update)
+            (auto_lock, clear, backup, expired, auto_update, sync)
         };
         if let Some(code) = clear
             && self.shared.ports.clipboard.clear_if(&code).unwrap_or(false)
@@ -1319,6 +1868,9 @@ impl Core {
         if auto_lock {
             self.lock_vault();
             self.notice(Notice::AutoLocked);
+        }
+        if sync {
+            self.start_sync();
         }
         if auto_update {
             // Installs at once only the version an earlier start downloaded. Skipped while the user
@@ -1459,6 +2011,31 @@ fn code_view(entry: &Entry, now_ms: u64) -> CodeView {
 
 fn current_code(entry: &Entry, now_ms: u64) -> String {
     code_view(entry, now_ms).code
+}
+
+/// A change to sync: a run follows after the debounce.
+fn schedule_sync(st: &mut State) {
+    if matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some()) {
+        st.sync.at = Some(Instant::now() + SYNC_DEBOUNCE);
+    }
+}
+
+fn sync_view(st: &State) -> SyncView {
+    let PhaseState::Unlocked(session) = &st.phase else { return SyncView { space: None } };
+    let space = session.data.sync().map(|sync| {
+        let own_tag = sync.keys().map(|keys| keys.device_tag(session.data.device())).unwrap_or_default();
+        SyncSpaceView {
+            storage: storage_view(&sync.storage),
+            device_name: sync.device_name.clone(),
+            devices: sync.devices(own_tag),
+            status: st.sync.status.clone(),
+            last_sync_ms: sync.last_sync_ms,
+            rolled_back: st.sync.rolled_back.clone(),
+            unreadable: st.sync.unreadable.clone(),
+            keyring_pending: sync.pending_keyring.is_some(),
+        }
+    });
+    SyncView { space }
 }
 
 fn unlocked(st: &State) -> CoreResult<&Session> {

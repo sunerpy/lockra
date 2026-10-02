@@ -13,6 +13,9 @@ import {
   exportStartedSchema,
   importOutcomeSchema,
   revealedSchema,
+  syncCreatedSchema,
+  syncInviteSchema,
+  syncViewSchema,
   uiCommandSchema,
   uiEventSchema,
   uiStateSchema,
@@ -74,6 +77,21 @@ describe("IPC fixtures", () => {
     expect(uiStateSchema.parse(ipcFixtures.state.unlocked).update.status.state).toBe("available");
   });
 
+  it("every sync view parses, each state and both storages once at least", () => {
+    const views = ipcFixtures.sync.map((view) => syncViewSchema.parse(view));
+    const spaces = views.flatMap((v) => (v.space ? [v.space] : []));
+    expect(new Set(spaces.map((s) => s.status.state))).toEqual(
+      new Set(["idle", "syncing", "synced", "failed"]),
+    );
+    expect(new Set(spaces.map((s) => s.storage.kind))).toEqual(new Set(["s3", "webdav"]));
+    expect(views.some((v) => v.space === null)).toBe(true);
+    const unlocked = uiStateSchema.parse(ipcFixtures.state.unlocked).sync.space;
+    expect(unlocked?.devices.map((d) => d.this_device)).toEqual([true, false]);
+    expect(uiStateSchema.parse(ipcFixtures.state.locked).sync.space).toBeNull();
+    // The storage's secret never comes back.
+    expect(JSON.stringify(ipcFixtures.sync)).not.toMatch(/secret_access_key|"password"/);
+  });
+
   it("every answer parses with its schema", () => {
     const r = ipcFixtures.responses;
     expect(entryAddedSchema.parse(r.entry_added).id).toMatch(/[0-9a-f-]{36}/);
@@ -87,6 +105,8 @@ describe("IPC fixtures", () => {
     });
     expect(codesFrameSchema.parse(r.codes_frame).codes[1]?.next_code).toBeNull();
     expect(codesFrameSchema.parse(r.codes_frame_locked).codes).toEqual([]);
+    expect(syncCreatedSchema.parse(r.sync_created).sync_key).toMatch(/^LKS1-/);
+    expect(syncInviteSchema.parse(r.sync_invite).invite).toMatch(/^lockra-invite:1:/);
     const errors = r.errors.map((e) => coreErrorSchema.parse(e));
     expect(errors[1]).toEqual({ code: "rate_limited", retry_at_ms: 1_790_000_004_000 });
   });
@@ -112,6 +132,8 @@ describe("IPC fixtures", () => {
         import_commit: ipcFixtures.responses.import_outcome,
         export_start: ipcFixtures.responses.export_started,
         export_page: ipcFixtures.responses.export_page,
+        sync_create: ipcFixtures.responses.sync_created,
+        sync_invite: ipcFixtures.responses.sync_invite,
       };
       const { transport, calls } = recordingTransport(answers[command.command] ?? null);
       const answer = await new TauriBackend(transport).dispatch(command);

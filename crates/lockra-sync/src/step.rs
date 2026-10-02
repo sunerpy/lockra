@@ -12,8 +12,10 @@ use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
+use zeroize::Zeroizing;
 
 use crate::keys::is_tag;
+use crate::object::device_name;
 use crate::{ObjectMeta, PutCondition, RemoteStore, Snapshot, SpaceKeys, SyncError, open_snapshot, seal_snapshot};
 
 const ROOT: &str = "lockra-sync-v1";
@@ -23,6 +25,11 @@ const EXTENSION: &str = ".lks";
 fn base(prefix: &str) -> String {
     let trimmed = prefix.trim_matches('/');
     if trimmed.is_empty() { String::new() } else { format!("{trimmed}/") }
+}
+
+/// The directory the spaces under `prefix` live in.
+pub fn spaces_dir(prefix: &str) -> String {
+    format!("{}{ROOT}/", base(prefix))
 }
 
 /// Where the keyring object of space `space_id` lives under `prefix`.
@@ -43,17 +50,31 @@ pub fn device_path(prefix: &str, space_id: Uuid, tag: &str) -> String {
 /// What a device remembers about its space between runs; the vault keeps it in its encrypted
 /// local part.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SyncState {
     /// The sequence number of this device's last write.
     pub own_seq: u64,
     /// The etag of this device's object as last written or read.
     pub own_etag: Option<String>,
-    /// SHA-256 (hex) of the payload last written: an unchanged replica is not written again.
+    /// SHA-256 (hex) of the device name and payload last written: an unchanged replica is not
+    /// written again.
     pub written_digest: Option<String>,
     /// When this device last wrote, Unix milliseconds.
     pub own_written_at_ms: Option<u64>,
+    /// A write this device started but has no answer for yet: found on the storage later, it is
+    /// this device's own, not a copy's.
+    pub pending: Option<PendingWrite>,
     /// The other devices, by tag.
     pub seen: BTreeMap<String, Seen>,
+}
+
+/// A write of this device's snapshot, named before it goes out.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingWrite {
+    /// Its sequence number.
+    pub seq: u64,
+    /// The digest of its device name and payload.
+    pub digest: String,
 }
 
 /// The latest snapshot read from another device.
@@ -72,7 +93,7 @@ pub struct Seen {
 /// The data a space keeps in step.
 pub trait Replica {
     /// What this device writes: its whole state as it syncs.
-    fn payload(&self) -> Vec<u8>;
+    fn payload(&self) -> Zeroizing<Vec<u8>>;
     /// Fold another device's payload in; `true` when the replica changed. A payload that does not
     /// parse is an error, and that device's snapshot counts as unreadable.
     fn absorb(&mut self, payload: &[u8]) -> Result<bool, SyncError>;
@@ -119,15 +140,35 @@ pub struct Outcome {
     pub devices: Vec<DeviceView>,
 }
 
+/// Keeps a run's progress before it writes: called with the state naming the write
+/// ([`SyncState::pending`]) and the replica as it will be written, both folded in from the other
+/// devices. The caller stores them, so a write whose answer never arrives (a lost connection, a
+/// vault locked meanwhile) is recognised as this device's own on the next run. An error stops the
+/// run before the write.
+pub type Persist<'a, R> = dyn FnMut(&SyncState, &R) -> Result<(), SyncError> + Send + 'a;
+
 /// One run for `space`: read what changed, fold it into `replica`, write this device's snapshot
 /// if needed. `state` is updated only as far as the run got: a failure leaves it consistent for
-/// the next run.
-pub async fn step<R: Replica + ?Sized>(
+/// the next run. Without a [`Persist`] step: [`step_with`] is the one for state that outlives the
+/// process.
+pub async fn step<R: Replica + Send + ?Sized>(
     remote: &dyn RemoteStore,
     space: &Space<'_>,
     state: &mut SyncState,
     replica: &mut R,
     now_ms: u64,
+) -> Result<Outcome, SyncError> {
+    step_with(remote, space, state, replica, now_ms, &mut |_: &SyncState, _: &R| Ok(())).await
+}
+
+/// [`step`], keeping its progress through `persist` before it writes.
+pub async fn step_with<R: Replica + Send + ?Sized>(
+    remote: &dyn RemoteStore,
+    space: &Space<'_>,
+    state: &mut SyncState,
+    replica: &mut R,
+    now_ms: u64,
+    persist: &mut Persist<'_, R>,
 ) -> Result<Outcome, SyncError> {
     let keys = space.keys;
     let own_tag = keys.device_tag(space.device);
@@ -173,6 +214,8 @@ pub async fn step<R: Replica + ?Sized>(
         }
         state.seen.insert(tag, Seen { seq: snapshot.seq, etag: etag.or(meta.etag), name: snapshot.device_name, written_at_ms: snapshot.written_at_ms });
     }
+    // A device whose snapshot is gone (removed) is no longer one of the space's.
+    state.seen.retain(|tag, _| others.contains(tag));
 
     match &own_meta {
         // Absent: the first run, or the storage lost it. Write it.
@@ -185,9 +228,17 @@ pub async fn step<R: Replica + ?Sized>(
         Some(meta) if meta.etag.is_none() || meta.etag != state.own_etag => {
             if let Some((bytes, etag)) = remote.get(&own_path).await? {
                 match open_snapshot(keys, &own_tag, &bytes) {
+                    // This device's own write, whose answer never arrived.
+                    Ok(snapshot)
+                        if state.pending.as_ref().is_some_and(|p| p.seq == snapshot.seq && p.digest == digest(&snapshot.device_name, &snapshot.payload)) =>
+                    {
+                        state.own_seq = snapshot.seq;
+                        state.written_digest = state.pending.take().map(|p| p.digest);
+                        state.own_written_at_ms = Some(snapshot.written_at_ms);
+                    }
                     Ok(snapshot) if snapshot.seq > state.own_seq => return Err(SyncError::DeviceClash),
                     Ok(snapshot) if snapshot.seq == state.own_seq && state.own_seq > 0 => {
-                        if Some(digest(&snapshot.payload)) != state.written_digest {
+                        if Some(digest(&snapshot.device_name, &snapshot.payload)) != state.written_digest {
                             return Err(SyncError::DeviceClash);
                         }
                     }
@@ -199,11 +250,14 @@ pub async fn step<R: Replica + ?Sized>(
         Some(_) => {}
     }
 
+    let name = device_name(space.device_name);
     let payload = replica.payload();
-    let payload_digest = digest(&payload);
+    let payload_digest = digest(&name, &payload);
     if state.written_digest.as_deref() != Some(payload_digest.as_str()) {
         let seq = state.own_seq + 1;
-        let object = seal_snapshot(keys, &own_tag, &Snapshot { seq, written_at_ms: now_ms, device_name: space.device_name.to_owned(), payload })?;
+        let object = seal_snapshot(keys, &own_tag, &Snapshot { seq, written_at_ms: now_ms, device_name: name.clone(), payload })?;
+        state.pending = Some(PendingWrite { seq, digest: payload_digest.clone() });
+        persist(state, replica)?;
         let condition = match (&own_meta, &state.own_etag) {
             _ if !remote.conditional_puts() => PutCondition::Always,
             (None, _) => PutCondition::IfAbsent,
@@ -218,10 +272,11 @@ pub async fn step<R: Replica + ?Sized>(
         state.own_etag = etag;
         state.written_digest = Some(payload_digest);
         state.own_written_at_ms = Some(now_ms);
+        state.pending = None;
         outcome.wrote = true;
     }
 
-    outcome.devices.push(DeviceView { tag: own_tag, name: space.device_name.to_owned(), written_at_ms: state.own_written_at_ms, this_device: true });
+    outcome.devices.push(DeviceView { tag: own_tag, name, written_at_ms: state.own_written_at_ms, this_device: true });
     for tag in others {
         if let Some(seen) = state.seen.get(&tag) {
             outcome.devices.push(DeviceView { name: seen.name.clone(), written_at_ms: Some(seen.written_at_ms), tag, this_device: false });
@@ -241,8 +296,13 @@ pub async fn remove_device(remote: &dyn RemoteStore, space: &Space<'_>, state: &
     Ok(())
 }
 
-fn digest(payload: &[u8]) -> String {
-    HEXLOWER.encode(&Sha256::digest(payload))
+/// What tells two writes of this device apart: its name and its payload.
+fn digest(name: &str, payload: &[u8]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(u64::try_from(name.len()).unwrap_or(u64::MAX).to_le_bytes());
+    hash.update(name.as_bytes());
+    hash.update(payload);
+    HEXLOWER.encode(&hash.finalize())
 }
 
 #[cfg(test)]
@@ -280,8 +340,8 @@ mod tests {
     }
 
     impl Replica for Doc {
-        fn payload(&self) -> Vec<u8> {
-            serde_json::to_vec(self).unwrap()
+        fn payload(&self) -> Zeroizing<Vec<u8>> {
+            Zeroizing::new(serde_json::to_vec(self).unwrap())
         }
 
         fn absorb(&mut self, payload: &[u8]) -> Result<bool, SyncError> {
@@ -444,7 +504,8 @@ mod tests {
 
     fn keys_and_object() -> Vec<u8> {
         let other = keys();
-        seal_snapshot(&other, &other.device_tag(4), &Snapshot { seq: 1, written_at_ms: 1, device_name: "x".into(), payload: b"{}".to_vec() }).unwrap()
+        seal_snapshot(&other, &other.device_tag(4), &Snapshot { seq: 1, written_at_ms: 1, device_name: "x".into(), payload: Zeroizing::new(b"{}".to_vec()) })
+            .unwrap()
     }
 
     #[tokio::test]
@@ -513,7 +574,9 @@ mod tests {
         let remote = MemoryRemote::new(true);
         let keys = keys();
         let tag = keys.device_tag(9);
-        let object = seal_snapshot(&keys, &tag, &Snapshot { seq: 1, written_at_ms: 1, device_name: "Future".into(), payload: b"not json".to_vec() }).unwrap();
+        let object =
+            seal_snapshot(&keys, &tag, &Snapshot { seq: 1, written_at_ms: 1, device_name: "Future".into(), payload: Zeroizing::new(b"not json".to_vec()) })
+                .unwrap();
         remote.set_object(&device_path(PREFIX, keys.space_id(), &tag), object);
         let mut laptop = Device::new(1, "Laptop");
         let outcome = laptop.sync(&remote, &keys, 100).await.unwrap();
@@ -529,10 +592,16 @@ mod tests {
         let mut phone = Device::new(2, "Phone");
         laptop.sync(&remote, &keys, 100).await.unwrap();
         phone.sync(&remote, &keys, 100).await.unwrap();
+        laptop.sync(&remote, &keys, 150).await.unwrap();
         let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop" };
         let phone_tag = keys.device_tag(2);
-        remove_device(&remote, &space, &mut laptop.state, &phone_tag).await.unwrap();
+        // Removed elsewhere: the next run forgets it too.
+        let mut elsewhere = laptop.state.clone();
+        remove_device(&remote, &space, &mut elsewhere, &phone_tag).await.unwrap();
+        assert!(!elsewhere.seen.contains_key(&phone_tag));
+        assert!(laptop.state.seen.contains_key(&phone_tag));
         assert_eq!(laptop.sync(&remote, &keys, 200).await.unwrap().devices.len(), 1);
+        assert!(!laptop.state.seen.contains_key(&phone_tag));
         assert_eq!(remove_device(&remote, &space, &mut laptop.state, &keys.device_tag(1)).await.err(), Some(SyncError::Misplaced), "not this device");
         assert_eq!(remove_device(&remote, &space, &mut laptop.state, "../keyring").await.err(), Some(SyncError::Misplaced));
         // The phone is still in use: its next run lists it again.
@@ -565,5 +634,80 @@ mod tests {
             let text = String::from_utf8_lossy(&remote.object(&path).unwrap()).into_owned();
             assert!(!text.contains("GitHub") && !text.contains("Laptop") && !text.contains("Phone"), "{path}: {text}");
         }
+    }
+
+    #[tokio::test]
+    async fn the_progress_is_kept_before_the_write_and_a_refusal_stops_it() {
+        let remote = MemoryRemote::new(true);
+        let keys = keys();
+        let mut phone = Device::new(2, "Phone");
+        phone.doc.put(2, "Mail", 20, 2);
+        phone.sync(&remote, &keys, 100).await.unwrap();
+        let mut laptop = Device::new(1, "Laptop");
+        laptop.doc.put(1, "GitHub", 10, 1);
+        let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop" };
+        let mut kept: Vec<(SyncState, Doc)> = Vec::new();
+        let mut keep = |state: &SyncState, doc: &Doc| {
+            kept.push((state.clone(), doc.clone()));
+            Ok(())
+        };
+        step_with(&remote, &space, &mut laptop.state, &mut laptop.doc, 200, &mut keep).await.unwrap();
+        let (state, doc) = &kept[0];
+        assert_eq!(state.pending.as_ref().map(|p| p.seq), Some(1), "the write is named before it goes out");
+        assert!(state.seen.contains_key(&keys.device_tag(2)), "with what it read");
+        assert_eq!(doc.values(), ["GitHub", "Mail"], "and the replica as it is written");
+        assert_eq!(laptop.state.pending, None, "answered: nothing pending");
+
+        // Refused: nothing is written.
+        laptop.doc.put(3, "Bank", 30, 1);
+        let before = remote.object(&laptop.path(&keys));
+        let mut refuse = |_: &SyncState, _: &Doc| Err(SyncError::Interrupted);
+        let refused = step_with(&remote, &space, &mut laptop.state, &mut laptop.doc, 300, &mut refuse).await;
+        assert_eq!(refused.err(), Some(SyncError::Interrupted));
+        assert_eq!(remote.object(&laptop.path(&keys)), before);
+    }
+
+    #[tokio::test]
+    async fn a_write_whose_answer_was_lost_is_this_devices_own() {
+        for conditional in [true, false] {
+            let remote = MemoryRemote::new(conditional);
+            let keys = keys();
+            let mut laptop = Device::new(1, "Laptop");
+            laptop.doc.put(1, "GitHub", 10, 1);
+            laptop.sync(&remote, &keys, 100).await.unwrap();
+            // The next write reaches the storage, but its answer does not reach the vault: what the
+            // vault holds is what the run kept before writing.
+            laptop.doc.put(2, "Mail", 20, 1);
+            let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop" };
+            let mut kept: Option<SyncState> = None;
+            let mut keep = |state: &SyncState, _: &Doc| {
+                kept = Some(state.clone());
+                Ok(())
+            };
+            step_with(&remote, &space, &mut laptop.state, &mut laptop.doc, 200, &mut keep).await.unwrap();
+            laptop.state = kept.unwrap();
+            let next = laptop.sync(&remote, &keys, 300).await.unwrap();
+            assert!(!next.wrote, "the snapshot is already there: conditional={conditional}");
+            assert_eq!((laptop.state.own_seq, laptop.state.pending.clone()), (2, None));
+            laptop.doc.put(3, "Bank", 30, 1);
+            assert!(laptop.sync(&remote, &keys, 400).await.unwrap().wrote);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_new_device_name_is_written_even_when_nothing_else_changed() {
+        let remote = MemoryRemote::new(true);
+        let keys = keys();
+        let mut laptop = Device::new(1, "Laptop");
+        laptop.sync(&remote, &keys, 100).await.unwrap();
+        laptop.name = "Work laptop";
+        assert!(laptop.sync(&remote, &keys, 200).await.unwrap().wrote);
+        let mut phone = Device::new(2, "Phone");
+        let outcome = phone.sync(&remote, &keys, 300).await.unwrap();
+        assert_eq!(outcome.devices[1].name, "Work laptop");
+        // A name longer than a snapshot carries does not read as another device's write.
+        laptop.name = "A very long device name that goes on and on beyond the sixty-four characters";
+        assert!(laptop.sync(&remote, &keys, 400).await.unwrap().wrote);
+        assert!(!laptop.sync(&remote, &keys, 500).await.unwrap().wrote);
     }
 }

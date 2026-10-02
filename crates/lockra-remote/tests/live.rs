@@ -106,8 +106,8 @@ struct Vault {
 }
 
 impl Replica for Vault {
-    fn payload(&self) -> Vec<u8> {
-        serde_json::to_vec(self).unwrap()
+    fn payload(&self) -> Zeroizing<Vec<u8>> {
+        Zeroizing::new(serde_json::to_vec(self).unwrap())
     }
 
     fn absorb(&mut self, payload: &[u8]) -> Result<bool, SyncError> {

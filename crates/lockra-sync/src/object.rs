@@ -5,6 +5,8 @@
 //! and the replica are inside the ciphertext, padded to a multiple of [`PAD_TO`] bytes so that the
 //! size says little about the number of accounts.
 
+use std::fmt;
+
 use chacha20poly1305::XNonce;
 use chacha20poly1305::aead::{Aead, Payload};
 use serde::{Deserialize, Serialize};
@@ -22,7 +24,7 @@ pub const PAD_TO: usize = 4096;
 const MAX_NAME_CHARS: usize = 64;
 
 /// One device's snapshot of its replica.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Snapshot {
     /// Counts the device's writes: a smaller number than one seen before is a rollback.
     pub seq: u64,
@@ -30,8 +32,24 @@ pub struct Snapshot {
     pub written_at_ms: u64,
     /// The device's name as the user knows it ("Pixel 8", "Desktop").
     pub device_name: String,
-    /// The replica, as the caller serializes it.
-    pub payload: Vec<u8>,
+    /// The replica, as the caller serializes it (its secrets included).
+    pub payload: Zeroizing<Vec<u8>>,
+}
+
+impl fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Snapshot")
+            .field("seq", &self.seq)
+            .field("written_at_ms", &self.written_at_ms)
+            .field("device_name", &self.device_name)
+            .field("payload_len", &self.payload.len())
+            .finish()
+    }
+}
+
+/// `name` as a snapshot carries it: cut to [`MAX_NAME_CHARS`] characters.
+pub(crate) fn device_name(name: &str) -> String {
+    name.chars().take(MAX_NAME_CHARS).collect()
 }
 
 #[derive(Serialize, Deserialize)]
@@ -54,7 +72,7 @@ struct Meta {
 pub fn seal_snapshot(keys: &SpaceKeys, tag: &str, snapshot: &Snapshot) -> Result<Vec<u8>, SyncError> {
     let header = SnapshotHeader { format: SNAPSHOT_FORMAT, space_id: keys.space_id(), tag: tag.to_owned(), nonce: random()? };
     let mut object = header_bytes(SNAPSHOT_MAGIC, &header)?;
-    let name: String = snapshot.device_name.chars().take(MAX_NAME_CHARS).collect();
+    let name = device_name(&snapshot.device_name);
     let meta = serde_json::to_vec(&Meta { seq: snapshot.seq, written_at_ms: snapshot.written_at_ms, device_name: name }).map_err(|_| SyncError::Corrupted)?;
     let meta_len = u32::try_from(meta.len()).map_err(|_| SyncError::Corrupted)?;
     let payload_len = u32::try_from(snapshot.payload.len()).map_err(|_| SyncError::Corrupted)?;
@@ -87,7 +105,7 @@ pub fn open_snapshot(keys: &SpaceKeys, expected_tag: &str, bytes: &[u8]) -> Resu
     let (meta_bytes, rest) = take_block(&plain)?;
     let (payload, _padding) = take_block(rest)?;
     let meta: Meta = serde_json::from_slice(meta_bytes).map_err(|_| SyncError::Corrupted)?;
-    Ok(Snapshot { seq: meta.seq, written_at_ms: meta.written_at_ms, device_name: meta.device_name, payload: payload.to_vec() })
+    Ok(Snapshot { seq: meta.seq, written_at_ms: meta.written_at_ms, device_name: meta.device_name, payload: Zeroizing::new(payload.to_vec()) })
 }
 
 /// A length-prefixed block and what follows it.
@@ -103,7 +121,7 @@ mod tests {
     use super::*;
 
     fn snapshot(payload: &[u8]) -> Snapshot {
-        Snapshot { seq: 3, written_at_ms: 1_790_000_000_000, device_name: "Pixel 8".into(), payload: payload.to_vec() }
+        Snapshot { seq: 3, written_at_ms: 1_790_000_000_000, device_name: "Pixel 8".into(), payload: Zeroizing::new(payload.to_vec()) }
     }
 
     #[test]

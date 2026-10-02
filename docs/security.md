@@ -7,11 +7,12 @@ What Lockra protects, how, and what it does not. Formats are in `docs/formats.md
 The TOTP/HOTP secrets, at rest and in the running app, against: someone who copies the vault file
 or a backup; other processes and web content reaching the app's IPC; the webview (the least
 trusted part of the app) reading files or secrets it was not explicitly given; secrets lingering
-on the clipboard or in screenshots; and an update that is not Lockra's. Lockra goes online for one
-thing only, its update (below): a check and a download when the user asks, or at start once
-automatic updates are on. There is no account, sync or telemetry. The HTTP client and TLS stack reach the desktop build
-only through tauri-plugin-updater (`deny.toml` bans them from every other crate but `lockra-remote`, the storage of the
-coming sync, which the app does not use yet).
+on the clipboard or in screenshots; an update that is not Lockra's; and, with sync on, whoever runs
+or reaches the user's sync storage. Lockra goes online for two things only: its update (below), a
+check and a download when the user asks or at start once automatic updates are on; and the sync of
+a space the user set up on storage of their own (below). There is no account, server or telemetry.
+The HTTP client and TLS stack reach the desktop build only through tauri-plugin-updater and
+`lockra-remote` (`deny.toml` bans them from every other crate).
 
 ## At rest
 
@@ -34,10 +35,12 @@ coming sync, which the app does not use yet).
   path, and the capability file grants the webview no `fs`, `dialog`, `shell` or `http`
   permission — only Lockra's own commands and the title bar's window buttons
   (`apps/desktop/src-tauri/tests/ipc.rs`, `apps/desktop/src/window-config.test.ts`).
-- What the webview receives is entry metadata and current codes. Two views carry a secret, both
-  behind the master password entered again: _reveal_ (the secret, its URI and QR code) and an
-  _export_ (QR codes; a plain otpauth file asks for the password before the save dialog opens).
-  The IPC contract test asserts that the known secrets of its fixtures appear in no other message
+- What the webview receives is entry metadata and current codes. Four answers carry a secret, all
+  behind the master password entered again: _reveal_ (the secret, its URI and QR code), an
+  _export_ (QR codes; a plain otpauth file asks for the password before the save dialog opens),
+  the new sync key when a sync space is created (`sync_create`), and a sync invitation
+  (`sync_invite`). The IPC contract test asserts that the known secrets of its fixtures, the sync
+  storage's credentials and the sync key included, appear in no other message
   (`crates/lockra-bridge/tests/contract.rs`).
 - While a secret view is open the window is excluded from screen capture
   (`set_content_protected`, Windows and macOS); it is lifted when the view closes or the vault
@@ -87,6 +90,49 @@ coming sync, which the app does not use yet).
 - **Before installing**, an automatic backup still inside its debounce is written, because the
   process ends with the install.
 
+## Sync
+
+- **Off unless set up, on storage of the user's own.** Sync stays off until the user sets up a
+  space on an S3-compatible bucket or a WebDAV folder of their own; Lockra runs no server. With a
+  space, Lockra contacts that storage only while the vault is unlocked: at unlock, 3 s after a
+  change, every 5 minutes, and on **Sync now**. Setting up, joining, showing an invitation and
+  moving the storage settings ask for the master password again.
+- **The storage sees ciphertext.** A space is a keyring object and one snapshot per device under
+  `lockra-sync-v1/<space id>/` (`docs/formats.md` §9). A snapshot is the device's whole replica,
+  secrets included, encrypted under a key derived from the space's random data key, its header
+  (format, space, device tag, nonce) bound as associated data, padded to 4 KiB so that its size
+  says little about the number of accounts. The names say nothing but the number of devices:
+  device names, times and sequence numbers are inside the ciphertext.
+- **Two secrets open a space.** The keyring wraps the data key under HKDF(Argon2id(master
+  password) ‖ sync key). The sync key is 256 random bits shown once, when the space is created,
+  to be kept with the master password; it also names the space. The storage's contents and the
+  master password open nothing without it, and with it every guess of the password still costs an
+  Argon2id run. A device keeps the data key in its vault's encrypted local part and needs neither
+  secret again.
+- **Joining.** Another device shows an invitation (text and QR code): the storage settings with
+  their credentials and the sync key, everything but the master password, which the joining
+  device asks for. It is to be scanned on the user's own devices only. Without another device,
+  the storage settings and the sync key typed in do the same. A device with no vault yet becomes
+  one, under the space's master password.
+- **Altered, moved and older objects are refused; deletion is not prevented.** Every object
+  authenticates and is bound to its space and its device's name: an altered or moved snapshot is
+  reported as unreadable. An older snapshot of a device than one already seen is refused, and the
+  merge (last writer wins on hybrid logical clock stamps) never lets an older change win over a
+  newer one. Whoever can write to the storage can delete the space's objects: that stops the sync,
+  not the vaults, which keep every account. A copied vault writing under the same device name is
+  found (on S3 by conditional writes, elsewhere by a snapshot this device did not write) and the
+  device takes a new number; a write whose answer was lost (a dropped connection, the vault
+  locked meanwhile) is recorded before it goes out, and recognised as this device's own.
+- **The credentials stay in the vault.** The storage settings and credentials, the data key and
+  the sync key are in the vault's encrypted local part: never in `settings.json`, never in a
+  backup (a restored backup joins its space again), and never sent back to the webview, which is
+  shown the storage without its secret.
+- **Transport.** HTTPS only, rustls with the operating system's verifier and the system proxy;
+  plain HTTP is refused except to this computer (the tests' servers). The requests carry the
+  storage's credentials (S3 signatures, WebDAV basic authentication inside TLS) and ciphertext.
+- **A new master password** re-wraps the keyring on the next run (the data key stays); until then
+  the old password still joins new devices.
+
 ## Residual risks
 
 - With "remember on this device" on, the vault is as safe as the OS account: anyone who can sign
@@ -105,6 +151,11 @@ coming sync, which the app does not use yet).
   its state as soon as the core has them, but a compromised webview process could read them.
 - Memory is not locked (`mlock`); decrypted entries could reach swap or a crash dump.
 - A forgotten master password cannot be recovered; _reset_ keeps the old file but cannot open it.
+- Sync: whoever holds the storage's contents and the sync key (an invitation photographed, for
+  instance) can try master passwords offline at Argon2id's cost; the master password is the last
+  line. The storage's operator sees when devices write and how many there are, and can delete the
+  space. Devices of one space may keep different master passwords: the keyring follows the last
+  one changed, and joining asks for that one.
 - Importing from Microsoft Authenticator needs a rooted Android phone, and newer versions of that
   app may encrypt the field Lockra reads.
 - The packages are not code-signed (Windows SmartScreen and macOS Gatekeeper warn); the update

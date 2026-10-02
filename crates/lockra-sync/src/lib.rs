@@ -9,23 +9,30 @@
 //! the number of devices.
 //!
 //! This crate does no I/O: the storage is the [`RemoteStore`] trait (lockra-remote implements it
-//! over HTTP), the merged data is the caller's [`Replica`].
+//! over HTTP for a [`StorageConfig`]), the merged data is the caller's [`Replica`].
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 mod clock;
 mod error;
 mod frame;
+mod invite;
 mod keys;
 mod lww;
 mod object;
 mod remote;
 mod step;
+mod storage;
 
 pub use clock::{Clock, Hlc};
 pub use error::SyncError;
+pub use invite::Invite;
 pub use keys::{SYNC_KEY_TEXT_LEN, SpaceKeys, SyncKey, open_keyring, seal_keyring};
 pub use lww::{Record, Tombstone, merge};
 pub use object::{PAD_TO, Snapshot, open_snapshot, seal_snapshot};
 pub use remote::{MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteStore};
-pub use step::{DeviceView, Outcome, Replica, Seen, Space, SyncState, device_path, devices_dir, keyring_path, remove_device, step};
+pub use step::{
+    DeviceView, Outcome, PendingWrite, Persist, Replica, Seen, Space, SyncState, device_path, devices_dir, keyring_path, remove_device, spaces_dir, step,
+    step_with,
+};
+pub use storage::{ConfigError, StorageConfig};

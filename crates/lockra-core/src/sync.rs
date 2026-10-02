@@ -1,0 +1,287 @@
+//! Multi-device sync in the core: what the vault keeps of its space, the replica a run works on,
+//! the views and the error codes. The runs and the commands are in `session.rs`, beside the
+//! others; lockra-sync does the cryptography and the merge.
+
+use std::collections::HashMap;
+use std::fmt;
+use std::time::Duration;
+
+use lockra_sync::{ConfigError, Replica, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, Tombstone, merge};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+use zeroize::Zeroizing;
+
+use crate::entry::{Entry, clean_name};
+use crate::error::{CoreError, ErrorCode};
+use crate::ui::{Platform, StorageView, SyncDeviceView};
+
+/// Delay between the last change and the sync run it causes.
+pub const SYNC_DEBOUNCE: Duration = Duration::from_secs(3);
+/// Time between runs while the vault is unlocked.
+pub const SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// The longest device name kept (characters), as a snapshot carries it.
+pub const MAX_DEVICE_NAME_CHARS: usize = 64;
+/// The format of the payload inside a snapshot: the accounts and the deletions.
+const PAYLOAD_FORMAT: u32 = 1;
+
+/// This device's sync space, in the vault's local part.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct SyncLocal {
+    /// Where the space is stored, with the credentials.
+    pub storage: StorageConfig,
+    /// The space.
+    pub space_id: Uuid,
+    /// The space's data key (Base64).
+    pub data_key: Zeroizing<String>,
+    /// The space's sync key (`LKS1-…`), for invitations.
+    pub sync_key: Zeroizing<String>,
+    /// This device's name in the space.
+    pub device_name: String,
+    /// What the runs remember.
+    #[serde(default)]
+    pub state: SyncState,
+    /// The keyring sealed under a new master password, still to be written (Base64).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pending_keyring: Option<String>,
+    /// When a run last finished without error, Unix milliseconds.
+    #[serde(default)]
+    pub last_sync_ms: Option<u64>,
+}
+
+impl fmt::Debug for SyncLocal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SyncLocal")
+            .field("storage", &self.storage)
+            .field("space_id", &self.space_id)
+            .field("device_name", &self.device_name)
+            .field("state", &self.state)
+            .field("keyring_pending", &self.pending_keyring.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+impl SyncLocal {
+    /// A space just created or joined.
+    pub fn new(storage: StorageConfig, keys: &SpaceKeys, sync_key: &SyncKey, device_name: String) -> Self {
+        Self {
+            storage,
+            space_id: keys.space_id(),
+            data_key: keys.data_key_text(),
+            sync_key: sync_key.to_text(),
+            device_name,
+            state: SyncState::default(),
+            pending_keyring: None,
+            last_sync_ms: None,
+        }
+    }
+
+    pub fn keys(&self) -> Result<SpaceKeys, SyncError> {
+        SpaceKeys::from_parts(self.space_id, &self.data_key)
+    }
+
+    pub fn sync_key(&self) -> Result<SyncKey, SyncError> {
+        SyncKey::from_text(&self.sync_key)
+    }
+
+    /// The devices as the last runs found them, this one (`own_tag`) first, the others by name.
+    pub fn devices(&self, own_tag: String) -> Vec<SyncDeviceView> {
+        let mut others: Vec<SyncDeviceView> = self
+            .state
+            .seen
+            .iter()
+            .map(|(tag, seen)| SyncDeviceView { tag: tag.clone(), name: seen.name.clone(), written_at_ms: Some(seen.written_at_ms), this_device: false })
+            .collect();
+        others.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.tag.cmp(&b.tag)));
+        let mut devices = vec![SyncDeviceView { tag: own_tag, name: self.device_name.clone(), written_at_ms: self.state.own_written_at_ms, this_device: true }];
+        devices.extend(others);
+        devices
+    }
+}
+
+/// The storage without its secret.
+pub(crate) fn storage_view(storage: &StorageConfig) -> StorageView {
+    match storage {
+        StorageConfig::S3 { endpoint, region, bucket, prefix, access_key_id, path_style, .. } => StorageView::S3 {
+            endpoint: endpoint.clone(),
+            region: region.clone(),
+            bucket: bucket.clone(),
+            prefix: prefix.clone(),
+            access_key_id: access_key_id.clone(),
+            path_style: *path_style,
+        },
+        StorageConfig::Webdav { url, prefix, username, .. } => StorageView::Webdav { url: url.clone(), prefix: prefix.clone(), username: username.clone() },
+    }
+}
+
+/// A device name as the space shows it: cleaned and cut; the platform's name when nothing is
+/// left.
+pub(crate) fn device_name(name: &str, platform: Platform) -> String {
+    let cleaned: String = clean_name(name).chars().take(MAX_DEVICE_NAME_CHARS).collect::<String>().trim().to_owned();
+    if !cleaned.is_empty() {
+        return cleaned;
+    }
+    match platform {
+        Platform::Windows => "Windows",
+        Platform::Macos => "macOS",
+        Platform::Linux => "Linux",
+    }
+    .to_owned()
+}
+
+/// The replica a run works on: a copy of the vault's accounts and deletions taken when the run
+/// started.
+pub(crate) struct Working {
+    pub entries: Vec<Entry>,
+    pub tombstones: Vec<Tombstone>,
+}
+
+#[derive(Serialize)]
+struct PayloadOut<'a> {
+    format: u32,
+    entries: Vec<Entry>,
+    tombstones: &'a [Tombstone],
+}
+
+#[derive(Deserialize)]
+struct PayloadIn {
+    format: u32,
+    #[serde(default)]
+    entries: Vec<Entry>,
+    #[serde(default)]
+    tombstones: Vec<Tombstone>,
+}
+
+impl Replica for Working {
+    fn payload(&self) -> Zeroizing<Vec<u8>> {
+        // The copy times stay on this device.
+        let entries = self.entries.iter().map(|e| Entry { last_used_at_ms: None, ..e.clone() }).collect();
+        let payload = PayloadOut { format: PAYLOAD_FORMAT, entries, tombstones: &self.tombstones };
+        // Serializing plain data structures to JSON cannot fail.
+        #[allow(clippy::expect_used)]
+        Zeroizing::new(serde_json::to_vec(&payload).expect("a sync payload serializes"))
+    }
+
+    fn absorb(&mut self, payload: &[u8]) -> Result<bool, SyncError> {
+        let theirs: PayloadIn = serde_json::from_slice(payload).map_err(|_| SyncError::Corrupted)?;
+        if theirs.format != PAYLOAD_FORMAT {
+            return Err(SyncError::Unsupported(theirs.format));
+        }
+        Ok(merge_entries(&mut self.entries, &mut self.tombstones, &theirs.entries, &theirs.tombstones))
+    }
+}
+
+/// Fold another replica's accounts and deletions in (last writer wins), keeping this device's copy
+/// times, which do not sync; `true` when something changed.
+pub(crate) fn merge_entries(entries: &mut Vec<Entry>, tombstones: &mut Vec<Tombstone>, their_entries: &[Entry], their_tombstones: &[Tombstone]) -> bool {
+    let used: HashMap<Uuid, u64> = entries.iter().filter_map(|e| e.last_used_at_ms.map(|at| (e.id, at))).collect();
+    let changed = merge(entries, tombstones, their_entries, their_tombstones);
+    for entry in entries.iter_mut() {
+        if let Some(&at) = used.get(&entry.id) {
+            entry.last_used_at_ms = Some(entry.last_used_at_ms.map_or(at, |theirs| theirs.max(at)));
+        }
+    }
+    changed
+}
+
+/// The code the interface shows for a sync failure.
+pub(crate) fn sync_error(error: &SyncError) -> CoreError {
+    CoreError::from(match error {
+        SyncError::Network(_) => ErrorCode::SyncNetwork,
+        SyncError::Denied => ErrorCode::SyncDenied,
+        SyncError::Conflict | SyncError::Storage(_) | SyncError::DeviceClash => ErrorCode::SyncStorageFailed,
+        SyncError::NotLockra | SyncError::Corrupted | SyncError::Misplaced => ErrorCode::SyncDataCorrupted,
+        SyncError::Unsupported(_) => ErrorCode::SyncUnsupported,
+        SyncError::WrongCredentials => ErrorCode::SyncWrongCredentials,
+        SyncError::BadSyncKey => ErrorCode::SyncKeyInvalid,
+        SyncError::BadInvite => ErrorCode::SyncInviteInvalid,
+        SyncError::Interrupted => ErrorCode::Locked,
+        SyncError::Random => ErrorCode::Internal,
+    })
+}
+
+/// The code the interface shows for a storage configuration it cannot use.
+pub(crate) fn config_error(error: ConfigError) -> CoreError {
+    CoreError::from(match error {
+        ConfigError::Address | ConfigError::Missing => ErrorCode::SyncConfigInvalid,
+        ConfigError::Insecure => ErrorCode::SyncInsecure,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use lockra_otp::uri;
+    use lockra_sync::Hlc;
+    use lockra_transfer::Origin;
+
+    use super::*;
+
+    fn entry(text: &str, wall_ms: u64, device: u64) -> Entry {
+        let mut entry = Entry::from_auth(uri::parse(text).unwrap(), Origin::Uri, 1);
+        entry.stamp = Hlc { wall_ms, counter: 0, device };
+        entry
+    }
+
+    #[test]
+    fn the_payload_leaves_the_copy_times_here_and_a_merge_keeps_them() {
+        let mut mine = entry("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP", 10, 1);
+        mine.last_used_at_ms = Some(500);
+        let working = Working { entries: vec![mine.clone()], tombstones: Vec::new() };
+        let payload: serde_json::Value = serde_json::from_slice(&working.payload()).unwrap();
+        assert_eq!(payload["format"], 1);
+        assert_eq!(payload["entries"][0]["last_used_at_ms"], serde_json::Value::Null);
+
+        // A rename from another device wins, and this device's copy time stays.
+        let mut renamed = mine.clone();
+        renamed.issuer = "Renamed".into();
+        renamed.stamp = Hlc { wall_ms: 20, counter: 0, device: 2 };
+        renamed.last_used_at_ms = None;
+        let mut working = working;
+        let theirs = Working { entries: vec![renamed], tombstones: Vec::new() };
+        assert!(working.absorb(&theirs.payload()).unwrap());
+        assert_eq!((working.entries[0].issuer.as_str(), working.entries[0].last_used_at_ms), ("Renamed", Some(500)));
+        // Nothing newer: nothing changes.
+        assert!(!working.absorb(&theirs.payload()).unwrap());
+    }
+
+    #[test]
+    fn a_payload_of_another_format_or_none_at_all_is_refused() {
+        let mut working = Working { entries: Vec::new(), tombstones: Vec::new() };
+        assert_eq!(working.absorb(br#"{"format":2,"entries":[]}"#), Err(SyncError::Unsupported(2)));
+        assert_eq!(working.absorb(b"[]"), Err(SyncError::Corrupted));
+        assert_eq!(working.absorb(br#"{"entries":[]}"#), Err(SyncError::Corrupted), "the format is required");
+    }
+
+    #[test]
+    fn device_names_are_cleaned_and_never_empty() {
+        assert_eq!(device_name("  Work laptop\n", Platform::Linux), "Work laptop");
+        assert_eq!(device_name(&"x".repeat(100), Platform::Linux).chars().count(), MAX_DEVICE_NAME_CHARS);
+        assert_eq!(device_name(" \u{7} ", Platform::Macos), "macOS");
+        assert_eq!(device_name("", Platform::Windows), "Windows");
+    }
+
+    #[test]
+    fn every_failure_has_a_code() {
+        let cases = [
+            (SyncError::Network("x".into()), ErrorCode::SyncNetwork),
+            (SyncError::Denied, ErrorCode::SyncDenied),
+            (SyncError::Conflict, ErrorCode::SyncStorageFailed),
+            (SyncError::Storage("x".into()), ErrorCode::SyncStorageFailed),
+            (SyncError::DeviceClash, ErrorCode::SyncStorageFailed),
+            (SyncError::NotLockra, ErrorCode::SyncDataCorrupted),
+            (SyncError::Corrupted, ErrorCode::SyncDataCorrupted),
+            (SyncError::Misplaced, ErrorCode::SyncDataCorrupted),
+            (SyncError::Unsupported(9), ErrorCode::SyncUnsupported),
+            (SyncError::WrongCredentials, ErrorCode::SyncWrongCredentials),
+            (SyncError::BadSyncKey, ErrorCode::SyncKeyInvalid),
+            (SyncError::BadInvite, ErrorCode::SyncInviteInvalid),
+            (SyncError::Interrupted, ErrorCode::Locked),
+            (SyncError::Random, ErrorCode::Internal),
+        ];
+        for (error, code) in cases {
+            assert_eq!(sync_error(&error).code, code, "{error:?}");
+        }
+        assert_eq!(config_error(ConfigError::Insecure).code, ErrorCode::SyncInsecure);
+        assert_eq!(config_error(ConfigError::Missing).code, ErrorCode::SyncConfigInvalid);
+        assert_eq!(config_error(ConfigError::Address).code, ErrorCode::SyncConfigInvalid);
+    }
+}

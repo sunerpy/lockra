@@ -169,6 +169,7 @@ impl ImportSession {
             match (status, chosen) {
                 (CandidateStatus::New | CandidateStatus::Conflict { .. }, CandidateAction::Add) | (CandidateStatus::New, CandidateAction::Replace) => {
                     let mut entry = Entry::from_auth(auth.clone(), candidate.origin, now_ms);
+                    entry.stamp = data.tick(now_ms);
                     if let Some((group, favorite)) = &candidate.extras {
                         entry.group = group.clone();
                         entry.favorite = *favorite;
@@ -177,7 +178,9 @@ impl ImportSession {
                     outcome.added += 1;
                 }
                 (CandidateStatus::Conflict { entry_id }, CandidateAction::Replace) => {
+                    let stamp = data.tick(now_ms);
                     if let Some(entry) = data.get_mut(entry_id) {
+                        entry.stamp = stamp;
                         entry.issuer = clean_name(&auth.issuer);
                         entry.account = clean_name(&auth.account);
                         entry.kind = auth.kind;
@@ -226,7 +229,7 @@ mod tests {
     }
 
     fn vault_with(texts: &[&str]) -> VaultData {
-        VaultData { format: 1, entries: texts.iter().map(|t| Entry::from_auth(auth(t), Origin::Uri, 1)).collect() }
+        VaultData { entries: texts.iter().map(|t| Entry::from_auth(auth(t), Origin::Uri, 1)).collect(), ..VaultData::new() }
     }
 
     #[test]

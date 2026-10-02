@@ -37,6 +37,12 @@ pub enum SyncError {
     /// The sync key text is not one Lockra wrote.
     #[error("the sync key is not valid")]
     BadSyncKey,
+    /// The invitation text is not one Lockra wrote.
+    #[error("the invitation is not valid")]
+    BadInvite,
+    /// The caller stopped the run before it wrote (the vault was locked meanwhile).
+    #[error("the run was stopped")]
+    Interrupted,
     /// The system's random number generator failed.
     #[error("random numbers are unavailable")]
     Random,

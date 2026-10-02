@@ -50,6 +50,9 @@
           "received": 4194304,
           "total": 11508084
         }
+      },
+      "sync": {
+        "space": null
       }
     }
   },

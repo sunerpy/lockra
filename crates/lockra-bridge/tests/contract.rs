@@ -11,12 +11,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use lockra_bridge::{COMMANDS, SHELL_COMMANDS, UiCommand, dispatch};
-use lockra_core::fakes::{FakeClipboard, FakeClock, FakeKeychain, FakeUpdater, RecordingSink};
+use lockra_core::fakes::{FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
 use lockra_core::settings::{AccentId, AutoBackup, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
     BackupFailure, BackupView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded, ExportPage, ExportStarted,
-    ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView, Revealed, UiEvent, UiState,
-    UpdateStatus, UpdateView,
+    ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView, Revealed, StorageView, SyncCreated,
+    SyncDeviceView, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use lockra_core::{Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
@@ -140,6 +140,44 @@ fn update_statuses() -> Vec<UpdateStatus> {
     ]
 }
 
+const DESKTOP_TAG: &str = "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7";
+const PHONE_TAG: &str = "0a9b8c7d6e5f40312233445566778899";
+const ALTERED_TAG: &str = "ffeeddccbbaa99887766554433221100";
+const SYNC_KEY: &str = "LKS1-AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH-IIII-JJJJ-KKKK-LLLL-MMMM-NNNN";
+
+/// Every sync status, in the order a run goes through them.
+fn sync_statuses() -> Vec<SyncStatus> {
+    vec![
+        SyncStatus::Idle,
+        SyncStatus::Syncing,
+        SyncStatus::Synced { at_ms: T0 - 60_000 },
+        SyncStatus::Failed { code: ErrorCode::SyncNetwork, at_ms: T0 - 5_000 },
+    ]
+}
+
+fn sync_space(status: SyncStatus) -> SyncSpaceView {
+    SyncSpaceView {
+        storage: StorageView::S3 {
+            endpoint: "https://s3.eu-central-1.amazonaws.com".into(),
+            region: "eu-central-1".into(),
+            bucket: "my-lockra".into(),
+            prefix: "lockra/".into(),
+            access_key_id: "AKIAIOSFODNN7EXAMPLE".into(),
+            path_style: false,
+        },
+        device_name: "Desktop".into(),
+        devices: vec![
+            SyncDeviceView { tag: DESKTOP_TAG.into(), name: "Desktop".into(), written_at_ms: Some(T0 - 60_000), this_device: true },
+            SyncDeviceView { tag: PHONE_TAG.into(), name: "Pixel 8".into(), written_at_ms: Some(T0 - 3_600_000), this_device: false },
+        ],
+        status,
+        last_sync_ms: Some(T0 - 60_000),
+        rolled_back: Vec::new(),
+        unreadable: vec![ALTERED_TAG.into()],
+        keyring_pending: false,
+    }
+}
+
 fn import_view() -> ImportView {
     let candidate =
         |n: u32, source: ImportSource, origin: Origin, issuer: &str, account: &str, status: CandidateStatus, action: CandidateAction| CandidateView {
@@ -218,6 +256,7 @@ fn state(phase: Phase) -> UiState {
             Phase::Locked => UpdateView { method: Some(InstallMethod::Nsis), status: update_statuses()[6].clone() },
             Phase::NoVault => UpdateView { method: None, status: UpdateStatus::Idle },
         },
+        sync: SyncView { space: unlocked.then(|| sync_space(sync_statuses()[2].clone())) },
     }
 }
 
@@ -277,7 +316,27 @@ fn commands() -> Vec<Value> {
         json!({"command": "activity"}),
         json!({"command": "update_check"}),
         json!({"command": "update_install"}),
+        json!({"command": "sync_create", "storage": s3_storage(), "password": "a new password", "device_name": "Desktop"}),
+        json!({"command": "sync_join", "source": {"type": "invite", "text": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0"}, "password": "a new password", "device_name": "Pixel 8"}),
+        json!({"command": "sync_invite", "password": "a new password"}),
+        json!({"command": "sync_set_storage", "storage": webdav_storage(), "password": "a new password"}),
+        json!({"command": "sync_rename_device", "name": "Work desktop"}),
+        json!({"command": "sync_remove_device", "tag": PHONE_TAG}),
+        json!({"command": "sync_now"}),
+        json!({"command": "sync_disable"}),
     ]
+}
+
+/// A storage as the webview sends it, credentials included.
+fn s3_storage() -> Value {
+    json!({
+        "kind": "s3", "endpoint": "https://s3.eu-central-1.amazonaws.com", "region": "eu-central-1", "bucket": "my-lockra", "prefix": "lockra/",
+        "access_key_id": "AKIAIOSFODNN7EXAMPLE", "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "path_style": false
+    })
+}
+
+fn webdav_storage() -> Value {
+    json!({"kind": "webdav", "url": "https://dav.jianguoyun.com/dav/", "prefix": "lockra", "username": "me@example.com", "password": "app password"})
 }
 
 #[test]
@@ -294,6 +353,22 @@ fn update_fixtures() {
         .map(|(status, method)| UpdateView { method, status })
         .collect();
     check("update.json", &views);
+}
+
+#[test]
+fn sync_fixtures() {
+    let mut views: Vec<SyncView> = sync_statuses().into_iter().map(|status| SyncView { space: Some(sync_space(status)) }).collect();
+    let mut webdav = sync_space(SyncStatus::Idle);
+    webdav.storage = StorageView::Webdav { url: "https://dav.jianguoyun.com/dav/".into(), prefix: "lockra".into(), username: "me@example.com".into() };
+    webdav.devices.truncate(1);
+    webdav.devices[0].written_at_ms = None;
+    webdav.last_sync_ms = None;
+    webdav.rolled_back = vec![PHONE_TAG.into()];
+    webdav.unreadable = Vec::new();
+    webdav.keyring_pending = true;
+    views.push(SyncView { space: Some(webdav) });
+    views.push(SyncView { space: None });
+    check("sync.json", &views);
 }
 
 #[test]
@@ -322,6 +397,7 @@ fn response_fixtures() {
         ErrorCode::WrongPassword.into(),
         CoreError { code: ErrorCode::RateLimited, retry_at_ms: Some(T0 + 4000) },
         ErrorCode::ExportExpired.into(),
+        ErrorCode::SyncWrongCredentials.into(),
         ErrorCode::Internal.into(),
     ];
     check(
@@ -342,6 +418,12 @@ fn response_fixtures() {
                 svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
             },
             "import_outcome": Outcome { added: 3, replaced: 1, skipped: 2 },
+            "sync_created": SyncCreated { sync_key: SYNC_KEY.into() },
+            "sync_invite": SyncInvite {
+                invite: "lockra-invite:1:eyJzdG9yYWdlIjp7fX0".into(),
+                svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
+                sync_key: SYNC_KEY.into(),
+            },
             "codes_frame": codes,
             "codes_frame_locked": CodesFrame { at_ms: T0, codes: Vec::new() },
             "errors": errors,
@@ -375,6 +457,9 @@ fn secret_views_are_flagged_for_the_shell() {
     let parse = |v: Value| serde_json::from_value::<UiCommand>(v).unwrap();
     assert!(parse(json!({"command": "entry_reveal", "id": id(1), "password": "x"})).shows_secret());
     assert!(parse(json!({"command": "export_start", "target": "microsoft", "entry_ids": [], "password": "x"})).shows_secret());
+    assert!(parse(json!({"command": "sync_create", "storage": s3_storage(), "password": "x", "device_name": "d"})).shows_secret());
+    assert!(parse(json!({"command": "sync_invite", "password": "x"})).shows_secret());
+    assert!(!parse(json!({"command": "sync_now"})).shows_secret());
     assert!(!parse(json!({"command": "app_state"})).shows_secret());
     for command in [json!({"command": "secret_view_closed"}), json!({"command": "export_close", "session": id(1)}), json!({"command": "vault_lock"})] {
         assert!(parse(command).hides_secret());
@@ -404,7 +489,8 @@ async fn dispatch_answers_and_leaks_nothing() {
     };
     let updater = Arc::new(FakeUpdater::installed(InstallMethod::Deb));
     *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));
-    let ports = Ports { secrets: keychain, clipboard: clipboard.clone(), clock: Arc::new(FakeClock::new(T0)), updater: updater.clone() };
+    let transport = Arc::new(FakeTransport::default());
+    let ports = Ports { secrets: keychain, clipboard: clipboard.clone(), clock: Arc::new(FakeClock::new(T0)), updater: updater.clone(), sync: transport };
     let core = Core::start(config, ports);
     let mut events = core.subscribe();
     let sink = Arc::new(RecordingSink::default());
@@ -458,6 +544,30 @@ async fn dispatch_answers_and_leaks_nothing() {
         }
     }
     assert_eq!(updater.calls(), ["check", "download", "install"], "the install goes on from what the check found");
+    // Sync on the fake storage: the two answers that show a secret are kept out of the scan.
+    let storage = json!({
+        "kind": "s3", "endpoint": "https://s3.example.com", "region": "us-east-1", "bucket": "lockra", "prefix": "",
+        "access_key_id": "AKIDLOCKRA", "secret_access_key": FakeTransport::SECRET, "path_style": false
+    });
+    let created = run(json!({"command": "sync_create", "storage": storage, "password": "correct horse battery", "device_name": "Desktop"})).await.unwrap();
+    let sync_key = created["sync_key"].as_str().unwrap().to_owned();
+    for _ in 0..50 {
+        tokio::task::yield_now().await;
+    }
+    let invite = run(json!({"command": "sync_invite", "password": "correct horse battery"})).await.unwrap();
+    assert!(invite["invite"].as_str().unwrap().starts_with("lockra-invite:1:") && invite["sync_key"] == sync_key.as_str());
+    ok(run(json!({"command": "sync_now"})).await, &mut answers);
+    ok(run(json!({"command": "sync_rename_device", "name": "Work desktop"})).await, &mut answers);
+    ok(run(json!({"command": "sync_set_storage", "storage": storage, "password": "correct horse battery"})).await, &mut answers);
+    let own_tag = run(json!({"command": "app_state"})).await.unwrap()["sync"]["space"]["devices"][0]["tag"].clone();
+    assert_eq!(run(json!({"command": "sync_remove_device", "tag": own_tag})).await.unwrap_err().code, ErrorCode::Internal);
+    ok(run(json!({"command": "sync_disable"})).await, &mut answers);
+    let source = json!({"type": "manual", "storage": storage, "sync_key": sync_key});
+    ok(run(json!({"command": "sync_join", "source": source, "password": "correct horse battery", "device_name": "Desktop"})).await, &mut answers);
+    for _ in 0..50 {
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(run(json!({"command": "app_state"})).await.unwrap()["sync"]["space"]["status"]["state"], "synced");
     assert_eq!(run(json!({"command": "app_state"})).await.unwrap()["update"]["status"]["state"], "installing");
     assert_eq!(run(json!({"command": "restore_commit", "password": "x", "mode": "merge"})).await.unwrap_err().code, ErrorCode::NoRestore);
     assert_eq!(run(json!({"command": "backup_auto_now"})).await.unwrap_err().code, ErrorCode::BackupDirMissing);
@@ -467,7 +577,7 @@ async fn dispatch_answers_and_leaks_nothing() {
     }
     texts.extend(sink.frames().iter().map(|f| serde_json::to_string(f).unwrap()));
     for text in &texts {
-        for secret in [SECRET, "GEZDGNBVGY3TQOJQ", "MZXW6YTBOI", "secret="] {
+        for secret in [SECRET, "GEZDGNBVGY3TQOJQ", "MZXW6YTBOI", "secret=", FakeTransport::SECRET, &sync_key[5..19], "lockra-invite"] {
             assert!(!text.contains(secret), "{secret} leaked: {text}");
         }
     }

@@ -1,21 +1,22 @@
 //! Lockra desktop shell: Tauri commands → `lockra-bridge` → `lockra-core`.
 //!
-//! The shell owns wiring only: the keychain, clipboard and updater adapters, the native file
-//! dialogs, the code stream channel, the event forwarding, drag and drop, and screen-capture
-//! protection. Every
+//! The shell owns wiring only: the keychain, clipboard, updater and sync storage adapters, the
+//! native file dialogs, the code stream channel, the event forwarding, drag and drop, and
+//! screen-capture protection. Every
 //! command is `async` (a sync command runs on the main thread and would freeze the webview while
 //! Argon2 works). Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs`
 //! drives the real command layer on `tauri::test::MockRuntime` without a window.
 
 pub mod clipboard;
 pub mod keychain;
+pub mod sync;
 pub mod updater;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use lockra_bridge::{UiCommand, dispatch};
-use lockra_core::ports::{Clipboard, CodeSink, MemorySecretStore, NoSecretStore, NoUpdater, PortError, SecretStore, SystemClock, Updater};
+use lockra_core::ports::{Clipboard, CodeSink, MemorySecretStore, NoSecretStore, NoUpdater, PortError, SecretStore, SyncTransport, SystemClock, Updater};
 use lockra_core::ui::{CodesFrame, Phase, Platform, UI_EVENT_NAME, UiEvent};
 use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports};
 use serde_json::Value;
@@ -64,6 +65,8 @@ pub struct ShellOptions {
     /// Register tauri-plugin-updater, which needs `plugins.updater` in the context: `run` does; the
     /// mock-runtime tests' context has none.
     pub plugin_updates: bool,
+    /// The sync storage (default: lockra-remote over HTTPS).
+    pub sync: Option<Arc<dyn SyncTransport>>,
 }
 
 impl Default for ShellOptions {
@@ -77,6 +80,7 @@ impl Default for ShellOptions {
             single_instance: true,
             updater: None,
             plugin_updates: false,
+            sync: None,
         }
     }
 }
@@ -308,7 +312,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 None if options.plugin_updates => Arc::new(updater::PluginUpdater::new(app.handle().clone(), updater::install_method())),
                 None => Arc::new(NoUpdater),
             };
-            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater };
+            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
+            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());

@@ -40,6 +40,9 @@
       "sort": "name",
       "theme": "light"
     },
+    "sync": {
+      "space": null
+    },
     "update": {
       "method": "nsis",
       "status": {
@@ -94,6 +97,9 @@
       "reduce_motion": false,
       "sort": "name",
       "theme": "light"
+    },
+    "sync": {
+      "space": null
     },
     "update": {
       "method": null,
@@ -392,6 +398,44 @@
       "reduce_motion": true,
       "sort": "recent",
       "theme": "dark"
+    },
+    "sync": {
+      "space": {
+        "device_name": "Desktop",
+        "devices": [
+          {
+            "name": "Desktop",
+            "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
+            "this_device": true,
+            "written_at_ms": 1789999940000
+          },
+          {
+            "name": "Pixel 8",
+            "tag": "0a9b8c7d6e5f40312233445566778899",
+            "this_device": false,
+            "written_at_ms": 1789996400000
+          }
+        ],
+        "keyring_pending": false,
+        "last_sync_ms": 1789999940000,
+        "rolled_back": [],
+        "status": {
+          "at_ms": 1789999940000,
+          "state": "synced"
+        },
+        "storage": {
+          "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+          "bucket": "my-lockra",
+          "endpoint": "https://s3.eu-central-1.amazonaws.com",
+          "kind": "s3",
+          "path_style": false,
+          "prefix": "lockra/",
+          "region": "eu-central-1"
+        },
+        "unreadable": [
+          "ffeeddccbbaa99887766554433221100"
+        ]
+      }
     },
     "update": {
       "method": "deb",
