@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/sunerpy/lockra/compare/v0.5.1...v0.6.0) (2026-10-02)
+
+
+### Features
+
+* **ui:** 批量修改账号分组，Touch ID / Windows Hello 可直接开启 ([#27](https://github.com/sunerpy/lockra/issues/27)) ([9c6ae1e](https://github.com/sunerpy/lockra/commit/9c6ae1e815032e2f0c80d01abe025b60527b2a9e))
+
 ## [0.5.1](https://github.com/sunerpy/lockra/compare/v0.5.0...v0.5.1) (2026-10-02)
 
 
