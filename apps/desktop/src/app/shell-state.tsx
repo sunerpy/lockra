@@ -10,7 +10,7 @@ export function isPageId(value: string): value is PageId {
   return PAGES.some((page) => page === value);
 }
 
-export type SettingsSection = "general" | "appearance" | "security" | "about";
+export type SettingsSection = "general" | "appearance" | "security" | "sync" | "about";
 
 export type Overlay =
   | { type: "add_manual" }

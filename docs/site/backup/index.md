@@ -22,7 +22,8 @@ backups beyond the number you keep (10 by default; 3 to 50). Only files with tha
 deleted; anything else in the folder is left alone.
 
 A folder that a cloud service synchronises (OneDrive, Google Drive, iCloud Drive, Dropbox) carries
-the backups to your other devices without Lockra going online.
+the backups to your other devices without Lockra going online. To keep the accounts themselves the
+same on several devices, use [sync](/backup/sync).
 
 If the folder cannot be written, for example because a drive is disconnected, the Backup page says
 so and Lockra tries again at the next change. **Run automatic backup now** writes one at once.

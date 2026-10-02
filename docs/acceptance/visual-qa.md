@@ -38,6 +38,7 @@ screenshot against `DESIGN.md` and Voltip's reference screens. Reproduce with `m
 | Window chrome: frameless title bar, window buttons, drag strip, close exits with 0                                          | pass                                                                                                         |
 | Chinese copy throughout; product names keep their case                                                                      | pass after fix 3                                                                                             |
 | The in-app update after Voltip's: the title bar note, Settings › General's switch and status line, the dialog over Settings | pass (`update-badge-light`, `update-settings-light`, `update-dialog-light`, `make smoke-update`, 2026-10-01) |
+| Multi-device sync: Settings › Sync off and on, the sync key, joining from the welcome screen, the rollback banner           | pass after four fixes ([sync.md](sync.md); `screens/sync/`, `make smoke-sync`, 2026-10-02)                   |
 
 Problems found by looking, and fixed:
 

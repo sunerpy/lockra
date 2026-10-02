@@ -12,7 +12,10 @@
 # - `deny` checks licences, bans, sources and RustSec advisories of the shipped graph.
 # - `smoke` drives the real app under Xvfb (scripts/smoke-desktop-linux.sh): it types a master
 #   password, imports from the clipboard, compares a copied code with RFC 6238, decodes the
-#   export QR code and closes the window with its own button.
+#   export QR code and closes the window with its own button. Then two copies of the app sync
+#   through the Versity S3 gateway in Docker (scripts/smoke-sync-linux.sh): one sets up the space
+#   in Settings › Sync, the other joins from the welcome screen with the sync key, their changes
+#   meet, and an older snapshot put back on the storage is refused.
 # - `sync-it` runs the sync storage against real servers in Docker (make sync-it): the Versity S3
 #   gateway, for S3's conditional writes, and rclone's WebDAV server.
 # - `windows-check` is the template's optional early warning, enabled: the shell and the
@@ -286,7 +289,8 @@ jobs:
   smoke:
     name: Desktop smoke (Xvfb)
     runs-on: ubuntu-22.04
-    timeout-minutes: 40
+    # The desktop smoke and the two-app sync smoke, one after the other.
+    timeout-minutes: 50
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -332,6 +336,9 @@ jobs:
       - name: Drive the app (make smoke-desktop)
         run: make smoke-desktop
 
+      - name: Two apps syncing through S3 (make smoke-sync)
+        run: make smoke-sync
+
       # A process that dies mid-session (the app, its web process or WebKitWebDriver) leaves a
       # segfault or an OOM kill here, which no log of the run shows.
       - name: Kernel messages after a failure
@@ -343,7 +350,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: desktop-screens
-          path: docs/acceptance/screens/desktop
+          path: |
+            docs/acceptance/screens/desktop
+            docs/acceptance/screens/sync
           if-no-files-found: ignore
           retention-days: 7
 

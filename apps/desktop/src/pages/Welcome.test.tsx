@@ -7,6 +7,41 @@ function noVault() {
 }
 
 describe("Welcome", () => {
+  it("joins a sync space from an invitation, which makes the vault", async () => {
+    const { user, backend } = renderApp({ backend: noVault() });
+    await ready();
+    const join = within(screen.getByTestId("welcome-join"));
+    await user.click(join.getByTestId("welcome-join-open"));
+    expect(
+      join.getByText("这台电脑上还没有保险库，加入后会用同步空间的主密码创建一个。"),
+    ).toBeInTheDocument();
+    await user.type(join.getByLabelText("邀请码"), "not an invitation");
+    await user.type(join.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
+    await user.click(join.getByRole("button", { name: "加入" }));
+    expect(await join.findByText("不是有效的 Lockra 同步邀请")).toBeInTheDocument();
+    await user.clear(join.getByLabelText("邀请码"));
+    await user.type(join.getByLabelText("邀请码"), "lockra-invite:1:abc");
+    await user.type(join.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
+    await user.click(join.getByRole("button", { name: "加入" }));
+    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+    expect(backend.calls).toContainEqual({
+      command: "sync_join",
+      source: { type: "invite", text: "lockra-invite:1:abc" },
+      password: MOCK_PASSWORD,
+      device_name: "Linux 电脑",
+    });
+    expect((await backend.getState()).sync.space?.devices[0]?.name).toBe("Linux 电脑");
+  });
+
+  it("the join form closes again", async () => {
+    const { user } = renderApp({ backend: noVault() });
+    await ready();
+    const join = within(screen.getByTestId("welcome-join"));
+    await user.click(join.getByTestId("welcome-join-open"));
+    await user.click(join.getByRole("button", { name: "取消" }));
+    expect(join.getByTestId("welcome-join-open")).toBeInTheDocument();
+  });
+
   it("creates a vault once the password is long enough and repeated", async () => {
     const { user, backend } = renderApp({ backend: noVault() });
     await ready();

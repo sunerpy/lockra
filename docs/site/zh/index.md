@@ -1,13 +1,13 @@
 ---
 layout: home
-title: Lockra — 适用于 Windows、macOS 和 Linux 的离线两步验证器
+title: Lockra — 适用于 Windows、macOS 和 Linux 的加密两步验证器
 titleTemplate: false
-description: Lockra 把两步验证码保存在本机的一个加密文件中。可以在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，并把加密备份写入你选择的文件夹。
+description: Lockra 把两步验证码保存在本机的一个加密文件中。可以在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，把加密备份写入你选择的文件夹，并通过你自己的存储同步多台设备。
 
 hero:
   name: Lockra
-  text: 两步验证码，留在你自己的电脑上。
-  tagline: 适用于 Windows、macOS 和 Linux 的加密验证器。从 Google 身份验证器或 Microsoft Authenticator 迁入账号，把加密备份放在你选择的位置，只为更新联网。
+  text: 两步验证码，留在你自己的设备上。
+  tagline: 适用于 Windows、macOS 和 Linux 的加密验证器。从 Google 身份验证器或 Microsoft Authenticator 迁入账号，把加密备份放在你选择的位置，需要时通过你自己的存储同步多台设备。
   actions:
     - theme: brand
       text: 下载
@@ -24,7 +24,7 @@ home:
     - term: 支持平台
       text: Windows 10 和 11、macOS 11 及以上（Apple 芯片与 Intel）、Linux，均支持 x64 和 ARM64。
     - term: 你的账号
-      text: 保存在本机的一个加密文件中。Lockra 只连接 GitHub，而且只为更新连接。
+      text: 保存在每台设备的一个加密文件中。Lockra 为更新连接 GitHub，开启同步后还会连接你自己的存储，除此之外不连接任何地方。
 
   visual:
     home:
@@ -88,6 +88,10 @@ home:
             body: 逐条合并备份中的账号，或者整体替换。替换之前，Lockra 会先保存当前保险库的副本。
             status: available
             link: /zh/backup/#从备份恢复
+          - title: 多设备同步
+            body: 通过你自己的 S3 兼容存储桶或 WebDAV 文件夹进行端到端加密同步。Lockra 不运行服务器，存储只能看到加密的文件。
+            status: available
+            link: /zh/backup/sync
       - name: 安全
         items:
           - title: 主密码
@@ -190,7 +194,7 @@ home:
 
   privacy:
     title: 哪些内容会离开你的电脑
-    intro: 除非你自己迁移，否则没有任何内容离开。
+    intro: 除非你自己迁移或开启同步，否则没有任何内容离开。
     label: 保存位置
     items:
       - name: 你的账号
@@ -199,16 +203,18 @@ home:
       - name: 备份
         value: 你保存的位置
         detail: 以同样的方式加密。自动备份只写入你选择的文件夹；如果这个文件夹会同步，加密文件也会随之同步。
+      - name: 同步
+        value: 你自己的存储（如已开启）
+        detail: 每台设备把加密文件写入你设置的存储桶或 WebDAV 文件夹。存储无法读取任何账号、密钥或设备名称。
       - name: 网络
-        value: 仅用于更新
-        detail: 你检查更新时，或开启自动更新后每次启动时，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。没有账户、同步或遥测，字体和图片都随应用提供。
+        value: 更新与你的同步
+        detail: 你检查更新时，或开启自动更新后每次启动时，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。Lockra 没有用户账户、服务器或遥测，字体和图片都随应用提供。
 
   scope:
     title: 有意不做的功能
-    intro: Lockra 只做一件事，并把它留在一台电脑上。
+    intro: Lockra 只做一件事，并把它留在你的设备和你的存储中。
     items:
-      - 在设备之间同步。请使用导出或备份迁移账号。
-      - 手机应用。Lockra 改为导出到你手机上的验证器。
+      - 同步服务器或用户账户。设备通过你选择的存储同步。
       - 浏览器扩展或自动填写验证码。请复制后粘贴。
       - 网站图标。账号显示首字母；获取图标需要联网。
       - Steam 令牌等非标准验证码。
@@ -234,11 +240,11 @@ Google 身份验证器以二维码的形式导出账号，Lockra 可以从照片
 
 ## 无需记挂的备份
 
-开启一次自动备份并选择文件夹。此后每次修改几秒后，Lockra 都会在那里写入一份加密副本，并只保留最近几份。如果选择 OneDrive、Google Drive 或 iCloud 的文件夹，副本会同步到你的其他设备，而 Lockra 本身无需联网。
+开启一次自动备份并选择文件夹。此后每次修改几秒后，Lockra 都会在那里写入一份加密副本，并只保留最近几份。如果选择 OneDrive、Google Drive 或 iCloud 的文件夹，副本会同步到你的其他设备，而 Lockra 本身无需联网；多设备同步则通过你自己的存储，让每台设备上的账号本身保持一致。
 
 恢复时，可以通过与导入相同的预览把备份合并到现有账号中，也可以在保存当前保险库的副本后整体替换。
 
-[备份与恢复](/zh/backup/)
+[备份与恢复](/zh/backup/) · [多设备同步](/zh/backup/sync)
 
 </SplitBlock>
 
