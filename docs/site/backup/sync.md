@@ -3,7 +3,7 @@
 This page explains how to keep the same accounts on several devices through storage of your own,
 how a new device joins, and how Lockra keeps that storage from reading your accounts.
 
-<StatusTag status="building" /> Sync comes with version 0.4.0.
+<StatusTag status="available" /> Sync is available from version 0.4.0.
 
 Sync is off until you set it up. Lockra runs no server and has no account: your devices meet in an
 S3-compatible bucket or a WebDAV folder that you choose, and everything they put there is encrypted

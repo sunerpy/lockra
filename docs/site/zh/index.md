@@ -90,7 +90,7 @@ home:
             link: /zh/backup/#从备份恢复
           - title: 多设备同步
             body: 通过你自己的 S3 兼容存储桶或 WebDAV 文件夹进行端到端加密同步。Lockra 不运行服务器，存储只能看到加密的文件。
-            status: building
+            status: available
             link: /zh/backup/sync
       - name: 安全
         items:
