@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/sunerpy/lockra/compare/v0.4.0...v0.5.0) (2026-10-02)
+
+
+### Features
+
+* **ui:** 增加分组折叠、账号颜色与 Touch ID / Windows Hello 解锁 ([#22](https://github.com/sunerpy/lockra/issues/22)) ([a6f18dd](https://github.com/sunerpy/lockra/commit/a6f18dd03988167161ac91f9151d6da5ff63716b))
+
 ## [0.4.0](https://github.com/sunerpy/lockra/compare/v0.3.2...v0.4.0) (2026-10-02)
 
 
