@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/sunerpy/lockra/compare/v0.3.2...v0.4.0) (2026-10-02)
+
+
+### Features
+
+* **sync:** 增加端到端加密的多设备同步 ([#19](https://github.com/sunerpy/lockra/issues/19)) ([ec9cf4d](https://github.com/sunerpy/lockra/commit/ec9cf4d5998667306e9474b2ac2b3ce4a3f91176))
+
 ## [0.3.2](https://github.com/sunerpy/lockra/compare/v0.3.1...v0.3.2) (2026-10-01)
 
 
