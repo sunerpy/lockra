@@ -18,7 +18,7 @@ use lockra_core::ui::{
     ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView, Revealed, StorageView, SyncCreated,
     SyncDeviceView, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
-use lockra_core::{Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
+use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
 use lockra_transfer::{Incompatible, Origin, RejectReason};
 use lockra_vault::FileKind;
@@ -61,6 +61,8 @@ fn entry(n: u128, issuer: &str, account: &str, kind: OtpKind, digits: Digits, ex
         digits,
         group: None,
         favorite: false,
+        color: AccountColor::Auto,
+        mark: None,
         origin: Origin::Uri,
         created_at_ms: T0 - 86_400_000,
         updated_at_ms: T0 - 3_600_000,
@@ -74,6 +76,8 @@ fn entries() -> Vec<EntryView> {
     let mut github = entry(1, "GitHub", "octocat", OtpKind::Totp { period: Period::THIRTY }, Digits::SIX, ok);
     github.favorite = true;
     github.group = Some("Work".into());
+    github.color = AccountColor::Purple;
+    github.mark = Some("GH".into());
     github.last_used_at_ms = Some(T0 - 60_000);
     let mut microsoft = entry(
         2,

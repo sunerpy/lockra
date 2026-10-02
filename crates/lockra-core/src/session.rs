@@ -25,7 +25,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::backup::{auto_file_name, pre_restore_file_name, prune};
-use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_name, random_device};
+use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_mark, clean_name, random_device};
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
@@ -561,6 +561,12 @@ impl Core {
             }
             if let Some(favorite) = patch.favorite {
                 entry.favorite = favorite;
+            }
+            if let Some(color) = patch.color {
+                entry.color = color;
+            }
+            if let Some(mark) = patch.mark {
+                entry.mark = clean_mark(&mark);
             }
             entry.updated_at_ms = now;
             self.save(&mut st, true, move |s| {

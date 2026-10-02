@@ -49,6 +49,27 @@
   --scrim: #1b1d22;
   --qr-plate: #ffffff;
   --mark: #fff1b8;
+  /* Account colours (DESIGN.md): a soft fill and its text, 4.5:1 or more. */
+  --tag-red: #fbdfe0;
+  --tag-red-text: #95181c;
+  --tag-orange: #fbeadf;
+  --tag-orange-text: #934918;
+  --tag-amber: #fbf2df;
+  --tag-amber-text: #7d5a14;
+  --tag-green: #dffbe9;
+  --tag-green-text: #127035;
+  --tag-teal: #dffbf8;
+  --tag-teal-text: #126e64;
+  --tag-blue: #dfecfb;
+  --tag-blue-text: #185395;
+  --tag-indigo: #dfe2fb;
+  --tag-indigo-text: #182595;
+  --tag-purple: #eedffb;
+  --tag-purple-text: #5b1895;
+  --tag-pink: #fbdfee;
+  --tag-pink-text: #95185b;
+  --tag-gray: #e8eaed;
+  --tag-gray-text: #4c5361;
   --shadow-pop: 0 8px 24px 0 rgb(27 29 34 / 0.08), 0 0 0 1px rgb(27 29 34 / 0.06);
   --shadow-win: 0 24px 64px -20px rgb(27 29 34 / 0.22), 0 0 0 1px rgb(27 29 34 / 0.08);
 }
@@ -91,6 +112,27 @@
   --scrim: #000000;
   --qr-plate: #ffffff;
   --mark: #3b3418;
+  /* Account colours (DESIGN.md): a soft fill and its text, 4.5:1 or more. */
+  --tag-red: #4c1f21;
+  --tag-red-text: #f0898c;
+  --tag-orange: #4c311f;
+  --tag-orange-text: #f0b289;
+  --tag-amber: #4c3d1f;
+  --tag-amber-text: #f0ce89;
+  --tag-green: #1f4c30;
+  --tag-green-text: #89f0af;
+  --tag-teal: #1f4c48;
+  --tag-teal-text: #89f0e6;
+  --tag-blue: #1f344c;
+  --tag-blue-text: #89b9f0;
+  --tag-indigo: #1f244c;
+  --tag-indigo-text: #8e97f1;
+  --tag-purple: #371f4c;
+  --tag-purple-text: #c089f0;
+  --tag-pink: #4c1f37;
+  --tag-pink-text: #f089c0;
+  --tag-gray: #32363e;
+  --tag-gray-text: #b3bac6;
   --shadow-pop: 0 8px 24px 0 rgb(0 0 0 / 0.5);
   --shadow-win: 0 24px 64px -20px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(0 0 0 / 0.08);
 }
@@ -133,6 +175,27 @@
   --scrim: #2a2521;
   --qr-plate: #ffffff;
   --mark: #f6ebb8;
+  /* Account colours (DESIGN.md): a soft fill and its text, 4.5:1 or more. */
+  --tag-red: #f0d0d2;
+  --tag-red-text: #861d21;
+  --tag-orange: #f0ddd0;
+  --tag-orange-text: #84461d;
+  --tag-amber: #f0e6d0;
+  --tag-amber-text: #735519;
+  --tag-green: #d0f0dc;
+  --tag-green-text: #176935;
+  --tag-teal: #d0f0ed;
+  --tag-teal-text: #16665e;
+  --tag-blue: #d0dff0;
+  --tag-blue-text: #1d4e86;
+  --tag-indigo: #d0d4f0;
+  --tag-indigo-text: #1d2886;
+  --tag-purple: #e1d0f0;
+  --tag-purple-text: #551d86;
+  --tag-pink: #f0d0e1;
+  --tag-pink-text: #861d55;
+  --tag-gray: #d9dce3;
+  --tag-gray-text: #464e5d;
   --shadow-pop: 0 12px 32px 0 rgb(42 37 33 / 0.12);
   --shadow-win: 0 24px 64px -20px rgb(42 37 33 / 0.18), 0 0 0 1px rgb(42 37 33 / 0.08);
 }
@@ -175,6 +238,27 @@
   --scrim: #000000;
   --qr-plate: #ffffff;
   --mark: #3d3826;
+  /* Account colours (DESIGN.md): a soft fill and its text, 4.5:1 or more. */
+  --tag-red: #6a393b;
+  --tag-red-text: #f3babc;
+  --tag-orange: #6a4d39;
+  --tag-orange-text: #f4d5c0;
+  --tag-amber: #6a5a39;
+  --tag-amber-text: #f6e8cb;
+  --tag-green: #396a4b;
+  --tag-green-text: #d6f8e2;
+  --tag-teal: #396a65;
+  --tag-teal-text: #dcf9f6;
+  --tag-blue: #39506a;
+  --tag-blue-text: #bcd6f3;
+  --tag-indigo: #393e6a;
+  --tag-indigo-text: #b7bdf2;
+  --tag-purple: #53396a;
+  --tag-purple-text: #d7b7f2;
+  --tag-pink: #6a3953;
+  --tag-pink-text: #f3bad8;
+  --tag-gray: #4d525b;
+  --tag-gray-text: #d6d9de;
   --shadow-pop: 0 8px 24px 0 rgb(0 0 0 / 0.35);
   --shadow-win: 0 24px 64px -20px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(0 0 0 / 0.08);
 }
@@ -410,6 +494,53 @@
   --accent-text-hover: #eceef1;
 }
 
+/* An avatar's colour: `data-tag` picks the pair, every theme its own values. Without it, the
+ * neutral fill the avatars had before colours. */
+:root {
+  --tag-bg: var(--inset2);
+  --tag-fg: var(--fg-muted);
+}
+[data-tag="red"] {
+  --tag-bg: var(--tag-red);
+  --tag-fg: var(--tag-red-text);
+}
+[data-tag="orange"] {
+  --tag-bg: var(--tag-orange);
+  --tag-fg: var(--tag-orange-text);
+}
+[data-tag="amber"] {
+  --tag-bg: var(--tag-amber);
+  --tag-fg: var(--tag-amber-text);
+}
+[data-tag="green"] {
+  --tag-bg: var(--tag-green);
+  --tag-fg: var(--tag-green-text);
+}
+[data-tag="teal"] {
+  --tag-bg: var(--tag-teal);
+  --tag-fg: var(--tag-teal-text);
+}
+[data-tag="blue"] {
+  --tag-bg: var(--tag-blue);
+  --tag-fg: var(--tag-blue-text);
+}
+[data-tag="indigo"] {
+  --tag-bg: var(--tag-indigo);
+  --tag-fg: var(--tag-indigo-text);
+}
+[data-tag="purple"] {
+  --tag-bg: var(--tag-purple);
+  --tag-fg: var(--tag-purple-text);
+}
+[data-tag="pink"] {
+  --tag-bg: var(--tag-pink);
+  --tag-fg: var(--tag-pink-text);
+}
+[data-tag="gray"] {
+  --tag-bg: var(--tag-gray);
+  --tag-fg: var(--tag-gray-text);
+}
+
 @theme inline {
   --color-*: initial;
 
@@ -448,6 +579,9 @@
   /* The QR code's own quiet zone: white in every theme, phones read dark-on-light codes best. */
   --color-qr-plate: var(--qr-plate);
   --color-mark: var(--mark);
+  /* An account's colour, as `data-tag` sets it (bg-tag-bg, text-tag-fg). */
+  --color-tag-bg: var(--tag-bg);
+  --color-tag-fg: var(--tag-fg);
 
   --font-ui:
     "Instrument Sans Variable", "Instrument Sans", "Noto Sans SC Variable", "Noto Sans SC",

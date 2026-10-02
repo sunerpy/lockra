@@ -32,6 +32,7 @@ import {
 import { type SubmitEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useSubmit } from "../../app/dispatch";
 import { useShell } from "../../app/shell-state";
+import { AccountAppearance } from "./AccountAppearance";
 import { entryGroups } from "./groups";
 
 /** How long a revealed secret stays on screen. */
@@ -378,10 +379,12 @@ function EditDialog({ entry, onClose }: { entry: EntryView; onClose: () => void 
   const [account, setAccount] = useState(entry.account);
   const [group, setGroup] = useState(entry.group ?? "");
   const [favorite, setFavorite] = useState(entry.favorite);
+  const [color, setColor] = useState(entry.color);
+  const [mark, setMark] = useState(entry.mark ?? "");
   const submit = useSubmit();
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
-    const patch = { issuer, account, group, favorite };
+    const patch = { issuer, account, group, favorite, color, mark: mark.trim() };
     const saved = await submit.run(() =>
       backend.dispatch({ command: "entry_update", id: entry.id, patch }),
     );
@@ -418,6 +421,14 @@ function EditDialog({ entry, onClose }: { entry: EntryView; onClose: () => void 
         />
         <GroupField value={group} onChange={setGroup} />
         <Toggle checked={favorite} onChange={setFavorite} label={t("codes.favorite")} />
+        <AccountAppearance
+          issuer={issuer}
+          account={account}
+          color={color}
+          mark={mark}
+          onColor={setColor}
+          onMark={setMark}
+        />
         <FormError code={submit.error} />
       </form>
     </Dialog>

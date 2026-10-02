@@ -132,6 +132,7 @@
       {
         "account": "octocat",
         "algorithm": "sha1",
+        "color": "purple",
         "created_at_ms": 1789913600000,
         "digits": 6,
         "export": {
@@ -147,12 +148,14 @@
           "type": "totp"
         },
         "last_used_at_ms": 1789999940000,
+        "mark": "GH",
         "origin": "uri",
         "updated_at_ms": 1789996400000
       },
       {
         "account": "me@outlook.com",
         "algorithm": "sha1",
+        "color": "auto",
         "created_at_ms": 1789913600000,
         "digits": 8,
         "export": {
@@ -168,12 +171,14 @@
           "type": "totp"
         },
         "last_used_at_ms": null,
+        "mark": null,
         "origin": "microsoft",
         "updated_at_ms": 1789996400000
       },
       {
         "account": "1234",
         "algorithm": "sha256",
+        "color": "auto",
         "created_at_ms": 1789913600000,
         "digits": 6,
         "export": {
@@ -189,12 +194,14 @@
           "type": "hotp"
         },
         "last_used_at_ms": null,
+        "mark": null,
         "origin": "manual",
         "updated_at_ms": 1789996400000
       },
       {
         "account": "player",
         "algorithm": "sha512",
+        "color": "auto",
         "created_at_ms": 1789913600000,
         "digits": 7,
         "export": {
@@ -210,6 +217,7 @@
           "type": "totp"
         },
         "last_used_at_ms": null,
+        "mark": null,
         "origin": "google",
         "updated_at_ms": 1789996400000
       }

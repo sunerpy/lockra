@@ -635,3 +635,20 @@ async fn a_run_stops_before_writing_where_the_space_no_longer_is() {
     assert!(after.iter().any(|c| c.starts_with("put lockra-sync-v1/")), "the next run writes to the new one: {after:?}");
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
 }
+
+#[tokio::test(start_paused = true)]
+async fn an_accounts_colour_and_mark_reach_the_other_devices() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    let phone = device(&transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
+    let id = desktop.core.state().entries[0].id;
+    let patch = EntryPatch { color: Some(crate::AccountColor::Teal), mark: Some("GH".into()), ..EntryPatch::default() };
+    desktop.core.update_entry(id, patch).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    phone.core.sync_now().unwrap();
+    settle().await;
+    let seen = phone.core.state().entries[0].clone();
+    assert_eq!((seen.color, seen.mark.as_deref()), (crate::AccountColor::Teal, Some("GH")));
+}

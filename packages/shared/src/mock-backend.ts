@@ -29,6 +29,7 @@ import {
   type Incompatible,
   type InstallMethod,
   type JoinSource,
+  MARK_CHARS,
   type Notice,
   type OtpKind,
   type Platform,
@@ -144,7 +145,15 @@ export function mockEntry(
   options: Partial<
     Pick<
       EntryView,
-      "kind" | "algorithm" | "digits" | "group" | "favorite" | "origin" | "last_used_at_ms"
+      | "kind"
+      | "algorithm"
+      | "digits"
+      | "group"
+      | "favorite"
+      | "origin"
+      | "last_used_at_ms"
+      | "color"
+      | "mark"
     >
   > & { secret?: string; at?: number } = {},
 ): MockEntry {
@@ -169,6 +178,8 @@ export function mockEntry(
       digits,
       group: options.group ?? null,
       favorite: options.favorite ?? false,
+      color: options.color ?? "auto",
+      mark: options.mark ?? null,
       origin: options.origin ?? "uri",
       created_at_ms: at,
       updated_at_ms: at,
@@ -176,6 +187,20 @@ export function mockEntry(
       export: exportCompat(kind, algorithm, digits),
     },
   };
+}
+
+/** A mark as the core keeps it: trimmed, at most `MARK_CHARS` characters as people count them;
+ *  `null` when nothing is left. */
+export function cleanMark(mark: string): string | null {
+  const segments = Array.from(
+    new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(mark.trim()),
+  );
+  const kept = segments
+    .slice(0, MARK_CHARS)
+    .map((s) => s.segment)
+    .join("")
+    .trim();
+  return kept === "" ? null : kept;
 }
 
 /** A believable vault for the preview. */
@@ -187,7 +212,12 @@ export function sampleEntries(): MockEntry[] {
     mockEntry("AWS", "root@acme-corp", { group: "工作", last_used_at_ms: Date.UTC(2026, 8, 29) }),
     mockEntry("Cloudflare", "ops@acme.dev", { group: "工作" }),
     mockEntry("Proton", "alex@proton.me", { algorithm: "sha256" }),
-    mockEntry("Bank", "6222 •••• 1234", { kind: { type: "hotp", counter: 12 }, origin: "manual" }),
+    mockEntry("Bank", "6222 •••• 1234", {
+      kind: { type: "hotp", counter: 12 },
+      origin: "manual",
+      color: "amber",
+      mark: "银行",
+    }),
     mockEntry("Game", "player-one", { kind: { type: "totp", period: 60 }, digits: 7 }),
   ];
 }
@@ -587,11 +617,13 @@ export class MockBackend implements Backend {
       }
       case "entry_update": {
         const entry = this.entry(command.id);
-        const { issuer, account, group, favorite } = command.patch;
+        const { issuer, account, group, favorite, color, mark } = command.patch;
         if (issuer !== undefined) entry.issuer = issuer.trim();
         if (account !== undefined) entry.account = account.trim();
         if (group !== undefined) entry.group = group.trim() === "" ? null : group.trim();
         if (favorite !== undefined) entry.favorite = favorite;
+        if (color !== undefined) entry.color = color;
+        if (mark !== undefined) entry.mark = cleanMark(mark);
         entry.updated_at_ms = this.now();
         this.changed();
         return null;

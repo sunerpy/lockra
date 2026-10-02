@@ -83,7 +83,12 @@ export function EntryRow({
         "group grid h-[calc(var(--row-h)+28px)] grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-3 rounded-10 px-3 outline-none transition-colors hover:bg-inset focus-visible:bg-inset",
         className,
       )}>
-      <EntryAvatar issuer={entry.issuer} account={entry.account} />
+      <EntryAvatar
+        issuer={entry.issuer}
+        account={entry.account}
+        color={entry.color}
+        mark={entry.mark}
+      />
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-1.5">
           {entry.favorite && <Icon name="star" size={12} className="shrink-0 text-accent-text" />}

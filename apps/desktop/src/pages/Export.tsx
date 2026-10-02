@@ -146,7 +146,13 @@ export function Export() {
                       onChange={(e) => toggle(entry.id, e.target.checked)}
                       aria-label={entryLabel(entry.issuer, entry.account)}
                     />
-                    <EntryAvatar issuer={entry.issuer} account={entry.account} size={24} />
+                    <EntryAvatar
+                      issuer={entry.issuer}
+                      account={entry.account}
+                      color={entry.color}
+                      mark={entry.mark}
+                      size={24}
+                    />
                     <span className="flex min-w-0 flex-1 flex-col">
                       <span className="truncate text-[13px] text-fg">
                         {entry.issuer || entry.account}

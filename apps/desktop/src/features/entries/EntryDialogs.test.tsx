@@ -115,6 +115,44 @@ describe("EntryDialogs", () => {
     });
   });
 
+  it("gives an account its own colour and avatar text, previewed as it changes", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await openFromMenu(user, "编辑…");
+    const dialog = within(screen.getByRole("dialog", { name: "编辑账号" }));
+    const colours = dialog.getByRole("radiogroup", { name: "颜色" });
+    expect(within(colours).getByRole("radio", { name: "自动" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(within(colours).getAllByRole("radio")).toHaveLength(11);
+    const preview = dialog.getByTestId("entry-avatar");
+    expect(preview).toHaveTextContent("G");
+    await user.click(within(colours).getByRole("radio", { name: "紫色" }));
+    expect(preview).toHaveAttribute("data-tag", "purple");
+    // The arrow keys move the choice along the swatches.
+    await user.keyboard("{ArrowRight}");
+    expect(within(colours).getByRole("radio", { name: "粉色" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(within(colours).getByRole("radio", { name: "粉色" })).toHaveFocus();
+    await user.keyboard("{ArrowLeft}");
+    const mark = dialog.getByLabelText("头像文字");
+    expect(mark).toHaveAttribute("placeholder", "G");
+    await user.type(mark, "GHX");
+    expect(mark).toHaveValue("GH");
+    expect(preview).toHaveTextContent("GH");
+    await user.click(dialog.getByRole("button", { name: "保存" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "entry_update",
+      patch: { color: "purple", mark: "GH" },
+    });
+    const avatar = screen.getAllByTestId("entry-avatar")[0];
+    expect(avatar).toHaveAttribute("data-tag", "purple");
+    expect(avatar).toHaveTextContent("GH");
+  });
+
   it("deletes after confirming", async () => {
     const { user } = renderApp();
     await ready();

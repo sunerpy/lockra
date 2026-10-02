@@ -17,7 +17,7 @@ use crate::fakes::{FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUp
 use crate::ports::{ClipboardImage, SecretStore, SyncTransport};
 use crate::settings::{AutoBackup, Settings, ThemeId};
 use crate::ui::{CandidateAction, CandidateStatus, ExportTarget, Notice, Phase, Platform, UiEvent};
-use crate::{Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, Outcome, Ports, RestoreMode, VAULT_FILE};
+use crate::{AccountColor, Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, Outcome, Ports, RestoreMode, VAULT_FILE};
 
 /// 2026-09-21T13:46:40Z: an arbitrary moment well inside a 30-second window.
 const T0: u64 = 1_790_000_000_000;
@@ -891,4 +891,45 @@ fn the_code_list_is_grouped_by_default() {
     assert!(Settings::default().group_codes);
     let older: Settings = serde_json::from_str(r#"{"sort":"name"}"#).unwrap();
     assert!(older.group_codes, "a file from before the switch groups too");
+}
+
+// ---- an account's colour and mark -------------------------------------------------------------
+
+#[tokio::test(start_paused = true)]
+async fn an_account_takes_a_colour_and_a_mark_and_a_backup_keeps_them() {
+    let h = Harness::unlocked().await;
+    let id = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    let view = || h.core.state().entries[0].clone();
+    assert_eq!((view().color, view().mark), (AccountColor::Auto, None), "the colour follows the name until chosen");
+    let patch = |color: Option<AccountColor>, mark: Option<&str>| EntryPatch { color, mark: mark.map(str::to_owned), ..EntryPatch::default() };
+    h.core.update_entry(id, patch(Some(AccountColor::Purple), Some("  👨‍💻🚀x\u{7} "))).unwrap();
+    assert_eq!(view().color, AccountColor::Purple);
+    assert_eq!(view().mark.as_deref(), Some("👨‍💻🚀"), "two characters as people count them, an emoji with its joiners as one");
+    h.core.update_entry(id, patch(None, Some("中国银行"))).unwrap();
+    assert_eq!((view().color, view().mark.as_deref()), (AccountColor::Purple, Some("中国")), "the colour stays when only the mark changes");
+    // A backup carries them; a restore brings them back.
+    let file = h.dir.path().join("styled.lockrabackup");
+    h.core.backup_to(file.clone(), None).await.unwrap();
+    let backup = Sealed::open_with_password(&fs::read(&file).unwrap(), MASTER.as_bytes()).unwrap();
+    let payload = String::from_utf8(backup.payload.to_vec()).unwrap();
+    assert!(payload.contains(r#""color":"purple""#) && payload.contains(r#""mark":"中国""#), "{payload}");
+    // Cleared: back to the name's colour and its initial.
+    h.core.update_entry(id, patch(Some(AccountColor::Auto), Some(" "))).unwrap();
+    assert_eq!((view().color, view().mark), (AccountColor::Auto, None));
+    let bytes = h.core.state();
+    assert!(bytes.entries[0].mark.is_none());
+}
+
+#[test]
+fn an_entry_written_before_colours_reads_with_the_names_colour() {
+    let legacy = br#"{"format":2,"entries":[{"id":"0f3f1a1e-8d4b-4c8e-9f7a-000000000001","issuer":"GitHub","account":"octocat","kind":{"type":"totp","period":30},"algorithm":"sha1","digits":6,"secret":"JBSWY3DPEHPK3PXP","group":null,"favorite":false,"origin":"uri","created_at_ms":5,"updated_at_ms":7,"last_used_at_ms":null}]}"#;
+    let data = crate::VaultData::from_bytes(legacy).unwrap();
+    assert_eq!((data.entries[0].color, data.entries[0].mark.clone()), (AccountColor::Auto, None));
+    // And an account left on its name's colour writes neither field.
+    let text = String::from_utf8(data.to_bytes().to_vec()).unwrap();
+    assert!(!text.contains("\"color\"") && !text.contains("\"mark\""), "{text}");
+    // A colour from a newer Lockra reads as the name's: the vault still opens.
+    let newer = String::from_utf8(legacy.to_vec()).unwrap().replace(r#""favorite":false"#, r#""favorite":false,"color":"lime","mark":"GH""#);
+    let data = crate::VaultData::from_bytes(newer.as_bytes()).unwrap();
+    assert_eq!((data.entries[0].color, data.entries[0].mark.as_deref()), (AccountColor::Auto, Some("GH")));
 }

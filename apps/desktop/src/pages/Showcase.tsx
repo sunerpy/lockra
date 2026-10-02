@@ -1,7 +1,13 @@
 // Development only (`#showcase`, never in a release bundle): every primitive in every state, to be
 // checked in the four themes before pages are built on them (DESIGN.md §3). Keys 1–4 switch the
 // theme, so a headless run can screenshot all four without clicking.
-import { type CodeView, type EntryView, THEME_IDS, type ThemeId } from "@lockra/shared";
+import {
+  ACCOUNT_COLORS,
+  type CodeView,
+  type EntryView,
+  THEME_IDS,
+  type ThemeId,
+} from "@lockra/shared";
 import {
   Badge,
   Banner,
@@ -11,6 +17,7 @@ import {
   CountdownRing,
   DropZone,
   EmptyState,
+  EntryAvatar,
   EntryRow,
   Eyebrow,
   Icon,
@@ -53,6 +60,8 @@ function sampleEntry(
     digits: 6,
     group: null,
     favorite: false,
+    color: "auto",
+    mark: null,
     origin: "uri",
     created_at_ms: 0,
     updated_at_ms: 0,
@@ -172,6 +181,8 @@ export default function Showcase() {
                 code={code("a")}
                 nowMs={now}
                 onCopy={() => undefined}
+                onFavorite={() => undefined}
+                onEdit={() => undefined}
               />
               <EntryRow
                 entry={sampleEntry("w", "Microsoft", "alex@outlook.com", { digits: 8 })}
@@ -189,6 +200,8 @@ export default function Showcase() {
               <EntryRow
                 entry={sampleEntry("h", "Bank", "6222 •••• 1234", {
                   kind: { type: "hotp", counter: 12 },
+                  color: "amber",
+                  mark: "银行",
                 })}
                 code={{
                   entry_id: "h",
@@ -210,6 +223,13 @@ export default function Showcase() {
                 nowMs={now}
                 onCopy={() => undefined}
               />
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="avatar-colors">
+              {ACCOUNT_COLORS.map((color) => (
+                <EntryAvatar key={color} issuer={color} color={color} size={32} />
+              ))}
+              <EntryAvatar issuer="GitHub" mark="GH" color="indigo" size={40} />
+              <EntryAvatar issuer="Bank" mark="银行" color="amber" size={24} />
             </div>
             <div className="mt-3 flex items-center gap-4">
               <OtpCode code="492039" size="lg" />

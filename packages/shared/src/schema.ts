@@ -141,6 +141,25 @@ export type RejectReason = z.infer<typeof rejectReasonSchema>;
 const idSchema = z.string().min(1);
 const msSchema = z.number().int().nonnegative();
 
+/** The colours an account can be shown in; `auto` follows its name (lockra-core `AccountColor`). */
+export const ACCOUNT_COLORS = [
+  "auto",
+  "red",
+  "orange",
+  "amber",
+  "green",
+  "teal",
+  "blue",
+  "indigo",
+  "purple",
+  "pink",
+  "gray",
+] as const;
+export const accountColorSchema = z.enum(ACCOUNT_COLORS);
+export type AccountColor = z.infer<typeof accountColorSchema>;
+/** The most characters, as people count them, an account's mark holds (lockra-core `MARK_CHARS`). */
+export const MARK_CHARS = 2;
+
 export const entryViewSchema = z.object({
   id: idSchema,
   issuer: z.string(),
@@ -150,6 +169,8 @@ export const entryViewSchema = z.object({
   digits: z.number().int().min(6).max(8),
   group: z.string().nullable(),
   favorite: z.boolean(),
+  color: accountColorSchema,
+  mark: z.string().nullable(),
   origin: originSchema,
   created_at_ms: msSchema,
   updated_at_ms: msSchema,
@@ -562,6 +583,9 @@ export const entryPatchSchema = z.object({
   account: z.string().optional(),
   group: z.string().optional(),
   favorite: z.boolean().optional(),
+  color: accountColorSchema.optional(),
+  /** `""` goes back to the name's initial. */
+  mark: z.string().optional(),
 });
 export type EntryPatch = z.infer<typeof entryPatchSchema>;
 
