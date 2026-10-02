@@ -102,7 +102,6 @@ export function AccountAppearance({
         onChange={(e) => onMark(cutMark(e.target.value))}
         placeholder={initial(issuer, account)}
         help={t("entry.markHint")}
-        className="max-w-[12rem]"
         autoComplete="off"
         spellCheck={false}
       />

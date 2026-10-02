@@ -222,8 +222,8 @@ pub struct EntryDraft {
     pub group: Option<String>,
 }
 
-/// What an edit may change: the names, the group and the pin. Secrets and code parameters are
-/// fixed for the life of an entry (delete it and add it again to change them).
+/// What an edit may change: the names, the group, the pin, the colour and the mark. Secrets and
+/// code parameters are fixed for the life of an entry (delete it and add it again to change them).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct EntryPatch {
     /// New issuer.

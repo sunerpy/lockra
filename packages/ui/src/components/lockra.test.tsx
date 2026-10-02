@@ -177,6 +177,8 @@ describe("EntryRow", () => {
     expect(onContextMenu).toHaveBeenCalledOnce();
     rerender(<EntryRow entry={entry({ favorite: true })} {...props} />);
     const pinned = screen.getByRole("button", { name: "收藏" });
+    // Said once: by the pressed button, not again beside the name.
+    expect(screen.getByTestId("entry-row").querySelectorAll('[data-icon="star"]')).toHaveLength(1);
     expect(pinned).toHaveAttribute("aria-pressed", "true");
     expect(pinned.querySelector("svg")).toHaveAttribute("fill", "currentColor");
     // Without the handlers, no buttons.

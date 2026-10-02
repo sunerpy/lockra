@@ -91,7 +91,10 @@ export function EntryRow({
       />
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-1.5">
-          {entry.favorite && <Icon name="star" size={12} className="shrink-0 text-accent-text" />}
+          {/* The pin button says it where there is one; the name says it where there is none. */}
+          {entry.favorite && !onFavorite && (
+            <Icon name="star" size={12} className="shrink-0 text-accent-text" />
+          )}
           <span className="truncate text-[14px] font-medium text-fg" title={entry.issuer}>
             {entry.issuer || entry.account}
           </span>
