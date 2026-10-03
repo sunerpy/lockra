@@ -133,6 +133,14 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   the tree) reports that it cannot update itself and never replaces its own executable.
 - **Before installing**, an automatic backup still inside its debounce is written, because the
   process ends with the install.
+- **The phone checks; it installs nothing.** On Android, Settings › About › Check for updates reads
+  the same manifest, only when tapped, over HTTPS with the system's certificate authorities (as
+  the sync does), and compares its version with the app's. The core never checks by itself there
+  and refuses to download or install. A newer release opens its page in the phone's browser: the
+  address is made in Rust from the version found, and the browser plugin refuses any address
+  outside Lockra's releases. The APK there is signed with the same Android key, so it installs
+  over the app and keeps the vault (`docs/release.md`, "Android"); a copy from Google Play updates
+  through the store.
 
 ## Sync
 

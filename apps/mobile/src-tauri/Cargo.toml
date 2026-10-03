@@ -25,6 +25,7 @@ data-encoding.workspace = true
 lockra-bridge.workspace = true
 lockra-core.workspace = true
 lockra-remote.workspace = true
+semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # The mobile runtime only: no tray, no desktop dialogs (the phone's own plugins do those).

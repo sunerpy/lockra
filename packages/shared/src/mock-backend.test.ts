@@ -255,6 +255,22 @@ describe("MockBackend", () => {
     expect(state.sync.space?.device_name).toBe("Phone");
   });
 
+  it("checks for a newer release on the phone and opens its page, never installing", async () => {
+    const release = { version: "0.7.0", notes: null, date: null, size: 1 };
+    const backend = new MockBackend({ phase: "unlocked", updateMethod: "android", release });
+    await backend.dispatch({ command: "update_check" });
+    expect((await backend.getState()).update.status).toMatchObject({
+      state: "available",
+      version: "0.7.0",
+    });
+    expect(await errorCode(backend.dispatch({ command: "update_install" }))).toBe(
+      "update_unavailable",
+    );
+    expect(await backend.openRelease()).toBeNull();
+    const noBrowser = new MockBackend({ updateMethod: "android", releasePageOpens: false });
+    expect(await noBrowser.openRelease()).toBe("https://github.com/sunerpy/lockra/releases/latest");
+  });
+
   it("backs up and restores", async () => {
     const backend = new MockBackend({ entries: sampleEntries().slice(0, 2) });
     const { notices } = recorder(backend);

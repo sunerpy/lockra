@@ -139,6 +139,11 @@ export const en: Messages = {
       prompt: "Point the camera at a QR code",
       next: "Scan the next code",
     },
+    update: {
+      open: "Open the release page",
+      address: "No browser could open it: {url}",
+      hint: "A check reads the newest version number from GitHub and sends nothing of your accounts or your vault. A Lockra installed from Google Play updates through the store.",
+    },
     sync: {
       rowOff: "Set up sync",
       settingsHint: "Sync with your other devices on storage of your own",
@@ -757,7 +762,7 @@ export const en: Messages = {
     update_unavailable: "This copy cannot update itself",
     update_busy: "An update check or install is already running",
     update_network: "The update server could not be reached",
-    update_invalid: "The update information is invalid or has no package for this computer",
+    update_invalid: "The update information is invalid or has no package for this device",
     update_signature: "The package is not signed with Lockra's key and was not installed",
     update_install_failed: "Installing the update failed",
     update_cancelled: "The administrator prompt was cancelled; nothing was installed",
@@ -857,6 +862,8 @@ export const en: Messages = {
       nsis: "The installer closes Lockra and opens it again when it is done.",
       msi: "The installer closes Lockra and opens it again when it is done.",
       app: "Replaces the app, then restarts.",
+      android:
+        "Download the newer version from its release page and install it over this one; the vault stays.",
     },
     status: {
       idle: "Not checked for updates yet",

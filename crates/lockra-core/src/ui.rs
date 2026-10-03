@@ -237,6 +237,16 @@ pub enum InstallMethod {
     Msi,
     /// The macOS app, replaced in place.
     App,
+    /// The Android app: a check finds a newer release, whose page the phone opens; nothing is
+    /// downloaded or installed in the app (a copy from Google Play updates through the store).
+    Android,
+}
+
+impl InstallMethod {
+    /// An update downloads and installs in the app (everywhere but the phone).
+    pub fn installs(self) -> bool {
+        !matches!(self, Self::Android)
+    }
 }
 
 /// The in-app update, as Settings › About shows it.

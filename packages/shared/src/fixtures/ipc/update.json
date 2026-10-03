@@ -48,7 +48,7 @@
     }
   },
   {
-    "method": null,
+    "method": "android",
     "status": {
       "state": "downloading",
       "version": "0.2.0",
@@ -57,21 +57,21 @@
     }
   },
   {
-    "method": "deb",
+    "method": null,
     "status": {
       "state": "ready",
       "version": "0.2.0"
     }
   },
   {
-    "method": "rpm",
+    "method": "deb",
     "status": {
       "state": "installing",
       "version": "0.2.0"
     }
   },
   {
-    "method": "appimage",
+    "method": "rpm",
     "status": {
       "state": "failed",
       "code": "update_signature",

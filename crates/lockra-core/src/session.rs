@@ -34,8 +34,8 @@ use crate::settings::{Settings, SettingsStore};
 use crate::sync::{SYNC_DEBOUNCE, SYNC_INTERVAL, SyncLocal, Working, config_error, device_name, merge_entries, storage_view, sync_error};
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
-    JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState,
-    UpdateStatus, UpdateView,
+    InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent,
+    UiState, UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
 
@@ -199,7 +199,7 @@ impl Core {
             },
             Err(_) => (PhaseState::NoVault, None, false, None),
         };
-        let update = UpdateState::new(settings.auto_update && ports.updater.method().is_some());
+        let update = UpdateState::new(settings.auto_update && ports.updater.method().is_some_and(InstallMethod::installs));
         let state = State {
             phase,
             settings,
@@ -1301,7 +1301,7 @@ impl Core {
             update_turned_on
         };
         self.changed();
-        if update_turned_on && self.shared.ports.updater.method().is_some() {
+        if update_turned_on && self.shared.ports.updater.method().is_some_and(InstallMethod::installs) {
             // Turned on: look and download now; only a restart installs. Skipped while the user
             // runs one, which answers the same question.
             let _ = self.start_update(UpdateRun::Auto { install_version: None });
@@ -1343,7 +1343,9 @@ impl Core {
 
     /// One run at a time, in the background.
     fn start_update(&self, run: UpdateRun) -> CoreResult<()> {
-        if self.shared.ports.updater.method().is_none() {
+        let Some(method) = self.shared.ports.updater.method() else { return Err(ErrorCode::UpdateUnavailable.into()) };
+        // The phone checks only: a newer release opens its page.
+        if run != UpdateRun::Check && !method.installs() {
             return Err(ErrorCode::UpdateUnavailable.into());
         }
         {

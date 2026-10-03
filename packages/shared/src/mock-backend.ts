@@ -84,6 +84,8 @@ export interface MockOptions {
   release?: MockRelease | null;
   /** Make the update fail at this step with `code`. */
   updateFailure?: { step: "check" | "download" | "install"; code: ErrorCode };
+  /** The phone's browser opens a release's page (the default), or no app can. */
+  releasePageOpens?: boolean;
   /** The sync space this device belongs to (shown once unlocked). */
   sync?: SyncSpaceView | null;
   /** The groups folded in the code list (shown once unlocked). */
@@ -384,6 +386,7 @@ export class MockBackend implements Backend {
   private readonly now: () => number;
   private release: MockRelease | null;
   private updateFailure: MockOptions["updateFailure"];
+  private releasePageOpens: boolean;
   /** What the last run found, and whether its package is downloaded (the core's `Pending`). */
   private pending: { release: MockRelease; downloaded: boolean } | null = null;
   /** The sync space, kept here while locked (the core keeps it in the vault). */
@@ -401,6 +404,7 @@ export class MockBackend implements Backend {
     this.scan = options.scan ?? null;
     this.release = options.release ?? null;
     this.updateFailure = options.updateFailure;
+    this.releasePageOpens = options.releasePageOpens ?? true;
     this.space = options.sync ?? null;
     this.collapsed = options.collapsedGroups ?? [];
     this.biometricAnswer = options.biometricAnswer ?? null;
@@ -557,6 +561,15 @@ export class MockBackend implements Backend {
   /** Test hook: what the clipboard holds for `import_clipboard`. */
   setClipboard(text: string | undefined): void {
     this.clipboard = text;
+  }
+
+  async openRelease(): Promise<string | null> {
+    if (this.releasePageOpens) return null;
+    const status = this.state.update.status;
+    const releases = "https://github.com/sunerpy/lockra/releases";
+    return status.state === "available"
+      ? `${releases}/tag/v${status.version}`
+      : `${releases}/latest`;
   }
 
   /** Test hook: what the next camera scans read. */
@@ -1046,6 +1059,9 @@ export class MockBackend implements Backend {
    *  stops at `ready`. */
   private runUpdate(run: "check" | "install" | "auto"): null {
     if (this.state.update.method === null) throw new LockraError("update_unavailable");
+    // The phone checks only: a newer release opens its page.
+    if (this.state.update.method === "android" && run !== "check")
+      throw new LockraError("update_unavailable");
     if (this.updateBusy()) throw new LockraError("update_busy");
     const step = (status: UiState["update"]["status"]) => {
       this.state.update = { ...this.state.update, status };

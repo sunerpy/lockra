@@ -12,9 +12,12 @@ import {
   originText,
   parametersText,
   rejectText,
+  downloadProgress,
   relativeTime,
   statusText,
+  statusVersion,
   syncStatusLine,
+  updateStatusLine,
   themeName,
   themeSubtitle,
 } from "./labels";
@@ -119,6 +122,39 @@ describe("labels", () => {
       tone: "danger",
       text: "同步失败：存储服务拒绝访问，请检查访问密钥或密码",
     });
+  });
+
+  it("the updater's state in one line, with its lamp", () => {
+    const at = Date.UTC(2026, 8, 30, 12);
+    const line = (update: Parameters<typeof updateStatusLine>[0]) =>
+      updateStatusLine(update, "0.6.0", zh, "zh-CN");
+    expect(line({ method: null, status: { state: "idle" } }).tone).toBe("idle");
+    expect(line({ method: "android", status: { state: "idle" } })).toEqual({
+      text: "尚未检查更新",
+      tone: "idle",
+    });
+    expect(line({ method: "android", status: { state: "checking" } }).tone).toBe("accent");
+    expect(
+      line({ method: "android", status: { state: "up_to_date", checked_at_ms: at } }).text,
+    ).toMatch(/^已是最新 · 0\.6\.0 · 检查于 /);
+    const available = { state: "available" as const, version: "0.7.0", notes: null, date: null };
+    expect(line({ method: "android", status: { ...available, checked_at_ms: at } })).toEqual({
+      text: "有新版本 0.7.0 · 当前 0.6.0",
+      tone: "accent",
+    });
+    const downloading = { state: "downloading" as const, version: "0.7.0", received: 5, total: 10 };
+    expect(line({ method: "deb", status: downloading }).text).toBe("正在下载 0.7.0 · 50%");
+    expect(line({ method: "deb", status: { state: "ready", version: "0.7.0" } }).tone).toBe("ok");
+    expect(line({ method: "deb", status: { state: "installing", version: "0.7.0" } }).tone).toBe(
+      "accent",
+    );
+    expect(
+      line({ method: "android", status: { state: "failed", code: "update_network", at_ms: at } }),
+    ).toEqual({ text: "更新失败 · 无法连接更新服务器", tone: "danger" });
+    expect(downloadProgress(4_194_304, 11_508_084)).toBe("36%");
+    expect(downloadProgress(3_145_728, null)).toBe("3.0 MB");
+    expect(statusVersion({ state: "ready", version: "0.3.0" })).toBe("0.3.0");
+    expect(statusVersion({ state: "checking" })).toBeUndefined();
   });
 
   it("codes are grouped for reading", () => {

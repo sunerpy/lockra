@@ -78,8 +78,9 @@ impl Storage {
 
 /// The HTTP client: rustls on ring (the process's provider, as the update check installs it), the
 /// system's verifier and proxy, bounded connection time. A redirect may not leave HTTPS (plain
-/// HTTP only to this computer, as for the address itself).
-fn http_client() -> Result<reqwest::Client, SyncError> {
+/// HTTP only to this computer, as for the address itself). The phone's update check uses it too,
+/// for the same certificate authorities (apps/mobile/src-tauri/src/updater.rs).
+pub fn http_client() -> Result<reqwest::Client, SyncError> {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }

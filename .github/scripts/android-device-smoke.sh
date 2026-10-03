@@ -2,8 +2,9 @@
 # The Android app on a device: install the APK, start it, create a vault, leave the app (it locks)
 # and unlock it again, add an account by hand and copy its code (the clipboard plugin, through R8),
 # open the camera's page (the emulator has no camera: the import says so, and the vault stays
-# open behind that page), and set up sync on AWS S3 with made-up keys, which S3 refuses: its answer
-# came over TLS with the certificate authorities read from Android's files. It stays up throughout
+# open behind that page), set up sync on AWS S3 with made-up keys, which S3 refuses: its answer
+# came over TLS with the certificate authorities read from Android's files, and check for updates
+# against the release manifest on GitHub. It stays up throughout
 # with nothing fatal in its log, and the page gives way to the keyboard rather than lie under it. A
 # package that passes every check can still close on start (a Tauri app that panics before its
 # first screen), so the app itself has to run. CI runs this against an emulator (`android-device`
@@ -322,6 +323,18 @@ if grep -qE 'could not be reached|无法连接' "$out/ui.xml"; then
   fail "the sync did not reach S3 over HTTPS (the certificate authorities, or the network)"
 fi
 
+# The update check reads the release manifest on GitHub over HTTPS, as the user asks for it: this
+# build is the newest, or a newer release is found; a failed check fails here.
+adb shell input keyevent KEYCODE_BACK
+showing 'Join an existing sync|加入已有的同步' 30
+adb shell input keyevent KEYCODE_BACK
+showing 'Set up sync|设置同步' 30
+tap 'Check for updates' '检查更新'
+showing 'Up to date|is available|The update failed|已是最新|有新版本|更新失败' 90
+if grep -qE 'The update failed|更新失败' "$out/ui.xml"; then
+  fail "the update check did not read the release manifest on GitHub"
+fi
+
 # And it stays up. The 20 s are the check itself (an app that closes a few seconds after its
 # screen fails here), not a wait for something to finish.
 for _ in $(seq 1 10); do
@@ -335,4 +348,4 @@ adb logcat -d --pid="$pid" >"$out/app-logcat.txt" 2>&1 || true
 if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || grep -q "$package" "$out/crash.txt"; then
   fail "the app logged a fatal error although it is still running"
 fi
-echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code, heard from the camera's page and reached S3 over HTTPS ($(basename "$apk"))"
+echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code, heard from the camera's page, reached S3 over HTTPS and checked for updates ($(basename "$apk"))"

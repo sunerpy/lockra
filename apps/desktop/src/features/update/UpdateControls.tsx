@@ -1,7 +1,7 @@
+import { updateStatusLine } from "@lockra/shared";
 import { Button, LampText, useLocale, useT, useUiState } from "@lockra/ui";
 import { useDispatch } from "../../app/dispatch";
 import { useShell } from "../../app/shell-state";
-import { updateStatusLine } from "./status";
 
 /** The updater's status line plus the one action its state allows (check / view / restart), after
  *  Voltip's: in full in Settings › General, compact in › About. */

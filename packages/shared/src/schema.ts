@@ -323,7 +323,7 @@ export type RestoreView = z.infer<typeof restoreViewSchema>;
 // ---- the in-app update -----------------------------------------------------------------------
 
 /** How this copy was installed, which is how an update installs (lockra-core `InstallMethod`). */
-export const INSTALL_METHODS = ["deb", "rpm", "appimage", "nsis", "msi", "app"] as const;
+export const INSTALL_METHODS = ["deb", "rpm", "appimage", "nsis", "msi", "app", "android"] as const;
 export const installMethodSchema = z.enum(INSTALL_METHODS);
 export type InstallMethod = z.infer<typeof installMethodSchema>;
 
@@ -723,6 +723,7 @@ export const PHONE_COMMAND_NAMES = [
   "restore_pick",
   "export_otpauth_file",
   "sync_scan_join",
+  "update_open_release",
 ] as const;
 
 /** Commands that answer with something other than `null`. */

@@ -42,6 +42,10 @@ export interface Backend {
   pickRestoreFile(): Promise<boolean>;
   /** Native save dialog → a plain otpauth list. The file name, or `null` when cancelled. */
   exportOtpauthFile(entryIds: readonly string[], password: string): Promise<string | null>;
+  /** The phone's browser → the page of the release an update check found (else the newest
+   *  release's), the address named by the shell. `null` once it opened, else the address, to
+   *  show (no browser opened it). */
+  openRelease(): Promise<string | null>;
 }
 
 /** The words on the phone's camera page. */
