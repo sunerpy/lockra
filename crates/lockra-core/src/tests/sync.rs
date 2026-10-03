@@ -148,7 +148,9 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     assert_eq!(phone.core.state().phase, Phase::NoVault, "no vault is made on a failed join");
     let other_key = lockra_sync::SyncKey::generate().unwrap().to_text();
     assert_eq!(code_err(join(manual(s3(STORAGE_SECRET), &other_key), MASTER).await), ErrorCode::SyncSpaceNotFound);
-    let typo = format!("{}A", &sync_key[..sync_key.len() - 1]);
+    // The last character mistyped, for certain: a random key may end in the letter put there.
+    let (head, last) = sync_key.split_at(sync_key.len() - 1);
+    let typo = format!("{head}{}", if last == "A" { "B" } else { "A" });
     assert_eq!(code_err(join(manual(s3(STORAGE_SECRET), &typo), MASTER).await), ErrorCode::SyncKeyInvalid);
     assert_eq!(code_err(join(manual(s3("wrong secret"), &sync_key), MASTER).await), ErrorCode::SyncDenied);
     let StorageConfig::S3 { region, bucket, prefix, access_key_id, secret_access_key, path_style, .. } = s3(STORAGE_SECRET) else { unreachable!() };
