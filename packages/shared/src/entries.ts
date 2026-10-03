@@ -1,6 +1,10 @@
 // The code list's logic, shared by the desktop and the phone: the order, the search, the sections
-// of groups, the groups in use, and an account's avatar text cut to its length.
-import { type EntryView, MARK_CHARS, type SortOrder } from "./schema";
+// of groups, the groups in use, an account's avatar text cut to its length, and the kind a form's
+// fields describe.
+import { type EntryView, MARK_CHARS, type OtpKind, type SortOrder } from "./schema";
+
+/** How long a revealed secret (an account's, the sync key, an invitation) stays on screen. */
+export const REVEAL_SECONDS = 120;
 
 /** The group menu's "all groups". */
 export const ALL_GROUPS = "";
@@ -85,4 +89,23 @@ export function cutMark(text: string): string {
     .slice(0, MARK_CHARS)
     .map((s) => s.segment)
     .join("");
+}
+
+/** The kind from a form's fields: `period` for TOTP, `counter` for HOTP; `undefined` when out of
+ *  the core's ranges. */
+export function parseKind(
+  type: OtpKind["type"],
+  period: string,
+  counter: string,
+): OtpKind | undefined {
+  if (type === "totp") {
+    const value = Number(period);
+    return Number.isInteger(value) && value >= 1 && value <= 3600
+      ? { type, period: value }
+      : undefined;
+  }
+  const value = Number(counter);
+  return Number.isSafeInteger(value) && value >= 0 && counter.trim() !== ""
+    ? { type, counter: value }
+    : undefined;
 }

@@ -1,5 +1,6 @@
-// The accounts and their codes: a tap copies the code; with groups, the accounts are in sections
-// that fold; a search shows what it finds in every section, folded or not.
+// The accounts and their codes: a tap copies the code, a long press or ⋯ opens the account's
+// actions, + adds accounts; with groups, the accounts are in sections that fold; a search shows
+// what it finds in every section, folded or not.
 import {
   ALL_GROUPS,
   NO_GROUP,
@@ -9,6 +10,7 @@ import {
   sortEntries,
 } from "@lockra/shared";
 import {
+  Button,
   Card,
   EmptyState,
   EntryRow,
@@ -23,9 +25,11 @@ import {
   useUiState,
 } from "@lockra/ui";
 import { useMemo, useState } from "react";
+import { useNav } from "../app/nav";
 
 export function Codes() {
   const t = useT();
+  const nav = useNav();
   const dispatch = useDispatch();
   const codes = useCodes();
   const now = useClock();
@@ -49,6 +53,13 @@ export function Codes() {
       <header className="flex items-center gap-2 border-b border-border bg-surface px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1">
         <h1 className="flex-1 text-[18px] font-semibold text-fg">{t("codes.title")}</h1>
         <IconButton
+          icon="plus"
+          label={t("codes.add.label")}
+          size={40}
+          onClick={() => nav.open({ name: "add" })}
+          data-testid="codes-add"
+        />
+        <IconButton
           icon="lock"
           label={t("shell.nav.lock")}
           size={40}
@@ -58,7 +69,18 @@ export function Codes() {
       </header>
       <main className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
         {entries.length === 0 ? (
-          <EmptyState icon="key" title={t("codes.emptyTitle")}>
+          <EmptyState
+            icon="key"
+            title={t("codes.emptyTitle")}
+            actions={
+              <Button
+                variant="primary"
+                size="lg"
+                icon="plus"
+                onClick={() => nav.open({ name: "add" })}>
+                {t("mobile.add.title")}
+              </Button>
+            }>
             {t("mobile.emptyBody")}
           </EmptyState>
         ) : (
@@ -121,6 +143,20 @@ export function Codes() {
                                     ? () =>
                                         void dispatch({ command: "entry_hotp_next", id: entry.id })
                                     : undefined
+                                }
+                                // A long press: the webview hears it as a context menu.
+                                onContextMenu={(event) => {
+                                  event.preventDefault();
+                                  nav.open({ name: "account", id: entry.id });
+                                }}
+                                menu={
+                                  <IconButton
+                                    icon="more"
+                                    label={t("codes.actions")}
+                                    size={40}
+                                    onClick={() => nav.open({ name: "account", id: entry.id })}
+                                    data-testid="row-more"
+                                  />
                                 }
                               />
                             </div>

@@ -1,6 +1,7 @@
 import { ipcFixtures } from "./fixtures";
 import { createTranslator } from "./i18n";
 import {
+  candidateSource,
   entryLabel,
   errorText,
   formatBytes,
@@ -29,6 +30,29 @@ const zh = createTranslator("zh-CN").t;
 const en = createTranslator("en").t;
 
 describe("labels", () => {
+  it("names where a found account came from, and its line", () => {
+    const base = {
+      id: 0,
+      origin: "uri",
+      issuer: "GitHub",
+      account: "",
+      kind: null,
+      algorithm: null,
+      digits: null,
+      status: { type: "new" },
+      default_action: "add",
+    } as const;
+    expect(candidateSource(en, { ...base, source: { type: "text" }, line: 3 })).toBe(
+      "Pasted text · line 3",
+    );
+    expect(candidateSource(zh, { ...base, source: { type: "clipboard" }, line: null })).toBe(
+      "剪贴板",
+    );
+    expect(
+      candidateSource(en, { ...base, source: { type: "file", name: "codes.png" }, line: null }),
+    ).toBe("codes.png");
+  });
+
   it("every code has words in both languages", () => {
     for (const t of [zh, en]) {
       for (const code of ERROR_CODES) expect(errorText(t, code)).not.toContain("error.");

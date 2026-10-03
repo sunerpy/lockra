@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The Android app on a device: install the APK, start it, create a vault, leave the app (it locks)
-# and unlock it again; it stays up throughout with nothing fatal in its log, and the page gives way
-# to the keyboard rather than lie under it. A package that passes every check can still close on
+# and unlock it again, add an account by hand and copy its code (the clipboard plugin, through R8);
+# it stays up throughout with nothing fatal in its log, and the page gives way to the keyboard
+# rather than lie under it. A package that passes every check can still close on
 # start (a Tauri app that panics before its first screen), so the app itself has to run. CI runs this against an emulator (`android-device` in ci.yml); it runs the
 # same against a phone over adb.
 #
@@ -54,6 +55,15 @@ showing() {
   until dump && grep -qE "$1" "$out/ui.xml"; do
     running || fail "the app closed while waiting for: $1"
     [ "$SECONDS" -lt "$deadline" ] || fail "the screen did not show $1 within ${2:-60} s"
+    sleep 1
+  done
+}
+# Wait (at most $2 s, default 60) until the screen no longer shows text matching $1: the page left.
+leaving() {
+  local deadline=$((SECONDS + ${2:-60}))
+  while ! dump || grep -qE "$1" "$out/ui.xml"; do
+    running || fail "the app closed while waiting to leave: $1"
+    [ "$SECONDS" -lt "$deadline" ] || fail "the screen still shows $1 after ${2:-60} s"
     sleep 1
   done
 }
@@ -115,12 +125,14 @@ keyboard() {
     sleep 1
   done
 }
-# Type the password into the field labelled with one of the words, then close the keyboard, so the
-# next tap lands on the page and not on a key.
-type_password() {
+# Type $1 (no spaces: `input text`) into the field labelled with one of the other words, then close
+# the keyboard, so the next tap lands on the page and not on a key.
+type_into() {
+  local text=$1
+  shift
   tap "$@"
   keyboard up
-  adb shell input text "$password"
+  adb shell input text "$text"
   adb shell input keyevent KEYCODE_BACK
   keyboard down
 }
@@ -138,8 +150,8 @@ showing 'Create vault|创建保险库' 120
 full_bottom=$(webview_bottom) || fail "no webview on the screen"
 
 # A vault: the password typed twice, then the codes screen (Argon2id runs here: give it time).
-type_password 'Master password' '主密码'
-type_password 'Repeat it' '再输入一次'
+type_into "$password" 'Master password' '主密码'
+type_into "$password" 'Repeat it' '再输入一次'
 tap 'Create vault' '创建保险库'
 showing 'No accounts yet|还没有账号' 120
 
@@ -154,6 +166,23 @@ adb shell input text "$password"
 adb shell input keyevent KEYCODE_ENTER
 showing 'No accounts yet|还没有账号' 120
 
+# An account by hand (a made-up secret), then a tap on it copies its code. The form's "Advanced"
+# marks its page: the service typed in is on the screen until the form has gone.
+tap 'Add' '添加'
+showing 'Add an account by hand|手动添加账号' 30
+tap 'Add an account by hand' '手动添加账号'
+showing 'Advanced|高级设置' 30
+type_into Example 'Service' '服务名称'
+# The secret, then Enter submits the form: its button may lie below the fold of a small screen.
+tap 'Secret' '密钥'
+keyboard up
+adb shell input text JBSWY3DPEHPK3PXP
+adb shell input keyevent KEYCODE_ENTER
+leaving 'Advanced|高级设置' 30
+showing 'Example' 30
+tap 'Example'
+showing 'Copied|已复制' 30
+
 # And it stays up. The 20 s are the check itself (an app that closes a few seconds after its
 # screen fails here), not a wait for something to finish.
 for _ in $(seq 1 10); do
@@ -167,4 +196,4 @@ adb logcat -d --pid="$pid" >"$out/app-logcat.txt" 2>&1 || true
 if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || grep -q "$package" "$out/crash.txt"; then
   fail "the app logged a fatal error although it is still running"
 fi
-echo "android-device-smoke: $package created a vault, locked on leaving and unlocked again ($(basename "$apk"))"
+echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account and copied its code ($(basename "$apk"))"

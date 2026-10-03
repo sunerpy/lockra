@@ -7,14 +7,17 @@ import {
   type EntryView,
   type ErrorCode,
   type OtpKind,
+  REVEAL_SECONDS,
   type Revealed,
   entryGroups,
   entryLabel,
   errorText,
   originText,
   parametersText,
+  parseKind,
 } from "@lockra/shared";
 import {
+  AccountAppearance,
   Banner,
   Button,
   Dialog,
@@ -33,10 +36,6 @@ import {
 import { type SubmitEvent, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useSubmit } from "../../app/dispatch";
 import { useShell } from "../../app/shell-state";
-import { AccountAppearance } from "./AccountAppearance";
-
-/** How long a revealed secret stays on screen. */
-export const REVEAL_SECONDS = 120;
 
 const DIGITS = ["6", "7", "8"] as const;
 type DigitsText = (typeof DIGITS)[number];
@@ -98,24 +97,6 @@ function FormError({ code }: { code: ErrorCode | undefined }) {
       {errorText(t, code)}
     </p>
   );
-}
-
-/** `30` / `0` from the advanced fields; `undefined` when out of the core's ranges. */
-export function parseKind(
-  type: OtpKind["type"],
-  period: string,
-  counter: string,
-): OtpKind | undefined {
-  if (type === "totp") {
-    const value = Number(period);
-    return Number.isInteger(value) && value >= 1 && value <= 3600
-      ? { type, period: value }
-      : undefined;
-  }
-  const value = Number(counter);
-  return Number.isSafeInteger(value) && value >= 0 && counter.trim() !== ""
-    ? { type, counter: value }
-    : undefined;
 }
 
 /** A group's name, suggesting the groups the accounts are in. */

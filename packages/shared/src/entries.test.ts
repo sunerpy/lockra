@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { cutMark, entryGroups, filterEntries, groupSections, sortEntries } from "./entries";
+import {
+  cutMark,
+  entryGroups,
+  filterEntries,
+  groupSections,
+  parseKind,
+  sortEntries,
+} from "./entries";
 import { mockEntry } from "./mock-backend";
 
 describe("sortEntries / filterEntries", () => {
@@ -62,5 +69,17 @@ describe("cutMark", () => {
     expect(cutMark("GitHub")).toBe("Gi");
     expect(cutMark("👨‍💻🚀x")).toBe("👨‍💻🚀");
     expect(cutMark("")).toBe("");
+  });
+});
+
+describe("parseKind", () => {
+  it("accepts the core's ranges only", () => {
+    expect(parseKind("totp", "30", "0")).toEqual({ type: "totp", period: 30 });
+    expect(parseKind("totp", "0", "0")).toBeUndefined();
+    expect(parseKind("totp", "3601", "0")).toBeUndefined();
+    expect(parseKind("totp", "1.5", "0")).toBeUndefined();
+    expect(parseKind("hotp", "30", "7")).toEqual({ type: "hotp", counter: 7 });
+    expect(parseKind("hotp", "30", "")).toBeUndefined();
+    expect(parseKind("hotp", "30", "-1")).toBeUndefined();
   });
 });

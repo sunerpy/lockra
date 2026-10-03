@@ -39,8 +39,9 @@ describe("the phone app", () => {
     });
     expect(screen.getByText("还没有账号")).toBeInTheDocument();
     expect(
-      screen.getByText("即将支持在手机上扫描二维码、读取截图和手动添加账号。"),
+      screen.getByText("点按 + 添加：粘贴 otpauth 链接、从剪贴板导入，或手动输入密钥。"),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加账号" })).toBeInTheDocument();
   });
 
   it("unlocks with the master password and counts the wrong ones", async () => {

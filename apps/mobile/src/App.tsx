@@ -1,5 +1,6 @@
-// The phone's app: one screen for each state of the vault (none yet, locked, unlocked), the core's
-// notices as toasts, and a vault that locks as the app leaves the screen.
+// The phone's app: one screen for each state of the vault (none yet, locked, unlocked; the
+// unlocked vault's pages go over the codes, app/nav.tsx), the core's notices as toasts, and a
+// vault that locks as the app leaves the screen.
 import { type Backend, resolveLocale } from "@lockra/shared";
 import {
   BackendProvider,
@@ -10,9 +11,17 @@ import {
   useBackend,
   useToaster,
   useToasts,
+  useUiState,
 } from "@lockra/ui";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { NavProvider, useNav } from "./app/nav";
+import { Account } from "./screens/Account";
+import { Add } from "./screens/Add";
 import { Codes } from "./screens/Codes";
+import { Edit } from "./screens/Edit";
+import { Manual } from "./screens/Manual";
+import { Preview } from "./screens/Preview";
+import { Reveal } from "./screens/Reveal";
 import { Unlock } from "./screens/Unlock";
 import { Welcome } from "./screens/Welcome";
 
@@ -49,7 +58,50 @@ function Screen() {
   if (state === undefined) return null;
   if (state.phase === "no_vault") return <Welcome />;
   if (state.phase === "locked") return <Unlock />;
-  return <Codes />;
+  return (
+    <NavProvider>
+      <Pages />
+    </NavProvider>
+  );
+}
+
+/** The codes, or the page on top of them. */
+function Pages() {
+  const { route, home } = useNav();
+  const { backend } = useBackend();
+  const { entries, import: pending } = useUiState();
+  // Leaving the import preview any way but its own buttons (the back gesture) discards the import.
+  const last = useRef(route);
+  useEffect(() => {
+    const was = last.current;
+    last.current = route;
+    if (was?.name === "preview" && route?.name !== "preview" && pending !== null)
+      void backend.dispatch({ command: "import_cancel" }).catch(() => undefined);
+  }, [route, pending, backend]);
+  const id = route !== undefined && "id" in route ? route.id : undefined;
+  const entry = id === undefined ? undefined : entries.find((e) => e.id === id);
+  // The account went away meanwhile (deleted, replaced by an import, merged away by a sync), or
+  // the import ended: back to the codes.
+  const gone = (id !== undefined && entry === undefined) || (route?.name === "preview" && !pending);
+  useEffect(() => {
+    if (gone) home();
+  }, [gone, home]);
+  switch (route?.name) {
+    case undefined:
+      return <Codes />;
+    case "add":
+      return <Add />;
+    case "manual":
+      return <Manual />;
+    case "preview":
+      return pending ? <Preview view={pending} /> : null;
+    case "account":
+      return entry ? <Account entry={entry} /> : null;
+    case "edit":
+      return entry ? <Edit entry={entry} /> : null;
+    case "reveal":
+      return entry ? <Reveal entry={entry} /> : null;
+  }
 }
 
 /** Core notices become toasts (inside the i18n tree, so they are translated). */

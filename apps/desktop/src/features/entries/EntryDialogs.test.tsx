@@ -1,7 +1,6 @@
 import { MOCK_PASSWORD } from "@lockra/shared/mock";
 import { screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../../test/render";
-import { parseKind } from "./EntryDialogs";
 
 async function openFromMenu(user: ReturnType<typeof renderApp>["user"], item: string, row = 0) {
   const trigger = screen.getAllByTestId("row-menu")[row];
@@ -9,18 +8,6 @@ async function openFromMenu(user: ReturnType<typeof renderApp>["user"], item: st
   await user.click(trigger);
   await user.click(screen.getByRole("menuitem", { name: item }));
 }
-
-describe("parseKind", () => {
-  it("accepts the core's ranges only", () => {
-    expect(parseKind("totp", "30", "0")).toEqual({ type: "totp", period: 30 });
-    expect(parseKind("totp", "0", "0")).toBeUndefined();
-    expect(parseKind("totp", "3601", "0")).toBeUndefined();
-    expect(parseKind("totp", "1.5", "0")).toBeUndefined();
-    expect(parseKind("hotp", "30", "7")).toEqual({ type: "hotp", counter: 7 });
-    expect(parseKind("hotp", "30", "")).toBeUndefined();
-    expect(parseKind("hotp", "30", "-1")).toBeUndefined();
-  });
-});
 
 describe("EntryDialogs", () => {
   it("adds an account by hand, with the secret checked by the core", async () => {

@@ -27,7 +27,9 @@ apps/desktop/
 apps/mobile/       The Android app, not released yet.
   src-tauri/       lockra-mobile: the phone's Tauri shell; gen/android is its Gradle project, with
                    a Kotlin class per native capability.
-  src/             The React phone app: create or unlock the vault, the codes.
+  src/             The React phone app: create or unlock the vault, the codes, adding accounts
+                   (links, the clipboard, by hand) through the import preview, an account's
+                   actions (edit, pin, show the secret, delete).
 packages/shared    zod contract, the Backend interface (TauriBackend, MockBackend), i18n, labels.
 packages/ui        The design system (Voltip's tokens and components, plus Lockra's own).
 ```
@@ -119,11 +121,16 @@ content takes the keyboard's height as bottom padding and the field being typed 
 (the device smoke test checks that the webview gives way). The webview locks the vault when the page
 is hidden (`visibilitychange`: another app in front, the screen off).
 
-The phone app (`apps/mobile/src`) uses `@lockra/ui` and `@lockra/shared` as the desktop does; the
-codes list's logic (sorting, filtering, group sections) is `packages/shared/src/entries.ts`, shared
-by both. `make android-apk` builds a debug APK; CI's `android` job builds the release APK and AAB
-unsigned, signs them with a key made for the run and checks them
-(`.github/scripts/check-android-package.sh`), and `android-device` runs that APK on an emulator.
+The phone app (`apps/mobile/src`) uses `@lockra/ui` and `@lockra/shared` as the desktop does; what
+both need lives there: the codes list's logic (sorting, filtering, group sections) and a form's kind
+in `packages/shared/src/entries.ts`, the import preview's choices in `import-preview.ts`, the colour
+and avatar text editor in `@lockra/ui`. The unlocked vault's pages lie over the codes
+(`app/nav.tsx`): each page opened adds a history entry that records its depth, so the phone's back
+gesture (wry goes back in the webview's history) and a page's own back button close the top page
+alike, leaving the import preview discards the import, and locking closes every page.
+`make android-apk` builds a debug APK; CI's `android` job builds the release APK and AAB unsigned,
+signs them with a key made for the run and checks them (`.github/scripts/check-android-package.sh`),
+and `android-device` runs that APK on an emulator.
 
 ## The webview
 
@@ -145,13 +152,13 @@ code stream in development (both fixed, both covered by tests).
 
 ## Tests
 
-| Layer    | How                                                                                                                                                                                                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| crates   | unit tests and RFC vectors; core scenarios on fakes and a paused tokio clock; line coverage ≥ 90 % (`make coverage`)                                                                                                                 |
-| contract | Rust fixtures ⇄ zod schemas, secret-leak assertions                                                                                                                                                                                  |
-| shell    | `tests/ipc.rs` on `tauri::test::MockRuntime`: the registered commands, dispatch, typed errors, no path, the code channel; `tests/update.rs`: the real updater plugin against a local manifest (signature, signed version, tampering) |
-| web      | vitest + Testing Library on `MockBackend`, line coverage ≥ 85 % per package                                                                                                                                                          |
-| app      | `make smoke-desktop`: the real app under Xvfb driven over WebDriver and X input (`docs/acceptance/visual-qa.md`)                                                                                                                     |
-| phone    | `apps/mobile/src-tauri/tests/ipc.rs` on `MockRuntime`; CI's `android-device`: the release APK on an emulator creates a vault, locks on leaving and unlocks again (`.github/scripts/android-device-smoke.sh`)                         |
+| Layer    | How                                                                                                                                                                                                                                                    |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| crates   | unit tests and RFC vectors; core scenarios on fakes and a paused tokio clock; line coverage ≥ 90 % (`make coverage`)                                                                                                                                   |
+| contract | Rust fixtures ⇄ zod schemas, secret-leak assertions                                                                                                                                                                                                    |
+| shell    | `tests/ipc.rs` on `tauri::test::MockRuntime`: the registered commands, dispatch, typed errors, no path, the code channel; `tests/update.rs`: the real updater plugin against a local manifest (signature, signed version, tampering)                   |
+| web      | vitest + Testing Library on `MockBackend`, line coverage ≥ 85 % per package                                                                                                                                                                            |
+| app      | `make smoke-desktop`: the real app under Xvfb driven over WebDriver and X input (`docs/acceptance/visual-qa.md`)                                                                                                                                       |
+| phone    | `apps/mobile/src-tauri/tests/ipc.rs` on `MockRuntime`; CI's `android-device`: the release APK on an emulator creates a vault, locks on leaving, unlocks again, adds an account by hand and copies its code (`.github/scripts/android-device-smoke.sh`) |
 
 `make verify` runs every gate; `make linux-x64` and `make windows-x64` build the packages.

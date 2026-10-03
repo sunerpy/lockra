@@ -6,9 +6,13 @@ import {
   type CandidateStatus,
   type CandidateView,
   type ImportView,
+  actionsFor,
+  candidateSource,
   errorText,
+  importChoices,
   parametersText,
   rejectText,
+  takenCount,
 } from "@lockra/shared";
 import {
   Badge,
@@ -39,14 +43,6 @@ const STATUS_TONE: Record<CandidateStatus["type"], BadgeTone> = {
   duplicate: "neutral",
   unsupported: "danger",
 };
-
-/** What the user may do with a found account: a new one is added or skipped; one that shares a
- *  name with an account of another secret can also replace it; the rest are only skipped. */
-export function actionsFor(status: CandidateStatus): readonly CandidateAction[] {
-  if (status.type === "new") return ["add", "skip"];
-  if (status.type === "conflict") return ["add", "replace", "skip"];
-  return [];
-}
 
 export function Import({ dragging }: { dragging: boolean }) {
   const t = useT();
@@ -179,34 +175,16 @@ function BackupSource() {
   );
 }
 
-function sourceText(t: ReturnType<typeof useT>, candidate: CandidateView): string {
-  const source =
-    candidate.source.type === "file"
-      ? candidate.source.name
-      : candidate.source.type === "clipboard"
-        ? t("import.preview.sourceClipboard")
-        : t("import.preview.sourceText");
-  return candidate.line === null
-    ? source
-    : `${source} · ${t("import.preview.line", { n: candidate.line })}`;
-}
-
 function Preview({ view }: { view: ImportView }) {
   const t = useT();
   const dispatch = useDispatch();
   const [choices, setChoices] = useState<ReadonlyMap<number, CandidateAction>>(new Map());
   const actionOf = (c: CandidateView): CandidateAction => choices.get(c.id) ?? c.default_action;
-  const taken = view.candidates.filter(
-    (c) => actionsFor(c.status).length > 0 && actionOf(c) !== "skip",
-  ).length;
+  const list = importChoices(view, choices);
+  const taken = takenCount(list);
   const choose = (id: number, action: CandidateAction) =>
     setChoices((current) => new Map(current).set(id, action));
-  const commit = () => {
-    const list = view.candidates
-      .filter((c) => actionsFor(c.status).length > 0)
-      .map((c) => ({ id: c.id, action: actionOf(c) }));
-    void dispatch({ command: "import_commit", choices: list });
-  };
+  const commit = () => void dispatch({ command: "import_commit", choices: list });
   const columns: TableColumn<CandidateView>[] = [
     {
       id: "account",
@@ -222,7 +200,7 @@ function Preview({ view }: { view: ImportView }) {
       id: "source",
       header: t("import.preview.source"),
       minWidth: 120,
-      cell: (c) => ({ type: "text", text: sourceText(t, c), muted: true }),
+      cell: (c) => ({ type: "text", text: candidateSource(t, c), muted: true }),
     },
     {
       id: "parameters",
