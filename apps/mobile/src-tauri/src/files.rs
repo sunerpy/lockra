@@ -1,6 +1,7 @@
-//! The phone's photo picker for the import, through `FilesPlugin.kt` on Android: the images picked
-//! come to Rust as bytes (no path, and nothing of them reaches the webview) and go into the import
-//! preview. Other builds of this crate (the host tests) have no picker and say so.
+//! The phone's pickers for the import, through `FilesPlugin.kt` on Android: the photo picker and
+//! the system's file picker. What they pick comes to Rust as bytes (no path, and nothing of it
+//! reaches the webview) and goes into the import preview. Other builds of this crate (the host
+//! tests) have no picker and say so.
 
 use data_encoding::BASE64;
 use lockra_core::ports::PortError;
@@ -62,6 +63,23 @@ impl<R: Runtime> Files<R> {
             Err(PortError(PICKER_UNAVAILABLE.into()))
         }
     }
+
+    /// Open the system's file picker on every kind of file and wait, as `pick_images` does: an
+    /// otpauth list, a Lockra backup, Microsoft's database and its log.
+    pub fn pick_files(&self) -> Result<Vec<PickedFile>, PortError> {
+        #[cfg(target_os = "android")]
+        {
+            use tauri::Manager as _;
+            let plugin = self.app.try_state::<Plugin<R>>().ok_or_else(|| PortError("files: plugin missing".into()))?;
+            let args = serde_json::json!({ "maxBytes": lockra_core::MAX_IMPORT_BYTES });
+            let answer: Value = plugin.0.run_mobile_plugin("pickFiles", args).map_err(|e| PortError(e.to_string()))?;
+            picked_of(&answer)
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            Err(PortError(PICKER_UNAVAILABLE.into()))
+        }
+    }
 }
 
 /// The plugin's answer `{ files: [{ name, data }] }`, the data in Base64.
@@ -114,5 +132,6 @@ mod tests {
     fn without_a_picker_the_pick_says_so() {
         let app = tauri::test::mock_app();
         assert!(matches!(Files::new(app.handle().clone()).pick_images(), Err(PortError(m)) if m == PICKER_UNAVAILABLE));
+        assert!(matches!(Files::new(app.handle().clone()).pick_files(), Err(PortError(m)) if m == PICKER_UNAVAILABLE));
     }
 }

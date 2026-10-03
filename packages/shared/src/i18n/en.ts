@@ -122,6 +122,8 @@ export const en: Messages = {
       scanHint: "Read a QR code with the camera, such as a Google Authenticator export",
       images: "Read from photos",
       imagesHint: "Pick screenshots or photos of QR codes",
+      files: "Import from files",
+      filesHint: "An otpauth list, a Lockra backup or Microsoft Authenticator's database",
       links: "Paste links",
       linksBody: "Paste one or more otpauth:// links, one per line.",
       clipboardHint: "Reads the otpauth links on the clipboard",

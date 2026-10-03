@@ -60,6 +60,13 @@ export function Codes() {
           data-testid="codes-add"
         />
         <IconButton
+          icon="settings"
+          label={t("settings.title")}
+          size={40}
+          onClick={() => nav.open({ name: "settings" })}
+          data-testid="codes-settings"
+        />
+        <IconButton
           icon="lock"
           label={t("shell.nav.lock")}
           size={40}
