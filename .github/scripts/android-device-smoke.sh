@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The Android app on a device: install the APK, start it, create a vault, leave the app (it locks)
-# and unlock it again; it stays up throughout with nothing fatal in its log. A package that passes
-# every check can still close on start (a Tauri app that panics before its first screen), so the
-# app itself has to run. CI runs this against an emulator (`android-device` in ci.yml); it runs the
+# and unlock it again; it stays up throughout with nothing fatal in its log, and the page gives way
+# to the keyboard rather than lie under it. A package that passes every check can still close on
+# start (a Tauri app that panics before its first screen), so the app itself has to run. CI runs this against an emulator (`android-device` in ci.yml); it runs the
 # same against a phone over adb.
 #
 # Usage: android-device-smoke.sh <apk or directory holding one> <out dir>
@@ -85,6 +85,45 @@ tap() {
   # shellcheck disable=SC2086 # "x y"
   adb shell input tap $xy
 }
+# The webview's bottom edge on the screen, from the last dump.
+webview_bottom() {
+  python3 - "$out/ui.xml" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+for node in ET.parse(sys.argv[1]).getroot().iter("node"):
+    m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+    if node.get("class") == "android.webkit.WebView" and m:
+        print(m.group(4))
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+# Wait (at most 20 s) until the webview ends above the keyboard ("up": MainActivity pads the
+# content by the keyboard's height, edge to edge nothing else would) or at the screen's bottom
+# again ("down").
+keyboard() {
+  local deadline=$((SECONDS + 20)) bottom=
+  while :; do
+    running || fail "the app closed while waiting for the keyboard to go $1"
+    if dump && bottom=$(webview_bottom); then
+      if [ "$1" = up ] && [ "$bottom" -lt "$full_bottom" ]; then return 0; fi
+      if [ "$1" = down ] && [ "$bottom" -eq "$full_bottom" ]; then return 0; fi
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      if [ "$1" = up ]; then fail "the keyboard opened over the page: the webview still ends at ${bottom:-?}"; fi
+      fail "the keyboard did not close: the webview ends at ${bottom:-?}, not $full_bottom"
+    fi
+    sleep 1
+  done
+}
+# Type the password into the field labelled with one of the words, then close the keyboard, so the
+# next tap lands on the page and not on a key.
+type_password() {
+  tap "$@"
+  keyboard up
+  adb shell input text "$password"
+  adb shell input keyevent KEYCODE_BACK
+  keyboard down
+}
 
 adb wait-for-device
 # A build signed with another key cannot replace the installed one.
@@ -96,13 +135,11 @@ adb shell am start -W -n "$package/.MainActivity" >"$out/start.txt" 2>&1 || fail
 # Up: the welcome screen (English on the emulator, Chinese on a phone set to it). At most 120 s:
 # an emulator running arm64 code through its ARM translation is slow.
 showing 'Create vault|创建保险库' 120
+full_bottom=$(webview_bottom) || fail "no webview on the screen"
 
 # A vault: the password typed twice, then the codes screen (Argon2id runs here: give it time).
-tap 'Master password' '主密码'
-adb shell input text "$password"
-tap 'Repeat it' '再输入一次'
-adb shell input text "$password"
-adb shell input keyevent KEYCODE_ESCAPE
+type_password 'Master password' '主密码'
+type_password 'Repeat it' '再输入一次'
 tap 'Create vault' '创建保险库'
 showing 'No accounts yet|还没有账号' 120
 

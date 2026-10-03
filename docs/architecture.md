@@ -114,8 +114,10 @@ capability is a small Tauri plugin whose Kotlin class lives in `gen/android` (ge
 The other ports are not there yet: `NoSecretStore` (so no "Remember on this device"),
 `NoBiometrics`, `NoUpdater` (updates come from the store or the release page) and `NoSync`.
 `MainActivity.kt` keeps the window `FLAG_SECURE` and draws it edge to edge (the webview pads with
-`env(safe-area-inset-*)`). The webview locks the vault when the page is hidden
-(`visibilitychange`: another app in front, the screen off).
+`env(safe-area-inset-*)`); edge to edge the window no longer shrinks for the keyboard, so the
+content takes the keyboard's height as bottom padding and the field being typed in stays above it
+(the device smoke test checks that the webview gives way). The webview locks the vault when the page
+is hidden (`visibilitychange`: another app in front, the screen off).
 
 The phone app (`apps/mobile/src`) uses `@lockra/ui` and `@lockra/shared` as the desktop does; the
 codes list's logic (sorting, filtering, group sections) is `packages/shared/src/entries.ts`, shared
