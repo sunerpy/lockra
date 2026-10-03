@@ -287,7 +287,9 @@ adb shell input keyevent KEYCODE_ENTER
 leaving 'Advanced|高级设置' 30
 showing 'Example' 30
 tap 'Example'
-showing 'Copied|已复制' 30
+# "Copied" shows for three seconds, and a dump on the emulator can take longer; "Clipboard cleared"
+# comes 30 s later and proves the same, since the clipboard plugin clears only the code it wrote.
+showing 'Copied|已复制|Clipboard cleared|剪贴板已清空' 45
 
 # The camera's page answers through the scanner plugin: without a camera, the import says so,
 # and the app, hidden behind that page for a moment, did not lock.
