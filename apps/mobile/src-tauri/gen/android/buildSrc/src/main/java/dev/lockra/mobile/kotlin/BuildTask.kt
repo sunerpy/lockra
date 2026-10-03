@@ -16,7 +16,9 @@ open class BuildTask : DefaultTask() {
 
     @TaskAction
     fun assemble() {
-        val executable = """cargo""";
+        // pnpm: the Tauri CLI of the lockfile (apps/mobile/package.json), the one that started this
+        // build. `cargo tauri android init` writes "cargo" here; keep this when regenerating.
+        val executable = """pnpm""";
         try {
             runTauriCli(executable)
         } catch (e: Exception) {
