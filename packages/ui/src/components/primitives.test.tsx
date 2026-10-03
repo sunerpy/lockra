@@ -10,6 +10,7 @@ import { EmptyState } from "./EmptyState";
 import { Eyebrow } from "./Eyebrow";
 import { ICON_NAMES, Icon, isIconName } from "./Icon";
 import { IconButton } from "./IconButton";
+import { PasswordField } from "./PasswordField";
 import { Input, Textarea } from "./Input";
 import { Keycap, Keycaps, splitKeys } from "./Keycap";
 import { Lamp } from "./Lamp";
@@ -121,6 +122,25 @@ describe("Lamp / Badge / Chip", () => {
 });
 
 describe("Button / IconButton", () => {
+  it("comes in a touch size for the phone", () => {
+    render(
+      <>
+        <Button size="lg" icon="lock">
+          创建保险库
+        </Button>
+        <IconButton icon="lock" label="锁定" size={40} />
+        <PasswordField label="主密码" value="" onChange={() => undefined} size="lg" />
+      </>,
+    );
+    const button = screen.getByRole("button", { name: "创建保险库" });
+    expect(button).toHaveClass("h-11");
+    expect(button.querySelector("svg")).toHaveAttribute("width", "16");
+    const lock = screen.getByRole("button", { name: "锁定" });
+    expect(lock).toHaveStyle({ width: "40px", height: "40px" });
+    expect(lock.querySelector("svg")).toHaveAttribute("width", "18");
+    expect(screen.getByLabelText("主密码").parentElement).toHaveClass("h-11");
+  });
+
   it("renders variants, sizes, icon, keys and loading state", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

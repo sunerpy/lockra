@@ -15,6 +15,7 @@ License 2.0. It is a Rust core in a Tauri 2 shell with a React interface:
 | `crates/lockra-core`             | the application: vault session, import, export, backups, settings       |
 | `crates/lockra-bridge`           | the contract between the interface and the core                         |
 | `apps/desktop`                   | the Tauri shell and the React app                                       |
+| `apps/mobile`                    | the Android app, in progress: its Tauri shell and React app             |
 | `packages/ui`, `packages/shared` | the design system; the contract, translations and test backend          |
 
 ## Building

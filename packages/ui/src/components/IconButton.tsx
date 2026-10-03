@@ -6,12 +6,15 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
   icon: IconName;
   /** Required: the icon alone is not a name. */
   label: string;
-  size?: 24 | 28;
+  /** 40 is the phone's touch size. */
+  size?: 24 | 28 | 40;
   tone?: "default" | "danger";
   bordered?: boolean;
   /** A toggle: `aria-pressed`, and the icon filled in the accent colour while on. */
   pressed?: boolean;
 }
+
+const ICON_SIZE = { 24: 14, 28: 16, 40: 18 } as const;
 
 export function IconButton({
   icon,
@@ -40,7 +43,7 @@ export function IconButton({
       )}
       style={{ width: size, height: size }}
       {...rest}>
-      <Icon name={icon} size={size === 24 ? 14 : 16} fill={pressed ? "currentColor" : "none"} />
+      <Icon name={icon} size={ICON_SIZE[size]} fill={pressed ? "currentColor" : "none"} />
     </button>
   );
 }

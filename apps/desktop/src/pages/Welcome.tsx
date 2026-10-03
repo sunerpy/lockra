@@ -1,6 +1,6 @@
 // No vault yet: create one with a master password, restore a backup (its password becomes the
 // master password), or join a sync space (its master password becomes this vault's).
-import { errorText, formatDateTime } from "@lockra/shared";
+import { errorText, formatDateTime, passwordLongEnough } from "@lockra/shared";
 import {
   Button,
   CardGrid,
@@ -13,7 +13,6 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useGuarded, useSubmit } from "../app/dispatch";
-import { passwordLongEnough } from "../app/password";
 import { JoinForm } from "../features/sync/JoinForm";
 
 export function Welcome() {

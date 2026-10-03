@@ -107,6 +107,9 @@ export const zhCN = {
     footer: { palette: "命令", add: "添加", lock: "锁定", settings: "设置" },
     notFound: "页面不存在",
   },
+  mobile: {
+    emptyBody: "即将支持在手机上扫描二维码、读取截图和手动添加账号。",
+  },
   palette: {
     group: { accounts: "账号", pages: "页面", actions: "操作" },
     copyCode: "复制验证码",

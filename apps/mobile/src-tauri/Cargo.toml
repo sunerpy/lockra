@@ -1,0 +1,48 @@
+[package]
+name = "lockra-mobile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Lockra mobile shell (Android)."
+publish = false
+
+[lints]
+workspace = true
+
+[lib]
+name = "lockra_mobile_lib"
+# staticlib and cdylib for the Android app; rlib for the tests on the host.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+tauri-codegen = "=2.6.3"
+
+[dependencies]
+lockra-bridge.workspace = true
+lockra-core.workspace = true
+serde_json.workspace = true
+# The mobile runtime only: no tray, no desktop dialogs (the phone's own plugins do those).
+tauri = { version = "=2.11.6", default-features = false, features = ["wry"] }
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+zeroize.workspace = true
+# Not used from Rust: pinned beside `tauri`, as in apps/desktop/src-tauri/Cargo.toml.
+tauri-runtime = "=2.11.3"
+tauri-runtime-wry = "=2.11.4"
+tauri-utils = "=2.9.3"
+wry = { version = "=0.55.1", default-features = false }
+tao = { version = "=0.35.3", default-features = false }
+
+[dev-dependencies]
+lockra-core = { workspace = true, features = ["fakes"] }
+lockra-vault = { workspace = true, features = ["test-kdf"] }
+tauri = { version = "=2.11.6", default-features = false, features = ["wry", "test"] }
+tempfile.workspace = true
+
+[features]
+# Enabled by `tauri build`: serve the bundled web app instead of the dev server.
+custom-protocol = ["tauri/custom-protocol"]

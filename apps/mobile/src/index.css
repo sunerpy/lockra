@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@import "../../../packages/ui/src/tokens.css";
+@source "../../../packages/ui/src";
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  /* A list that ends does not pull the whole page with it, and a tap shows no grey box. */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}

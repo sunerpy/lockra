@@ -46,6 +46,7 @@ import {
   MAX_DEVICE_NAME_CHARS,
   defaultSettings,
 } from "./schema";
+import { MIN_PASSWORD } from "./password";
 
 export interface MockEntry {
   view: EntryView;
@@ -97,7 +98,6 @@ export const MOCK_STORAGE_SECRET = "storage secret";
 /** The sync key of the mock's spaces. */
 export const MOCK_SYNC_KEY =
   "LKS1-MFRG-GZDF-MZTW-Q2LK-NNWG-23TP-OBYX-E43U-OR3W-C6DZ-PI2D-AMBR-GQ2D-ARQA";
-const MIN_PASSWORD = 8;
 const FREE_ATTEMPTS = 3;
 const EXPORT_PER_CODE = 10;
 

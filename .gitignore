@@ -7,9 +7,11 @@ coverage/
 *.tsbuildinfo
 # The web bundle: `vite build` writes it, a debug `cargo check` does not need it.
 apps/desktop/dist/
+apps/mobile/dist/
 
 # Tauri: generated capability schemas
 apps/desktop/src-tauri/gen/
+apps/mobile/src-tauri/gen/schemas/
 
 # Build outputs of scripts/build-*.sh and the verify log bound to HEAD
 /dist/

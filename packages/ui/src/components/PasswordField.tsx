@@ -38,6 +38,8 @@ export interface PasswordFieldProps extends Omit<
   strength?: boolean;
   error?: string;
   help?: string;
+  /** `lg` is the phone's: a 44 px field with larger text. */
+  size?: "md" | "lg";
 }
 
 export function PasswordField({
@@ -47,6 +49,7 @@ export function PasswordField({
   strength = false,
   error,
   help,
+  size = "md",
   className,
   id,
   ...rest
@@ -63,7 +66,8 @@ export function PasswordField({
       </label>
       <div
         className={cx(
-          "flex h-9 items-center gap-1 rounded-6 bg-surface pr-1 pl-2.5 hairline transition-colors",
+          "flex items-center gap-1 rounded-6 bg-surface pr-1 pl-2.5 hairline transition-colors",
+          size === "lg" ? "h-11" : "h-9",
           "focus-within:border-fg focus-within:shadow-[0_0_0_1px_var(--fg)]",
           error &&
             "border-danger focus-within:border-danger focus-within:shadow-[0_0_0_1px_var(--danger)]",
@@ -78,7 +82,10 @@ export function PasswordField({
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? `${inputId}-error` : undefined}
           onChange={(e) => onChange(e.target.value)}
-          className="mono min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-fg-subtle"
+          className={cx(
+            "mono min-w-0 flex-1 bg-transparent outline-none placeholder:text-fg-subtle",
+            size === "lg" ? "text-[15px]" : "text-[13px]",
+          )}
         />
         <IconButton
           type="button"

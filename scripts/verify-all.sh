@@ -26,6 +26,8 @@ if [ "${#missing[@]}" -gt 0 ]; then
 fi
 
 step "format";           make -s fmt-check
+# The shells' generate_context! needs the web apps' output folders, even empty (a fresh clone).
+mkdir -p apps/desktop/dist apps/mobile/dist
 step "clippy";           cargo clippy --workspace --all-targets -- -D warnings
 step "rust tests";       cargo test --workspace --all-targets
 step "crate coverage";   make -s coverage
