@@ -11,8 +11,10 @@ afterEach(async () => {
   });
 });
 
-/** The app leaves the screen (another app, the screen off) or comes back to it. */
-function visibility(state: "hidden" | "visible") {
+/** The app leaves the screen (another app, the screen off) or comes back to it, once the effects
+ *  that listen for it have run. */
+async function visibility(state: "hidden" | "visible") {
+  await act(async () => {});
   Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
   act(() => {
     document.dispatchEvent(new Event("visibilitychange"));
@@ -125,10 +127,10 @@ describe("the fingerprint on the phone", () => {
     await ready();
     const asked = () => backend.calls.filter((c) => c.command === "vault_unlock_device").length;
     // Leaving locks the vault; the check waits for the app to be on the screen again.
-    visibility("hidden");
+    await visibility("hidden");
     await screen.findByTestId("page-unlock");
     expect(asked()).toBe(0);
-    visibility("visible");
+    await visibility("visible");
     await waitFor(() => expect(asked()).toBe(1));
     const button = screen.getByRole("button", { name: "使用指纹解锁" });
     expect(button).toHaveAttribute("data-variant", "primary");
@@ -140,8 +142,8 @@ describe("the fingerprint on the phone", () => {
     // Cancelled: only once the app has left and come back.
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     backend.answerBiometric(null);
-    visibility("hidden");
-    visibility("visible");
+    await visibility("hidden");
+    await visibility("visible");
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
     expect(asked()).toBe(2);
   });
@@ -158,8 +160,8 @@ describe("the fingerprint on the phone", () => {
     await screen.findByTestId("page-unlock");
     const asked = () => backend.calls.filter((c) => c.command === "vault_unlock_device").length;
     expect(asked()).toBe(0);
-    visibility("hidden");
-    visibility("visible");
+    await visibility("hidden");
+    await visibility("visible");
     await waitFor(() => expect(asked()).toBe(1));
   });
 
@@ -172,8 +174,8 @@ describe("the fingerprint on the phone", () => {
     });
     renderApp({ backend });
     await ready();
-    visibility("hidden");
-    visibility("visible");
+    await visibility("hidden");
+    await visibility("visible");
     expect(backend.calls.some((c) => c.command === "vault_unlock_device")).toBe(false);
     expect(screen.getByRole("button", { name: "解锁" })).toHaveAttribute("data-variant", "primary");
   });

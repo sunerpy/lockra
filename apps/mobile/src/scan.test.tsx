@@ -15,7 +15,9 @@ class SlowCamera extends MockBackend {
   }
 }
 
-function setVisibility(state: "visible" | "hidden") {
+/** The page shown or hidden, once the effects that listen for it have run. */
+async function setVisibility(state: "visible" | "hidden") {
+  await act(async () => {});
   Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
   act(() => {
     document.dispatchEvent(new Event("visibilitychange"));
@@ -77,17 +79,17 @@ describe("the camera and the photo picker", () => {
     await user.click(screen.getByTestId("codes-add"));
     await user.click(await screen.findByTestId("add-scan"));
     // The camera's page hides the app: that is not leaving it.
-    setVisibility("hidden");
-    setVisibility("visible");
-    setVisibility("hidden");
+    await setVisibility("hidden");
+    await setVisibility("visible");
+    await setVisibility("hidden");
     // The page closes, and the answer comes back before the app is in front again (as on the
     // phone, where the webview resumes after the page has gone).
     act(() => backend.answer?.(false));
     await waitFor(() => expect(screen.getByTestId("page-add")).toBeInTheDocument());
-    setVisibility("visible");
+    await setVisibility("visible");
     expect(backend.calls.some((c) => c.command === "vault_lock")).toBe(false);
     // In front again: leaving now locks the vault.
-    setVisibility("hidden");
+    await setVisibility("hidden");
     expect(await screen.findByTestId("page-unlock")).toBeInTheDocument();
     expect(backend.calls.at(-1)).toEqual({ command: "vault_lock" });
   });
@@ -98,14 +100,14 @@ describe("the camera and the photo picker", () => {
     await ready();
     await user.click(screen.getByTestId("codes-add"));
     await user.click(await screen.findByTestId("add-scan"));
-    setVisibility("hidden");
-    setVisibility("visible");
+    await setVisibility("hidden");
+    await setVisibility("visible");
     await backend.dispatch({ command: "import_text", text: SCANNED });
     act(() => backend.answer?.(true));
     expect(await screen.findByTestId("page-preview")).toBeInTheDocument();
     expect(backend.calls.some((c) => c.command === "vault_lock")).toBe(false);
     // Once the camera has gone, leaving the app locks the vault again.
-    setVisibility("hidden");
+    await setVisibility("hidden");
     expect(await screen.findByTestId("page-unlock")).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import { MockBackend, type MockOptions, sampleEntries } from "@lockra/shared/mock";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { App } from "../App";
 
@@ -26,4 +26,6 @@ export function renderApp({ backend, mock }: RenderAppOptions = {}) {
 /** Wait for the first state: a page is on screen (the shell's body is `page-body`). */
 export async function ready(): Promise<void> {
   await screen.findAllByTestId(/^page-(?!body)/);
+  // The effects of the render that brought the screen, where its listeners are added.
+  await act(async () => {});
 }
