@@ -24,9 +24,10 @@ use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports, Storag
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
+use zeroize::Zeroizing;
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
-pub const COMMANDS: [&str; 5] = ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan"];
+pub const COMMANDS: [&str; 7] = ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan", "backup_save", "restore_pick"];
 
 /// What the shell wires into the core; tests replace the platform parts with fakes.
 pub struct ShellOptions {
@@ -102,6 +103,26 @@ async fn import_pick_files<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>,
     files::import(&core, picked).await
 }
 
+/// Save a backup where the user picks (the system's file picker): under the master password, or
+/// under `separate_password` if given; the file's name, or `None` when the picker was left.
+#[tauri::command]
+async fn backup_save<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>, separate_password: Option<Zeroizing<String>>) -> Result<Option<String>, CoreError> {
+    let bytes = core.backup_sealed(separate_password).await?;
+    let picker = files::Files::new(app);
+    let saved = tauri::async_runtime::spawn_blocking(move || picker.save(files::BACKUP_NAME, files::BACKUP_MIME, &bytes))
+        .await
+        .map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    files::saved(&core, saved)
+}
+
+/// Open a backup for restoring with the system's file picker; `false` when none was picked.
+#[tauri::command]
+async fn restore_pick<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<bool, CoreError> {
+    let picker = files::Files::new(app);
+    let picked = tauri::async_runtime::spawn_blocking(move || picker.pick_file()).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    files::restore(&core, picked).await
+}
+
 /// Scan a QR code with the camera into the import preview; `false` when left without one.
 /// `prompt` and `cancel` are the camera page's words, in the webview's language.
 #[tauri::command]
@@ -137,7 +158,15 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
         .plugin(clipboard::init())
         .plugin(files::init())
         .plugin(scanner::init())
-        .invoke_handler(tauri::generate_handler![lockra_dispatch, codes_subscribe, codes_unsubscribe, import_pick_files, import_scan])
+        .invoke_handler(tauri::generate_handler![
+            lockra_dispatch,
+            codes_subscribe,
+            codes_unsubscribe,
+            import_pick_files,
+            import_scan,
+            backup_save,
+            restore_pick
+        ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {
                 Some(dir) => dir,

@@ -18,11 +18,13 @@ import { NavProvider, useNav } from "./app/nav";
 import { phoneScreenOpen } from "./app/phone-screen";
 import { Account } from "./screens/Account";
 import { Add } from "./screens/Add";
+import { Backup } from "./screens/Backup";
 import { Codes } from "./screens/Codes";
 import { Edit } from "./screens/Edit";
 import { Manual } from "./screens/Manual";
 import { Password } from "./screens/Password";
 import { Preview } from "./screens/Preview";
+import { Restore } from "./screens/Restore";
 import { Reveal } from "./screens/Reveal";
 import { Settings } from "./screens/Settings";
 import { Unlock } from "./screens/Unlock";
@@ -70,25 +72,45 @@ function Screen() {
 
 /** The codes, or the page on top of them. */
 function Pages() {
-  const { route, home } = useNav();
+  const { route, home, replace } = useNav();
   const { backend } = useBackend();
-  const { entries, import: pending } = useUiState();
-  // Leaving the import preview any way but its own buttons (the back gesture) discards the import.
+  const { entries, import: pending, restore } = useUiState();
+  // Leaving the import preview or the restore before they are done (their buttons, the back
+  // gesture) ends them.
   const last = useRef(route);
   useEffect(() => {
     const was = last.current;
     last.current = route;
-    if (was?.name === "preview" && route?.name !== "preview" && pending !== null)
+    if (was?.name === route?.name) return;
+    if (was?.name === "preview" && pending !== null)
       void backend.dispatch({ command: "import_cancel" }).catch(() => undefined);
-  }, [route, pending, backend]);
+    if (was?.name === "restore" && restore !== null && route?.name !== "preview")
+      void backend.dispatch({ command: "restore_cancel" }).catch(() => undefined);
+  }, [route, pending, restore, backend]);
   const id = route !== undefined && "id" in route ? route.id : undefined;
   const entry = id === undefined ? undefined : entries.find((e) => e.id === id);
-  // The account went away meanwhile (deleted, replaced by an import, merged away by a sync), or
-  // the import ended: back to the codes.
-  const gone = (id !== undefined && entry === undefined) || (route?.name === "preview" && !pending);
+  // What the top page shows: the account, the import, the backup being restored.
+  const present =
+    route?.name === "preview"
+      ? pending !== null
+      : route?.name === "restore"
+        ? restore !== null
+        : id === undefined || entry !== undefined;
+  // Once that was there and is gone (the account deleted, replaced by an import or merged away by a
+  // sync; the import or the restore done), the page closes: a merged restore goes on to the import
+  // preview, the rest back to the codes. Before it has been there, its state is still on the way
+  // (the command's answer and the state event come by different routes).
+  const seen = useRef<typeof route>(undefined);
   useEffect(() => {
-    if (gone) home();
-  }, [gone, home]);
+    if (route === undefined) return;
+    if (present) {
+      seen.current = route;
+      return;
+    }
+    if (seen.current !== route) return;
+    if (route.name === "restore" && pending !== null) replace({ name: "preview" });
+    else home();
+  }, [route, present, pending, home, replace]);
   switch (route?.name) {
     case undefined:
       return <Codes />;
@@ -102,6 +124,10 @@ function Pages() {
       return <Settings />;
     case "password":
       return <Password />;
+    case "backup":
+      return <Backup />;
+    case "restore":
+      return restore ? <Restore restore={restore} /> : null;
     case "account":
       return entry ? <Account entry={entry} /> : null;
     case "edit":
