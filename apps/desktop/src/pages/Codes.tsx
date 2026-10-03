@@ -4,11 +4,17 @@
 // "Select" ticks several accounts (one by one, a section, or all that the search shows) to move
 // them to a group at once.
 import {
+  ALL_GROUPS,
   type EntryView,
+  NO_GROUP,
   SORT_ORDERS,
   type SortOrder,
+  entryGroups,
   entryLabel,
+  filterEntries,
+  groupSections,
   relativeTime,
+  sortEntries,
 } from "@lockra/shared";
 import {
   Button,
@@ -44,72 +50,6 @@ import { motionReduced } from "../app/appearance";
 import { useDispatch, useGuarded } from "../app/dispatch";
 import { useShell } from "../app/shell-state";
 import { MoveGroupDialog } from "../features/entries/MoveGroupDialog";
-import { entryGroups } from "../features/entries/groups";
-
-const ALL_GROUPS = "";
-/** The section of the accounts in no group (its fold is kept under this name too). */
-const NO_GROUP = "";
-
-function nameOf(entry: EntryView): string {
-  return (entry.issuer || entry.account).toLocaleLowerCase();
-}
-
-function byName(a: EntryView, b: EntryView): number {
-  return nameOf(a).localeCompare(nameOf(b)) || a.account.localeCompare(b.account);
-}
-
-/** Favourites first, then `order`; ties by name. */
-export function sortEntries(entries: readonly EntryView[], order: SortOrder): EntryView[] {
-  const key: (a: EntryView, b: EntryView) => number =
-    order === "added"
-      ? (a, b) => b.created_at_ms - a.created_at_ms
-      : order === "recent"
-        ? (a, b) => (b.last_used_at_ms ?? 0) - (a.last_used_at_ms ?? 0)
-        : byName;
-  // A sorted copy: `toSorted` is ES2023 (Safari 16), past the ES2022 lib kept for older macOS.
-  // oxlint-disable-next-line unicorn/no-array-sort
-  return [...entries].sort(
-    (a, b) => Number(b.favorite) - Number(a.favorite) || key(a, b) || byName(a, b),
-  );
-}
-
-/** The accounts whose issuer, account or group contains `query`, in `group` (all when empty). */
-export function filterEntries(
-  entries: readonly EntryView[],
-  query: string,
-  group: string,
-): EntryView[] {
-  const q = query.trim().toLocaleLowerCase();
-  return entries.filter(
-    (e) =>
-      (group === ALL_GROUPS || e.group === group) &&
-      (q === "" || `${e.issuer}\n${e.account}\n${e.group ?? ""}`.toLocaleLowerCase().includes(q)),
-  );
-}
-
-/** One section of the code list: a group's accounts, or those in no group (`key` ""). */
-export interface GroupSection {
-  key: string;
-  entries: EntryView[];
-}
-
-/** The accounts in sections: one per group by name, then the accounts in no group; each keeps the
- *  order it is given. */
-export function groupSections(entries: readonly EntryView[]): GroupSection[] {
-  const byGroup = new Map<string, EntryView[]>();
-  for (const entry of entries) {
-    const key = entry.group ?? NO_GROUP;
-    const section = byGroup.get(key);
-    if (section) section.push(entry);
-    else byGroup.set(key, [entry]);
-  }
-  const keys = [...byGroup.keys()].filter((key) => key !== NO_GROUP);
-  // A sorted copy: `toSorted` is ES2023 (Safari 16), past the ES2022 lib kept for older macOS.
-  // oxlint-disable-next-line unicorn/no-array-sort
-  keys.sort((a, b) => a.localeCompare(b));
-  if (byGroup.has(NO_GROUP)) keys.push(NO_GROUP);
-  return keys.map((key) => ({ key, entries: byGroup.get(key) ?? [] }));
-}
 
 /** A row's menu: what it offers and what each choice does, shared by the "⋯" button, the right
  *  click and the buttons beside them. `select` starts a selection with the row ticked. */

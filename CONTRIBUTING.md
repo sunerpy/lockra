@@ -14,6 +14,10 @@ pnpm --filter @lockra/desktop tauri dev   # the app with hot reload
 pnpm dev                                  # the interface alone, on an in-memory core
 ```
 
+The Android app (`apps/mobile`) also needs JDK 21, the Android SDK with platform 36 and the NDK
+(`ANDROID_HOME`, `NDK_HOME`) and the Rust target `aarch64-linux-android`; `make android-apk` builds
+its debug APK and `make android-clippy` lints the crates it links for the phone.
+
 ## Before you open a pull request
 
 ```bash

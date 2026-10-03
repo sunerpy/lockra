@@ -28,6 +28,17 @@ fn statuses(h: &mut Harness) -> Vec<UpdateStatus> {
     out
 }
 
+/// `harness_with(updater)` once the start-up look at the sensor is done and its state event read.
+/// That look ends on `spawn_blocking`'s threads, at no fixed point among the yields of a paused
+/// clock: its event, carrying the update status of the moment, would otherwise land among a run's
+/// statuses or between two runs.
+async fn settled(updater: FakeUpdater) -> Harness {
+    let mut h = harness_with(updater);
+    until("the first look at the sensor", || h.core.state().lock.device_unlock.biometric.kind.is_some()).await;
+    statuses(&mut h);
+    h
+}
+
 /// Let a background run reach a status `done` accepts (the fake yields between progress steps,
 /// more often than `settle` does).
 async fn reaches(core: &Core, done: impl Fn(&UpdateStatus) -> bool) {
@@ -113,7 +124,7 @@ async fn a_copy_that_cannot_update_itself_refuses_and_never_goes_online() {
 
 #[tokio::test(start_paused = true)]
 async fn a_check_finds_nothing_newer_or_the_newer_release() {
-    let mut h = harness_with(FakeUpdater::installed(InstallMethod::Deb));
+    let mut h = settled(FakeUpdater::installed(InstallMethod::Deb)).await;
     assert_eq!(h.core.state().update.method, Some(InstallMethod::Deb));
     h.core.update_check().unwrap();
     settle().await;
@@ -159,7 +170,7 @@ async fn install_downloads_with_progress_backs_up_and_installs() {
     let mut steps: Vec<(u64, Option<u64>)> = (1..=20).map(|n| (n * total / 200, Some(total))).collect();
     steps.push((total, Some(total)));
     *updater.progress.lock() = steps;
-    let mut h = harness_with(updater);
+    let mut h = settled(updater).await;
     h.core.create_vault(pw(MASTER)).await.unwrap();
     // Automatic backups were just turned on: a backup is due within the debounce.
     let backups = h.dir.path().join("backups");
@@ -196,7 +207,7 @@ async fn install_downloads_with_progress_backs_up_and_installs() {
 
 #[tokio::test(start_paused = true)]
 async fn installing_what_a_check_found_asks_and_downloads_once() {
-    let mut h = harness_with(FakeUpdater::installed(InstallMethod::Msi));
+    let mut h = settled(FakeUpdater::installed(InstallMethod::Msi)).await;
     *h.updater.check.lock() = Ok(Some(FakeUpdater::release("0.3.0")));
     h.core.update_check().unwrap();
     reaches(&h.core, ended).await;

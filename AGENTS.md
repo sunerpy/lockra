@@ -11,6 +11,9 @@ How to work in this repository, for coding agents and people alike.
   sync: keyring, device snapshots, merge; no I/O) and `lockra-remote` (its S3 and WebDAV storage).
 - `apps/desktop` — the React app (`src/`) and the Tauri 2 shell (`src-tauri/`, crate
   `lockra-desktop`).
+- `apps/mobile` — the Android app, not released yet: the React phone app (`src/`) and its Tauri 2
+  shell (`src-tauri/`, crate `lockra-mobile`; `gen/android` is the Gradle project with the Kotlin
+  plugins, generated once and then kept).
 - `packages/shared` (zod contract, backends, i18n, labels), `packages/ui` (design system).
 - `docs/` — `architecture.md` first, then `formats.md`, `security.md`, `release.md`; `DESIGN.md` at
   the root is the design system's reading guide; `docs/acceptance/` holds the visual QA and its
@@ -33,6 +36,7 @@ make sync-it                     # the sync storage against S3 and WebDAV server
 make pre-ci                      # the real app under Xvfb, the deb, the cross-built installer
 make smoke-desktop               # the real app alone: flows and screenshots
 make showcase                    # the component showcase in the four themes
+make android-apk                 # the phone app's debug APK (JDK 21, Android SDK 36, NDK)
 make site-screens                # the documentation site's screenshots (docs/site/README.md)
 make help                        # everything else
 ```

@@ -1,6 +1,7 @@
 # Roadmap
 
-This page describes what Lockra covers today, what is planned, and what it deliberately leaves out.
+This page describes what Lockra covers today, what is being built, and what it deliberately leaves
+out.
 
 ## Today
 
@@ -11,9 +12,9 @@ storage of your own, protection for the vault (with Touch ID or Windows Hello wh
 has it), the clipboard and the screen, and signed in-app updates with a one-line install for every
 platform. Suggestions are welcome in the [issue tracker](https://github.com/sunerpy/lockra/issues).
 
-## Planned
+## In progress
 
-- **An Android app** <StatusTag status="planned" />: the same vault on the phone, scanning QR codes
+- **An Android app** <StatusTag status="building" />: the same vault on the phone, scanning QR codes
   with the camera or from screenshots, unlocking with a fingerprint, and syncing with your other
   devices.
 

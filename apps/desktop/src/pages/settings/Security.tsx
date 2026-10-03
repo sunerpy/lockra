@@ -1,4 +1,9 @@
-import { AUTO_LOCK_CHOICES, CLIPBOARD_CHOICES, errorText } from "@lockra/shared";
+import {
+  AUTO_LOCK_CHOICES,
+  CLIPBOARD_CHOICES,
+  errorText,
+  passwordLongEnough,
+} from "@lockra/shared";
 import {
   Button,
   PasswordField,
@@ -15,7 +20,6 @@ import {
 import { type SubmitEvent, useState } from "react";
 import { useSubmit } from "../../app/dispatch";
 import { useToaster } from "../../app/notices";
-import { passwordLongEnough } from "../../app/password";
 import { biometricName } from "../../app/platform";
 import { useUpdateSettings } from "../../app/settings";
 

@@ -1,4 +1,4 @@
-# Lockra workspace: the Rust core (crates/) and the Tauri desktop shell (apps/desktop/src-tauri).
+# Lockra workspace: the Rust core (crates/) and the Tauri shells (apps/desktop/src-tauri, apps/mobile/src-tauri).
 [workspace]
 resolver = "3"
 members = [
@@ -10,6 +10,7 @@ members = [
   "crates/lockra-sync",
   "crates/lockra-remote",
   "apps/desktop/src-tauri",
+  "apps/mobile/src-tauri",
 ]
 
 [workspace.package]

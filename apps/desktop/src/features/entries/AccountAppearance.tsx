@@ -1,18 +1,9 @@
 // An account's colour and avatar text (the edit dialog): the swatches are one radio group (the
 // arrow keys move the choice, Tab leaves it), the text keeps two characters as people count them,
 // and the avatar beside them shows the result as it changes.
-import { ACCOUNT_COLORS, type AccountColor, MARK_CHARS } from "@lockra/shared";
+import { ACCOUNT_COLORS, type AccountColor, cutMark } from "@lockra/shared";
 import { EntryAvatar, Icon, Input, autoColor, cx, initial, useT } from "@lockra/ui";
 import { type KeyboardEvent, useId, useRef } from "react";
-
-/** `text` cut to `MARK_CHARS` characters as people count them (an emoji with its joiners is one). */
-export function cutMark(text: string): string {
-  const segments = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text);
-  return Array.from(segments)
-    .slice(0, MARK_CHARS)
-    .map((s) => s.segment)
-    .join("");
-}
 
 export function AccountAppearance({
   issuer,

@@ -2,11 +2,12 @@
 // folder the user picks (keeping the newest few), and restoring one (merged through the import
 // preview, or replacing every account after the current vault is set aside).
 import {
-  KEEP_CHOICES,
-  type RestoreMode,
   errorText,
   formatDateTime,
+  KEEP_CHOICES,
+  passwordLongEnough,
   relativeTime,
+  type RestoreMode,
 } from "@lockra/shared";
 import {
   Banner,
@@ -26,7 +27,6 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useDispatch, useGuarded, useSubmit } from "../app/dispatch";
-import { passwordLongEnough } from "../app/password";
 
 export function Backup() {
   const { t } = useI18n();

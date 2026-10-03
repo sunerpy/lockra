@@ -113,6 +113,10 @@ export const en: Messages = {
     footer: { palette: "Commands", add: "Add", lock: "Lock", settings: "Settings" },
     notFound: "Page not found",
   },
+  mobile: {
+    emptyBody:
+      "Scanning QR codes, reading screenshots and adding accounts by hand are coming to the phone.",
+  },
   palette: {
     group: { accounts: "Accounts", pages: "Pages", actions: "Actions" },
     copyCode: "Copy code",

@@ -11,7 +11,8 @@ export type ButtonVariant =
   | "text"
   | "text-danger"
   | "text-muted";
-export type ButtonSize = "sm" | "md";
+/** `lg` is the phone's: a 44 px touch target. */
+export type ButtonSize = "sm" | "md" | "lg";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -35,9 +36,12 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   "text-muted": "bg-transparent px-0 text-fg-muted hover:text-fg",
 };
 
+const ICON_SIZE: Record<ButtonSize, number> = { sm: 13, md: 14, lg: 16 };
+
 const SIZE_CLASS: Record<ButtonSize, string> = {
   sm: "h-7 px-2.5 text-[12px] gap-1.5",
   md: "h-8 px-3 text-[13px] gap-2",
+  lg: "h-11 px-4 text-[15px] gap-2",
 };
 
 export function Button({
@@ -66,7 +70,7 @@ export function Button({
         className,
       )}
       {...rest}>
-      {icon && <Icon name={icon} size={size === "sm" ? 13 : 14} />}
+      {icon && <Icon name={icon} size={ICON_SIZE[size]} />}
       {children}
       {keys && <Keycaps keys={keys} className="ml-1" />}
     </button>

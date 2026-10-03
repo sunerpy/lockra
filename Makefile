@@ -24,12 +24,12 @@ fmt-check: ## Verify formatting without writing (CI gate)
 	$(PNPM) run fmt:check
 
 .PHONY: lint
-lint: ## clippy -D warnings, then oxlint + tsc per web package
+lint: frontend-dist-dirs ## clippy -D warnings, then oxlint + tsc per web package
 	$(CARGO) clippy --workspace --all-targets -- -D warnings
 	$(PNPM) -r run lint
 
 .PHONY: test
-test: ## Rust and web tests
+test: frontend-dist-dirs ## Rust and web tests
 	$(CARGO) test --workspace --all-targets
 	$(PNPM) -r run test
 
@@ -51,8 +51,20 @@ hooks: ## Install the pre-commit (make fmt) and pre-push (make lint test) hooks
 	pre-commit install --hook-type pre-commit --hook-type pre-push
 
 .PHONY: coverage
-coverage: ## Rust line coverage of crates/*, failing under CRATE_COVERAGE_MIN
-	$(CARGO) llvm-cov --workspace --exclude lockra-desktop --all-targets --summary-only --fail-under-lines $(CRATE_COVERAGE_MIN)
+coverage: frontend-dist-dirs ## Rust line coverage of crates/*, failing under CRATE_COVERAGE_MIN
+	$(CARGO) llvm-cov --workspace --exclude lockra-desktop --exclude lockra-mobile --all-targets --summary-only --fail-under-lines $(CRATE_COVERAGE_MIN)
+
+.PHONY: frontend-dist-dirs
+frontend-dist-dirs: ## The web apps' output folders: the shells' generate_context! needs them, even empty
+	@mkdir -p apps/desktop/dist apps/mobile/dist
+
+.PHONY: android-clippy
+android-clippy: frontend-dist-dirs ## clippy -D warnings for aarch64-linux-android: every workspace crate the phone links (needs NDK_HOME)
+	./scripts/clippy-android.sh
+
+.PHONY: android-apk
+android-apk: ## The phone app's debug APK for arm64 (needs ANDROID_HOME, NDK_HOME and JDK 21)
+	cd apps/mobile && $(PNPM) tauri android build --debug --target aarch64 --apk
 
 .PHONY: verify
 verify: check ## Alias of check
