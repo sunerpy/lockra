@@ -1,8 +1,19 @@
-// No vault yet: create one with a master password. Restoring a backup and joining a sync space
-// come with the phone's file picker and its sync.
-import { errorText, passwordLongEnough } from "@lockra/shared";
-import { Button, Logo, PasswordField, useBackend, useI18n, useSubmit } from "@lockra/ui";
+// No vault yet: create one with a master password, or restore a backup made elsewhere (the
+// desktop, another phone), whose password becomes the master password. Joining a sync space comes
+// with the phone's sync.
+import { errorText, formatDateTime, passwordLongEnough } from "@lockra/shared";
+import {
+  Button,
+  Logo,
+  PasswordField,
+  useBackend,
+  useDispatch,
+  useGuarded,
+  useI18n,
+  useSubmit,
+} from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
+import { overPhoneScreen } from "../app/phone-screen";
 
 export function Welcome() {
   const { t } = useI18n();
@@ -57,6 +68,73 @@ export function Welcome() {
           {t("welcome.create.submit")}
         </Button>
       </form>
+      <RestoreBackup />
     </main>
+  );
+}
+
+function RestoreBackup() {
+  const { t, locale } = useI18n();
+  const { backend, state } = useBackend();
+  const guarded = useGuarded();
+  const dispatch = useDispatch();
+  const restore = state?.restore ?? null;
+  const [password, setPassword] = useState("");
+  const submit = useSubmit();
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (password === "") return;
+    await submit.run(() =>
+      backend.dispatch({ command: "restore_commit", password, mode: "replace" }),
+    );
+    setPassword("");
+  };
+  return (
+    <section className="flex flex-col gap-4" data-testid="welcome-restore">
+      <h2 className="text-[16px] font-medium text-fg">{t("welcome.restore.title")}</h2>
+      <p className="text-[14px] text-fg-muted">{t("welcome.restore.body")}</p>
+      {restore === null ? (
+        <Button
+          size="lg"
+          icon="folder"
+          onClick={() => void guarded(() => overPhoneScreen(() => backend.pickRestoreFile()))}>
+          {t("welcome.restore.pick")}
+        </Button>
+      ) : (
+        <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-4">
+          <p className="mono text-[12px] break-all text-fg" data-testid="restore-file">
+            {t("welcome.restore.file", {
+              name: restore.file_name,
+              date: formatDateTime(locale, restore.created_at_ms, {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }),
+            })}
+          </p>
+          <PasswordField
+            size="lg"
+            label={t("welcome.restore.password")}
+            value={password}
+            onChange={setPassword}
+            autoComplete="off"
+            error={submit.error === undefined ? undefined : errorText(t, submit.error)}
+          />
+          <Button
+            variant="primary"
+            size="lg"
+            type="submit"
+            loading={submit.busy}
+            disabled={password === ""}>
+            {t("welcome.restore.submit")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="lg"
+            onClick={() => void dispatch({ command: "restore_cancel" })}>
+            {t("common.cancel")}
+          </Button>
+        </form>
+      )}
+    </section>
   );
 }

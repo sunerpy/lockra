@@ -826,6 +826,41 @@ async fn automatic_backups_debounce_prune_and_report_failures() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_backup_as_bytes_saves_and_restores_where_there_is_no_path() {
+    let mut h = Harness::unlocked().await;
+    h.core.add_uri(&otpauth("A", "a", "GEZDGNBV")).unwrap();
+    h.notices();
+    // Sealed as bytes, nothing is written and nothing recorded until the shell has saved them.
+    let bytes = h.core.backup_sealed(None).await.unwrap();
+    assert_eq!(Sealed::open_with_password(&bytes, MASTER.as_bytes()).unwrap().kind, FileKind::Backup);
+    assert!(h.notices().is_empty());
+    assert!(h.core.state().backup.last_backup_ms.is_none());
+    h.core.backup_recorded("lockra-backup.lockrabackup");
+    assert!(h.notices().contains(&Notice::BackupWritten { file_name: "lockra-backup.lockrabackup".into(), automatic: false }));
+    assert!(h.core.state().backup.last_backup_ms.is_some());
+    assert_eq!(code_err(h.core.backup_sealed(Some(pw("short"))).await), ErrorCode::PasswordTooShort);
+    let own = h.core.backup_sealed(Some(pw("backup password"))).await.unwrap();
+    assert!(Sealed::open_with_password(&own, MASTER.as_bytes()).is_err());
+    assert!(Sealed::open_with_password(&own, b"backup password").is_ok());
+    h.core.lock_vault();
+    assert_eq!(code_err(h.core.backup_sealed(None).await), ErrorCode::Locked);
+
+    // A new phone opens those bytes: the backup becomes its vault.
+    let fresh = harness();
+    let picked = |bytes: &[u8]| Zeroizing::new(bytes.to_vec());
+    assert_eq!(code_err(fresh.core.restore_open_bytes("notes.txt".into(), picked(b"hello")).await), ErrorCode::NotLockra);
+    let huge = vec![0; usize::try_from(MAX_IMPORT_BYTES).unwrap() + 1];
+    assert_eq!(code_err(fresh.core.restore_open_bytes("huge.lockrabackup".into(), picked(&huge)).await), ErrorCode::ImportUnreadable);
+    fresh.core.restore_open_bytes("lockra-backup.lockrabackup".into(), picked(&bytes)).await.unwrap();
+    assert_eq!(fresh.core.state().restore.unwrap().file_name, "lockra-backup.lockrabackup");
+    fresh.core.restore_commit(pw(MASTER), RestoreMode::Merge).await.unwrap();
+    let state = fresh.core.state();
+    assert_eq!((state.phase, state.entries.len()), (Phase::Unlocked, 1));
+    fresh.core.lock_vault();
+    assert_eq!(code_err(fresh.core.restore_open_bytes("lockra-backup.lockrabackup".into(), picked(&bytes)).await), ErrorCode::Locked);
+}
+
+#[tokio::test(start_paused = true)]
 async fn restoring_into_a_new_vault_and_into_an_unlocked_one() {
     let source = Harness::unlocked().await;
     source.core.add_uri(&otpauth("A", "a", "GEZDGNBV")).unwrap();

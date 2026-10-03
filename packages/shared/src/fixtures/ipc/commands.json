@@ -250,7 +250,9 @@
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
-    "import_scan"
+    "import_scan",
+    "backup_save",
+    "restore_pick"
   ],
   "shell_commands": [
     "lockra_dispatch",

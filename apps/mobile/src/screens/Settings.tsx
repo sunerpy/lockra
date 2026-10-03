@@ -1,6 +1,6 @@
 // The phone's settings: the language, the order of the codes and their groups; the theme and
-// motion; locking, the clipboard, hidden codes and the master password; the version. Every choice
-// applies at once, as on the desktop.
+// motion; locking, the clipboard, hidden codes and the master password; backups; the version.
+// Every choice applies at once, as on the desktop.
 import {
   AUTO_LOCK_CHOICES,
   CLIPBOARD_CHOICES,
@@ -18,11 +18,14 @@ import {
   resolveTheme,
   systemPrefersDark,
   systemPrefersReducedMotion,
+  useBackend,
+  useGuarded,
   useI18n,
   useUiState,
   useUpdateSettings,
 } from "@lockra/ui";
 import { useNav } from "../app/nav";
+import { overPhoneScreen } from "../app/phone-screen";
 import { ActionRow } from "../components/ActionRow";
 import { Page } from "../components/Page";
 import { Field, InfoRow, Section, SwitchRow } from "../components/Rows";
@@ -32,6 +35,12 @@ export function Settings() {
   const nav = useNav();
   const { settings, app_version: version } = useUiState();
   const update = useUpdateSettings();
+  const { backend } = useBackend();
+  const guarded = useGuarded();
+  const pickRestore = async () => {
+    if (await guarded(() => overPhoneScreen(() => backend.pickRestoreFile())))
+      nav.open({ name: "restore" });
+  };
   const resolved = resolveTheme(settings, systemPrefersDark());
   const systemReduced = systemPrefersReducedMotion();
   const never = t("common.never");
@@ -153,6 +162,25 @@ export function Settings() {
               opensPage
               onClick={() => nav.open({ name: "password" })}
               testId="settings-password"
+            />
+          </div>
+        </Section>
+        <Section title={t("backup.title")}>
+          <div className="p-1">
+            <ActionRow
+              icon="archive"
+              label={t("backup.manual.title")}
+              hint={t("backup.manual.save")}
+              opensPage
+              onClick={() => nav.open({ name: "backup" })}
+              testId="settings-backup"
+            />
+            <ActionRow
+              icon="download"
+              label={t("backup.restore.title")}
+              hint={t("backup.restore.pick")}
+              onClick={() => void pickRestore()}
+              testId="settings-restore"
             />
           </div>
         </Section>

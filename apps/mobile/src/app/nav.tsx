@@ -19,6 +19,8 @@ export type Route =
   | { name: "preview" }
   | { name: "settings" }
   | { name: "password" }
+  | { name: "backup" }
+  | { name: "restore" }
   | { name: "account"; id: string }
   | { name: "edit"; id: string }
   | { name: "reveal"; id: string };
@@ -31,6 +33,8 @@ export interface Nav {
   back: () => void;
   /** Close every page: back to the codes. */
   home: () => void;
+  /** Put `route` in place of the top page (its history entry stays). */
+  replace: (route: Route) => void;
 }
 
 const NavContext = createContext<Nav | null>(null);
@@ -77,9 +81,12 @@ export function NavProvider({ children }: { children: ReactNode }) {
     depth.current = 0;
     history.go(-pages);
   }, []);
+  const replace = useCallback((route: Route) => {
+    setStack((pages) => (pages.length === 0 ? pages : [...pages.slice(0, -1), route]));
+  }, []);
   const nav = useMemo<Nav>(
-    () => ({ route: stack.at(-1), open, back, home }),
-    [stack, open, back, home],
+    () => ({ route: stack.at(-1), open, back, home, replace }),
+    [stack, open, back, home, replace],
   );
   return <NavContext.Provider value={nav}>{children}</NavContext.Provider>;
 }

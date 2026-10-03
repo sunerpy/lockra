@@ -711,6 +711,8 @@ export const PHONE_COMMAND_NAMES = [
   "codes_unsubscribe",
   "import_pick_files",
   "import_scan",
+  "backup_save",
+  "restore_pick",
 ] as const;
 
 /** Commands that answer with something other than `null`. */

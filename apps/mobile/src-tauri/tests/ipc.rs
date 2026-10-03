@@ -138,6 +138,30 @@ fn a_vault_is_made_and_a_code_copied_through_the_phone_shell() {
 }
 
 #[test]
+fn a_backup_goes_out_and_comes_back_through_the_file_picker() {
+    let shell = shell();
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    shell.dispatch(json!({ "command": "entry_add_uri", "uri": "otpauth://totp/Kept:me?secret=MZXW6YTBOI&issuer=Kept" })).unwrap();
+    let core = shell.core();
+    let bytes = tauri::async_runtime::block_on(core.backup_sealed(None)).unwrap();
+    // Saved: recorded under the name the picker gave; left: nothing recorded.
+    assert_eq!(files::saved(&core, Ok(None)).unwrap(), None);
+    assert_eq!(shell.dispatch(json!({ "command": "app_state" })).unwrap()["backup"]["last_backup_ms"], Value::Null);
+    assert_eq!(files::saved(&core, Ok(Some("lockra-backup.lockrabackup".into()))).unwrap().as_deref(), Some("lockra-backup.lockrabackup"));
+    assert!(shell.dispatch(json!({ "command": "app_state" })).unwrap()["backup"]["last_backup_ms"].is_number());
+    assert_eq!(files::saved(&core, Err(PortError("gone".into()))).unwrap_err().code, ErrorCode::IoFailed);
+    // Picked again, the backup opens for restoring.
+    let picked = PickedFile { name: "lockra-backup.lockrabackup".into(), bytes: Zeroizing::new(bytes) };
+    assert!(tauri::async_runtime::block_on(files::restore(&core, Ok(Some(picked)))).unwrap());
+    let state = shell.dispatch(json!({ "command": "app_state" })).unwrap();
+    assert_eq!(state["restore"]["file_name"], "lockra-backup.lockrabackup");
+    assert!(!tauri::async_runtime::block_on(files::restore(&core, Ok(None))).unwrap());
+    // This build has no file picker, and the commands say so.
+    assert_eq!(shell.invoke("backup_save", json!({ "separatePassword": null })).unwrap_err(), json!({ "code": "io_failed" }));
+    assert_eq!(shell.invoke("restore_pick", json!({})).unwrap_err(), json!({ "code": "io_failed" }));
+}
+
+#[test]
 fn the_code_stream_subscribes_through_a_channel_and_stops() {
     let shell = shell();
     // Spelled in two halves: the scaffold check reads a literal double-underscore token as a

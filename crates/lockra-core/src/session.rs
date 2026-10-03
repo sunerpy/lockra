@@ -1114,6 +1114,20 @@ impl Core {
 
     /// Write a backup to `path`: under the master password, or under `separate` if given.
     pub async fn backup_to(&self, path: PathBuf, separate: Option<Zeroizing<String>>) -> CoreResult<String> {
+        let bytes = self.backup_sealed(separate).await?;
+        let name = blocking(move || {
+            write_private(&path, &bytes)?;
+            Ok(file_name(&path))
+        })
+        .await?;
+        self.backup_recorded(&name);
+        Ok(name)
+    }
+
+    /// A backup as bytes, for a shell that saves files itself (the phone's file picker): under the
+    /// master password, or under `separate` if given. Nothing is recorded before
+    /// [`Self::backup_recorded`].
+    pub async fn backup_sealed(&self, separate: Option<Zeroizing<String>>) -> CoreResult<Vec<u8>> {
         if let Some(password) = &separate {
             check_password(password)?;
         }
@@ -1123,19 +1137,20 @@ impl Core {
             (session.sealed.clone(), session.data.backup_bytes())
         };
         let cost = self.shared.config.kdf;
-        let name = blocking(move || {
-            let bytes = match separate {
+        blocking(move || {
+            Ok(match separate {
                 Some(password) => Sealed::create_for(sealed.vault_id(), password.as_bytes(), cost, sealed.created_at_ms())?.seal(FileKind::Backup, &payload)?,
                 None => sealed.seal(FileKind::Backup, &payload)?,
-            };
-            write_private(&path, &bytes)?;
-            Ok(file_name(&path))
+            })
         })
-        .await?;
+        .await
+    }
+
+    /// A backup was saved as `file_name`: the time of the last backup moves, and the notice says so.
+    pub fn backup_recorded(&self, file_name: &str) {
         self.lock().last_backup_ms = Some(self.now_ms());
-        self.notice(Notice::BackupWritten { file_name: name.clone(), automatic: false });
+        self.notice(Notice::BackupWritten { file_name: file_name.to_owned(), automatic: false });
         self.changed();
-        Ok(name)
     }
 
     /// Run the automatic backup now (Settings › Backup › "back up now").
@@ -1158,8 +1173,20 @@ impl Core {
             return Err(ErrorCode::Locked.into());
         }
         let name = file_name(&path);
+        let bytes = blocking(move || Ok(Zeroizing::new(read_limited(&path)?))).await?;
+        self.restore_open_bytes(name, bytes).await
+    }
+
+    /// Open a backup's bytes for restoring, as [`Self::restore_open`] opens a file: the phone's file
+    /// picker hands over bytes, not a path.
+    pub async fn restore_open_bytes(&self, name: String, bytes: Zeroizing<Vec<u8>>) -> CoreResult<()> {
+        if matches!(self.lock().phase, PhaseState::Locked) {
+            return Err(ErrorCode::Locked.into());
+        }
+        if bytes.len() as u64 > MAX_IMPORT_BYTES {
+            return Err(ErrorCode::ImportUnreadable.into());
+        }
         let (bytes, info) = blocking(move || {
-            let bytes = Zeroizing::new(read_limited(&path)?);
             let info = read_header(&bytes)?;
             Ok((bytes, info))
         })

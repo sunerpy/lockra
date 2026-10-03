@@ -292,8 +292,9 @@ pub const SHELL_COMMANDS: [&str; 8] =
     ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "backup_save", "backup_pick_dir", "restore_pick", "export_otpauth_file"];
 
 /// The Tauri commands of the phone shell: the dispatcher, the code stream, and the actions that
-/// open the photo picker or the camera first; what they read goes to the import in Rust.
-pub const PHONE_COMMANDS: [&str; 5] = ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan"];
+/// open the photo picker, the file picker or the camera first; what they read stays in Rust.
+pub const PHONE_COMMANDS: [&str; 7] =
+    ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan", "backup_save", "restore_pick"];
 
 impl UiCommand {
     /// Whether the answer carries a secret (the shell turns screen-capture protection on).
