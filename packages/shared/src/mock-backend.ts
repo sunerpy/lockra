@@ -569,6 +569,12 @@ export class MockBackend implements Backend {
     this.notice(notice);
   }
 
+  /** Test hook: the idle time ran out, as the core locks then. */
+  autoLock(): void {
+    this.lock();
+    this.notice({ type: "auto_locked" });
+  }
+
   private run(command: UiCommand): unknown {
     switch (command.command) {
       case "app_state":

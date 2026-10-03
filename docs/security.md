@@ -41,10 +41,16 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   check and offers none without it; robius-authentication looks again just before its prompt and,
   if Hello became unavailable in that instant (busy with another app's prompt, a reader unplugged),
   asks for the password of the signed-in Windows account instead, which Windows verifies for that
-  same account: a password in place of the fingerprint, not a way around the check. The platform calls go through robius-authentication, so Lockra's crates keep forbidding
-  unsafe code. A release build only ever asks the platform (only a debug build honours
-  `LOCKRA_DEV_BIOMETRIC=touch_id` or `windows_hello`, a stand-in that always passes, for headless
-  test runs).
+  same account: a password in place of the fingerprint, not a way around the check. The platform
+  calls go through robius-authentication, so Lockra's crates keep forbidding unsafe code. A release
+  build only ever asks the platform (only a debug build honours `LOCKRA_DEV_BIOMETRIC=touch_id` or
+  `windows_hello`, a stand-in that always passes, for headless test runs).
+- **The default unlock** (Settings › Security, `default_unlock` in `settings.json`) only decides
+  whether the lock screen asks for the check by itself; the check, the keychain and the master
+  password stay as above, so the setting opens nothing. The lock screen asks only while Lockra is
+  in front (its window has the focus; on the phone, the app is on the screen), never right after
+  the user locked it, and after a cancelled check only once Lockra has been left and come back:
+  a system prompt never comes up over another app.
 - Unlock attempts slow down after three failures (1 s, doubling, at most 30 s).
 
 ## In the running app

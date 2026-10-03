@@ -2,15 +2,28 @@
 // the fingerprint: turning it on makes the device key and its check in one go, after one passed
 // check (device_biometric_enable); turning it off, after the master password, removes the key
 // (device_unlock_disable), since without the check the Keystore would not give it back anyway.
+// Once it is on, the default unlock: the fingerprint, asked by itself as the app comes to the
+// screen, or the master password.
 import { errorText } from "@lockra/shared";
-import { Button, Dialog, PasswordField, useBackend, useSubmit, useT, useUiState } from "@lockra/ui";
+import {
+  Button,
+  Dialog,
+  PasswordField,
+  Segmented,
+  useBackend,
+  useSubmit,
+  useT,
+  useUiState,
+  useUpdateSettings,
+} from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
-import { SwitchRow } from "./Rows";
+import { Field, SwitchRow } from "./Rows";
 
 export function FingerprintSetting() {
   const t = useT();
   const { backend } = useBackend();
-  const { lock } = useUiState();
+  const { lock, settings } = useUiState();
+  const update = useUpdateSettings();
   const { enabled, biometric } = lock.device_unlock;
   const on = enabled && biometric.enabled;
   const [disabling, setDisabling] = useState(false);
@@ -39,6 +52,26 @@ export function FingerprintSetting() {
         <p role="alert" className="px-4 pb-3 text-[13px] text-danger">
           {errorText(t, submit.error)}
         </p>
+      )}
+      {on && (
+        <Field
+          label={t("settings.security.defaultUnlock.label")}
+          hint={t("settings.security.defaultUnlock.hint.fingerprint")}>
+          <Segmented
+            size="lg"
+            label={t("settings.security.defaultUnlock.label")}
+            value={settings.default_unlock}
+            onChange={(default_unlock) => update({ default_unlock })}
+            options={[
+              {
+                value: "biometric",
+                label: t("settings.security.defaultUnlock.biometric.fingerprint"),
+              },
+              { value: "password", label: t("settings.security.defaultUnlock.password") },
+            ]}
+            className="self-start"
+          />
+        </Field>
       )}
       {disabling && <TurnOff onClose={() => setDisabling(false)} />}
     </>

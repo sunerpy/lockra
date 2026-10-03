@@ -38,7 +38,8 @@
           "dir": null,
           "keep": 10
         },
-        "auto_update": false
+        "auto_update": false,
+        "default_unlock": "biometric"
       },
       "import": null,
       "backup": {

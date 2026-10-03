@@ -270,7 +270,11 @@ What the automated gates cannot cover, before announcing a release:
    (the prompt comes once, and _Remember on this device_ turns on with it); lock; _Unlock with Touch
    ID_ opens the vault after the fingerprint, a cancelled prompt leaves it locked without a message,
    the master password still unlocks; turning the switch off asks for the master password and leaves
-   _Remember on this device_ on.
+   _Remember on this device_ on. With _Default unlock_ on _Touch ID_ (the default): quit and start
+   Lockra, and the prompt comes by itself; `Ctrl L` brings no prompt until you switch to another app
+   and back; a cancelled prompt stays away until the same; an auto-lock (one minute) with Lockra in
+   front prompts at once, and with Lockra behind another app only when you switch back. With
+   _Master password_, nothing comes by itself.
 8. **Windows Hello** (a PC with Windows Hello): the same steps; the Hello dialog comes up in front of
    Lockra, and its PIN is accepted as well as a fingerprint or the face.
 9. **Android** (an arm64 phone): install the release's APK and go through

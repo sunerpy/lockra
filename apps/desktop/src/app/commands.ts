@@ -1,7 +1,14 @@
 // The command palette's items: every account (Enter copies its code), the pages, and the actions
 // of the unlocked app. A development build adds the component showcase.
 import { entryLabel } from "@lockra/shared";
-import { type CommandItem, type IconName, useBackend, useT, useUiState } from "@lockra/ui";
+import {
+  type CommandItem,
+  type IconName,
+  noteUserLock,
+  useBackend,
+  useT,
+  useUiState,
+} from "@lockra/ui";
 import { useMemo } from "react";
 import { useDispatch, useGuarded } from "./dispatch";
 import { PAGES, type PageId, useShell } from "./shell-state";
@@ -77,7 +84,10 @@ export function useCommands(): CommandItem[] {
         label: t("shell.nav.lock"),
         icon: "lock",
         keys: "Ctrl L",
-        run: () => void dispatch({ command: "vault_lock" }),
+        run: () => {
+          noteUserLock();
+          void dispatch({ command: "vault_lock" });
+        },
       },
       {
         id: "settings",

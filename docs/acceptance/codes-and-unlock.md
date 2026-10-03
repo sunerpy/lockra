@@ -25,7 +25,9 @@ row's menu with a right click (`codes-context-1280-light`). With the debug build
 (`LOCKRA_DEV_BIOMETRIC=touch_id`, which always passes) it turns Touch ID on with the switch in
 Settings › Security (`settings-biometric-1280-light`), locks, and opens the vault with the unlock
 screen's button (`unlock-touch-id-1280-light`): the webview, the shell's commands and the core
-for real, only the system's prompt stood in. The showcase shows the ten colours and two marks in
+for real, only the system's prompt stood in. With Touch ID as the default unlock (2026-10-03), the
+user's own `Ctrl L` leaves the vault locked with the window in front, and a lock that is not the
+user's opens again by itself through the check. The showcase shows the ten colours and two marks in
 each of the four themes; the site's codes pages show the sections, the colours and the row buttons.
 
 Problems found by looking at them, and fixed:
@@ -71,6 +73,9 @@ macOS Keychain) and robius-authentication's macOS path were read and behave as e
   sensor is away (a lid closed) and says why it cannot open.
 - macOS no longer hides Touch ID for the rest of a run after a check found none: a check that
   passes brings it back.
+- With Touch ID as the default unlock, the unlock screen still said "Enter the master password to
+  unlock" above the Touch ID button (`unlock-touch-id-1280-light`): it now names both, the check
+  first (`unlock.subtitleCheck`).
 
 Several accounts: **Select** ticks rows (a click or Space), a section's box (with "some" shown in
 between), **Select all** (what the search and the group menu show) or Ctrl/⌘ A; **Move to group…**

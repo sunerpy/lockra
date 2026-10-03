@@ -185,6 +185,11 @@ export const zhCN = {
   unlock: {
     title: "保险库已锁定",
     subtitle: "输入主密码解锁。",
+    subtitleCheck: {
+      touch_id: "使用 Touch ID 或主密码解锁。",
+      windows_hello: "使用 Windows Hello 或主密码解锁。",
+      fingerprint: "使用指纹或主密码解锁。",
+    },
     password: "主密码",
     submit: "解锁",
     device: "使用本机记住的密钥解锁",
@@ -518,6 +523,19 @@ export const zhCN = {
       biometricDisablePrompt:
         "输入主密码以关闭解锁前的验证。「在本机记住」会保持开启，如果不再需要，可以在上方关闭。",
       biometricDisableTitle: "关闭验证",
+      defaultUnlock: {
+        label: "默认解锁方式",
+        password: "主密码",
+        biometric: { touch_id: "Touch ID", windows_hello: "Windows Hello", fingerprint: "指纹" },
+        hint: {
+          touch_id:
+            "选 Touch ID 时，Lockra 启动、在前台自动锁定或切回时会自动请求 Touch ID；自己锁定后，离开再回来才会请求。选主密码时，先输入密码。",
+          windows_hello:
+            "选 Windows Hello 时，Lockra 启动、在前台自动锁定或切回时会自动请求 Windows Hello；自己锁定后，离开再回来才会请求。选主密码时，先输入密码。",
+          fingerprint:
+            "选指纹时，打开或切回 Lockra 时会自动请求指纹；自己锁定后，离开再回来才会请求。选主密码时，先输入密码。",
+        },
+      },
       changePassword: "修改主密码",
       changePasswordHint: "修改后，以前的备份仍然需要旧密码才能打开。",
       current: "当前主密码",

@@ -101,6 +101,20 @@ impl Default for AutoBackup {
     }
 }
 
+/// How the lock screen unlocks first where Touch ID, Windows Hello or a fingerprint unlocks the vault
+/// (Settings › Security): the system's check asks by itself when Lockra starts, when it locks by
+/// itself while in front, and when it comes back to the front while locked; or the master password
+/// is typed, and the check waits for its button.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DefaultUnlock {
+    /// The system's check first.
+    #[default]
+    Biometric,
+    /// The master password first.
+    Password,
+}
+
 /// Every user setting.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -136,6 +150,8 @@ pub struct Settings {
     /// Lockra goes online only when the user checks. 0.2.0's `auto_check_updates` only checked, so
     /// it is not read: automatic downloads need this switch turned on.
     pub auto_update: bool,
+    /// How the lock screen unlocks first where the system's check is turned on.
+    pub default_unlock: DefaultUnlock,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -166,6 +182,7 @@ impl Default for Settings {
             group_codes: true,
             auto_backup: AutoBackup::default(),
             auto_update: false,
+            default_unlock: DefaultUnlock::default(),
         }
     }
 }
@@ -285,6 +302,24 @@ mod tests {
         };
         store.save(&settings).unwrap();
         assert_eq!(store.load(), settings);
+    }
+
+    #[test]
+    fn the_biometric_check_unlocks_by_default_until_the_master_password_is_chosen() {
+        assert_eq!(Settings::default().default_unlock, DefaultUnlock::Biometric);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let load = || SettingsStore::new(dir.path()).load().default_unlock;
+        // A file from before the choice: the check comes first wherever it is turned on.
+        fs::write(&path, r#"{"schema":2,"theme":"dark"}"#).unwrap();
+        assert_eq!(load(), DefaultUnlock::Biometric);
+        fs::write(&path, r#"{"schema":2,"default_unlock":"password"}"#).unwrap();
+        assert_eq!(load(), DefaultUnlock::Password);
+        fs::write(&path, r#"{"schema":2,"default_unlock":"face"}"#).unwrap();
+        assert_eq!(load(), DefaultUnlock::Biometric);
+        let store = SettingsStore::new(dir.path());
+        store.save(&Settings { default_unlock: DefaultUnlock::Password, ..Settings::default() }).unwrap();
+        assert!(fs::read_to_string(&path).unwrap().contains(r#""default_unlock": "password""#));
     }
 
     #[test]

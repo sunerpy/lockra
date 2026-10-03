@@ -48,6 +48,18 @@ app shows its own Windows Hello prompt), Windows asks for your Windows sign-in p
 The check guards against someone using your unlocked computer. A program running as you could
 still read the remembered key from the keychain, as without the check.
 
+## Default unlock
+
+<StatusTag status="building" />
+
+Once **Unlock with Touch ID** (or **Unlock with Windows Hello**) is on, **Settings › Security ›
+Default unlock** chooses what the unlock screen does first. With **Touch ID** (**Windows Hello** on
+Windows), the default, its button comes first and the unlock screen asks for the check by itself:
+when Lockra starts, when it locks by itself while its window is in front, and when you come back to
+its window while it is locked. After you lock it yourself, or cancel the check, it asks again once
+you have left the window and come back. It never asks while Lockra is in the background. With
+**Master password**, you type the password first and the check waits for its button.
+
 ## Locking
 
 Lockra locks after five minutes without a key press or click (**Settings › Security › Auto-lock**:

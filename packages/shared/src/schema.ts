@@ -49,6 +49,12 @@ export const autoBackupSchema = z.object({
 });
 export type AutoBackup = z.infer<typeof autoBackupSchema>;
 
+/** How the lock screen unlocks first where Touch ID, Windows Hello or a fingerprint unlocks the
+ *  vault (lockra-core `DefaultUnlock`). */
+export const DEFAULT_UNLOCKS = ["biometric", "password"] as const;
+export const defaultUnlockSchema = z.enum(DEFAULT_UNLOCKS);
+export type DefaultUnlock = z.infer<typeof defaultUnlockSchema>;
+
 export const settingsSchema = z.object({
   theme: themeIdSchema,
   follow_system_theme: z.boolean(),
@@ -64,6 +70,7 @@ export const settingsSchema = z.object({
   group_codes: z.boolean(),
   auto_backup: autoBackupSchema,
   auto_update: z.boolean(),
+  default_unlock: defaultUnlockSchema,
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -84,6 +91,7 @@ export function defaultSettings(): Settings {
     group_codes: true,
     auto_backup: { enabled: false, dir: null, keep: 10 },
     auto_update: false,
+    default_unlock: "biometric",
   };
 }
 

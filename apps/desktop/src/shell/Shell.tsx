@@ -13,6 +13,7 @@ import {
   type ThemeChoice,
   type ToolbarReadout,
   cx,
+  noteUserLock,
   useBackend,
   useClock,
   useT,
@@ -67,6 +68,8 @@ function ShellLayout() {
   }, [importing, shell]);
 
   const lock = useCallback(() => {
+    // The user's own lock: the lock screen does not ask for Touch ID until they come back.
+    noteUserLock();
     void dispatch({ command: "vault_lock" });
   }, [dispatch]);
   const handlers = useMemo(
