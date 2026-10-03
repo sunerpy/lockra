@@ -109,6 +109,26 @@ fn release_out(method: InstallMethod, version: &str) -> Arc<FakeUpdater> {
 }
 
 #[tokio::test(start_paused = true)]
+async fn the_phone_only_checks_and_never_on_its_own() {
+    // A newer release is found, as on a desktop; the phone opens its page instead of installing.
+    let updater = FakeUpdater::installed(InstallMethod::Android);
+    *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));
+    let h = harness_with(updater);
+    h.core.update_check().unwrap();
+    reaches(&h.core, ended).await;
+    assert_eq!(status(&h.core), available("0.2.0", T0));
+    assert_eq!(code_err(h.core.update_install()), ErrorCode::UpdateUnavailable);
+    assert_eq!(h.updater.calls(), ["check"]);
+    // Automatic updates turned on (by hand in settings.json) still never run.
+    let h = harness();
+    let updater = release_out(InstallMethod::Android, "0.2.0");
+    let core = start_automatic(&h, &updater);
+    advance(STARTUP_CHECK_DELAY * 10).await;
+    assert!(updater.calls().is_empty(), "{:?}", updater.calls());
+    assert_eq!(status(&core), UpdateStatus::Idle);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_copy_that_cannot_update_itself_refuses_and_never_goes_online() {
     let h = harness();
     let state = h.core.state();

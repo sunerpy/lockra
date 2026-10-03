@@ -1,6 +1,6 @@
 // The phone's settings: the language, the order of the codes and their groups; the theme and
 // motion; locking, the fingerprint, the clipboard, hidden codes and the master password; sync;
-// backups and the export; the version.
+// backups and the export; the version and a check for a newer one.
 // Every choice applies at once, as on the desktop.
 import {
   AUTO_LOCK_CHOICES,
@@ -35,6 +35,7 @@ import { ActionRow } from "../components/ActionRow";
 import { FingerprintSetting } from "../components/FingerprintSetting";
 import { Page } from "../components/Page";
 import { Field, InfoRow, Section, SwitchRow } from "../components/Rows";
+import { UpdateRow } from "../components/UpdateRow";
 
 export function Settings() {
   const { t, locale } = useI18n();
@@ -210,6 +211,7 @@ export function Settings() {
             value={`Lockra ${version}`}
             testId="about-version"
           />
+          <UpdateRow />
           <InfoRow label={t("settings.about.license")} value="Apache-2.0" />
         </Section>
       </div>

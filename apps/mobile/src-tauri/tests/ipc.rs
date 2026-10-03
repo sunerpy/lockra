@@ -195,6 +195,15 @@ fn the_phone_s_sync_storage_opens_without_contacting_it_and_plain_http_elsewhere
 }
 
 #[test]
+fn the_phone_checks_for_updates_and_opens_the_release_page_rather_than_installing() {
+    let shell = shell();
+    assert_eq!(shell.dispatch(json!({ "command": "app_state" })).unwrap()["update"]["method"], "android");
+    assert_eq!(shell.dispatch(json!({ "command": "update_install" })).unwrap_err(), json!({ "code": "update_unavailable" }));
+    // This build has no browser: the command answers with the page's address, to show instead.
+    assert_eq!(shell.invoke("update_open_release", json!({})).unwrap(), json!("https://github.com/sunerpy/lockra/releases/latest"));
+}
+
+#[test]
 fn an_invitation_the_camera_reads_joins_its_space() {
     let transport = Arc::new(FakeTransport::default());
     let desktop = shell_on(Arc::clone(&transport));

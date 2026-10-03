@@ -131,6 +131,11 @@ export const zhCN = {
       prompt: "将相机对准二维码",
       next: "扫描下一个二维码",
     },
+    update: {
+      open: "前往发布页",
+      address: "无法打开浏览器，请访问：{url}",
+      hint: "检查更新时只连接 GitHub 读取最新的版本号，不发送账号或保险库中的任何内容。从 Google Play 安装的 Lockra 由商店更新。",
+    },
     sync: {
       rowOff: "设置同步",
       settingsHint: "在你自己的存储上与其他设备同步",
@@ -711,7 +716,7 @@ export const zhCN = {
     update_unavailable: "此副本无法在应用内更新",
     update_busy: "正在检查或安装更新",
     update_network: "无法连接更新服务器",
-    update_invalid: "更新信息无效，或其中没有适合这台电脑的安装包",
+    update_invalid: "更新信息无效，或其中没有适合这台设备的安装包",
     update_signature: "安装包未使用 Lockra 的密钥签名，已拒绝安装",
     update_install_failed: "安装更新失败",
     update_cancelled: "已取消管理员授权，未安装更新",
@@ -808,6 +813,7 @@ export const zhCN = {
       nsis: "安装程序会关闭 Lockra，安装完成后重新打开。",
       msi: "安装程序会关闭 Lockra，安装完成后重新打开。",
       app: "替换应用后自动重启。",
+      android: "在发布页下载新版本，覆盖安装即可，保险库会保留。",
     },
     status: {
       idle: "尚未检查更新",

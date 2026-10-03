@@ -2729,6 +2729,7 @@ dependencies = [
  "lockra-core",
  "lockra-remote",
  "lockra-vault",
+ "semver",
  "serde",
  "serde_json",
  "tao",

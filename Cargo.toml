@@ -86,6 +86,8 @@ rxing = { version = "=0.9.3", default-features = false, features = [
 # Microsoft Authenticator's PhoneFactor database; `bundled` builds SQLite from C on every target.
 rusqlite = { version = "=0.40.2", features = ["bundled"] }
 rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std"] }
+# Release versions compared on the phone (its update check).
+semver = "=1.0.28"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sha1 = "=0.11.0"

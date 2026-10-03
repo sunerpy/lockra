@@ -1,10 +1,9 @@
-import { zhT } from "@lockra/shared";
+import { downloadProgress, statusVersion, zhT } from "@lockra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ready, renderApp } from "../../test/render";
 import { etaText, rateFrom } from "./download-rate";
 import { ReleaseNotes, inlineParts, parseNotes } from "./release-notes";
-import { downloadProgress, statusVersion } from "./status";
 
 describe("release notes", () => {
   it("reads release-please's markdown as headings, lists and paragraphs, minus the version line", () => {

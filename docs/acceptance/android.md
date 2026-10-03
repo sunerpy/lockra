@@ -16,8 +16,9 @@ only a real phone can.
   clipboard plugin through R8); open the camera's page (without a camera the import says so, and the
   vault stays open behind that page); set up sync on AWS S3 with made-up keys, which S3 refuses
   (its answer came over TLS, checked against the certificate authorities read from Android's
-  files; the job needs to reach AWS); stay up with nothing fatal in the app's log. The log, the
-  crash buffer, the exit reason and the UI tree upload either way.
+  files; the job needs to reach AWS); check for updates against the release manifest on GitHub
+  (up to date, or a newer release found; a failed check fails the job); stay up with nothing fatal
+  in the app's log. The log, the crash buffer, the exit reason and the UI tree upload either way.
 
 ## On a phone
 
@@ -44,6 +45,7 @@ adb install -r lockra-apk/Lockra_*_android_arm64.apk
 | 10  | Export: Google Authenticator's migration codes scanned by another phone match the codes shown beside them; a plain otpauth list saves only after its plain text is ticked.                                                     |
 | 11  | The back gesture closes one page at a time and leaves the app from the codes; the keyboard never hides the field being typed in.                                                                                               |
 | 12  | Android's backup: in Settings › System › Backup, Lockra has no data to back up.                                                                                                                                                |
+| 12a | Settings › About › Check for updates: up to date on the newest release; on an older APK, a newer version, and Open the release page opens it in the browser (the vault locks on leaving).                                      |
 | 13  | Settings › Sync › Start syncing from this device, on your own S3 bucket or WebDAV folder over HTTPS: the sync key shows once and hides after two minutes.                                                                      |
 | 14  | On the desktop, Settings › Sync › Invite another device; on the phone, Join an existing sync › Scan to join: the desktop's accounts arrive, and a change on one reaches the other.                                             |
 | 15  | A new install joins from the welcome screen (Join from sync, scanning the invitation): the vault opens with the space's master password and holds the same accounts.                                                           |

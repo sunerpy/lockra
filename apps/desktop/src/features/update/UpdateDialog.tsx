@@ -1,4 +1,11 @@
-import { errorText, formatBytes, formatDateTime } from "@lockra/shared";
+import {
+  downloadProgress,
+  errorText,
+  formatBytes,
+  formatDateTime,
+  statusVersion,
+  updateStatusLine,
+} from "@lockra/shared";
 import {
   Button,
   Dialog,
@@ -13,7 +20,6 @@ import type { ReactNode } from "react";
 import { useDispatch } from "../../app/dispatch";
 import { etaText, useDownloadRate } from "./download-rate";
 import { ReleaseNotes } from "./release-notes";
-import { downloadProgress, statusVersion, updateStatusLine } from "./status";
 
 export interface UpdateDialogProps {
   open: boolean;

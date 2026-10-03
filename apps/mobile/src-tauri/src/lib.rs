@@ -1,8 +1,9 @@
 //! Lockra mobile shell (Android): Tauri commands → `lockra-bridge` → `lockra-core`, as on the
 //! desktop (apps/desktop/src-tauri), with the phone's own adapters. Each native capability is a
 //! small Tauri plugin whose Kotlin half lives in `gen/android` (the clipboard, the camera, the
-//! pickers, the fingerprint and its key store); its answers stay in Rust. The sync storage is
-//! lockra-remote's, as on the desktop. The webview gets the state and the codes, never a secret it
+//! pickers, the fingerprint and its key store, the browser for a release's page); its answers stay
+//! in Rust. The sync storage is lockra-remote's, as on the desktop; the update check reads the
+//! release manifest and installs nothing (src/updater.rs). The webview gets the state and the codes, never a secret it
 //! did not ask to reveal.
 //! Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs` drives the real
 //! command layer on `tauri::test::MockRuntime` on the host.
@@ -10,16 +11,18 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod biometrics;
+pub mod browser;
 pub mod clipboard;
 pub mod files;
 pub mod scanner;
 pub mod sync;
+pub mod updater;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use lockra_bridge::{UiCommand, dispatch};
-use lockra_core::ports::{Biometrics, Clipboard, CodeSink, NoUpdater, PortError, SecretStore, SyncTransport, SystemClock};
+use lockra_core::ports::{Biometrics, Clipboard, CodeSink, PortError, SecretStore, SyncTransport, SystemClock, Updater};
 use lockra_core::ui::{CodesFrame, Platform, UI_EVENT_NAME, UiEvent};
 use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports};
 use serde_json::Value;
@@ -28,7 +31,7 @@ use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
 use zeroize::Zeroizing;
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
-pub const COMMANDS: [&str; 9] = [
+pub const COMMANDS: [&str; 10] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -38,6 +41,7 @@ pub const COMMANDS: [&str; 9] = [
     "restore_pick",
     "export_otpauth_file",
     "sync_scan_join",
+    "update_open_release",
 ];
 
 /// What the shell wires into the core; tests replace the platform parts with fakes.
@@ -50,6 +54,8 @@ pub struct ShellOptions {
     pub biometrics: Option<Arc<dyn Biometrics>>,
     /// The sync storage (default: lockra-remote over HTTPS, src/sync.rs).
     pub sync: Option<Arc<dyn SyncTransport>>,
+    /// The update check (default: the release manifest on GitHub, src/updater.rs).
+    pub updater: Option<Arc<dyn Updater>>,
     /// Where the vault lives (default: the app's private data directory).
     pub data_dir: Option<PathBuf>,
     /// Where `settings.json` lives (default: the app's private config directory).
@@ -60,7 +66,7 @@ pub struct ShellOptions {
 
 impl Default for ShellOptions {
     fn default() -> Self {
-        Self { secrets: None, clipboard: None, biometrics: None, sync: None, data_dir: None, config_dir: None, kdf: KdfCost::DEFAULT }
+        Self { secrets: None, clipboard: None, biometrics: None, sync: None, updater: None, data_dir: None, config_dir: None, kdf: KdfCost::DEFAULT }
     }
 }
 
@@ -173,6 +179,25 @@ async fn sync_scan_join<R: Runtime>(
     sync::join(&core, scan, password, device_name, space_password).await
 }
 
+/// Open the page of the release a check found (else the newest release's) in the phone's browser;
+/// `None` once it opened, else the page's address, for the webview to show (no browser opened it).
+/// The address is the shell's: the webview names none.
+#[tauri::command]
+async fn update_open_release<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<Option<String>, CoreError> {
+    let url = updater::release_page(&core.state().update.status);
+    let browser = browser::Browser::new(app);
+    let page = url.clone();
+    let opened = tauri::async_runtime::spawn_blocking(move || browser.open(&page)).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    match opened {
+        Ok(true) => Ok(None),
+        Ok(false) => Ok(Some(url)),
+        Err(error) => {
+            tracing::warn!(%error, "the release page did not open");
+            Ok(Some(url))
+        }
+    }
+}
+
 /// Forward every core event to the webview.
 async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core) {
     let mut events = core.subscribe();
@@ -199,6 +224,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
         .plugin(files::init())
         .plugin(scanner::init())
         .plugin(biometrics::init())
+        .plugin(browser::init())
         .invoke_handler(tauri::generate_handler![
             lockra_dispatch,
             codes_subscribe,
@@ -208,7 +234,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             backup_save,
             restore_pick,
             export_otpauth_file,
-            sync_scan_join
+            sync_scan_join,
+            update_open_release
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {
@@ -226,7 +253,9 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let config =
                 CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
             let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
-            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater: Arc::new(NoUpdater), sync, biometrics };
+            let updater: Arc<dyn Updater> =
+                options.updater.clone().unwrap_or_else(|| Arc::new(updater::PhoneUpdater::new(&app.package_info().version.to_string())));
+            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());

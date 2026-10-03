@@ -157,6 +157,13 @@ export class TauriBackend implements Backend {
     );
   }
 
+  async openRelease(): Promise<string | null> {
+    return z
+      .string()
+      .nullable()
+      .parse(await this.call("update_open_release"));
+  }
+
   private async call(command: string, args?: Record<string, unknown>): Promise<unknown> {
     try {
       return await this.transport.invoke(command, args);
