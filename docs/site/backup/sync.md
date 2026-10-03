@@ -61,7 +61,7 @@ device's next sync, and the old one no longer opens the space unless another dev
 
 ## Adding a phone
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.0.
 
 The Android app syncs like a computer. Show an invitation on a device of the space (**Settings ›
 Sync › Invite another device**), then on the phone choose **Settings › Sync › Join an existing

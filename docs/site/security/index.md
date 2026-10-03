@@ -50,7 +50,7 @@ still read the remembered key from the keychain, as without the check.
 
 ## Default unlock
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.0.
 
 Once **Unlock with Touch ID** (or **Unlock with Windows Hello**) is on, **Settings › Security ›
 Default unlock** chooses what the unlock screen does first. With **Touch ID** (**Windows Hello** on
@@ -62,7 +62,7 @@ you have left the window and come back. It never asks while Lockra is in the bac
 
 ## Fingerprint on Android
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.0.
 
 On the phone, **Settings › Security › Unlock with fingerprint** keeps the vault's key in the
 phone's secure hardware, usable only for ten seconds after a passed fingerprint check. Turning it

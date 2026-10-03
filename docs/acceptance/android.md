@@ -1,6 +1,6 @@
 # Android app: acceptance
 
-The phone app (`apps/mobile`) is not released yet. What CI proves on every pull request, and what
+The phone app (`apps/mobile`), released from 0.7.0. What CI proves on every pull request, and what
 only a real phone can.
 
 ## What CI runs

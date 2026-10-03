@@ -31,7 +31,7 @@
 
 ### 在 Android 上
 
-<StatusTag status="building" />
+<StatusTag status="available" /> 自 0.7.0 版起提供。
 
 Android 应用不会自行更新。点按「设置 › 关于 › 检查更新」时，Lockra 向 GitHub 查询最新版本；有新版本时，「前往发布页」会在手机浏览器中打开该版本的页面，那里的 APK 可以覆盖安装，保险库会保留。手机上不会自动检查更新。卸载应用会删除其中的保险库，请先保存备份。
 

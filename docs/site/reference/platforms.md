@@ -38,7 +38,7 @@ This page lists what differs between Windows, macOS, Linux and the Android app.
 
 ## Android
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.0.
 
 - **Versions**: Android 8 or later, on ARM64 phones, from the APK on the releases page.
 - **Unlocking**: with the master password, or with **Settings › Security › Unlock with
