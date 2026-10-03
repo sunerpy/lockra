@@ -137,9 +137,10 @@ scroll_down() {
   read -r w h <<<"$(adb shell wm size | sed -n 's/.*: *\([0-9]*\)x\([0-9]*\).*/\1 \2/p' | tail -1)"
   adb shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h * 3 / 10)) 300
 }
-# Tap the node labelled with one of the words, scrolling to it when it is below the fold; after a
-# scroll, only once it stands still (two reads alike), so the tap does not land on a fling.
-tap() {
+# Bring the node labelled with one of the words on the screen, scrolling when it is below the
+# fold, and print its centre; after a scroll, only once it stands still (two reads alike), so a tap
+# does not land on a fling. ui.xml is the screen as it then is.
+reveal() {
   local xy last='' scrolls=0 deadline=$((SECONDS + 30))
   while :; do
     dump || fail "the screen could not be read"
@@ -154,6 +155,12 @@ tap() {
     fi
     [ "$SECONDS" -lt "$deadline" ] || fail "$* did not stand still on the screen"
   done
+  echo "$xy"
+}
+# Tap the node labelled with one of the words.
+tap() {
+  local xy
+  xy=$(reveal "$@")
   # shellcheck disable=SC2086 # "x y"
   adb shell input tap $xy
 }
@@ -169,34 +176,65 @@ for node in ET.parse(sys.argv[1]).getroot().iter("node"):
 sys.exit(1)
 PY
 }
-# Wait (at most 20 s) until the webview ends above the keyboard ("up": MainActivity pads the
-# content by the keyboard's height, edge to edge nothing else would) or at the screen's bottom
-# again ("down").
+# Wait (at most $2 s, default 20) until the webview ends above the keyboard ("up": MainActivity
+# pads the content by the keyboard's height, edge to edge nothing else would) or at the screen's
+# bottom again ("down"); 1 when it did not.
 keyboard() {
-  local deadline=$((SECONDS + 20)) bottom=
+  local deadline=$((SECONDS + ${2:-20})) bottom=
   while :; do
     running || fail "the app closed while waiting for the keyboard to go $1"
     if dump && bottom=$(webview_bottom); then
       if [ "$1" = up ] && [ "$bottom" -lt "$full_bottom" ]; then return 0; fi
       if [ "$1" = down ] && [ "$bottom" -eq "$full_bottom" ]; then return 0; fi
     fi
-    if [ "$SECONDS" -ge "$deadline" ]; then
-      if [ "$1" = up ]; then fail "the keyboard opened over the page: the webview still ends at ${bottom:-?}"; fi
-      fail "the keyboard did not close: the webview ends at ${bottom:-?}, not $full_bottom"
-    fi
+    [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep 1
   done
 }
+# The centre of the text field after the node labelled with one of the words (a label's field
+# follows it), else of that node itself.
+field() {
+  python3 - "$out/ui.xml" "$@" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+path, *words = sys.argv[1:]
+def centre(node):
+    m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+    if not m:
+        return None
+    x1, y1, x2, y2 = map(int, m.groups())
+    return f"{(x1 + x2) // 2} {(y1 + y2) // 2}" if x2 > x1 and y2 > y1 else None
+nodes = list(ET.parse(path).getroot().iter("node"))
+for i, node in enumerate(nodes):
+    if (node.get("text") or "").strip() in words or (node.get("content-desc") or "").strip() in words:
+        for after in nodes[i + 1:]:
+            if after.get("class", "").endswith("EditText"):
+                print(centre(after) or centre(node) or "")
+                sys.exit(0 if (centre(after) or centre(node)) else 1)
+        print(centre(node) or "")
+        sys.exit(0 if centre(node) else 1)
+sys.exit(1)
+PY
+}
 # Type $1 (no spaces: `input text`) into the field labelled with one of the other words, then close
-# the keyboard, so the next tap lands on the page and not on a key.
+# the keyboard, so the next tap lands on the page and not on a key. A tap that leaves the field
+# unfocused (the emulator now and then) is tried again.
 type_into() {
-  local text=$1
+  local text=$1 attempt xy
   shift
-  tap "$@"
-  keyboard up
+  for attempt in 1 2 3; do
+    reveal "$@" >/dev/null
+    xy=$(field "$@") || fail "no field is labelled $*"
+    # shellcheck disable=SC2086 # "x y"
+    adb shell input tap $xy
+    keyboard up 10 && break
+    if [ "$attempt" -eq 3 ]; then
+      adb shell dumpsys input_method >"$out/input-method.txt" 2>&1 || true
+      fail "the keyboard did not open over $*, or the page did not give way to it (the webview still ends at $full_bottom)"
+    fi
+  done
   adb shell input text "$text"
   adb shell input keyevent KEYCODE_BACK
-  keyboard down
+  keyboard down || fail "the keyboard did not close over $*"
 }
 
 adb wait-for-device
@@ -237,7 +275,7 @@ showing 'Advanced|高级设置' 30
 type_into Example 'Service' '服务名称'
 # The secret, then Enter submits the form: its button may lie below the fold of a small screen.
 tap 'Secret' '密钥'
-keyboard up
+keyboard up || fail "the keyboard did not open over the secret"
 adb shell input text JBSWY3DPEHPK3PXP
 adb shell input keyevent KEYCODE_ENTER
 leaving 'Advanced|高级设置' 30
