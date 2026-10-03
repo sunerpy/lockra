@@ -226,6 +226,10 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   module's since Android 14, the system image's before): one the user turned off in the system's
   settings is still trusted by the sync, and Android's blocklist of distrusted certificates is not
   consulted.
+- The Android app trusts its release key the same way: an APK signed with it can update an
+  installed Lockra, and one signed with any other key cannot. Losing the key means users reinstall
+  (losing the vault unless they made a Lockra backup, since Android's backups leave the app out);
+  whoever holds it can sign an update (`docs/release.md`, "Android").
 - Importing from Microsoft Authenticator needs a rooted Android phone, and newer versions of that
   app may encrypt the field Lockra reads.
 - The packages are not code-signed (Windows SmartScreen and macOS Gatekeeper warn); the update

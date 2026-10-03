@@ -33,7 +33,7 @@ step "rust tests";       cargo test --workspace --all-targets
 step "crate coverage";   make -s coverage
 step "web lint + types"; pnpm -r run lint
 step "web tests";        pnpm -r run test:coverage
-step "release config";   python3 .github/scripts/tauri-release.py check-config --project apps/desktop/src-tauri --targets-file .github/release-targets.json >/dev/null && python3 .github/scripts/tauri-release.py matrix --file .github/release-targets.json >/dev/null && python3 .github/scripts/test-tauri-release.py
+step "release config";   python3 .github/scripts/tauri-release.py check-config --project apps/desktop/src-tauri --targets-file .github/release-targets.json >/dev/null && python3 .github/scripts/tauri-release.py matrix --file .github/release-targets.json >/dev/null && python3 .github/scripts/test-tauri-release.py && .github/scripts/android-signing.sh >/dev/null
 step "colour literals";  scripts/check-no-literal-colors.sh
 step "release bundle";   scripts/check-web-bundle.sh
 step "cargo-deny";       cargo deny check licenses bans sources

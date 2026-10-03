@@ -206,6 +206,10 @@ jobs:
       - name: Test bundle collection
         run: python3 .github/scripts/test-tauri-release.py
 
+      # The certificate the release's Android packages must carry (release.yml, bundle-android).
+      - name: Check the Android signing pin
+        run: .github/scripts/android-signing.sh
+
   repo:
     name: Repository gates
     runs-on: ubuntu-latest
