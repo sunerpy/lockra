@@ -115,7 +115,15 @@ export const en: Messages = {
   },
   mobile: {
     emptyBody:
-      "Scanning QR codes, reading screenshots and adding accounts by hand are coming to the phone.",
+      "Tap + to add one: paste otpauth links, import them from the clipboard or type the secret in.",
+    add: {
+      title: "Add an account",
+      links: "Paste links",
+      linksBody: "Paste one or more otpauth:// links, one per line.",
+      clipboardHint: "Reads the otpauth links on the clipboard",
+      manualHint: "Type in the service's name and secret",
+    },
+    groupSuggestions: "Groups in use",
   },
   palette: {
     group: { accounts: "Accounts", pages: "Pages", actions: "Actions" },

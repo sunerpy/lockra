@@ -4,6 +4,7 @@ import { DEFAULT_LOCALE, type Locale, type TFunction, translate } from "./i18n";
 import type {
   Algorithm,
   CandidateStatus,
+  CandidateView,
   ErrorCode,
   Incompatible,
   Notice,
@@ -41,6 +42,19 @@ export function statusText(t: TFunction, status: CandidateStatus): string {
   return status.type === "unsupported"
     ? `${t("import.status.unsupported")} · ${rejectText(t, status.reason)}`
     : t(`import.status.${status.type}`);
+}
+
+/** Where a found account came from: the file, the clipboard or the pasted text, and its line. */
+export function candidateSource(t: TFunction, candidate: CandidateView): string {
+  const source =
+    candidate.source.type === "file"
+      ? candidate.source.name
+      : candidate.source.type === "clipboard"
+        ? t("import.preview.sourceClipboard")
+        : t("import.preview.sourceText");
+  return candidate.line === null
+    ? source
+    : `${source} · ${t("import.preview.line", { n: candidate.line })}`;
 }
 
 /** `SHA1 · 6 位 · 30 秒` style parameters of an account. */

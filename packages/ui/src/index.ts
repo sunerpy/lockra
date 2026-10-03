@@ -42,6 +42,7 @@ export * from "./components/TitleBar";
 export * from "./components/OptionCard";
 export * from "./components/OtpCode";
 export * from "./components/CountdownRing";
+export * from "./components/AccountAppearance";
 export * from "./components/EntryAvatar";
 export * from "./components/EntryRow";
 export * from "./components/PasswordField";

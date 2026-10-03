@@ -1,9 +1,25 @@
-// An account's colour and avatar text (the edit dialog): the swatches are one radio group (the
-// arrow keys move the choice, Tab leaves it), the text keeps two characters as people count them,
-// and the avatar beside them shows the result as it changes.
+// An account's colour and avatar text (the edit dialog on the desktop, the edit page on the
+// phone): the swatches are one radio group (the arrow keys move the choice, Tab leaves it), the
+// text keeps two characters as people count them, and the avatar beside them shows the result as
+// it changes.
 import { ACCOUNT_COLORS, type AccountColor, cutMark } from "@lockra/shared";
-import { EntryAvatar, Icon, Input, autoColor, cx, initial, useT } from "@lockra/ui";
 import { type KeyboardEvent, useId, useRef } from "react";
+import { cx } from "../cx";
+import { useT } from "../i18n/I18nProvider";
+import { EntryAvatar, autoColor, initial } from "./EntryAvatar";
+import { Icon } from "./Icon";
+import { Input } from "./Input";
+
+export interface AccountAppearanceProps {
+  issuer: string;
+  account: string;
+  color: AccountColor;
+  mark: string;
+  onColor: (color: AccountColor) => void;
+  onMark: (mark: string) => void;
+  /** `lg` is the phone's: 36 px swatches and a 44 px field. */
+  size?: "md" | "lg";
+}
 
 export function AccountAppearance({
   issuer,
@@ -12,14 +28,8 @@ export function AccountAppearance({
   mark,
   onColor,
   onMark,
-}: {
-  issuer: string;
-  account: string;
-  color: AccountColor;
-  mark: string;
-  onColor: (color: AccountColor) => void;
-  onMark: (mark: string) => void;
-}) {
+  size = "md",
+}: AccountAppearanceProps) {
   const t = useT();
   const labelId = useId();
   const swatches = useRef<(HTMLButtonElement | null)[]>([]);
@@ -56,7 +66,7 @@ export function AccountAppearance({
             role="radiogroup"
             aria-labelledby={labelId}
             onKeyDown={onKey}
-            className="flex flex-wrap gap-1.5">
+            className={cx("flex flex-wrap", size === "lg" ? "gap-2" : "gap-1.5")}>
             {ACCOUNT_COLORS.map((choice, i) => {
               const checked = choice === color;
               return (
@@ -74,12 +84,13 @@ export function AccountAppearance({
                   onClick={() => onColor(choice)}
                   data-tag={choice === "auto" ? autoColor(issuer, account) : choice}
                   className={cx(
-                    "inline-flex h-6 w-6 items-center justify-center rounded-pill bg-tag-bg text-tag-fg outline-offset-2 transition-shadow",
+                    "inline-flex items-center justify-center rounded-pill bg-tag-bg text-tag-fg outline-offset-2 transition-shadow",
+                    size === "lg" ? "h-9 w-9" : "h-6 w-6",
                     checked
                       ? "ring-2 ring-accent-text ring-offset-1 ring-offset-surface"
                       : "hairline",
                   )}>
-                  {choice === "auto" && <Icon name="sparkles" size={12} />}
+                  {choice === "auto" && <Icon name="sparkles" size={size === "lg" ? 16 : 12} />}
                 </button>
               );
             })}
@@ -89,6 +100,7 @@ export function AccountAppearance({
       </div>
       <Input
         label={t("entry.mark")}
+        size={size}
         value={mark}
         onChange={(e) => onMark(cutMark(e.target.value))}
         placeholder={initial(issuer, account)}

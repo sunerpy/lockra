@@ -108,7 +108,15 @@ export const zhCN = {
     notFound: "页面不存在",
   },
   mobile: {
-    emptyBody: "即将支持在手机上扫描二维码、读取截图和手动添加账号。",
+    emptyBody: "点按 + 添加：粘贴 otpauth 链接、从剪贴板导入，或手动输入密钥。",
+    add: {
+      title: "添加账号",
+      links: "粘贴链接",
+      linksBody: "粘贴一个或多个 otpauth:// 链接，每行一个。",
+      clipboardHint: "读取剪贴板中的 otpauth 链接",
+      manualHint: "输入服务名称和密钥",
+    },
+    groupSuggestions: "已有分组",
   },
   palette: {
     group: { accounts: "账号", pages: "页面", actions: "操作" },

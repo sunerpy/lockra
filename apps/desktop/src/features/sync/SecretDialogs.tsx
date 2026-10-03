@@ -1,7 +1,7 @@
 // The two sync views that show a secret: the new space's sync key, and an invitation for another
 // device. Both hide themselves after two minutes like a revealed secret, and however they close,
 // the shell lifts screen-capture protection (`secret_view_closed`).
-import { type SyncInvite, errorText } from "@lockra/shared";
+import { REVEAL_SECONDS, type SyncInvite, errorText } from "@lockra/shared";
 import {
   Banner,
   Button,
@@ -15,7 +15,6 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { useSubmit } from "../../app/dispatch";
-import { REVEAL_SECONDS } from "../entries/EntryDialogs";
 
 /** Seconds left of a secret shown at `at`, on the shared clock (it ticks on whole seconds, so it
  *  can read just before the moment the view opened). */

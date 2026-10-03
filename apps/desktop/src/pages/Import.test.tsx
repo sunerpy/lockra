@@ -1,21 +1,11 @@
 import { MOCK_PASSWORD, MockBackend, sampleEntries } from "@lockra/shared/mock";
 import { act, screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../test/render";
-import { actionsFor } from "./Import";
 
 async function openImport(user: ReturnType<typeof renderApp>["user"]) {
   await user.click(screen.getByRole("button", { name: /^导入/ }));
   await screen.findByTestId("page-import");
 }
-
-describe("actionsFor", () => {
-  it("lets new accounts be added or skipped, name clashes also replace, the rest only skip", () => {
-    expect(actionsFor({ type: "new" })).toEqual(["add", "skip"]);
-    expect(actionsFor({ type: "conflict", entry_id: "x" })).toEqual(["add", "replace", "skip"]);
-    expect(actionsFor({ type: "exists", entry_id: "x" })).toEqual([]);
-    expect(actionsFor({ type: "unsupported", reason: "md5_algorithm" })).toEqual([]);
-  });
-});
 
 describe("Import", () => {
   it("shows the four sources with their steps", async () => {

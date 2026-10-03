@@ -130,6 +130,19 @@ describe("Button / IconButton", () => {
         </Button>
         <IconButton icon="lock" label="锁定" size={40} />
         <PasswordField label="主密码" value="" onChange={() => undefined} size="lg" />
+        <Segmented
+          label="类型"
+          size="lg"
+          value="totp"
+          onChange={() => undefined}
+          options={[
+            { value: "totp", label: "基于时间" },
+            { value: "hotp", label: "基于计数" },
+          ]}
+        />
+        <Chip size="lg" onClick={() => undefined}>
+          工作
+        </Chip>
       </>,
     );
     const button = screen.getByRole("button", { name: "创建保险库" });
@@ -139,6 +152,9 @@ describe("Button / IconButton", () => {
     expect(lock).toHaveStyle({ width: "40px", height: "40px" });
     expect(lock.querySelector("svg")).toHaveAttribute("width", "18");
     expect(screen.getByLabelText("主密码").parentElement).toHaveClass("h-11");
+    expect(screen.getByRole("radiogroup", { name: "类型" })).toHaveClass("h-11");
+    expect(screen.getByRole("radio", { name: "基于时间" })).toHaveClass("text-[14px]");
+    expect(screen.getByRole("button", { name: "工作" })).toHaveClass("h-9", "text-[14px]");
   });
 
   it("renders variants, sizes, icon, keys and loading state", async () => {

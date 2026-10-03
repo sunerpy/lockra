@@ -13,9 +13,11 @@ export interface ChipProps {
   title?: string;
   className?: string;
   round?: boolean;
+  /** `lg` is the phone's: 36 px, larger text. */
+  size?: "md" | "lg";
 }
 
-/** Hairline pill (h 28). Renders a button when clickable, a span otherwise. */
+/** Hairline pill (h 28, the phone's 36). Renders a button when clickable, a span otherwise. */
 export function Chip({
   children,
   lamp,
@@ -26,9 +28,11 @@ export function Chip({
   title,
   className,
   round = false,
+  size = "md",
 }: ChipProps) {
   const classes = cx(
-    "inline-flex h-7 items-center gap-1.5 bg-surface px-2.5 text-[12px] whitespace-nowrap hairline",
+    "inline-flex items-center gap-1.5 bg-surface whitespace-nowrap hairline",
+    size === "lg" ? "h-9 px-3 text-[14px]" : "h-7 px-2.5 text-[12px]",
     round ? "rounded-pill" : "rounded-6",
     active && "border-primary bg-primary text-primary-fg",
     onClick && !disabled && "cursor-pointer hover:border-fg-subtle",

@@ -1,5 +1,8 @@
 import { cx } from "../cx";
 
+const HEIGHT = { sm: "h-7", md: "h-8", lg: "h-11" } as const;
+const TEXT = { sm: "text-[11px]", md: "text-[12px]", lg: "text-[14px]" } as const;
+
 export interface SegmentedOption<V extends string> {
   value: V;
   label: string;
@@ -14,7 +17,8 @@ export interface SegmentedProps<V extends string> {
   onChange: (value: V) => void;
   /** `soft`: selected = surface + hairline (本地 | 云端). `ink`: selected = ink fill (全部 · 已生效). */
   variant?: "soft" | "ink";
-  size?: "sm" | "md";
+  /** `lg` is the phone's: a 44 px touch target. */
+  size?: "sm" | "md" | "lg";
   mono?: boolean;
   label?: string;
   className?: string;
@@ -36,7 +40,7 @@ export function Segmented<V extends string>({
       aria-label={label}
       className={cx(
         "inline-flex items-center rounded-6 bg-inset p-0.5 hairline",
-        size === "sm" ? "h-7" : "h-8",
+        HEIGHT[size],
         className,
       )}>
       {options.map((opt) => {
@@ -54,7 +58,7 @@ export function Segmented<V extends string>({
             }}
             className={cx(
               "h-full rounded-[5px] px-3 whitespace-nowrap transition-colors",
-              size === "sm" ? "text-[11px]" : "text-[12px]",
+              TEXT[size],
               mono && "mono",
               selected &&
                 variant === "soft" &&
