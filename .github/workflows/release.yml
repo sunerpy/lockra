@@ -19,9 +19,9 @@
 # - Attestation runs in the no-compile `updater` job over the downloaded bytes,
 #   so no job that executes dependency code holds id-token: write.
 #
-# Out of scope: app stores, Snap/Flatpak/AUR, mobile targets, non-GitHub update
-# servers, certificate procurement, and candidate promotion (deferred until the
-# same-run profile has shipped real releases; see the reference).
+# Out of scope: app stores, Snap/Flatpak/AUR, iOS, non-GitHub update servers,
+# certificate procurement, and candidate promotion (deferred until the same-run
+# profile has shipped real releases; see the reference).
 #
 # Lockra adaptations (the file is in .github/scaffold.json "drift_allow"): the Cargo
 # workspace sits at the repository root, so TAURI_PROJECT_PATH names the shell crate in
@@ -30,7 +30,11 @@
 # updater is on (bundle.createUpdaterArtifacts and plugins.updater in tauri.conf.json): every
 # package is signed, and the updater job writes latest.json with a key per target and per
 # installer, verifies every signature against the configured pubkey, and writes SHA256SUMS and
-# the attestations.
+# the attestations. The Android app (apps/mobile) has a leg of its own, `bundle-android`: the APK
+# for the releases page and the AAB for Google Play, signed with the project's Android key after an
+# unsigned build and checked against the certificate .github/android-signing.json pins; they go
+# into SHA256SUMS and the attestations with the rest, and into no updater manifest (the phone
+# updates from the store or the releases page).
 name: Release
 
 on:
@@ -55,6 +59,7 @@ env:
   PACKAGE_MANAGER: pnpm
   TAURI_PROJECT_PATH: apps/desktop/src-tauri
   RELEASE_TARGETS_FILE: .github/release-targets.json
+  ANDROID_SIGNING_FILE: .github/android-signing.json
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
 
@@ -159,6 +164,24 @@ jobs:
             echo "::error::bundle.createUpdaterArtifacts is enabled but the TAURI_SIGNING_PRIVATE_KEY secret is missing"
             exit 1
           fi
+
+      # The Android packages are signed with the project's one key: without it, no leg starts.
+      # As above, the secrets are only compared to the empty string inside env.
+      - name: Require the Android release key and its pin
+        env:
+          ANDROID_KEYSTORE_BASE64_PRESENT: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+          ANDROID_KEYSTORE_PASSWORD_PRESENT: ${{ secrets.ANDROID_KEYSTORE_PASSWORD != '' }}
+          ANDROID_KEY_PASSWORD_PRESENT: ${{ secrets.ANDROID_KEY_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD; do
+            present="${name}_PRESENT"
+            if [ "${!present}" != true ]; then
+              echo "::error::the ${name} secret is missing; the Android packages are signed with the release key (docs/release.md, Android)"
+              exit 1
+            fi
+          done
+          .github/scripts/android-signing.sh "$ANDROID_SIGNING_FILE" >/dev/null
 
       - name: Render the bundle matrix
         id: matrix
@@ -344,9 +367,118 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # Android, arm64: Lockra_<version>_android_arm64.apk for the releases page and
+  # Lockra_<version>_android_arm64.aab for Google Play. Gradle builds both unsigned with the
+  # lockfile's Tauri CLI, as CI's `android` job does; the key is decoded in the signing step alone
+  # and removed when it ends, so it never sits beside the dependencies' build code. The checks
+  # require the certificate .github/android-signing.json pins, and the leg's checksums go with
+  # the packages for the `updater` job to compare.
+  bundle-android:
+    name: Bundle aarch64-linux-android
+    needs: [release-please, preflight]
+    if: needs.release-please.outputs.build_artifacts == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      VERSION: ${{ needs.release-please.outputs.version }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+
+      - name: Verify the tag resolves to the released commit
+        env:
+          RELEASE_SHA: ${{ needs.release-please.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          head=$(git rev-parse HEAD)
+          if [ "$head" != "$RELEASE_SHA" ]; then
+            echo "::error::checked-out tag commit $head != release commit $RELEASE_SHA"
+            exit 1
+          fi
+
+      - name: Android toolchain (JDK 21; SDK platform, build tools and NDK pinned)
+        run: .github/scripts/android-toolchain.sh
+
+      - name: Install Rust toolchain (and aarch64-linux-android)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.0
+          targets: aarch64-linux-android
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: tauri-release-aarch64-linux-android
+          cache-on-failure: true
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the unsigned release APK and AAB (no secrets)
+        working-directory: apps/mobile
+        run: pnpm tauri android build --ci --target aarch64 --apk --aab
+
+      - name: Sign with the release key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          pin=$(.github/scripts/android-signing.sh "$ANDROID_SIGNING_FILE")
+          ANDROID_KEY_ALIAS=${pin#* }
+          export ANDROID_KEY_ALIAS ANDROID_KEYSTORE=$RUNNER_TEMP/lockra-release.jks
+          trap 'rm -f "$ANDROID_KEYSTORE"' EXIT
+          (umask 077 && printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode >"$ANDROID_KEYSTORE")
+          unset ANDROID_KEYSTORE_BASE64
+          out=apps/mobile/src-tauri/gen/android/app/build/outputs
+          .github/scripts/sign-android-package.sh "$out/apk/universal/release/app-universal-release-unsigned.apk" \
+            "$out/bundle/universalRelease/app-universal-release.aab" android-bundle "$VERSION"
+
+      - name: Check the packages against the pinned certificate
+        run: |
+          set -euo pipefail
+          pin=$(.github/scripts/android-signing.sh "$ANDROID_SIGNING_FILE")
+          .github/scripts/check-android-package.sh "android-bundle/apk/Lockra_${VERSION}_android_arm64.apk" \
+            "android-bundle/aab/Lockra_${VERSION}_android_arm64.aab" "${pin%% *}" "$VERSION"
+
+      # The packages under their release names, and their checksums apart (evidence/*.json is the
+      # desktop legs' format, which names an updater bundle the phone does not have).
+      - name: Collect the packages and their checksums
+        run: |
+          set -euo pipefail
+          mkdir -p dist evidence
+          cp "android-bundle/apk/Lockra_${VERSION}_android_arm64.apk" "android-bundle/aab/Lockra_${VERSION}_android_arm64.aab" dist/
+          (cd dist && sha256sum -- *) >evidence/aarch64-linux-android.sha256
+
+      - name: Upload the packages
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tauri-aarch64-linux-android
+          path: |
+            dist/
+            evidence/
+          if-no-files-found: error
+          retention-days: 1
+
   updater:
     name: Updater manifest and assets
-    needs: [release-please, preflight, bundle]
+    needs: [release-please, preflight, bundle, bundle-android]
     if: needs.release-please.outputs.build_artifacts == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -368,6 +500,11 @@ jobs:
           pattern: tauri-*
           path: bundle
           merge-multiple: true
+
+      # The Android packages arrived as their leg wrote them, and both of them.
+      - name: Check the Android packages against their leg's checksums
+        working-directory: bundle/dist
+        run: sha256sum --check --strict ../evidence/aarch64-linux-android.sha256
 
       - name: Install minisign
         run: |

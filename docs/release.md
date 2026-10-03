@@ -20,6 +20,8 @@ one workflow run builds, verifies and publishes everything.
      any secret, then `tauri bundle` with the update signing key (deb, rpm and AppImage on Linux x64
      and arm64; the app archive and the dmg for Apple silicon and Intel; NSIS and MSI on Windows
      x64, NSIS on Windows arm64), which signs every package for the in-app update;
+   - `bundle-android` builds the phone app's APK and AAB for arm64 unsigned, signs them with the
+     Android key in a step of its own and checks them against the pinned certificate (below);
    - `updater` collects every leg, verifies every signature against the public key in
      `tauri.conf.json`, writes `latest.json` (below) and `SHA256SUMS`, attests the files (SLSA
      build provenance) and attaches them to the draft. `.github/scripts/test-tauri-release.py`
@@ -129,6 +131,7 @@ gh run list --repo $R --branch release-please--branches--main--components--lockr
 | --------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | none                                                                                          | releases                                | `GITHUB_TOKEN` creates the tag, the draft and the assets                                                           |
 | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`                             | releases (the in-app update)            | the minisign key every package is signed with; `preflight` fails without it (below)                                |
+| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD`                | releases (the Android app)              | the PKCS12 keystore (base64, one line) and its password, twice (PKCS12 keeps one); `preflight` fails without them  |
 | `FIRLAB_DOCS_TOKEN`                                                                           | `publish-site.yml`                      | a fine-grained token for `sunerpy/firlab` only, Contents read and write; see [docs/site/README.md](site/README.md) |
 | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_*`    | optional macOS signing and notarization | without them the app is unsigned and Gatekeeper warns                                                              |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` with `bundle.windows.signCommand` | optional Windows signing                | without them SmartScreen warns                                                                                     |
@@ -178,6 +181,40 @@ therefore unsigned: the scripts pass `--config '{"bundle":{"createUpdaterArtifac
 manifest; `apps/desktop/src-tauri/tests/update.rs` checks the updater against a local manifest
 instead, and `docs/acceptance/updates.md` is the update checked by hand on each system.
 
+## Android
+
+From 0.7.0 every release carries the phone app for arm64: `Lockra_X.Y.Z_android_arm64.apk` to
+install from the releases page and `Lockra_X.Y.Z_android_arm64.aab` for Google Play, both in
+`SHA256SUMS` and the attestations, neither in `latest.json` (the phone has no in-app updater: a
+newer APK signed with the same key installs over the old one and keeps its vault).
+
+`bundle-android` builds both unsigned with the lockfile's Tauri CLI, as CI's `android` job does,
+so the key is not there while the dependencies' build code runs. The next step decodes the
+keystore into the job's temporary directory, signs (`.github/scripts/sign-android-package.sh`:
+`zipalign -P 16`, then apksigner with schemes v2 and v3 for the APK, jarsigner for the AAB) and
+removes it. `.github/scripts/check-android-package.sh` then requires one signer, the pinned
+certificate on both packages, 16 KB alignment, and the release's package name, version and
+version code. CI runs the same signing and checks with a key made for each run.
+
+**The key.** Generated with `keytool` on 2026-10-03 on the maintainer's machine: RSA 4096,
+SHA256withRSA, valid until 2126-09-09, alias `lockra`, `CN=Lockra, O=Lockra`, PKCS12. Its
+certificate's SHA-256, `5ac2ccffe00d12e80d13dbfc23425cd3b89eec77cd5d21adda4fdac1cf4dcc28`, is
+pinned in `.github/android-signing.json` with the alias (which is not a secret; CI checks the file
+with `.github/scripts/android-signing.sh`). The keystore and its password are the three secrets
+above, which GitHub never gives back, so the maintainer keeps both in a password manager and an
+offline copy. Google Play keeps the same key: when Play App Signing is set up, choose to upload
+an existing key from a Java keystore (encrypted with the PEPK tool Play Console offers) instead of
+letting Google make one, so the app from Play and the APK from the releases page update each
+other.
+
+- **Lost:** no APK can update an installed Lockra any more; users uninstall and install again,
+  and uninstalling deletes the vault (the app is kept out of Android's backups), so they need a
+  Lockra backup first. On Play, request a reset of the upload key; Play keeps signing with its copy.
+- **Leaked:** rotate with APK Signature Scheme v3 (`apksigner rotate`) and Play's app signing key
+  upgrade, in a release that carries the lineage; to be designed when needed.
+- **Checking a key:** `keytool -list -v -keystore lockra-release.jks -alias lockra` shows the
+  SHA-256 above.
+
 ## The install scripts
 
 `scripts/install.sh` (Linux, macOS) and `scripts/install.ps1` (Windows) install the latest release
@@ -197,6 +234,8 @@ gh release download vX.Y.Z --pattern SHA256SUMS && sha256sum -c SHA256SUMS --ign
 gh attestation verify Lockra_X.Y.Z_x64-setup.exe --repo sunerpy/lockra \
   --signer-workflow sunerpy/lockra/.github/workflows/release.yml
 gh release download vX.Y.Z --pattern latest.json --output - | jq '.version, (.platforms | keys)'
+gh release download vX.Y.Z --pattern '*_android_arm64.apk' &&
+  apksigner verify --print-certs Lockra_X.Y.Z_android_arm64.apk | grep 'SHA-256'   # the pinned digest
 ```
 
 Every bundle leg must appear by its target name; a green run with a skipped leg is not a release.
@@ -234,3 +273,6 @@ What the automated gates cannot cover, before announcing a release:
    _Remember on this device_ on.
 8. **Windows Hello** (a PC with Windows Hello): the same steps; the Hello dialog comes up in front of
    Lockra, and its PIN is accepted as well as a fingerprint or the face.
+9. **Android** (an arm64 phone): install the release's APK and go through
+   `docs/acceptance/android.md`; an APK from a pull request (signed with that run's key) has to be
+   uninstalled first.
