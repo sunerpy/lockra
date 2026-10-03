@@ -8,6 +8,7 @@ import {
   type ImportView,
   actionsFor,
   candidateSource,
+  errorText,
   importChoices,
   parametersText,
   rejectText,
@@ -19,11 +20,14 @@ import {
   Banner,
   Button,
   Card,
+  PasswordField,
   Segmented,
+  useBackend,
   useDispatch,
+  useSubmit,
   useT,
 } from "@lockra/ui";
-import { useState } from "react";
+import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
 import { usePhoneImport } from "../app/phone-import";
 import { Page } from "../components/Page";
@@ -57,6 +61,7 @@ export function Preview({ view }: { view: ImportView }) {
               ` · ${t("import.preview.googleMissing", { missing: batch.missing.map((i) => i + 1).join(", ") })}`}
           </Banner>
         ))}
+        {view.awaiting_password !== null && <BackupPassword name={view.awaiting_password} />}
         {/* A Google export of several codes: the rest join this preview as they are scanned. */}
         {view.google_batches.some((batch) => batch.missing.length > 0) && (
           <Button size="lg" icon="scan" onClick={() => void scan()} data-testid="preview-scan">
@@ -138,5 +143,44 @@ function Candidate({
         )}
       </Card>
     </li>
+  );
+}
+
+/** A Lockra backup in the import waits for its password; opened, its accounts join the preview. */
+function BackupPassword({ name }: { name: string }) {
+  const t = useT();
+  const { backend } = useBackend();
+  const [password, setPassword] = useState("");
+  const submit = useSubmit();
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (password === "") return;
+    await submit.run(() => backend.dispatch({ command: "import_backup_password", password }));
+    setPassword("");
+  };
+  return (
+    <Card padding="none" className="p-4">
+      <form
+        onSubmit={(e) => void onSubmit(e)}
+        className="flex flex-col gap-3"
+        data-testid="backup-password">
+        <PasswordField
+          size="lg"
+          label={t("import.preview.awaiting", { name })}
+          value={password}
+          onChange={setPassword}
+          autoComplete="off"
+          error={submit.error === undefined ? undefined : errorText(t, submit.error)}
+        />
+        <Button
+          variant="primary"
+          size="lg"
+          type="submit"
+          loading={submit.busy}
+          disabled={password === ""}>
+          {t("import.preview.awaitingSubmit")}
+        </Button>
+      </form>
+    </Card>
   );
 }

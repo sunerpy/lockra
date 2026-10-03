@@ -17,6 +17,8 @@ export type Route =
   | { name: "add" }
   | { name: "manual" }
   | { name: "preview" }
+  | { name: "settings" }
+  | { name: "password" }
   | { name: "account"; id: string }
   | { name: "edit"; id: string }
   | { name: "reveal"; id: string };

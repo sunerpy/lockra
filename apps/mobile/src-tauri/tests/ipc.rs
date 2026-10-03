@@ -113,9 +113,9 @@ fn what_the_photo_picker_hands_over_reaches_the_import() {
     assert_eq!(shell.import()["candidates"][0]["source"], json!({ "type": "file", "name": "codes.txt" }));
     assert!(!tauri::async_runtime::block_on(files::import(&core, Ok(Vec::new()))).unwrap());
     assert_eq!(tauri::async_runtime::block_on(files::import(&core, Err(PortError("gone".into())))).unwrap_err().code, ErrorCode::IoFailed);
-    // This build has no picker; and the phone picks images only, for now.
+    // This build has no picker of either kind, and its command says so.
     assert_eq!(shell.invoke("import_pick_files", json!({ "kind": "images" })).unwrap_err(), json!({ "code": "io_failed" }));
-    assert_eq!(shell.invoke("import_pick_files", json!({ "kind": "any" })).unwrap_err(), json!({ "code": "internal" }));
+    assert_eq!(shell.invoke("import_pick_files", json!({ "kind": "any" })).unwrap_err(), json!({ "code": "io_failed" }));
 }
 
 #[test]

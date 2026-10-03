@@ -118,10 +118,42 @@ for exact in (True, False):
 sys.exit(1)
 PY
 }
+# Whether a node is labelled with one of the words, on the screen or not (a node below the fold
+# has empty bounds).
+labelled() {
+  python3 - "$out/ui.xml" "$@" <<'PY'
+import sys, xml.etree.ElementTree as ET
+path, *words = sys.argv[1:]
+for node in ET.parse(path).getroot().iter("node"):
+    text, desc = (node.get("text") or "").strip(), (node.get("content-desc") or "").strip()
+    if any(w in text or w in desc for w in words):
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+# Scroll the page body by most of a screen: a swipe up.
+scroll_down() {
+  local w h
+  read -r w h <<<"$(adb shell wm size | sed -n 's/.*: *\([0-9]*\)x\([0-9]*\).*/\1 \2/p' | tail -1)"
+  adb shell input swipe $((w / 2)) $((h * 7 / 10)) $((w / 2)) $((h * 3 / 10)) 300
+}
+# Tap the node labelled with one of the words, scrolling to it when it is below the fold; after a
+# scroll, only once it stands still (two reads alike), so the tap does not land on a fling.
 tap() {
-  local xy
-  dump || fail "the screen could not be read"
-  xy=$(centre "$@") || fail "nothing on the screen reads $*"
+  local xy last='' scrolls=0 deadline=$((SECONDS + 30))
+  while :; do
+    dump || fail "the screen could not be read"
+    if xy=$(centre "$@"); then
+      [ "$scrolls" -eq 0 ] || [ "$xy" = "$last" ] && break
+      last=$xy
+    elif [ "$scrolls" -lt 6 ] && labelled "$@"; then
+      scrolls=$((scrolls + 1))
+      scroll_down
+    else
+      fail "nothing on the screen reads $*"
+    fi
+    [ "$SECONDS" -lt "$deadline" ] || fail "$* did not stand still on the screen"
+  done
   # shellcheck disable=SC2086 # "x y"
   adb shell input tap $xy
 }

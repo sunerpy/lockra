@@ -90,15 +90,15 @@ async fn codes_unsubscribe(core: State<'_, Core>) -> Result<(), CoreError> {
     Ok(())
 }
 
-/// Pick images to import with the photo picker; `false` when none was picked. The phone picks
-/// images only for now (`kind` "images"); its other files come with the file plugin.
+/// Pick files to import: images with the photo picker (`kind` "images"), any other kind with the
+/// system's file picker; `false` when none was picked.
 #[tauri::command]
 async fn import_pick_files<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>, kind: Option<String>) -> Result<bool, CoreError> {
-    if kind.as_deref() != Some("images") {
-        return Err(ErrorCode::Internal.into());
-    }
     let picker = files::Files::new(app);
-    let picked = tauri::async_runtime::spawn_blocking(move || picker.pick_images()).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    let images = kind.as_deref() == Some("images");
+    let picked = tauri::async_runtime::spawn_blocking(move || if images { picker.pick_images() } else { picker.pick_files() })
+        .await
+        .map_err(|_| CoreError::from(ErrorCode::Internal))?;
     files::import(&core, picked).await
 }
 

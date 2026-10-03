@@ -17,8 +17,12 @@ export interface SelectProps<V extends string> extends Omit<
   onChange: (value: V) => void;
   mono?: boolean;
   label?: string;
-  size?: "sm" | "md";
+  /** `lg` is the phone's: a 44 px touch target. */
+  size?: "sm" | "md" | "lg";
 }
+
+const TEXT = { sm: "text-[12px]", md: "text-[13px]", lg: "text-[15px]" } as const;
+const HEIGHT = { sm: "h-7", md: "h-8", lg: "h-11" } as const;
 
 /** Native `<select>` with the design's chrome: hairline, radius 6, chevron, optional mono value.
  *  It is never narrower than its longest option (user feedback 2026-09-29: callers' fixed widths
@@ -57,7 +61,7 @@ export function Select<V extends string>({
           {...markers}
           className={cx(
             "invisible col-start-1 row-start-1 flex h-0 min-w-max flex-col overflow-hidden border border-transparent pr-7 pl-2.5 whitespace-nowrap",
-            size === "sm" ? "text-[12px]" : "text-[13px]",
+            TEXT[size],
             mono && "mono",
           )}>
           {options.map((o) => (
@@ -73,7 +77,8 @@ export function Select<V extends string>({
           }}
           className={cx(
             "col-start-1 row-start-1 w-full min-w-0 appearance-none rounded-6 bg-surface pr-7 pl-2.5 hairline outline-none transition-colors hover:border-fg-subtle focus:border-fg disabled:opacity-50 disabled:hover:border-border",
-            size === "sm" ? "h-7 text-[12px]" : "h-8 text-[13px]",
+            HEIGHT[size],
+            TEXT[size],
             mono && "mono",
           )}
           {...rest}>

@@ -21,8 +21,10 @@ import { Add } from "./screens/Add";
 import { Codes } from "./screens/Codes";
 import { Edit } from "./screens/Edit";
 import { Manual } from "./screens/Manual";
+import { Password } from "./screens/Password";
 import { Preview } from "./screens/Preview";
 import { Reveal } from "./screens/Reveal";
+import { Settings } from "./screens/Settings";
 import { Unlock } from "./screens/Unlock";
 import { Welcome } from "./screens/Welcome";
 
@@ -96,6 +98,10 @@ function Pages() {
       return <Manual />;
     case "preview":
       return pending ? <Preview view={pending} /> : null;
+    case "settings":
+      return <Settings />;
+    case "password":
+      return <Password />;
     case "account":
       return entry ? <Account entry={entry} /> : null;
     case "edit":

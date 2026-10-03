@@ -115,6 +115,8 @@ export const zhCN = {
       scanHint: "用相机读取二维码，例如 Google 身份验证器的导出码",
       images: "从照片中读取",
       imagesHint: "选择含二维码的截图或照片",
+      files: "从文件导入",
+      filesHint: "otpauth 列表、Lockra 备份，或 Microsoft Authenticator 的数据库",
       links: "粘贴链接",
       linksBody: "粘贴一个或多个 otpauth:// 链接，每行一个。",
       clipboardHint: "读取剪贴板中的 otpauth 链接",

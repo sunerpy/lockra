@@ -143,6 +143,17 @@ describe("Button / IconButton", () => {
         <Chip size="lg" onClick={() => undefined}>
           工作
         </Chip>
+        <Toggle size="lg" checked onChange={() => undefined} ariaLabel="隐藏验证码" />
+        <Select
+          size="lg"
+          aria-label="自动锁定"
+          value="5"
+          onChange={() => undefined}
+          options={[
+            { value: "5", label: "5 分钟" },
+            { value: "0", label: "从不" },
+          ]}
+        />
       </>,
     );
     const button = screen.getByRole("button", { name: "创建保险库" });
@@ -155,6 +166,8 @@ describe("Button / IconButton", () => {
     expect(screen.getByRole("radiogroup", { name: "类型" })).toHaveClass("h-11");
     expect(screen.getByRole("radio", { name: "基于时间" })).toHaveClass("text-[14px]");
     expect(screen.getByRole("button", { name: "工作" })).toHaveClass("h-9", "text-[14px]");
+    expect(screen.getByRole("combobox", { name: "自动锁定" })).toHaveClass("h-11", "text-[15px]");
+    expect(screen.getByRole("switch", { name: "隐藏验证码" })).toHaveClass("h-8", "w-[52px]");
   });
 
   it("renders variants, sizes, icon, keys and loading state", async () => {

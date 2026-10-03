@@ -1,6 +1,6 @@
-// Add accounts: scan a QR code, read photos of them, paste otpauth links, read the clipboard (all
-// go through the import preview, where nothing is added before the user confirms), or type one in
-// by hand.
+// Add accounts: scan a QR code, read photos of them, import files, paste otpauth links, read the
+// clipboard (all go through the import preview, where nothing is added before the user confirms),
+// or type one in by hand.
 import { Button, Card, Textarea, useDispatch, useT } from "@lockra/ui";
 import { useState } from "react";
 import { useNav } from "../app/nav";
@@ -12,7 +12,7 @@ export function Add() {
   const t = useT();
   const nav = useNav();
   const dispatch = useDispatch();
-  const { scan, pickImages } = usePhoneImport();
+  const { scan, pickImages, pickFiles } = usePhoneImport();
   const [links, setLinks] = useState("");
   const fromPhone = async (read: () => Promise<boolean>) => {
     if (await read()) nav.open({ name: "preview" });
@@ -44,6 +44,13 @@ export function Add() {
             hint={t("mobile.add.imagesHint")}
             onClick={() => void fromPhone(pickImages)}
             testId="add-images"
+          />
+          <ActionRow
+            icon="fileText"
+            label={t("mobile.add.files")}
+            hint={t("mobile.add.filesHint")}
+            onClick={() => void fromPhone(pickFiles)}
+            testId="add-files"
           />
         </Card>
         <Card padding="none" className="flex flex-col gap-3 p-4">

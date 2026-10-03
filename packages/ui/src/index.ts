@@ -6,6 +6,7 @@ export * from "./hooks/useNow";
 export * from "./hooks/useClock";
 export * from "./hooks/appearance";
 export * from "./hooks/dispatch";
+export * from "./hooks/settings";
 export * from "./hooks/toaster";
 export * from "./components/Icon";
 export * from "./components/Lamp";
