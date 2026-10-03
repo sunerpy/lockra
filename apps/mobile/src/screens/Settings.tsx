@@ -1,5 +1,6 @@
 // The phone's settings: the language, the order of the codes and their groups; the theme and
-// motion; locking, the clipboard, hidden codes and the master password; backups; the version.
+// motion; locking, the fingerprint, the clipboard, hidden codes and the master password; backups
+// and the export; the version.
 // Every choice applies at once, as on the desktop.
 import {
   AUTO_LOCK_CHOICES,
@@ -27,6 +28,7 @@ import {
 import { useNav } from "../app/nav";
 import { overPhoneScreen } from "../app/phone-screen";
 import { ActionRow } from "../components/ActionRow";
+import { FingerprintSetting } from "../components/FingerprintSetting";
 import { Page } from "../components/Page";
 import { Field, InfoRow, Section, SwitchRow } from "../components/Rows";
 
@@ -148,6 +150,7 @@ export function Settings() {
               }))}
             />
           </Field>
+          <FingerprintSetting />
           <SwitchRow
             label={t("settings.security.hideCodes")}
             hint={t("settings.security.hideCodesHint")}

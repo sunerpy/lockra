@@ -2,14 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The template's, without its Android TV parts (the leanback feature and launcher
          category): Lockra is a phone app; the activity resizes for the keyboard
-         (MainActivity.kt); and the camera, asked for only when a scan starts, with its page
-         (ScannerActivity.kt). Keep it so when regenerating the project. -->
+         (MainActivity.kt); the camera, asked for only when a scan starts, with its page
+         (ScannerActivity.kt); and no system backup or device transfer of the app's data: the
+         vault and its sealed device key stay on this phone (Lockra's own backups move them).
+         Keep it so when regenerating the project. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- A phone without a camera still installs Lockra: it imports from images and links. -->
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.lockra_mobile"

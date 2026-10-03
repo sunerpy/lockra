@@ -131,7 +131,7 @@ fn a_vault_is_made_and_a_code_copied_through_the_phone_shell() {
     // A locked vault answers with the core's code.
     shell.dispatch(json!({ "command": "vault_lock" })).unwrap();
     assert_eq!(shell.dispatch(json!({ "command": "vault_unlock", "password": "wrong" })).unwrap_err(), json!({ "code": "wrong_password" }));
-    // Nothing to remember the vault with yet on the phone: no keychain, no fingerprint.
+    // This build has no fingerprint, so no key store either.
     let state = shell.dispatch(json!({ "command": "app_state" })).unwrap();
     assert_eq!(state["lock"]["device_unlock"]["available"], false);
     assert_eq!(state["lock"]["device_unlock"]["biometric"]["kind"], Value::Null);

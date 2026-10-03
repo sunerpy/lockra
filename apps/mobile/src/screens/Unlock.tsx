@@ -1,4 +1,5 @@
-// The locked vault: the master password. Wrong passwords slow down (the core's rate limit).
+// The locked vault: the master password, or the fingerprint once it is turned on. Wrong passwords
+// slow down (the core's rate limit).
 import { type ErrorCode, errorText } from "@lockra/shared";
 import {
   Button,
@@ -19,6 +20,10 @@ export function Unlock() {
   const now = useClock();
   const [password, setPassword] = useState("");
   const submit = useSubmit();
+  const device = useSubmit();
+  const { available, enabled, biometric } = lock.device_unlock;
+  // The phone remembers the key only behind the fingerprint, and only while one is enrolled.
+  const fingerprint = enabled && biometric.enabled && available;
   const retryAt = lock.retry_at_ms;
   const waitSeconds = retryAt !== null && retryAt > now ? Math.ceil((retryAt - now) / 1000) : 0;
   const onSubmit = async (event: SubmitEvent) => {
@@ -66,6 +71,37 @@ export function Unlock() {
           {t("unlock.submit")}
         </Button>
       </form>
+      {fingerprint && (
+        <div className="flex flex-col gap-2">
+          <Button
+            size="lg"
+            icon="fingerprint"
+            loading={device.busy}
+            onClick={() =>
+              void device.run(() =>
+                backend.dispatch({
+                  command: "vault_unlock_device",
+                  // The words of the system's prompt, in the interface's language.
+                  reason: t("unlock.biometricReason"),
+                }),
+              )
+            }>
+            {t("unlock.biometric.fingerprint")}
+          </Button>
+          {/* A cancelled check is the user's own choice: nothing to say. */}
+          {device.error !== undefined && device.error !== "biometric_cancelled" && (
+            <p role="alert" className="text-[13px] text-danger">
+              {errorText(t, device.error)}
+            </p>
+          )}
+        </div>
+      )}
+      {/* A fingerprint here but not turned on: where to turn it on, once unlocked. */}
+      {!fingerprint && biometric.kind !== null && (
+        <p className="text-center text-[13px] text-fg-muted" data-testid="biometric-offer">
+          {t(`unlock.biometricOffer.${biometric.kind}`)}
+        </p>
+      )}
     </main>
   );
 }

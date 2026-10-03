@@ -442,7 +442,7 @@ export const MAX_DEVICE_NAME_CHARS = 64;
 // ---- state and events ------------------------------------------------------------------------
 
 /** The platform checks Lockra can ask for before "remember on this device" unlocks. */
-export const BIOMETRIC_KINDS = ["touch_id", "windows_hello"] as const;
+export const BIOMETRIC_KINDS = ["touch_id", "windows_hello", "fingerprint"] as const;
 export const biometricKindSchema = z.enum(BIOMETRIC_KINDS);
 export type BiometricKind = z.infer<typeof biometricKindSchema>;
 

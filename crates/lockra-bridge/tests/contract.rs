@@ -359,7 +359,13 @@ fn webdav_storage() -> Value {
 
 #[test]
 fn state_fixtures() {
-    check("state.json", &json!({ "unlocked": state(Phase::Unlocked), "locked": state(Phase::Locked), "no_vault": state(Phase::NoVault) }));
+    // The phone: locked, with the fingerprint in front of its remembered key.
+    let mut phone = state(Phase::Locked);
+    phone.lock.device_unlock.biometric.kind = Some(BiometricKind::Fingerprint);
+    check(
+        "state.json",
+        &json!({ "unlocked": state(Phase::Unlocked), "locked": state(Phase::Locked), "no_vault": state(Phase::NoVault), "phone_locked": phone }),
+    );
 }
 
 #[test]

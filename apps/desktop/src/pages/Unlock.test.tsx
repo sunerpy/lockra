@@ -101,7 +101,7 @@ describe("Unlock", () => {
     await ready();
     await user.click(screen.getByRole("button", { name: "使用 Touch ID 解锁" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "这台电脑现在无法使用指纹或 Windows Hello，请输入主密码",
+      "这台设备现在无法使用指纹、Touch ID 或 Windows Hello，请输入主密码",
     );
   });
 

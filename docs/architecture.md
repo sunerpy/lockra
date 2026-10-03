@@ -126,8 +126,15 @@ so), called from Rust with `run_mobile_plugin` on a blocking thread; its answers
   once saved) or a plain otpauth list (`Core::export_otpauth_text`, after the master password and
   before the picker opens) (`src/files.rs`).
 
-The other ports are not there yet: `NoSecretStore` (so no "Remember on this device"),
-`NoBiometrics`, `NoUpdater` (updates come from the store or the release page) and `NoSync`.
+- The fingerprint: `BiometricPlugin.kt` through `src/biometrics.rs` is both the `Biometrics` port
+  (`BiometricPrompt`, strong biometrics only) and the `SecretStore`: the device key sealed by an
+  Android Keystore key that works for ten seconds after a passed check and is invalidated by a new
+  enrollment, so the core's check-then-read (and check-then-write when it is turned on) needs one
+  prompt. The store's status is learnt with the fingerprint's availability, which the core asks
+  for at start and at every lock, never from a call of its own (the state reads it all the time).
+
+The other ports are not there yet: `NoUpdater` (updates come from the store or the release page)
+and `NoSync`.
 `MainActivity.kt` keeps the window `FLAG_SECURE` and draws it edge to edge (the webview pads with
 `env(safe-area-inset-*)`); edge to edge the window no longer shrinks for the keyboard, so the
 content takes the keyboard's height as bottom padding and the field being typed in stays above it

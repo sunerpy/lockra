@@ -130,6 +130,11 @@ export const en: Messages = {
       manualHint: "Type in the service's name and secret",
     },
     groupSuggestions: "Groups in use",
+    fingerprint: {
+      disableTitle: "Turn off fingerprint unlock",
+      disablePrompt:
+        "Enter the master password to turn off fingerprint unlock; the key kept on the phone is deleted.",
+    },
     scan: {
       prompt: "Point the camera at a QR code",
       next: "Scan the next code",
@@ -179,12 +184,18 @@ export const en: Messages = {
     password: "Master password",
     submit: "Unlock",
     device: "Unlock with the key remembered on this device",
-    biometric: { touch_id: "Unlock with Touch ID", windows_hello: "Unlock with Windows Hello" },
+    biometric: {
+      touch_id: "Unlock with Touch ID",
+      windows_hello: "Unlock with Windows Hello",
+      fingerprint: "Unlock with fingerprint",
+    },
     biometricOffer: {
       touch_id:
         "After unlocking, turn on Settings › Security › Unlock with Touch ID to use your fingerprint next time.",
       windows_hello:
         "After unlocking, turn on Settings › Security › Unlock with Windows Hello to use it next time.",
+      fingerprint:
+        "After unlocking, turn on Settings › Security › Unlock with fingerprint to use your fingerprint next time.",
     },
     biometricReason: "unlock your vault",
     failed: { one: "Wrong password ({n} attempt)", other: "Wrong password ({n} attempts)" },
@@ -502,16 +513,20 @@ export const en: Messages = {
       biometric: {
         touch_id: "Unlock with Touch ID",
         windows_hello: "Unlock with Windows Hello",
+        fingerprint: "Unlock with fingerprint",
       },
       biometricHint: {
         touch_id:
           "Unlock with your fingerprint instead of the master password; turning it on also turns on Remember on this device. The master password always unlocks.",
         windows_hello:
           "Unlock with Windows Hello (fingerprint, face or PIN) instead of the master password; turning it on also turns on Remember on this device. The master password always unlocks.",
+        fingerprint:
+          "Unlock with your fingerprint instead of the master password. The key is kept in the phone's secure hardware; after a new fingerprint is enrolled, turn it on again. The master password always unlocks.",
       },
       biometricReason: {
         touch_id: "turn on unlocking with Touch ID",
         windows_hello: "turn on unlocking with Windows Hello",
+        fingerprint: "turn on unlocking with your fingerprint",
       },
       biometricDisablePrompt:
         "Enter the master password to stop asking before unlocking. Remember on this device stays on; turn it off above if you no longer want it.",
@@ -681,7 +696,7 @@ export const en: Messages = {
     biometric_cancelled: "The check was cancelled",
     biometric_failed: "The check did not pass; try again or enter the master password",
     biometric_unavailable:
-      "Touch ID or Windows Hello cannot be used on this computer now; enter the master password",
+      "A fingerprint, Touch ID or Windows Hello cannot be used on this device now; enter the master password",
     entry_not_found: "The account does not exist",
     duplicate_entry: "This account is already in the vault",
     invalid_uri: "Not a valid otpauth link",
