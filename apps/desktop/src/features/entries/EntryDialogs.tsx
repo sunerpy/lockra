@@ -8,6 +8,7 @@ import {
   type ErrorCode,
   type OtpKind,
   type Revealed,
+  entryGroups,
   entryLabel,
   errorText,
   originText,
@@ -33,7 +34,6 @@ import { type SubmitEvent, type ReactNode, useEffect, useId, useRef, useState } 
 import { useSubmit } from "../../app/dispatch";
 import { useShell } from "../../app/shell-state";
 import { AccountAppearance } from "./AccountAppearance";
-import { entryGroups } from "./groups";
 
 /** How long a revealed secret stays on screen. */
 export const REVEAL_SECONDS = 120;
