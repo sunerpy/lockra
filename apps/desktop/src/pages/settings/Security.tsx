@@ -1,5 +1,6 @@
 import {
   AUTO_LOCK_CHOICES,
+  type BiometricKind,
   CLIPBOARD_CHOICES,
   errorText,
   passwordLongEnough,
@@ -7,6 +8,7 @@ import {
 import {
   Button,
   PasswordField,
+  Segmented,
   Select,
   SettingsPane,
   SettingsRows,
@@ -24,7 +26,8 @@ import { biometricName } from "../../app/platform";
 import { useUpdateSettings } from "../../app/settings";
 
 /** Settings › Security: auto-lock, clipboard clearing, hidden codes, "remember on this device"
- *  with Touch ID or Windows Hello before it, and the master password. */
+ *  with Touch ID or Windows Hello before it (and which of the two unlocks first), and the master
+ *  password. */
 export function Security() {
   const t = useT();
   const { settings } = useUiState();
@@ -281,6 +284,7 @@ function BiometricUnlock() {
           ariaLabel={t(`settings.security.biometric.${kind}`)}
         />
       </StatusRow>
+      {biometric.enabled && <DefaultUnlock kind={kind} />}
       {confirming && biometric.enabled && (
         <form
           onSubmit={(e) => void onSubmit(e)}
@@ -315,5 +319,30 @@ function BiometricUnlock() {
         </form>
       )}
     </>
+  );
+}
+
+/** Which unlocks first, once the check is on: the check, which asks by itself as the lock screen
+ *  comes up in front (the default), or the master password. */
+function DefaultUnlock({ kind }: { kind: BiometricKind }) {
+  const t = useT();
+  const { settings } = useUiState();
+  const update = useUpdateSettings();
+  return (
+    <StatusRow
+      label={t("settings.security.defaultUnlock.label")}
+      help={t(`settings.security.defaultUnlock.hint.${kind}`)}
+      data-testid="default-unlock">
+      <Segmented
+        size="sm"
+        label={t("settings.security.defaultUnlock.label")}
+        value={settings.default_unlock}
+        onChange={(default_unlock) => update({ default_unlock })}
+        options={[
+          { value: "biometric", label: t(`settings.security.defaultUnlock.biometric.${kind}`) },
+          { value: "password", label: t("settings.security.defaultUnlock.password") },
+        ]}
+      />
+    </StatusRow>
   );
 }

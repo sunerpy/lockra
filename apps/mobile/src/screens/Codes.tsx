@@ -18,6 +18,7 @@ import {
   IconButton,
   Input,
   motionReduced,
+  noteUserLock,
   useClock,
   useCodes,
   useDispatch,
@@ -70,7 +71,11 @@ export function Codes() {
           icon="lock"
           label={t("shell.nav.lock")}
           size={40}
-          onClick={() => void dispatch({ command: "vault_lock" })}
+          onClick={() => {
+            // The user's own lock: the fingerprint waits until they leave and come back.
+            noteUserLock();
+            void dispatch({ command: "vault_lock" });
+          }}
           data-testid="codes-lock"
         />
       </header>

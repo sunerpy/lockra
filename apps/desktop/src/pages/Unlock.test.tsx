@@ -1,5 +1,5 @@
 import { MOCK_PASSWORD, MockBackend, sampleEntries } from "@lockra/shared/mock";
-import { screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { ready, renderApp } from "../test/render";
 
 function locked(options: ConstructorParameters<typeof MockBackend>[0] = {}) {
@@ -58,8 +58,13 @@ describe("Unlock", () => {
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
   });
 
-  it("unlocks with Touch ID when the vault asks for it, and stays quiet when it is cancelled", async () => {
-    const backend = locked({ deviceUnlock: true, biometric: "touch_id", biometricUnlock: true });
+  it("unlocks with Touch ID from its button, and stays quiet when it is cancelled", async () => {
+    const backend = locked({
+      deviceUnlock: true,
+      biometric: "touch_id",
+      biometricUnlock: true,
+      settings: { locale: "zh-cn", default_unlock: "password" },
+    });
     const { user } = renderApp({ backend });
     await ready();
     const button = screen.getByRole("button", { name: "使用 Touch ID 解锁" });
@@ -107,7 +112,12 @@ describe("Unlock", () => {
 
   it("names Windows Hello on Windows", async () => {
     renderApp({
-      backend: locked({ deviceUnlock: true, biometric: "windows_hello", biometricUnlock: true }),
+      backend: locked({
+        deviceUnlock: true,
+        biometric: "windows_hello",
+        biometricUnlock: true,
+        biometricAnswer: "biometric_cancelled",
+      }),
     });
     await ready();
     expect(screen.getByRole("button", { name: "使用 Windows Hello 解锁" })).toBeInTheDocument();
@@ -130,5 +140,121 @@ describe("Unlock", () => {
     await user.click(again.getByRole("button", { name: "重置保险库" }));
     expect(await screen.findByTestId("page-welcome")).toBeInTheDocument();
     expect(backend.calls).toContainEqual({ command: "vault_reset" });
+  });
+});
+
+describe("Unlock with the system's check as the default", () => {
+  let focused = true;
+  beforeEach(() => {
+    focused = true;
+    vi.spyOn(document, "hasFocus").mockImplementation(() => focused);
+  });
+  afterEach(() => vi.restoreAllMocks());
+  const leave = () =>
+    act(() => {
+      focused = false;
+      window.dispatchEvent(new Event("blur"));
+    });
+  const come = () =>
+    act(() => {
+      focused = true;
+      window.dispatchEvent(new Event("focus"));
+    });
+  const asked = (backend: MockBackend) =>
+    backend.calls.filter((c) => c.command === "vault_unlock_device").length;
+  const withCheck = {
+    entries: sampleEntries(),
+    deviceUnlock: true,
+    biometricUnlock: true,
+    biometricAnswer: "biometric_cancelled" as const,
+    settings: { locale: "zh-cn" as const },
+  };
+
+  it("asks for Touch ID as Lockra starts in front, and leads with it", async () => {
+    const backend = new MockBackend({ ...withCheck, phase: "locked", biometric: "touch_id" });
+    renderApp({ backend });
+    await ready();
+    await waitFor(() => expect(asked(backend)).toBe(1));
+    expect(backend.biometricReasons).toEqual(["解锁保险库"]);
+    // Cancelled: nothing to say, and the button comes first.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("使用 Touch ID 或主密码解锁。")).toBeInTheDocument();
+    const touchId = screen.getByRole("button", { name: "使用 Touch ID 解锁" });
+    expect(touchId).toHaveAttribute("data-variant", "primary");
+    expect(screen.getByRole("button", { name: "解锁" })).not.toHaveAttribute(
+      "data-variant",
+      "primary",
+    );
+    expect(
+      touchId.compareDocumentPosition(screen.getByLabelText("主密码")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    // Not again until Lockra has been left and comes back.
+    come();
+    expect(asked(backend)).toBe(1);
+    backend.answerBiometric(null);
+    leave();
+    come();
+    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+    expect(asked(backend)).toBe(2);
+  });
+
+  it("asks for Windows Hello when Lockra locks by itself, once it is in front", async () => {
+    const backend = new MockBackend({ ...withCheck, biometric: "windows_hello" });
+    renderApp({ backend });
+    await ready();
+    // Locked by itself in front: at once.
+    act(() => backend.autoLock());
+    await waitFor(() => expect(asked(backend)).toBe(1));
+    backend.answerBiometric(null);
+    leave();
+    come();
+    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+    // Locked by itself in the background: when Lockra comes to the front.
+    leave();
+    act(() => backend.autoLock());
+    await screen.findByTestId("page-unlock");
+    expect(asked(backend)).toBe(2);
+    come();
+    await waitFor(() => expect(asked(backend)).toBe(3));
+  });
+
+  it("waits after the user locks it, until they leave and come back", async () => {
+    const backend = new MockBackend({ ...withCheck, biometric: "touch_id" });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.keyboard("{Control>}l{/Control}");
+    await screen.findByTestId("page-unlock");
+    come();
+    expect(asked(backend)).toBe(0);
+    leave();
+    come();
+    await waitFor(() => expect(asked(backend)).toBe(1));
+  });
+
+  it("puts the master password first when that is the default", async () => {
+    const backend = new MockBackend({
+      ...withCheck,
+      phase: "locked",
+      biometric: "touch_id",
+      settings: { locale: "zh-cn", default_unlock: "password" },
+    });
+    renderApp({ backend });
+    await ready();
+    leave();
+    come();
+    expect(asked(backend)).toBe(0);
+    expect(screen.getByRole("button", { name: "解锁" })).toHaveAttribute("data-variant", "primary");
+    expect(screen.getByText("输入主密码解锁。")).toBeInTheDocument();
+  });
+
+  it("does not ask while the check cannot run", async () => {
+    // Turned on, but the sensor is away (a closed lid): the button stays, nothing asks by itself.
+    const backend = new MockBackend({ ...withCheck, phase: "locked", platform: "macos" });
+    renderApp({ backend });
+    await ready();
+    leave();
+    come();
+    expect(asked(backend)).toBe(0);
   });
 });

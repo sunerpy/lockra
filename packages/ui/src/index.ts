@@ -8,6 +8,7 @@ export * from "./hooks/appearance";
 export * from "./hooks/dispatch";
 export * from "./hooks/settings";
 export * from "./hooks/toaster";
+export * from "./hooks/unlock-prompt";
 export * from "./components/Icon";
 export * from "./components/Lamp";
 export * from "./components/LampText";

@@ -196,6 +196,11 @@ export const en: Messages = {
   unlock: {
     title: "The vault is locked",
     subtitle: "Enter the master password to unlock.",
+    subtitleCheck: {
+      touch_id: "Unlock with Touch ID or the master password.",
+      windows_hello: "Unlock with Windows Hello or the master password.",
+      fingerprint: "Unlock with your fingerprint or the master password.",
+    },
     password: "Master password",
     submit: "Unlock",
     device: "Unlock with the key remembered on this device",
@@ -546,6 +551,23 @@ export const en: Messages = {
       biometricDisablePrompt:
         "Enter the master password to stop asking before unlocking. Remember on this device stays on; turn it off above if you no longer want it.",
       biometricDisableTitle: "Stop asking",
+      defaultUnlock: {
+        label: "Default unlock",
+        password: "Master password",
+        biometric: {
+          touch_id: "Touch ID",
+          windows_hello: "Windows Hello",
+          fingerprint: "Fingerprint",
+        },
+        hint: {
+          touch_id:
+            "With Touch ID, Lockra asks for it by itself when it starts, locks while in front, or comes back to the front; after you lock it yourself, only once you have left and come back. With the master password, you type it first.",
+          windows_hello:
+            "With Windows Hello, Lockra asks for it by itself when it starts, locks while in front, or comes back to the front; after you lock it yourself, only once you have left and come back. With the master password, you type it first.",
+          fingerprint:
+            "With the fingerprint, Lockra asks for it by itself when it opens or comes back; after you lock it yourself, only once you have left and come back. With the master password, you type it first.",
+        },
+      },
       changePassword: "Change master password",
       changePasswordHint: "Earlier backups still open with the old password.",
       current: "Current master password",

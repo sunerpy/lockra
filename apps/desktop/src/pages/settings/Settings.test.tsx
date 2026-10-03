@@ -148,6 +148,33 @@ describe("SettingsDialog", () => {
     });
   });
 
+  it("chooses whether Windows Hello or the master password comes first, once it is on", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      deviceUnlock: true,
+      biometric: "windows_hello",
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const dialog = await openSettings(user, "安全");
+    // Off: nothing to choose.
+    expect(dialog.queryByRole("radiogroup", { name: "默认解锁方式" })).toBeNull();
+    await user.click(dialog.getByRole("switch", { name: "使用 Windows Hello 解锁" }));
+    const choice = within(await dialog.findByRole("radiogroup", { name: "默认解锁方式" }));
+    expect(choice.getByRole("radio", { name: "Windows Hello" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(dialog.getByText(/在前台自动锁定或切回时会自动请求 Windows Hello/)).toBeInTheDocument();
+    await user.click(choice.getByRole("radio", { name: "主密码" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "settings_set",
+      settings: { default_unlock: "password" },
+    });
+    expect(choice.getByRole("radio", { name: "主密码" })).toHaveAttribute("aria-checked", "true");
+  });
+
   it("offers no fingerprint check where there is none", async () => {
     const { user } = renderApp({ mock: { deviceUnlock: true } });
     await ready();

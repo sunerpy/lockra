@@ -1,5 +1,7 @@
 // The locked vault: the master password, or the key remembered on this device. Wrong passwords
 // slow down (the core's rate limit); a forgotten password leads to a reset that keeps the old file.
+// Where Touch ID or Windows Hello is the default unlock (Settings › Security), its button comes
+// first and the system's check asks by itself (@lockra/ui `useUnlockPrompt`).
 import { type ErrorCode, errorText } from "@lockra/shared";
 import {
   Button,
@@ -11,15 +13,17 @@ import {
   useClock,
   useI18n,
   useUiState,
+  useUnlockPrompt,
+  windowFocus,
 } from "@lockra/ui";
-import { type SubmitEvent, useState } from "react";
+import { type SubmitEvent, useCallback, useState } from "react";
 import { useSubmit } from "../app/dispatch";
 import { biometricName } from "../app/platform";
 
 export function Unlock() {
   const { t } = useI18n();
   const { backend } = useBackend();
-  const { lock, platform } = useUiState();
+  const { lock, platform, settings } = useUiState();
   const now = useClock();
   const [password, setPassword] = useState("");
   const [resetOpen, setResetOpen] = useState(false);
@@ -40,6 +44,47 @@ export function Unlock() {
     return errorText(t, code);
   };
   const { available, enabled, biometric } = lock.device_unlock;
+  const checkFirst = enabled && biometric.enabled && settings.default_unlock === "biometric";
+  const { run: runDevice } = device;
+  const unlockWithDevice = useCallback(
+    () =>
+      runDevice(() =>
+        backend.dispatch({
+          command: "vault_unlock_device",
+          // The words of the system's prompt, in the interface's language.
+          reason: biometric.enabled ? t("unlock.biometricReason") : undefined,
+        }),
+      ),
+    [runDevice, backend, biometric.enabled, t],
+  );
+  // Only while the system offers the check now: a sensor that is away keeps its button, not the
+  // prompts.
+  useUnlockPrompt({
+    active: checkFirst && available && biometric.kind !== null,
+    presence: windowFocus,
+    prompt: unlockWithDevice,
+  });
+  const deviceUnlock = enabled && (
+    <div className="flex flex-col gap-1.5">
+      <Button
+        variant={checkFirst ? "primary" : undefined}
+        icon={biometric.enabled ? "fingerprint" : "key"}
+        loading={device.busy}
+        disabled={!available}
+        title={available ? undefined : t("settings.security.deviceUnavailable")}
+        onClick={() => void unlockWithDevice()}>
+        {biometric.enabled
+          ? t(`unlock.biometric.${biometricName(biometric.kind, platform)}`)
+          : t("unlock.device")}
+      </Button>
+      {/* A cancelled check is the user's own choice: nothing to say. */}
+      {device.error !== undefined && device.error !== "biometric_cancelled" && (
+        <p role="alert" className="text-[12px] text-danger">
+          {errorText(t, device.error)}
+        </p>
+      )}
+    </div>
+  );
   return (
     <div className="flex min-h-full items-center justify-center p-6" data-testid="page-unlock">
       <div className="flex w-full max-w-[380px] flex-col gap-5 rounded-14 bg-surface p-8 hairline">
@@ -47,9 +92,14 @@ export function Unlock() {
           <Logo size={44} />
           <div>
             <h1 className="text-[16px] font-semibold text-fg">{t("unlock.title")}</h1>
-            <p className="mt-1 text-[13px] text-fg-muted">{t("unlock.subtitle")}</p>
+            <p className="mt-1 text-[13px] text-fg-muted">
+              {checkFirst
+                ? t(`unlock.subtitleCheck.${biometricName(biometric.kind, platform)}`)
+                : t("unlock.subtitle")}
+            </p>
           </div>
         </div>
+        {checkFirst && deviceUnlock}
         <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-3">
           <PasswordField
             label={t("unlock.password")}
@@ -65,7 +115,7 @@ export function Unlock() {
             </p>
           )}
           <Button
-            variant="primary"
+            variant={checkFirst ? undefined : "primary"}
             type="submit"
             icon="unlock"
             loading={submit.busy}
@@ -73,34 +123,7 @@ export function Unlock() {
             {t("unlock.submit")}
           </Button>
         </form>
-        {enabled && (
-          <div className="flex flex-col gap-1.5">
-            <Button
-              icon={biometric.enabled ? "fingerprint" : "key"}
-              loading={device.busy}
-              disabled={!available}
-              title={available ? undefined : t("settings.security.deviceUnavailable")}
-              onClick={() =>
-                void device.run(() =>
-                  backend.dispatch({
-                    command: "vault_unlock_device",
-                    // The words of the system's prompt, in the interface's language.
-                    reason: biometric.enabled ? t("unlock.biometricReason") : undefined,
-                  }),
-                )
-              }>
-              {biometric.enabled
-                ? t(`unlock.biometric.${biometricName(biometric.kind, platform)}`)
-                : t("unlock.device")}
-            </Button>
-            {/* A cancelled check is the user's own choice: nothing to say. */}
-            {device.error !== undefined && device.error !== "biometric_cancelled" && (
-              <p role="alert" className="text-[12px] text-danger">
-                {errorText(t, device.error)}
-              </p>
-            )}
-          </div>
-        )}
+        {!checkFirst && deviceUnlock}
         {/* Touch ID here but not set up: where to turn it on, once unlocked. */}
         {!biometric.enabled && biometric.kind !== null && (
           <p

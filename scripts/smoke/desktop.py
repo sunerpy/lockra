@@ -365,7 +365,8 @@ class Smoke:
 
         # Touch ID (the debug build's stand-in check, which always passes): while it is off, the
         # unlock screen says where to turn it on; there one switch turns it and "remember on this
-        # device" on; then the unlock screen's button opens the vault.
+        # device" on; then the unlock screen's button opens the vault, the user's own lock waits for
+        # it, and any other lock asks for it by itself (Touch ID is the default unlock).
         self.nav("验证码")
         self.page("codes")
         self.focus()
@@ -392,7 +393,19 @@ class Smoke:
         self.page("unlock")
         touch_id = web.wait(xpath="//button[normalize-space()='使用 Touch ID 解锁']")
         self.shot("unlock-touch-id-1280-light")
+        # The user's own lock does not bring the check: the vault stays locked with the window in
+        # front. The two seconds are the check itself (the stand-in passes at once, so a check
+        # asked for would have unlocked by then), not a wait for something to finish.
+        time.sleep(2)
+        if web.invoke({"command": "app_state"})["phase"] != "locked":
+            raise SystemExit("smoke: the lock screen asked for Touch ID right after the user's own lock")
         web.click(touch_id)
+        self.page("codes")
+        # Touch ID is the default unlock: a lock that is not the user's (the core's own, as an
+        # automatic lock is) brings the check by itself while the window is in front.
+        self.focus()
+        web.invoke({"command": "vault_lock"})
+        until("the vault unlocked by itself with Touch ID", lambda: web.invoke({"command": "app_state"})["phase"] == "unlocked")
         self.page("codes")
         web.invoke({"command": "device_unlock_disable", "password": PASSWORD})
 
