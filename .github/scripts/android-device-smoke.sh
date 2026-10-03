@@ -46,8 +46,37 @@ fail() {
 running() {
   [ -n "$(adb shell pidof "$package" 2>/dev/null | tr -d '\r')" ]
 }
-dump() {
+read_screen() {
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$out/ui.xml" >/dev/null 2>&1
+}
+# The centre of the system dialog's Wait when one of the emulator's own apps "isn't responding"
+# (they can stall for a while after it boots, and the dialog covers the screen).
+stalled() {
+  python3 - "$out/ui.xml" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+nodes = list(ET.parse(sys.argv[1]).getroot().iter("node"))
+if not any(re.search(r"isn.t responding", node.get("text") or "") for node in nodes):
+    sys.exit(1)
+for node in nodes:
+    m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+    if (node.get("text") or "") == "Wait" and m:
+        x1, y1, x2, y2 = map(int, m.groups())
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+# Read the screen into ui.xml, past any such dialog (at most 30 s of them).
+dump() {
+  local deadline=$((SECONDS + 30)) xy
+  read_screen || return 1
+  while xy=$(stalled); do
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    # shellcheck disable=SC2086 # "x y"
+    adb shell input tap $xy
+    sleep 1
+    read_screen || return 1
+  done
 }
 # Wait (at most $2 s, default 60) until the screen shows text matching the extended regex $1. FLAG_SECURE
 # keeps screenshots black but not the accessibility tree, which the dump reads.
