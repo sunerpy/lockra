@@ -1,8 +1,9 @@
 //! Lockra mobile shell (Android): Tauri commands → `lockra-bridge` → `lockra-core`, as on the
 //! desktop (apps/desktop/src-tauri), with the phone's own adapters. Each native capability is a
 //! small Tauri plugin whose Kotlin half lives in `gen/android` (the clipboard, the camera, the
-//! pickers, the fingerprint and its key store); its answers stay in Rust. The webview gets the state and the codes, never a
-//! secret it did not ask to reveal.
+//! pickers, the fingerprint and its key store); its answers stay in Rust. The sync storage is
+//! lockra-remote's, as on the desktop. The webview gets the state and the codes, never a secret it
+//! did not ask to reveal.
 //! Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs` drives the real
 //! command layer on `tauri::test::MockRuntime` on the host.
 
@@ -12,22 +13,32 @@ pub mod biometrics;
 pub mod clipboard;
 pub mod files;
 pub mod scanner;
+pub mod sync;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use lockra_bridge::{UiCommand, dispatch};
-use lockra_core::ports::{Biometrics, Clipboard, CodeSink, NoUpdater, PortError, RemoteStore, SecretStore, SyncError, SyncTransport, SystemClock};
+use lockra_core::ports::{Biometrics, Clipboard, CodeSink, NoUpdater, PortError, SecretStore, SyncTransport, SystemClock};
 use lockra_core::ui::{CodesFrame, Platform, UI_EVENT_NAME, UiEvent};
-use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports, StorageConfig};
+use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports};
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
 use zeroize::Zeroizing;
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
-pub const COMMANDS: [&str; 8] =
-    ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan", "backup_save", "restore_pick", "export_otpauth_file"];
+pub const COMMANDS: [&str; 9] = [
+    "lockra_dispatch",
+    "codes_subscribe",
+    "codes_unsubscribe",
+    "import_pick_files",
+    "import_scan",
+    "backup_save",
+    "restore_pick",
+    "export_otpauth_file",
+    "sync_scan_join",
+];
 
 /// What the shell wires into the core; tests replace the platform parts with fakes.
 pub struct ShellOptions {
@@ -37,6 +48,8 @@ pub struct ShellOptions {
     pub clipboard: Option<Arc<dyn Clipboard>>,
     /// The check before the remembered key unlocks (default: the fingerprint, src/biometrics.rs).
     pub biometrics: Option<Arc<dyn Biometrics>>,
+    /// The sync storage (default: lockra-remote over HTTPS, src/sync.rs).
+    pub sync: Option<Arc<dyn SyncTransport>>,
     /// Where the vault lives (default: the app's private data directory).
     pub data_dir: Option<PathBuf>,
     /// Where `settings.json` lives (default: the app's private config directory).
@@ -47,17 +60,7 @@ pub struct ShellOptions {
 
 impl Default for ShellOptions {
     fn default() -> Self {
-        Self { secrets: None, clipboard: None, biometrics: None, data_dir: None, config_dir: None, kdf: KdfCost::DEFAULT }
-    }
-}
-
-/// No sync storage on the phone yet: a space is set up on the desktop.
-#[derive(Debug, Default, Clone, Copy)]
-pub struct NoSync;
-
-impl SyncTransport for NoSync {
-    fn open(&self, _config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
-        Err(SyncError::Storage("sync is not available on this phone yet".into()))
+        Self { secrets: None, clipboard: None, biometrics: None, sync: None, data_dir: None, config_dir: None, kdf: KdfCost::DEFAULT }
     }
 }
 
@@ -150,6 +153,26 @@ async fn import_scan<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>, promp
     scanner::import(&core, scan)
 }
 
+/// Join a sync space from the invitation another device shows, read with the camera; `false` when
+/// left without one. The invitation goes from the camera to the core, not through the webview.
+/// `password`, `device_name` and `space_password` as for `sync_join`; `prompt` and `cancel` as
+/// for `import_scan`.
+#[tauri::command]
+async fn sync_scan_join<R: Runtime>(
+    app: AppHandle<R>,
+    core: State<'_, Core>,
+    prompt: String,
+    cancel: String,
+    password: Zeroizing<String>,
+    device_name: String,
+    space_password: Option<Zeroizing<String>>,
+) -> Result<bool, CoreError> {
+    let camera = scanner::Scanner::new(app);
+    let texts = scanner::ScanTexts { prompt, cancel };
+    let scan = tauri::async_runtime::spawn_blocking(move || camera.scan(&texts)).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    sync::join(&core, scan, password, device_name, space_password).await
+}
+
 /// Forward every core event to the webview.
 async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core) {
     let mut events = core.subscribe();
@@ -184,7 +207,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             import_scan,
             backup_save,
             restore_pick,
-            export_otpauth_file
+            export_otpauth_file,
+            sync_scan_join
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {
@@ -201,7 +225,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let biometrics: Arc<dyn Biometrics> = options.biometrics.clone().unwrap_or_else(|| Arc::new(fingerprint));
             let config =
                 CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
-            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater: Arc::new(NoUpdater), sync: Arc::new(NoSync), biometrics };
+            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
+            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater: Arc::new(NoUpdater), sync, biometrics };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());

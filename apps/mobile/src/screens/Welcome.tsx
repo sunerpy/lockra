@@ -1,6 +1,6 @@
-// No vault yet: create one with a master password, or restore a backup made elsewhere (the
-// desktop, another phone), whose password becomes the master password. Joining a sync space comes
-// with the phone's sync.
+// No vault yet: create one with a master password, restore a backup made elsewhere (the desktop,
+// another phone), whose password becomes the master password, or join a sync space, whose master
+// password does.
 import { errorText, formatDateTime, passwordLongEnough } from "@lockra/shared";
 import {
   Button,
@@ -14,6 +14,7 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { overPhoneScreen } from "../app/phone-screen";
+import { JoinSync } from "../components/JoinSync";
 
 export function Welcome() {
   const { t } = useI18n();
@@ -69,6 +70,7 @@ export function Welcome() {
         </Button>
       </form>
       <RestoreBackup />
+      <JoinFromSync />
     </main>
   );
 }
@@ -134,6 +136,24 @@ function RestoreBackup() {
             {t("common.cancel")}
           </Button>
         </form>
+      )}
+    </section>
+  );
+}
+
+function JoinFromSync() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="flex flex-col gap-4" data-testid="welcome-join">
+      <h2 className="text-[16px] font-medium text-fg">{t("welcome.join.title")}</h2>
+      <p className="text-[14px] text-fg-muted">{t("mobile.sync.welcomeBody")}</p>
+      {open ? (
+        <JoinSync newVault />
+      ) : (
+        <Button size="lg" icon="link" onClick={() => setOpen(true)}>
+          {t("welcome.join.open")}
+        </Button>
       )}
     </section>
   );

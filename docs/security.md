@@ -84,10 +84,12 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   never again once a new fingerprint is enrolled (the master password unlocks then, and the
   fingerprint is turned on anew). There is no "Remember on this device" without that check. The
   app's data is kept out of Android's backups and device transfers (`allowBackup="false"` and the
-  data extraction rules): the vault leaves the phone only in Lockra's own encrypted backups. The camera's page is `FLAG_SECURE` too, and what
-  it reads, like the photos and files picked, goes to the import preview in Rust and never to the
-  webview; a backup leaves encrypted, written where the user picks, and a plain otpauth list only
-  after the master password and the user's acknowledgement that it is plaintext.
+  data extraction rules): the vault leaves the phone only in Lockra's own encrypted backups. The
+  camera's page is `FLAG_SECURE` too, and what it reads, like the photos and files picked, goes to
+  the import preview in Rust and never to the webview; an invitation it reads (the storage's
+  credentials and the sync key) goes the same way into joining its space. A backup leaves
+  encrypted, written where the user picks, and a plain otpauth list only after the master password
+  and the user's acknowledgement that it is plaintext.
   Leaving the app from the camera's page locks the vault at once; the system photo picker runs in
   another app that Lockra cannot watch, so the vault stays unlocked behind it until the auto-lock
   time.
@@ -178,9 +180,12 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   shown the storage without its secret. An address carrying a user name or password is refused:
   the credentials go in their own fields.
 - **Transport.** HTTPS only, rustls with the operating system's verifier and the system proxy;
-  plain HTTP is refused except to this computer (the tests' servers), and a redirect may not lead
-  to it either. The requests carry the storage's credentials (S3 signatures, WebDAV basic
-  authentication inside TLS) and ciphertext.
+  on Android, with the certificate authorities the system keeps for apps, read from its files (the
+  platform verifier would ask Android through JNI glue that needs unsafe code), so an authority
+  the user installed is not trusted, as for any app that does not opt in to them. Plain HTTP is
+  refused except to this computer (the tests' servers), and a redirect may not lead to it either.
+  The requests carry the storage's credentials (S3 signatures, WebDAV basic authentication inside
+  TLS) and ciphertext.
 - **A new master password** re-wraps this device's keyring, which its next run writes with the
   snapshot (the data key stays); until then the old password still joins new devices through this
   device. Devices change their passwords apart, each its own keyring: neither change can be lost
@@ -217,6 +222,10 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   and a copy of the storage taken earlier keeps its keyring. To shut out a lost device, or someone
   who has the sync key and an old master password, set up a new space and join the other devices
   to it.
+- On Android, the sync trusts the certificate authorities the system ships (its Conscrypt
+  module's since Android 14, the system image's before): one the user turned off in the system's
+  settings is still trusted by the sync, and Android's blocklist of distrusted certificates is not
+  consulted.
 - Importing from Microsoft Authenticator needs a rooted Android phone, and newer versions of that
   app may encrypt the field Lockra reads.
 - The packages are not code-signed (Windows SmartScreen and macOS Gatekeeper warn); the update

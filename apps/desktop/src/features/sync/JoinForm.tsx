@@ -1,9 +1,16 @@
-import { type JoinSource, errorText } from "@lockra/shared";
+import {
+  type JoinSource,
+  emptyStorageForm,
+  errorText,
+  storageComplete,
+  storageConfig,
+} from "@lockra/shared";
 import {
   Button,
   Input,
   PasswordField,
   Segmented,
+  StorageFields,
   Textarea,
   useBackend,
   useT,
@@ -11,8 +18,6 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useSubmit } from "../../app/dispatch";
-import { StorageFields } from "./StorageFields";
-import { emptyStorageForm, storageComplete, storageConfig } from "./storage-form";
 
 type Mode = "invite" | "key";
 

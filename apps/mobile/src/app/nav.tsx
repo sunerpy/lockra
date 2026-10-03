@@ -24,6 +24,12 @@ export type Route =
   | { name: "restore" }
   | { name: "export" }
   | { name: "exportView"; started: ExportStarted }
+  | { name: "sync" }
+  | { name: "syncSetup" }
+  | { name: "syncKey"; syncKey: string }
+  | { name: "syncJoin" }
+  | { name: "syncInvite" }
+  | { name: "syncStorage" }
   | { name: "account"; id: string }
   | { name: "edit"; id: string }
   | { name: "reveal"; id: string };

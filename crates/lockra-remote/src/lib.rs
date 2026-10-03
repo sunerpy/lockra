@@ -1,8 +1,9 @@
 //! The storage of a sync space over HTTP: S3-compatible object storage or WebDAV, through Apache
 //! OpenDAL, as lockra-sync's [`RemoteStore`] (docs/security.md, "Sync").
 //!
-//! Only HTTPS, with rustls on ring and the system's certificate verifier, through the system proxy;
-//! plain HTTP only to this computer (the test servers). The credentials live in the
+//! Only HTTPS, with rustls on ring and the system's certificate verifier (on Android, the
+//! certificate authorities the system keeps), through the system proxy; plain HTTP only to this
+//! computer (the test servers). The credentials live in the
 //! vault's encrypted local part and are handed in here; nothing of them is logged.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
@@ -91,13 +92,57 @@ fn http_client() -> Result<reqwest::Client, SyncError> {
             attempt.error("a redirect to plain HTTP")
         }
     });
-    reqwest::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
-        .user_agent("Lockra")
-        .redirect(redirects)
-        .build()
-        .map_err(|e| SyncError::Storage(e.to_string()))
+    let builder = reqwest::Client::builder().connect_timeout(CONNECT_TIMEOUT).timeout(REQUEST_TIMEOUT).user_agent("Lockra").redirect(redirects);
+    #[cfg(target_os = "android")]
+    let builder = builder.tls_certs_only(android_roots()?);
+    builder.build().map_err(|e| SyncError::Storage(e.to_string()))
+}
+
+/// Where Android keeps the certificate authorities an app trusts, newest first: the Conscrypt
+/// module's since Android 14 (updated with the system), the system image's before.
+#[cfg(target_os = "android")]
+const ANDROID_ROOTS: [&str; 2] = ["/apex/com.android.conscrypt/cacerts", "/system/etc/security/cacerts"];
+
+/// Android's certificate authorities, from the files the system keeps them in. The platform
+/// verifier would ask Android itself, through JNI glue that needs unsafe code (its `jni` is not
+/// Tauri's); the files hold what Android trusts for an app by default, which leaves out the
+/// authorities a user installed, as for any app that does not opt in to them.
+#[cfg(target_os = "android")]
+fn android_roots() -> Result<Vec<reqwest::Certificate>, SyncError> {
+    let roots = roots_in(&ANDROID_ROOTS.map(std::path::Path::new));
+    if roots.is_empty() {
+        // Nothing can be reached securely: the storage cannot be reached (and the device smoke
+        // test, which takes any answer of the storage's for TLS that worked, fails).
+        return Err(SyncError::Network("no certificate authorities found on this phone".into()));
+    }
+    Ok(roots)
+}
+
+/// The certificate authorities in the first of `dirs` that holds any: a PEM certificate per file
+/// (Android writes its text form beside it); a file that is not one is left out.
+#[cfg(any(test, target_os = "android"))]
+fn roots_in(dirs: &[&std::path::Path]) -> Vec<reqwest::Certificate> {
+    use rustls::pki_types::CertificateDer;
+    use rustls::pki_types::pem::PemObject as _;
+    for dir in dirs {
+        let Ok(files) = std::fs::read_dir(dir) else { continue };
+        let mut roots = Vec::new();
+        for file in files.flatten() {
+            let Ok(pem) = std::fs::read(file.path()) else { continue };
+            for der in CertificateDer::pem_slice_iter(&pem).flatten() {
+                // Only what rustls takes for a trust anchor: one it refuses would fail the client.
+                if rustls::RootCertStore::empty().add(der.clone()).is_ok()
+                    && let Ok(root) = reqwest::Certificate::from_der(&der)
+                {
+                    roots.push(root);
+                }
+            }
+        }
+        if !roots.is_empty() {
+            return roots;
+        }
+    }
+    Vec::new()
 }
 
 /// Where a redirect may lead: HTTPS anywhere, plain HTTP only to this computer.
@@ -318,6 +363,48 @@ mod tests {
         let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
         let storage = Storage::open(&webdav(&format!("http://127.0.0.1:{port}/dav/"))).unwrap();
         assert!(matches!(storage.list("x/").await, Err(SyncError::Network(_))));
+    }
+
+    /// A certificate authority as Android keeps one: the certificate in PEM and as text (a root made
+    /// for this test, its key thrown away).
+    const ANDROID_ROOT: &str = "-----BEGIN CERTIFICATE-----
+MIIBvzCCAWWgAwIBAgIUTEvn/xFHD5/ohtKnnI5VVrklsNowCgYIKoZIzj0EAwIw
+LDEPMA0GA1UECgwGTG9ja3JhMRkwFwYDVQQDDBBMb2NrcmEgdGVzdCByb290MCAX
+DTI2MTAwMzA4MDQxNloYDzIxMjYwOTA5MDgwNDE2WjAsMQ8wDQYDVQQKDAZMb2Nr
+cmExGTAXBgNVBAMMEExvY2tyYSB0ZXN0IHJvb3QwWTATBgcqhkjOPQIBBggqhkjO
+PQMBBwNCAAR5N2R3wtP6EEZo94K3peIovaL7XKHLFYVSICUzH8aHQS3Vc7r9Sdo5
+5X4lpCPuBneEH4M8WWuMCPBEyuht/5J9o2MwYTAdBgNVHQ4EFgQUlDh90CTY+n4E
+VxyxODOE0u7eJgwwHwYDVR0jBBgwFoAUlDh90CTY+n4EVxyxODOE0u7eJgwwDwYD
+VR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAwRQIg
+RMMlK1SPMTXijytw1K7FjQ1gm91A5T2kI1Kf1SGZo8QCIQC6efisx93GbpHa5R/k
+yGwLHSaM6zQPU99aUeVP7MLN5A==
+-----END CERTIFICATE-----
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Subject: O = Lockra, CN = Lockra test root
+SHA1 Fingerprint=A2:02:CB:5D:D0:58:4A:A7:0F:66:C1:BF:96:49:A9:95:DF:35:7C:15
+";
+
+    #[test]
+    fn the_first_folder_holding_authorities_gives_them_and_other_files_are_left_out() {
+        let dirs: Vec<tempfile::TempDir> = (0..3).map(|_| tempfile::tempdir().unwrap()).collect();
+        let write = |dir: usize, name: &str, text: &str| std::fs::write(dirs[dir].path().join(name), text).unwrap();
+        // Nothing usable in the first; in the second, a root, a file that is no certificate and a
+        // damaged certificate; the third is not read.
+        write(0, "notes.txt", "not a certificate");
+        write(1, "a2c4ef61.0", ANDROID_ROOT);
+        write(1, "notes.txt", "not a certificate");
+        write(1, "damaged.0", "-----BEGIN CERTIFICATE-----\nMIIBvzCCAWWg\n-----END CERTIFICATE-----\n");
+        write(2, "a2c4ef61.0", ANDROID_ROOT);
+        write(2, "a2c4ef61.1", ANDROID_ROOT);
+        let missing = dirs[0].path().join("missing");
+        let dir = |n: usize| dirs[n].path();
+        assert_eq!(roots_in(&[&missing, dir(0), dir(1), dir(2)]).len(), 1);
+        assert!(roots_in(&[&missing, dir(0)]).is_empty());
+        // A client that trusts them alone builds, as on a phone.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        assert!(reqwest::Client::builder().tls_certs_only(roots_in(&[dir(1)])).build().is_ok());
     }
 
     #[test]

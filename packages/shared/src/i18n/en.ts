@@ -139,6 +139,21 @@ export const en: Messages = {
       prompt: "Point the camera at a QR code",
       next: "Scan the next code",
     },
+    sync: {
+      rowOff: "Set up sync",
+      settingsHint: "Sync with your other devices on storage of your own",
+      deviceName: "Android phone",
+      fromScan: "Scan",
+      scan: "Scan to join",
+      scanPrompt: "Point the camera at the invitation on the other device",
+      scanHint:
+        "Show the invitation on the other device (Settings › Sync › Invite another device), enter the master password, then scan it.",
+      newVault:
+        "There is no vault on this phone yet: joining creates one under this master password.",
+      welcomeBody:
+        "Already syncing Lockra on other devices? Scan an invitation from one of them, and this phone gets the same accounts.",
+      renameTitle: "Rename this device",
+    },
   },
   palette: {
     group: { accounts: "Accounts", pages: "Pages", actions: "Actions" },

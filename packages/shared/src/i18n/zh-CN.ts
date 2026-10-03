@@ -131,6 +131,18 @@ export const zhCN = {
       prompt: "将相机对准二维码",
       next: "扫描下一个二维码",
     },
+    sync: {
+      rowOff: "设置同步",
+      settingsHint: "在你自己的存储上与其他设备同步",
+      deviceName: "Android 手机",
+      fromScan: "扫码",
+      scan: "扫码加入",
+      scanPrompt: "将相机对准另一台设备上的邀请码",
+      scanHint: "在另一台设备的「设置 › 同步 › 邀请其他设备」中显示邀请码，输入主密码后扫描它。",
+      newVault: "这部手机上还没有保险库，加入后会用这个主密码创建一个。",
+      welcomeBody: "已经在其他设备上用 Lockra 同步？扫描它的邀请码加入，这部手机会得到同样的账号。",
+      renameTitle: "重命名这台设备",
+    },
   },
   palette: {
     group: { accounts: "账号", pages: "页面", actions: "操作" },

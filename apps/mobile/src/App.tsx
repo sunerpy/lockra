@@ -29,6 +29,12 @@ import { Preview } from "./screens/Preview";
 import { Restore } from "./screens/Restore";
 import { Reveal } from "./screens/Reveal";
 import { Settings } from "./screens/Settings";
+import { Sync } from "./screens/Sync";
+import { SyncInvite } from "./screens/SyncInvite";
+import { SyncJoin } from "./screens/SyncJoin";
+import { SyncKey } from "./screens/SyncKey";
+import { SyncSetup } from "./screens/SyncSetup";
+import { SyncStorage } from "./screens/SyncStorage";
 import { Unlock } from "./screens/Unlock";
 import { Welcome } from "./screens/Welcome";
 
@@ -76,7 +82,7 @@ function Screen() {
 function Pages() {
   const { route, home, replace } = useNav();
   const { backend } = useBackend();
-  const { entries, import: pending, restore } = useUiState();
+  const { entries, import: pending, restore, sync } = useUiState();
   // Leaving the import preview or the restore before they are done (their buttons, the back
   // gesture) ends them.
   const last = useRef(route);
@@ -96,13 +102,16 @@ function Pages() {
   }, [route, pending, restore, backend]);
   const id = route !== undefined && "id" in route ? route.id : undefined;
   const entry = id === undefined ? undefined : entries.find((e) => e.id === id);
-  // What the top page shows: the account, the import, the backup being restored.
+  // What the top page shows: the account, the import, the backup being restored, the sync space
+  // whose storage changes.
   const present =
     route?.name === "preview"
       ? pending !== null
       : route?.name === "restore"
         ? restore !== null
-        : id === undefined || entry !== undefined;
+        : route?.name === "syncStorage"
+          ? sync.space !== null
+          : id === undefined || entry !== undefined;
   // Once that was there and is gone (the account deleted, replaced by an import or merged away by a
   // sync; the import or the restore done), the page closes: a merged restore goes on to the import
   // preview, the rest back to the codes. Before it has been there, its state is still on the way
@@ -139,6 +148,18 @@ function Pages() {
       return <Export />;
     case "exportView":
       return <ExportView started={route.started} />;
+    case "sync":
+      return <Sync />;
+    case "syncSetup":
+      return <SyncSetup />;
+    case "syncKey":
+      return <SyncKey syncKey={route.syncKey} />;
+    case "syncJoin":
+      return <SyncJoin />;
+    case "syncInvite":
+      return <SyncInvite />;
+    case "syncStorage":
+      return sync.space ? <SyncStorage space={sync.space} /> : null;
     case "account":
       return entry ? <Account entry={entry} /> : null;
     case "edit":

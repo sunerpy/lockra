@@ -123,6 +123,7 @@ describe("TauriBackend", () => {
       backup_pick_dir: null,
       restore_pick: false,
       export_otpauth_file: "x.txt",
+      sync_scan_join: true,
     });
     const backend = new TauriBackend(f.transport);
     expect(await backend.pickImportFiles()).toBe(true);
@@ -133,6 +134,8 @@ describe("TauriBackend", () => {
     expect(await backend.pickBackupDir()).toBeNull();
     expect(await backend.pickRestoreFile()).toBe(false);
     expect(await backend.exportOtpauthFile(["a"], "pw")).toBe("x.txt");
+    const join = { password: "pw", deviceName: "Phone" };
+    expect(await backend.scanJoin({ prompt: "Point at it", cancel: "Cancel" }, join)).toBe(true);
     expect(f.calls.map(([c, a]) => [c, a])).toEqual([
       ["import_pick_files", { kind: "any" }],
       ["import_pick_files", { kind: "images" }],
@@ -142,6 +145,16 @@ describe("TauriBackend", () => {
       ["backup_pick_dir", undefined],
       ["restore_pick", undefined],
       ["export_otpauth_file", { entryIds: ["a"], password: "pw" }],
+      [
+        "sync_scan_join",
+        {
+          prompt: "Point at it",
+          cancel: "Cancel",
+          password: "pw",
+          deviceName: "Phone",
+          spacePassword: null,
+        },
+      ],
     ]);
   });
 

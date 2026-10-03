@@ -1,7 +1,7 @@
-//! The camera as the import's scanner, through `ScannerPlugin.kt` and `ScannerActivity.kt` on
-//! Android: the first QR code read comes back to Rust, never to the webview, and goes into the
-//! import preview. Leaving the app while the camera is open locks the vault at once. Other builds
-//! of this crate (the host tests) have no camera and say so.
+//! The camera, through `ScannerPlugin.kt` and `ScannerActivity.kt` on Android: the first QR code
+//! read comes back to Rust, never to the webview, and goes into the import preview (or, for an
+//! invitation, into joining its sync space: src/sync.rs). Leaving the app while the camera is open
+//! locks the vault at once. Other builds of this crate (the host tests) have no camera and say so.
 
 use lockra_core::ports::PortError;
 use lockra_core::{Core, CoreError, ErrorCode};
@@ -103,15 +103,15 @@ pub fn scan_of(answer: &Value) -> Scan {
     }
 }
 
-/// What a scan means for the import: the code read goes into the preview (`true`); left, nothing
-/// (`false`); the app left meanwhile, the vault locks now, whatever the webview still runs.
-pub fn import(core: &Core, scan: Result<Scan, PortError>) -> Result<bool, CoreError> {
+/// What a scan read: the QR code's text; left, nothing; the app left meanwhile, nothing, and the
+/// vault locks now, whatever the webview still runs.
+pub fn read(core: &Core, scan: Result<Scan, PortError>) -> Result<Option<Zeroizing<String>>, CoreError> {
     match scan {
-        Ok(Scan::Code(text)) => core.import_scanned(&text).map(|()| true),
-        Ok(Scan::Left) => Ok(false),
+        Ok(Scan::Code(text)) => Ok(Some(text)),
+        Ok(Scan::Left) => Ok(None),
         Ok(Scan::Away) => {
             core.lock_vault();
-            Ok(false)
+            Ok(None)
         }
         Ok(Scan::Denied) => Err(ErrorCode::CameraDenied.into()),
         Ok(Scan::NoCamera) => Err(ErrorCode::CameraUnavailable.into()),
@@ -119,6 +119,15 @@ pub fn import(core: &Core, scan: Result<Scan, PortError>) -> Result<bool, CoreEr
             tracing::warn!(%error, "the camera did not answer");
             Err(ErrorCode::CameraUnavailable.into())
         }
+    }
+}
+
+/// What a scan means for the import: the code read goes into the preview (`true`); otherwise as
+/// [`read`] (`false`).
+pub fn import(core: &Core, scan: Result<Scan, PortError>) -> Result<bool, CoreError> {
+    match read(core, scan)? {
+        Some(text) => core.import_scanned(&text).map(|()| true),
+        None => Ok(false),
     }
 }
 

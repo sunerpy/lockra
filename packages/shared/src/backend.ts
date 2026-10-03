@@ -30,6 +30,10 @@ export interface Backend {
   /** The phone's camera → import: the QR code it reads goes to the preview in Rust. `false` when
    *  the scan was left without one. `texts` are the camera page's words, in the app's language. */
   scanImport(texts: ScanTexts): Promise<boolean>;
+  /** The phone's camera → joining a sync space: the invitation it reads (the storage's credentials
+   *  and the sync key) goes to the core in Rust, never here, and joins as `sync_join` does with
+   *  `join`. `false` when the scan was left without one. */
+  scanJoin(texts: ScanTexts, join: ScanJoin): Promise<boolean>;
   /** Native save dialog → backup. The file name, or `null` when cancelled. */
   saveBackup(separatePassword?: string): Promise<string | null>;
   /** Native folder picker → the automatic backup folder. The folder, or `null` when cancelled. */
@@ -46,6 +50,16 @@ export interface ScanTexts {
   prompt: string;
   /** The button that leaves. */
   cancel: string;
+}
+
+/** What joining from a scanned invitation takes besides it, as `sync_join`. */
+export interface ScanJoin {
+  /** This device's master password (with no vault yet, the new vault's). */
+  password: string;
+  /** This device's name in the space. */
+  deviceName: string;
+  /** The master password of the space's devices, when it is not `password`. */
+  spacePassword?: string;
 }
 
 /** A failed command: the core's error code, and when a rate-limited unlock may be retried. */

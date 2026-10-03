@@ -1,52 +1,21 @@
 // An account's secret and QR code, behind the master password entered again; they hide after
-// REVEAL_SECONDS. The window never shows in screenshots (FLAG_SECURE, MainActivity.kt); the core
-// still hears when the secret view ends, as on the desktop.
-import {
-  type EntryView,
-  REVEAL_SECONDS,
-  type Revealed,
-  entryLabel,
-  errorText,
-} from "@lockra/shared";
-import {
-  Banner,
-  Button,
-  PasswordField,
-  QrView,
-  useBackend,
-  useClock,
-  useSubmit,
-  useT,
-} from "@lockra/ui";
-import { type SubmitEvent, useEffect, useState } from "react";
+// REVEAL_SECONDS like any secret (app/secret-page.ts).
+import { type EntryView, type Revealed, entryLabel, errorText } from "@lockra/shared";
+import { Banner, Button, PasswordField, QrView, useBackend, useSubmit, useT } from "@lockra/ui";
+import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
+import { useSecretPage } from "../app/secret-page";
 import { Page } from "../components/Page";
 
 export function Reveal({ entry }: { entry: EntryView }) {
   const t = useT();
   const nav = useNav();
   const { backend } = useBackend();
-  const now = useClock();
   const [password, setPassword] = useState("");
   const [revealed, setRevealed] = useState<{ answer: Revealed; at: number } | undefined>(undefined);
   const submit = useSubmit();
-  const shown = revealed !== undefined;
-  // However the page goes (its button, the back gesture, the vault locking), the secret view ends.
-  useEffect(() => {
-    if (!shown) return undefined;
-    return () => {
-      void backend.dispatch({ command: "secret_view_closed" }).catch(() => undefined);
-    };
-  }, [shown, backend]);
-  // The shared clock ticks on whole seconds, so it can read just before the moment of the reveal.
-  const left =
-    revealed === undefined
-      ? REVEAL_SECONDS
-      : Math.max(0, REVEAL_SECONDS - Math.max(0, Math.floor((now - revealed.at) / 1000)));
+  const left = useSecretPage(revealed?.at);
   const { back } = nav;
-  useEffect(() => {
-    if (shown && left === 0) back();
-  }, [shown, left, back]);
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     const answer = await submit.run(() =>

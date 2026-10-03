@@ -11,6 +11,7 @@ import {
   type FrameListener,
   type ImportPickKind,
   LockraError,
+  type ScanJoin,
   type ScanTexts,
   type Unsubscribe,
 } from "./backend";
@@ -122,6 +123,18 @@ export class TauriBackend implements Backend {
     return z
       .boolean()
       .parse(await this.call("import_scan", { prompt: texts.prompt, cancel: texts.cancel }));
+  }
+
+  async scanJoin(texts: ScanTexts, join: ScanJoin): Promise<boolean> {
+    return z.boolean().parse(
+      await this.call("sync_scan_join", {
+        prompt: texts.prompt,
+        cancel: texts.cancel,
+        password: join.password,
+        deviceName: join.deviceName,
+        spacePassword: join.spacePassword ?? null,
+      }),
+    );
   }
 
   async saveBackup(separatePassword?: string): Promise<string | null> {

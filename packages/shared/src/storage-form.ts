@@ -1,6 +1,7 @@
-// The storage form's fields, the settings they make and the ones they start from. The secret
-// (S3 secret key, WebDAV password) is typed in every time: the core never sends it back.
-import type { StorageConfig, StorageKind, StorageView } from "@lockra/shared";
+// The sync storage form's fields (the desktop's and the phone's), the settings they make and the
+// ones they start from. The secret (S3 secret key, WebDAV password) is typed in every time: the
+// core never sends it back.
+import type { StorageConfig, StorageKind, StorageView } from "./schema";
 
 export interface StorageForm {
   kind: StorageKind;

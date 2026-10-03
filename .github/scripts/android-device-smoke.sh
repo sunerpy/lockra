@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # The Android app on a device: install the APK, start it, create a vault, leave the app (it locks)
 # and unlock it again, add an account by hand and copy its code (the clipboard plugin, through R8),
-# and open the camera's page (the emulator has no camera: the import says so, and the vault stays
-# open behind that page); it stays up throughout with nothing fatal in its log, and the page gives
-# way to the keyboard rather than lie under it. A package that passes every check can still close on
-# start (a Tauri app that panics before its first screen), so the app itself has to run. CI runs this against an emulator (`android-device` in ci.yml); it runs the
-# same against a phone over adb.
+# open the camera's page (the emulator has no camera: the import says so, and the vault stays
+# open behind that page), and set up sync on AWS S3 with made-up keys, which S3 refuses: its answer
+# came over TLS with the certificate authorities read from Android's files. It stays up throughout
+# with nothing fatal in its log, and the page gives way to the keyboard rather than lie under it. A
+# package that passes every check can still close on start (a Tauri app that panics before its
+# first screen), so the app itself has to run. CI runs this against an emulator (`android-device`
+# in ci.yml); it runs the same against a phone over adb (both need to reach AWS S3).
 #
 # Usage: android-device-smoke.sh <apk or directory holding one> <out dir>
 # Needs `adb` on PATH with one device online. Writes into <out>: install.txt, start.txt,
@@ -25,6 +27,9 @@ fi
 package=dev.lockra.mobile
 # Typed with `input text`, which needs no spaces; a throwaway vault on a throwaway device.
 password=lockra-smoke-7f3a
+# AWS's own example keys (its documentation's): S3 knows no such key and refuses it.
+s3_key_id=AKIAIOSFODNN7EXAMPLE
+s3_secret=wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY
 mkdir -p "$out"
 
 collect() {
@@ -293,6 +298,30 @@ if grep -qE 'The vault is locked|保险库已锁定' "$out/ui.xml"; then
   fail "the vault locked behind the camera's page"
 fi
 
+# Sync over HTTPS: set up on AWS S3 with made-up keys, which S3 refuses (or, for a bucket that is
+# not there, answers with an error). Either answer came over TLS, checked against the certificate
+# authorities Lockra reads from Android's files; without them, the storage could not be reached.
+# Argon2id runs twice before the first request (the password, then this device's keyring).
+adb shell input keyevent KEYCODE_BACK
+showing 'No accounts yet|Example' 30
+tap 'Settings' '设置'
+showing 'Set up sync|设置同步' 30
+tap 'Set up sync' '设置同步'
+showing 'Start syncing from this device|在这台设备上开始同步' 30
+tap 'Start syncing from this device' '在这台设备上开始同步'
+showing 'Endpoint|服务地址' 30
+type_into https://s3.amazonaws.com 'Endpoint' '服务地址'
+type_into us-east-1 'Region' '区域'
+type_into lockra-smoke-no-such-bucket 'Bucket' '存储桶'
+type_into "$s3_key_id" 'Access key ID' '访问密钥 ID'
+type_into "$s3_secret" 'Secret access key' '访问密钥'
+type_into "$password" 'Master password' '主密码'
+tap 'Start syncing' '开始同步'
+showing 'refused access|answered with an error|could not be reached|拒绝访问|返回错误|无法连接' 240
+if grep -qE 'could not be reached|无法连接' "$out/ui.xml"; then
+  fail "the sync did not reach S3 over HTTPS (the certificate authorities, or the network)"
+fi
+
 # And it stays up. The 20 s are the check itself (an app that closes a few seconds after its
 # screen fails here), not a wait for something to finish.
 for _ in $(seq 1 10); do
@@ -306,4 +335,4 @@ adb logcat -d --pid="$pid" >"$out/app-logcat.txt" 2>&1 || true
 if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || grep -q "$package" "$out/crash.txt"; then
   fail "the app logged a fatal error although it is still running"
 fi
-echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code and heard from the camera's page ($(basename "$apk"))"
+echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code, heard from the camera's page and reached S3 over HTTPS ($(basename "$apk"))"

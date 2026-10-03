@@ -253,7 +253,8 @@
     "import_scan",
     "backup_save",
     "restore_pick",
-    "export_otpauth_file"
+    "export_otpauth_file",
+    "sync_scan_join"
   ],
   "shell_commands": [
     "lockra_dispatch",
