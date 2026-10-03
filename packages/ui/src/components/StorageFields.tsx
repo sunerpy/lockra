@@ -1,19 +1,28 @@
-import { Input, PasswordField, Segmented, Toggle, useT } from "@lockra/ui";
-import type { StorageForm } from "./storage-form";
+// A sync storage's fields, S3-compatible or WebDAV (the desktop's Settings › Sync and the phone's
+// sync pages); the form's logic is @lockra/shared's storage-form.
+import type { StorageForm } from "@lockra/shared";
+import { useT } from "../i18n/I18nProvider";
+import { Input } from "./Input";
+import { PasswordField } from "./PasswordField";
+import { Segmented } from "./Segmented";
+import { Toggle } from "./Toggle";
 
-/** The storage's fields: S3-compatible or WebDAV. */
+/** The storage's fields: S3-compatible or WebDAV. `lg` is the phone's: taller fields. */
 export function StorageFields({
   form,
   onChange,
+  size = "md",
 }: {
   form: StorageForm;
   onChange: (patch: Partial<StorageForm>) => void;
+  size?: "md" | "lg";
 }) {
   const t = useT();
   return (
     <div className="flex flex-col gap-3" data-testid="storage-fields">
       <div className="flex flex-col gap-1">
         <Segmented
+          size={size}
           label={t("sync.storage.kind")}
           value={form.kind}
           onChange={(kind) => onChange({ kind })}
@@ -30,6 +39,7 @@ export function StorageFields({
       {form.kind === "s3" ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
+            size={size}
             label={t("sync.storage.endpoint")}
             value={form.endpoint}
             onChange={(e) => onChange({ endpoint: e.target.value })}
@@ -40,6 +50,7 @@ export function StorageFields({
             className="sm:col-span-2"
           />
           <Input
+            size={size}
             label={t("sync.storage.region")}
             value={form.region}
             onChange={(e) => onChange({ region: e.target.value })}
@@ -49,6 +60,7 @@ export function StorageFields({
             spellCheck={false}
           />
           <Input
+            size={size}
             label={t("sync.storage.bucket")}
             value={form.bucket}
             onChange={(e) => onChange({ bucket: e.target.value })}
@@ -56,6 +68,7 @@ export function StorageFields({
             spellCheck={false}
           />
           <Input
+            size={size}
             label={t("sync.storage.accessKeyId")}
             value={form.accessKeyId}
             onChange={(e) => onChange({ accessKeyId: e.target.value })}
@@ -64,6 +77,7 @@ export function StorageFields({
             autoComplete="off"
           />
           <PasswordField
+            size={size}
             label={t("sync.storage.secretAccessKey")}
             value={form.secretAccessKey}
             onChange={(secretAccessKey) => onChange({ secretAccessKey })}
@@ -73,6 +87,7 @@ export function StorageFields({
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           <Input
+            size={size}
             label={t("sync.storage.url")}
             value={form.url}
             onChange={(e) => onChange({ url: e.target.value })}
@@ -83,6 +98,7 @@ export function StorageFields({
             className="sm:col-span-2"
           />
           <Input
+            size={size}
             label={t("sync.storage.username")}
             value={form.username}
             onChange={(e) => onChange({ username: e.target.value })}
@@ -90,6 +106,7 @@ export function StorageFields({
             autoComplete="off"
           />
           <PasswordField
+            size={size}
             label={t("sync.storage.password")}
             value={form.password}
             onChange={(password) => onChange({ password })}
@@ -100,6 +117,7 @@ export function StorageFields({
       )}
       <div className="grid gap-3 sm:grid-cols-2">
         <Input
+          size={size}
           label={t("sync.storage.prefix")}
           value={form.prefix}
           onChange={(e) => onChange({ prefix: e.target.value })}
@@ -114,6 +132,7 @@ export function StorageFields({
               <div className="text-[12px] text-fg-subtle">{t("sync.storage.pathStyleHint")}</div>
             </div>
             <Toggle
+              size={size}
               checked={form.pathStyle}
               onChange={(pathStyle) => onChange({ pathStyle })}
               ariaLabel={t("sync.storage.pathStyle")}

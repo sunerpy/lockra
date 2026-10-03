@@ -11,6 +11,7 @@ import type {
   OtpKind,
   Origin,
   RejectReason,
+  SyncStatus,
   ThemeId,
 } from "./schema";
 
@@ -135,6 +136,30 @@ export function relativeTime(t: TFunction, thenMs: number, nowMs: number): strin
   const hours = Math.floor(minutes / 60);
   if (hours < 48) return t("common.hoursAgo", { n: hours });
   return t("common.daysAgo", { n: Math.floor(hours / 24) });
+}
+
+/** What a sync space's last run says, and the tone of the lamp beside it. */
+export function syncStatusLine(
+  status: SyncStatus,
+  t: TFunction,
+  nowMs: number,
+): { tone: "idle" | "accent" | "ok" | "danger"; text: string } {
+  switch (status.state) {
+    case "idle":
+      return { tone: "idle", text: t("sync.status.idle") };
+    case "syncing":
+      return { tone: "accent", text: t("sync.status.syncing") };
+    case "synced":
+      return {
+        tone: "ok",
+        text: t("sync.status.synced", { when: relativeTime(t, status.at_ms, nowMs) }),
+      };
+    case "failed":
+      return {
+        tone: "danger",
+        text: t("sync.status.failed", { error: errorText(t, status.code) }),
+      };
+  }
 }
 
 /** `issuer: account`, or whichever exists. */

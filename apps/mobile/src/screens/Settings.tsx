@@ -1,6 +1,6 @@
 // The phone's settings: the language, the order of the codes and their groups; the theme and
-// motion; locking, the fingerprint, the clipboard, hidden codes and the master password; backups
-// and the export; the version.
+// motion; locking, the fingerprint, the clipboard, hidden codes and the master password; sync;
+// backups and the export; the version.
 // Every choice applies at once, as on the desktop.
 import {
   AUTO_LOCK_CHOICES,
@@ -8,6 +8,8 @@ import {
   LOCALE_SETTINGS,
   SORT_ORDERS,
   THEME_IDS,
+  storageSummary,
+  syncStatusLine,
   themeName,
   themeSubtitle,
 } from "@lockra/shared";
@@ -22,6 +24,8 @@ import {
   useBackend,
   useGuarded,
   useI18n,
+  useNow,
+  useT,
   useUiState,
   useUpdateSettings,
 } from "@lockra/ui";
@@ -168,6 +172,11 @@ export function Settings() {
             />
           </div>
         </Section>
+        <Section title={t("settings.section.sync")}>
+          <div className="p-1">
+            <SyncRow />
+          </div>
+        </Section>
         <Section title={t("backup.title")}>
           <div className="p-1">
             <ActionRow
@@ -205,5 +214,27 @@ export function Settings() {
         </Section>
       </div>
     </Page>
+  );
+}
+
+/** Sync: off, the way to set it up; on, how the last run went and where the space is. */
+function SyncRow() {
+  const t = useT();
+  const nav = useNav();
+  const now = useNow();
+  const { space } = useUiState().sync;
+  return (
+    <ActionRow
+      icon="cloud"
+      label={space === null ? t("mobile.sync.rowOff") : syncStatusLine(space.status, t, now).text}
+      hint={
+        space === null
+          ? t("mobile.sync.settingsHint")
+          : `${t(`sync.storage.${space.storage.kind}`)} · ${storageSummary(space.storage)}`
+      }
+      opensPage
+      onClick={() => nav.open({ name: "sync" })}
+      testId="settings-sync"
+    />
   );
 }

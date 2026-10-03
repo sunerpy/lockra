@@ -7,4 +7,5 @@ export * from "./import-preview";
 export * from "./labels";
 export * from "./password";
 export * from "./schema";
+export * from "./storage-form";
 export * from "./tauri-backend";

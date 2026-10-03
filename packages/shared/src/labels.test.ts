@@ -14,6 +14,7 @@ import {
   rejectText,
   relativeTime,
   statusText,
+  syncStatusLine,
   themeName,
   themeSubtitle,
 } from "./labels";
@@ -98,6 +99,26 @@ describe("labels", () => {
     expect(relativeTime(en, now - 3 * 3_600_000, now)).toBe("3 hours ago");
     expect(relativeTime(zh, now - 3 * 86_400_000, now)).toBe("3 天前");
     expect(relativeTime(en, now + 5000, now)).toBe("just now");
+  });
+
+  it("a sync space's last run, with its lamp", () => {
+    const now = Date.UTC(2026, 8, 30, 12);
+    expect(syncStatusLine({ state: "idle" }, en, now)).toEqual({
+      tone: "idle",
+      text: "Not synced yet",
+    });
+    expect(syncStatusLine({ state: "syncing" }, zh, now)).toEqual({
+      tone: "accent",
+      text: "正在同步…",
+    });
+    expect(syncStatusLine({ state: "synced", at_ms: now - 5 * 60_000 }, zh, now)).toEqual({
+      tone: "ok",
+      text: "已同步 · 5 分钟前",
+    });
+    expect(syncStatusLine({ state: "failed", code: "sync_denied", at_ms: now }, zh, now)).toEqual({
+      tone: "danger",
+      text: "同步失败：存储服务拒绝访问，请检查访问密钥或密码",
+    });
   });
 
   it("codes are grouped for reading", () => {

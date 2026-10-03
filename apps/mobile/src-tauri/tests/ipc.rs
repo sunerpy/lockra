@@ -1,18 +1,20 @@
 //! The mobile shell's command layer on Tauri's mock runtime: its commands are the bridge's phone
 //! commands, a core command runs through `lockra_dispatch` with the core's typed errors, a copied
-//! code goes to the clipboard port, the code stream subscribes through a channel, and what the
-//! camera or the photo picker hands over reaches the import.
+//! code goes to the clipboard port, the code stream subscribes through a channel, what the camera
+//! or the photo picker hands over reaches the import, and an invitation the camera reads joins its
+//! sync space.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::sync::Arc;
 
 use lockra_bridge::PHONE_COMMANDS;
-use lockra_core::fakes::FakeClipboard;
+use lockra_core::fakes::{FakeClipboard, FakeTransport};
 use lockra_core::ports::{PortError, SyncTransport as _};
 use lockra_core::{Core, ErrorCode, KdfCost, PickedFile, StorageConfig};
 use lockra_mobile_lib::scanner::Scan;
-use lockra_mobile_lib::{COMMANDS, NoSync, ShellOptions, build_app, files, scanner};
+use lockra_mobile_lib::sync::HttpSync;
+use lockra_mobile_lib::{COMMANDS, ShellOptions, build_app, files, scanner, sync};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets};
@@ -31,10 +33,16 @@ struct Shell {
 }
 
 fn shell() -> Shell {
+    shell_on(Arc::new(FakeTransport::default()))
+}
+
+/// A shell whose sync storage is `transport`'s, which other shells may share.
+fn shell_on(transport: Arc<FakeTransport>) -> Shell {
     let dir = tempfile::tempdir().unwrap();
     let clipboard = Arc::new(FakeClipboard::default());
     let options = ShellOptions {
         clipboard: Some(clipboard.clone()),
+        sync: Some(transport),
         data_dir: Some(dir.path().join("data")),
         config_dir: Some(dir.path().join("config")),
         kdf: KdfCost::FAST_INSECURE,
@@ -180,8 +188,37 @@ fn the_code_stream_subscribes_through_a_channel_and_stops() {
 }
 
 #[test]
-fn the_phone_offers_no_sync_storage_yet() {
-    let dav =
-        StorageConfig::Webdav { url: "https://dav.example.com/".into(), prefix: String::new(), username: "me".into(), password: Zeroizing::new("pw".into()) };
-    assert!(NoSync.open(&dav).is_err());
+fn the_phone_s_sync_storage_opens_without_contacting_it_and_plain_http_elsewhere_is_refused() {
+    let dav = |url: &str| StorageConfig::Webdav { url: url.into(), prefix: String::new(), username: "me".into(), password: Zeroizing::new("pw".into()) };
+    assert!(matches!(HttpSync.open(&dav("https://dav.example.com/dav/")), Ok(storage) if !storage.conditional_puts()));
+    assert!(HttpSync.open(&dav("http://192.168.1.2/dav/")).is_err());
+}
+
+#[test]
+fn an_invitation_the_camera_reads_joins_its_space() {
+    let transport = Arc::new(FakeTransport::default());
+    let desktop = shell_on(Arc::clone(&transport));
+    desktop.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    let storage = json!({ "kind": "webdav", "url": "https://dav.example.com/", "prefix": "", "username": "me", "password": FakeTransport::SECRET });
+    desktop.dispatch(json!({ "command": "sync_create", "storage": storage, "password": PASSWORD, "device_name": "Desktop" })).unwrap();
+    let invite = desktop.dispatch(json!({ "command": "sync_invite", "password": PASSWORD })).unwrap()["invite"].as_str().unwrap().to_owned();
+    // A new phone: the master password of the space's devices becomes its vault's.
+    let phone = shell_on(transport);
+    let core = phone.core();
+    let join = |scan| tauri::async_runtime::block_on(sync::join(&core, scan, Zeroizing::new(PASSWORD.into()), "Phone".into(), None));
+    assert!(!join(Ok(Scan::Left)).unwrap());
+    let account = "otpauth://totp/Scanned:me?secret=MZXW6YTBOI&issuer=Scanned";
+    assert_eq!(join(Ok(Scan::Code(Zeroizing::new(account.into())))).unwrap_err().code, ErrorCode::SyncInviteInvalid);
+    assert_eq!(join(Ok(Scan::Denied)).unwrap_err().code, ErrorCode::CameraDenied);
+    assert!(join(Ok(Scan::Code(Zeroizing::new(invite)))).unwrap());
+    let state = phone.dispatch(json!({ "command": "app_state" })).unwrap();
+    assert_eq!(state["phase"], "unlocked");
+    assert_eq!(state["sync"]["space"]["device_name"], "Phone");
+    // Leaving the app from the camera's page locks the vault, as for the import.
+    assert!(!join(Ok(Scan::Away)).unwrap());
+    assert_eq!(phone.dispatch(json!({ "command": "app_state" })).unwrap()["phase"], "locked");
+    // This build has no camera, and its command says so.
+    let join_texts =
+        json!({ "prompt": "Point the camera at the invitation", "cancel": "Cancel", "password": PASSWORD, "deviceName": "Phone", "spacePassword": null });
+    assert_eq!(phone.invoke("sync_scan_join", join_texts).unwrap_err(), json!({ "code": "camera_unavailable" }));
 }

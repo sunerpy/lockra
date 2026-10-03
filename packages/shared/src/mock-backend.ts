@@ -9,6 +9,7 @@ import {
   type FrameListener,
   type ImportPickKind,
   LockraError,
+  type ScanJoin,
   type ScanTexts,
   type Unsubscribe,
 } from "./backend";
@@ -468,6 +469,18 @@ export class MockBackend implements Backend {
     if (this.scan === null) return false;
     if (typeof this.scan !== "string") throw new LockraError(this.scan.error);
     this.importText(this.scan, { type: "camera" });
+    return true;
+  }
+
+  async scanJoin(_texts: ScanTexts, join: ScanJoin): Promise<boolean> {
+    if (this.scan === null) return false;
+    if (typeof this.scan !== "string") throw new LockraError(this.scan.error);
+    this.syncJoin(
+      { type: "invite", text: this.scan },
+      join.password,
+      join.deviceName,
+      join.spacePassword,
+    );
     return true;
   }
 

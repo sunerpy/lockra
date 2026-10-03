@@ -239,6 +239,22 @@ describe("MockBackend", () => {
     expect(await errorCode(backend.scanImport(TEXTS))).toBe("camera_denied");
   });
 
+  it("joins a space from the invitation the camera reads, or says why it could not", async () => {
+    const TEXTS = { prompt: "Point at the invitation", cancel: "Cancel" };
+    const join = { password: MOCK_PASSWORD, deviceName: "Phone" };
+    const backend = new MockBackend({ phase: "no_vault" });
+    expect(await backend.scanJoin(TEXTS, join)).toBe(false);
+    backend.setScan("otpauth://totp/Cam:era?secret=MFRGGZDF");
+    expect(await errorCode(backend.scanJoin(TEXTS, join))).toBe("sync_invite_invalid");
+    backend.setScan({ error: "camera_denied" });
+    expect(await errorCode(backend.scanJoin(TEXTS, join))).toBe("camera_denied");
+    backend.setScan("lockra-invite:1:bW9jaw");
+    expect(await backend.scanJoin(TEXTS, join)).toBe(true);
+    const state = await backend.getState();
+    expect(state.phase).toBe("unlocked");
+    expect(state.sync.space?.device_name).toBe("Phone");
+  });
+
   it("backs up and restores", async () => {
     const backend = new MockBackend({ entries: sampleEntries().slice(0, 2) });
     const { notices } = recorder(backend);

@@ -1,4 +1,14 @@
-import { type SyncSpaceView, errorText, relativeTime } from "@lockra/shared";
+import {
+  type SyncSpaceView,
+  emptyStorageForm,
+  errorText,
+  relativeTime,
+  storageComplete,
+  storageConfig,
+  storageFormFrom,
+  storageSummary,
+  syncStatusLine,
+} from "@lockra/shared";
 import {
   Badge,
   Banner,
@@ -7,12 +17,12 @@ import {
   IconButton,
   Input,
   LampText,
-  type LampTone,
   PasswordField,
   SettingsPane,
   SettingsRows,
   SettingsSection,
   StatusRow,
+  StorageFields,
   useBackend,
   useClock,
   useT,
@@ -22,14 +32,6 @@ import { type SubmitEvent, useState } from "react";
 import { useDispatch, useSubmit } from "../../app/dispatch";
 import { JoinForm } from "../../features/sync/JoinForm";
 import { InviteDialog, SyncKeyDialog, useSecretAnswer } from "../../features/sync/SecretDialogs";
-import { StorageFields } from "../../features/sync/StorageFields";
-import {
-  emptyStorageForm,
-  storageComplete,
-  storageConfig,
-  storageFormFrom,
-  storageSummary,
-} from "../../features/sync/storage-form";
 
 /** Settings › Sync: set up a space on storage of the user's own or join one; with a space, its
  *  status, storage, devices, invitations, and turning it off here. */
@@ -163,30 +165,6 @@ function CreateForm({
   );
 }
 
-function statusLine(
-  space: SyncSpaceView,
-  t: ReturnType<typeof useT>,
-  now: number,
-): { tone: LampTone; text: string } {
-  const status = space.status;
-  switch (status.state) {
-    case "idle":
-      return { tone: "idle", text: t("sync.status.idle") };
-    case "syncing":
-      return { tone: "accent", text: t("sync.status.syncing") };
-    case "synced":
-      return {
-        tone: "ok",
-        text: t("sync.status.synced", { when: relativeTime(t, status.at_ms, now) }),
-      };
-    case "failed":
-      return {
-        tone: "danger",
-        text: t("sync.status.failed", { error: errorText(t, status.code) }),
-      };
-  }
-}
-
 /** A device's name, or the start of its tag when the space does not know it. */
 function deviceLabel(space: SyncSpaceView, tag: string): string {
   return space.devices.find((d) => d.tag === tag)?.name ?? `${tag.slice(0, 8)}…`;
@@ -197,7 +175,7 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
   const now = useClock();
   const dispatch = useDispatch();
   const [dialog, setDialog] = useState<"invite" | "disable" | { remove: string } | null>(null);
-  const line = statusLine(space, t, now);
+  const line = syncStatusLine(space.status, t, now);
   const syncing = space.status.state === "syncing";
   const removing =
     dialog !== null && typeof dialog === "object"
