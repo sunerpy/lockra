@@ -59,6 +59,16 @@ password and the sync key. The master password of any device in the space, with 
 adds a device. After you change the master password on a device, the new one works from that
 device's next sync, and the old one no longer opens the space unless another device still uses it.
 
+## Adding a phone
+
+<StatusTag status="building" />
+
+The Android app syncs like a computer. Show an invitation on a device of the space (**Settings ›
+Sync › Invite another device**), then on the phone choose **Settings › Sync › Join an existing
+sync › Scan to join**, or **Join from sync** on the welcome screen of a new install, and scan it.
+The invitation goes from the camera to Lockra and is not shown on the phone. Pasting the
+invitation, or typing the storage settings and the sync key, works as on a computer.
+
 ## When devices sync
 
 While the vault is unlocked, a device syncs when you unlock it, three seconds after a change,

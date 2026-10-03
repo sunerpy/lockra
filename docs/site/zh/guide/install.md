@@ -71,6 +71,14 @@ sudo dnf install ./Lockra-*-1.x86_64.rpm    # Fedora
 
 AppImage 无需安装：添加可执行权限后直接运行。Lockra 需要 WebKitGTK 4.1，deb 和 rpm 安装包会自动安装它。要使用「在本机记住」，桌面环境需要提供 Secret Service 钥匙串，例如 GNOME 钥匙圈或 KWallet。
 
+## Android
+
+<StatusTag status="building" />
+
+Android 应用发布后，每个版本还会附带 `Lockra_<version>_android_arm64.apk`，适用于 Android 8 及以上的 ARM64 手机。在手机上从[发布页](https://github.com/sunerpy/lockra/releases)下载并打开它；首次安装时，Android 会询问是否允许打开它的浏览器或文件管理器安装应用。发布页上更新版本的 APK 可以直接覆盖安装，保险库会保留。
+
+与其他下载一样，可以用 `SHA256SUMS` 和 `gh attestation verify Lockra_*_android_arm64.apk --repo sunerpy/lockra` 校验 APK。APK 使用 Lockra 的 Android 密钥签名：使用 Android SDK 的构建工具运行 `apksigner verify --print-certs Lockra_*_android_arm64.apk`，可以看到证书的 SHA-256：`5ac2ccffe00d12e80d13dbfc23425cd3b89eec77cd5d21adda4fdac1cf4dcc28`。Android 不会用其他密钥签名的 APK 更新已安装的应用。
+
 ## 后续步骤
 
 [快速开始](/zh/guide/quick-start)介绍如何创建保险库并导入第一批账号。

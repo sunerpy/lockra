@@ -60,6 +60,18 @@ its window while it is locked. After you lock it yourself, or cancel the check, 
 you have left the window and come back. It never asks while Lockra is in the background. With
 **Master password**, you type the password first and the check waits for its button.
 
+## Fingerprint on Android
+
+<StatusTag status="building" />
+
+On the phone, **Settings › Security › Unlock with fingerprint** keeps the vault's key in the
+phone's secure hardware, usable only for ten seconds after a passed fingerprint check. Turning it
+on checks once; turning it off asks for the master password and deletes the key. A fingerprint
+enrolled afterwards makes the key unusable: the master password unlocks, and the switch can be
+turned on again. With **Default unlock** on **Fingerprint**, opening Lockra or coming back to it
+asks for the fingerprint by itself. Lockra is always kept out of screenshots on the phone, and
+leaving the app locks the vault.
+
 ## Locking
 
 Lockra locks after five minutes without a key press or click (**Settings › Security › Auto-lock**:

@@ -1,6 +1,6 @@
 # Platform notes
 
-This page lists what differs between Windows, macOS and Linux.
+This page lists what differs between Windows, macOS, Linux and the Android app.
 
 ## Windows
 
@@ -35,3 +35,22 @@ This page lists what differs between Windows, macOS and Linux.
   the mark, other clipboard managers may not.
 - **Screenshots** cannot be blocked: Linux offers no way for an app to exclude its window from
   capture. The reveal and export views say so; mind screen sharing while they are open.
+
+## Android
+
+<StatusTag status="building" />
+
+- **Versions**: Android 8 or later, on ARM64 phones, from the APK on the releases page.
+- **Unlocking**: with the master password, or with **Settings › Security › Unlock with
+  fingerprint**, which keeps the vault's key in the phone's secure hardware. There is no
+  **Remember on this device** without the fingerprint. A fingerprint enrolled later makes the key
+  unusable: the master password unlocks until the switch is turned on again.
+- **Leaving the app** (another app, the home screen, the screen turned off) locks the vault at
+  once.
+- **Screenshots** and screen recordings of Lockra are always blocked, and the recent apps show a
+  blank card.
+- **Clipboard**: copied codes are marked sensitive, so the keyboard's clipboard history and the
+  paste preview leave them out.
+- **Backups** are saved and restored where the system's file picker says; there are no automatic
+  backups. Android's own backup and device transfer leave Lockra out, so keep a Lockra backup.
+- **Updates**: **Settings › About › Check for updates**; a newer release opens its page.

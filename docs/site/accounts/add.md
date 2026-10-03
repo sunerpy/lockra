@@ -32,6 +32,15 @@ service says otherwise, open **Advanced** and choose:
 | Digits    | 6, 7 or 8                                 |
 | Algorithm | SHA1, SHA256 or SHA512                    |
 
+## On Android
+
+<StatusTag status="building" />
+
+On the phone, **Add** offers **Scan a QR code** (the camera), **Read from photos** (screenshots or
+photos of QR codes), **Import from files**, **Paste links**, **Import from the clipboard** and
+**Add an account by hand**. The camera asks for its permission the first time, and what it reads
+goes straight to the import preview. Leaving the app while the camera is open locks the vault.
+
 ## Already in the vault
 
 Adding an account whose secret is already in the vault is refused, so the same account never
