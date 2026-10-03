@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The Android app on a device: install the APK, start it, create a vault, leave the app (it locks)
-# and unlock it again, add an account by hand and copy its code (the clipboard plugin, through R8);
-# it stays up throughout with nothing fatal in its log, and the page gives way to the keyboard
-# rather than lie under it. A package that passes every check can still close on
+# and unlock it again, add an account by hand and copy its code (the clipboard plugin, through R8),
+# and open the camera's page (the emulator has no camera: the import says so, and the vault stays
+# open behind that page); it stays up throughout with nothing fatal in its log, and the page gives
+# way to the keyboard rather than lie under it. A package that passes every check can still close on
 # start (a Tauri app that panics before its first screen), so the app itself has to run. CI runs this against an emulator (`android-device` in ci.yml); it runs the
 # same against a phone over adb.
 #
@@ -45,8 +46,37 @@ fail() {
 running() {
   [ -n "$(adb shell pidof "$package" 2>/dev/null | tr -d '\r')" ]
 }
-dump() {
+read_screen() {
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$out/ui.xml" >/dev/null 2>&1
+}
+# The centre of the system dialog's Wait when one of the emulator's own apps "isn't responding"
+# (they can stall for a while after it boots, and the dialog covers the screen).
+stalled() {
+  python3 - "$out/ui.xml" <<'PY'
+import re, sys, xml.etree.ElementTree as ET
+nodes = list(ET.parse(sys.argv[1]).getroot().iter("node"))
+if not any(re.search(r"isn.t responding", node.get("text") or "") for node in nodes):
+    sys.exit(1)
+for node in nodes:
+    m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
+    if (node.get("text") or "") == "Wait" and m:
+        x1, y1, x2, y2 = map(int, m.groups())
+        print((x1 + x2) // 2, (y1 + y2) // 2)
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+# Read the screen into ui.xml, past any such dialog (at most 30 s of them).
+dump() {
+  local deadline=$((SECONDS + 30)) xy
+  read_screen || return 1
+  while xy=$(stalled); do
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    # shellcheck disable=SC2086 # "x y"
+    adb shell input tap $xy
+    sleep 1
+    read_screen || return 1
+  done
 }
 # Wait (at most $2 s, default 60) until the screen shows text matching the extended regex $1. FLAG_SECURE
 # keeps screenshots black but not the accessibility tree, which the dump reads.
@@ -183,6 +213,16 @@ showing 'Example' 30
 tap 'Example'
 showing 'Copied|已复制' 30
 
+# The camera's page answers through the scanner plugin: without a camera, the import says so,
+# and the app, hidden behind that page for a moment, did not lock.
+tap 'Add' '添加'
+showing 'Scan a QR code|扫描二维码' 30
+tap 'Scan a QR code' '扫描二维码'
+showing 'The camera cannot be opened|无法打开相机' 30
+if grep -qE 'The vault is locked|保险库已锁定' "$out/ui.xml"; then
+  fail "the vault locked behind the camera's page"
+fi
+
 # And it stays up. The 20 s are the check itself (an app that closes a few seconds after its
 # screen fails here), not a wait for something to finish.
 for _ in $(seq 1 10); do
@@ -196,4 +236,4 @@ adb logcat -d --pid="$pid" >"$out/app-logcat.txt" 2>&1 || true
 if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || grep -q "$package" "$out/crash.txt"; then
   fail "the app logged a fatal error although it is still running"
 fi
-echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account and copied its code ($(basename "$apk"))"
+echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code and heard from the camera's page ($(basename "$apk"))"

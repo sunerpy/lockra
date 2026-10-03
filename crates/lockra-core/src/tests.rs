@@ -16,8 +16,8 @@ use zeroize::Zeroizing;
 use crate::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
 use crate::ports::{BiometricError, ClipboardImage, SecretStore, SyncTransport};
 use crate::settings::{AutoBackup, Settings, ThemeId};
-use crate::ui::{BiometricKind, BiometricView, CandidateAction, CandidateStatus, ExportTarget, Notice, Phase, Platform, UiEvent};
-use crate::{AccountColor, Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, Outcome, Ports, RestoreMode, VAULT_FILE};
+use crate::ui::{BiometricKind, BiometricView, CandidateAction, CandidateStatus, ExportTarget, ImportSource, Notice, Phase, Platform, UiEvent};
+use crate::{AccountColor, Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, MAX_IMPORT_BYTES, Outcome, PickedFile, Ports, RestoreMode, VAULT_FILE};
 
 /// 2026-09-21T13:46:40Z: an arbitrary moment well inside a 30-second window.
 const T0: u64 = 1_790_000_000_000;
@@ -590,6 +590,56 @@ async fn files_of_every_kind_are_imported() {
     assert_eq!(h.core.import_commit(&[]).unwrap().added, 3);
     let only_unknown = files.path().join("notes.bin");
     assert_eq!(code_err(h.core.import_files(vec![only_unknown]).await), ErrorCode::ImportEmpty);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_scanned_code_goes_to_the_preview_from_the_camera() {
+    let h = Harness::unlocked().await;
+    h.core.import_scanned(&otpauth("Scanned", "me", "MZXW6YTBOI")).unwrap();
+    // A QR code that holds no account is listed as one the import cannot take; a QR code is one
+    // piece of text, so no line is named.
+    h.core.import_scanned("https://example.com/").unwrap();
+    let preview = h.core.state().import.unwrap();
+    let found: Vec<(&str, &ImportSource, Option<u32>, bool)> =
+        preview.candidates.iter().map(|c| (c.issuer.as_str(), &c.source, c.line, matches!(c.status, CandidateStatus::Unsupported { .. }))).collect();
+    assert_eq!(found, [("Scanned", &ImportSource::Camera, None, false), ("", &ImportSource::Camera, None, true)]);
+    // A Google export's codes, scanned one after another, fill one batch.
+    let accounts: Vec<lockra_otp::OtpAuth> = (0..12).map(|n| uri::parse(&otpauth(&format!("G{n}"), "me", "MZXW6YTBOI")).unwrap()).collect();
+    let refs: Vec<&lockra_otp::OtpAuth> = accounts.iter().collect();
+    let codes = lockra_transfer::google::encode(&refs).unwrap();
+    h.core.import_scanned(&codes[0].uri).unwrap();
+    let batch = &h.core.state().import.unwrap().google_batches[0];
+    assert_eq!((batch.received.clone(), batch.missing.clone()), (vec![0], vec![1]));
+    h.core.import_scanned(&codes[1].uri).unwrap();
+    assert!(h.core.state().import.unwrap().google_batches[0].missing.is_empty());
+    assert_eq!(code_err(h.core.import_scanned(" \n")), ErrorCode::ImportEmpty);
+    h.core.lock_vault();
+    assert_eq!(code_err(h.core.import_scanned(&otpauth("Late", "me", "MZXW6YTBOI"))), ErrorCode::Locked);
+}
+
+#[tokio::test(start_paused = true)]
+async fn picked_files_are_read_from_their_bytes() {
+    let mut h = Harness::unlocked().await;
+    let picked = |name: &str, bytes: Vec<u8>| PickedFile { name: name.into(), bytes: Zeroizing::new(bytes) };
+    h.notices();
+    h.core
+        .import_picked(vec![
+            picked("export.png", png_of_qr(&otpauth("Picked", "x", "MZXW6YTBOI"))),
+            picked("cat.bin", b"\x00\x01binary".to_vec()),
+            picked("huge.png", vec![0; usize::try_from(MAX_IMPORT_BYTES).unwrap() + 1]),
+        ])
+        .await
+        .unwrap();
+    let preview = h.core.state().import.unwrap();
+    let found: Vec<(&str, &ImportSource)> = preview.candidates.iter().map(|c| (c.issuer.as_str(), &c.source)).collect();
+    assert_eq!(found, [("Picked", &ImportSource::File { name: "export.png".into() })]);
+    let notices = h.notices();
+    assert!(notices.contains(&Notice::FileUnrecognized { name: "cat.bin".into() }), "{notices:?}");
+    assert!(notices.contains(&Notice::FileUnreadable { name: "huge.png".into() }), "{notices:?}");
+    h.core.import_cancel();
+    assert_eq!(code_err(h.core.import_picked(vec![picked("cat.bin", b"\x00\x01".to_vec())]).await), ErrorCode::ImportEmpty);
+    h.core.lock_vault();
+    assert_eq!(code_err(h.core.import_picked(Vec::new()).await), ErrorCode::Locked);
 }
 
 #[tokio::test(start_paused = true)]

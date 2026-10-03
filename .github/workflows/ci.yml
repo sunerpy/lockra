@@ -530,10 +530,11 @@ jobs:
           retention-days: 3
 
   # The app on a device: the APK the `android` job built runs on an Android 15 emulator (x86_64,
-  # which runs the arm64 code through its ARM translation; KVM on the hosted runner). It installs,
-  # creates a vault, locks when it leaves the screen and unlocks again, with nothing fatal in its
-  # log (.github/scripts/android-device-smoke.sh). The log, the crash buffer, the exit reason and
-  # the UI tree upload either way.
+  # which runs the arm64 code through its ARM translation; KVM on the hosted runner; no camera). It
+  # installs, creates a vault, locks when it leaves the screen and unlocks again, adds an account
+  # and copies its code, and opens the camera's page, with nothing fatal in its log
+  # (.github/scripts/android-device-smoke.sh). The log, the crash buffer, the exit reason and the
+  # UI tree upload either way.
   android-device:
     name: Android (runs on an emulator)
     needs: [android]
@@ -566,7 +567,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           script: .github/scripts/android-device-smoke.sh android-apk device
 
       - name: Upload the device logs

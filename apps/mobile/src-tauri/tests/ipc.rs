@@ -1,21 +1,23 @@
-//! The mobile shell's command layer on Tauri's mock runtime: its commands are names the bridge
-//! knows, a core command runs through `lockra_dispatch` with the core's typed errors, a copied code
-//! goes to the clipboard port, and the code stream subscribes through a channel.
+//! The mobile shell's command layer on Tauri's mock runtime: its commands are the bridge's phone
+//! commands, a core command runs through `lockra_dispatch` with the core's typed errors, a copied
+//! code goes to the clipboard port, the code stream subscribes through a channel, and what the
+//! camera or the photo picker hands over reaches the import.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::sync::Arc;
 
-use lockra_bridge::SHELL_COMMANDS;
+use lockra_bridge::PHONE_COMMANDS;
 use lockra_core::fakes::FakeClipboard;
-use lockra_core::ports::SyncTransport as _;
-use lockra_core::{KdfCost, StorageConfig};
-use lockra_mobile_lib::{COMMANDS, NoSync, ShellOptions, build_app};
+use lockra_core::ports::{PortError, SyncTransport as _};
+use lockra_core::{Core, ErrorCode, KdfCost, PickedFile, StorageConfig};
+use lockra_mobile_lib::scanner::Scan;
+use lockra_mobile_lib::{COMMANDS, NoSync, ShellOptions, build_app, files, scanner};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets};
 use tauri::webview::InvokeRequest;
-use tauri::{App, WebviewWindow, WebviewWindowBuilder};
+use tauri::{App, Manager as _, WebviewWindow, WebviewWindowBuilder};
 use tempfile::TempDir;
 use zeroize::Zeroizing;
 
@@ -23,7 +25,7 @@ const PASSWORD: &str = "correct horse battery";
 
 struct Shell {
     _dir: TempDir,
-    _app: App<MockRuntime>,
+    app: App<MockRuntime>,
     webview: WebviewWindow<MockRuntime>,
     clipboard: Arc<FakeClipboard>,
 }
@@ -43,7 +45,7 @@ fn shell() -> Shell {
     // The setup hook (which starts the core) runs on the first turn of the event loop.
     #[allow(deprecated)]
     app.run_iteration(|_, _| {});
-    Shell { _dir: dir, _app: app, webview, clipboard }
+    Shell { _dir: dir, app, webview, clipboard }
 }
 
 impl Shell {
@@ -63,11 +65,57 @@ impl Shell {
     fn dispatch(&self, command: Value) -> Result<Value, Value> {
         self.invoke("lockra_dispatch", json!({ "command": command }))
     }
+
+    fn core(&self) -> Core {
+        self.app.state::<Core>().inner().clone()
+    }
+
+    fn import(&self) -> Value {
+        self.dispatch(json!({ "command": "app_state" })).unwrap()["import"].clone()
+    }
 }
 
 #[test]
-fn the_shell_registers_only_commands_the_bridge_names() {
-    assert!(COMMANDS.iter().all(|name| SHELL_COMMANDS.contains(name)), "{COMMANDS:?}");
+fn the_shell_registers_the_bridge_s_phone_commands() {
+    assert_eq!(COMMANDS, PHONE_COMMANDS);
+}
+
+#[test]
+fn what_the_camera_ends_with_reaches_the_import() {
+    let shell = shell();
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    let core = shell.core();
+    let uri = "otpauth://totp/Scanned:me?secret=MZXW6YTBOI&issuer=Scanned";
+    assert!(scanner::import(&core, Ok(Scan::Code(Zeroizing::new(uri.into())))).unwrap());
+    assert_eq!(shell.import()["candidates"][0]["source"], json!({ "type": "camera" }));
+    assert!(!scanner::import(&core, Ok(Scan::Left)).unwrap());
+    assert_eq!(scanner::import(&core, Ok(Scan::Denied)).unwrap_err().code, ErrorCode::CameraDenied);
+    assert_eq!(scanner::import(&core, Ok(Scan::NoCamera)).unwrap_err().code, ErrorCode::CameraUnavailable);
+    assert_eq!(scanner::import(&core, Err(PortError("gone".into()))).unwrap_err().code, ErrorCode::CameraUnavailable);
+    // The app left while the camera was open: the vault locks then and there (on the runtime, as
+    // the command runs).
+    assert!(!tauri::async_runtime::block_on(async { scanner::import(&core, Ok(Scan::Away)) }).unwrap());
+    assert_eq!(shell.dispatch(json!({ "command": "app_state" })).unwrap()["phase"], "locked");
+    // This build has no camera, and its command says so.
+    shell.dispatch(json!({ "command": "vault_unlock", "password": PASSWORD })).unwrap();
+    let texts = json!({ "prompt": "Point the camera at a QR code", "cancel": "Cancel" });
+    assert_eq!(shell.invoke("import_scan", texts).unwrap_err(), json!({ "code": "camera_unavailable" }));
+}
+
+#[test]
+fn what_the_photo_picker_hands_over_reaches_the_import() {
+    let shell = shell();
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    let core = shell.core();
+    let list = b"otpauth://totp/Picked:me?secret=MZXW6YTBOI&issuer=Picked\n".to_vec();
+    let picked = vec![PickedFile { name: "codes.txt".into(), bytes: Zeroizing::new(list) }];
+    assert!(tauri::async_runtime::block_on(files::import(&core, Ok(picked))).unwrap());
+    assert_eq!(shell.import()["candidates"][0]["source"], json!({ "type": "file", "name": "codes.txt" }));
+    assert!(!tauri::async_runtime::block_on(files::import(&core, Ok(Vec::new()))).unwrap());
+    assert_eq!(tauri::async_runtime::block_on(files::import(&core, Err(PortError("gone".into())))).unwrap_err().code, ErrorCode::IoFailed);
+    // This build has no picker; and the phone picks images only, for now.
+    assert_eq!(shell.invoke("import_pick_files", json!({ "kind": "images" })).unwrap_err(), json!({ "code": "io_failed" }));
+    assert_eq!(shell.invoke("import_pick_files", json!({ "kind": "any" })).unwrap_err(), json!({ "code": "internal" }));
 }
 
 #[test]

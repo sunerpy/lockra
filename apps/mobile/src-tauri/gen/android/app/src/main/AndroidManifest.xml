@@ -1,9 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The template's, without its Android TV parts (the leanback feature and launcher
-         category): Lockra is a phone app; and the activity resizes for the keyboard
-         (MainActivity.kt). Keep it so when regenerating the project. -->
+         category): Lockra is a phone app; the activity resizes for the keyboard
+         (MainActivity.kt); and the camera, asked for only when a scan starts, with its page
+         (ScannerActivity.kt). Keep it so when regenerating the project. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- A phone without a camera still installs Lockra: it imports from images and links. -->
+    <uses-feature android:name="android.hardware.camera.any" android:required="false" />
 
     <application
         android:icon="@mipmap/ic_launcher"
@@ -22,6 +26,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".ScannerActivity"
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:theme="@style/Theme.lockra_mobile" />
 
         <provider
           android:name="androidx.core.content.FileProvider"

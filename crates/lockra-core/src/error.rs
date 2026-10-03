@@ -62,6 +62,10 @@ pub enum ErrorCode {
     ClipboardEmpty,
     /// The clipboard could not be read or written.
     ClipboardFailed,
+    /// The camera may not be used: the permission was refused.
+    CameraDenied,
+    /// There is no camera to scan with, or it could not be opened.
+    CameraUnavailable,
     /// The export session expired or was closed.
     ExportExpired,
     /// None of the chosen entries can go to that target.

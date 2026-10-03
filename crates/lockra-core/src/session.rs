@@ -869,6 +869,32 @@ impl Core {
     pub async fn import_files(&self, paths: Vec<PathBuf>) -> CoreResult<()> {
         self.ensure_unlocked()?;
         let found = blocking(move || Ok(read_import_files(&paths))).await?;
+        self.stage_files(found)
+    }
+
+    /// Read files picked on the phone into the import preview, as `import_files` reads picked
+    /// or dropped ones: the photo picker hands over their bytes, not a path.
+    pub async fn import_picked(&self, files: Vec<PickedFile>) -> CoreResult<()> {
+        self.ensure_unlocked()?;
+        let found = blocking(move || {
+            let mut notices = Vec::new();
+            let mut read = Vec::new();
+            for file in files {
+                if file.bytes.len() as u64 > MAX_IMPORT_BYTES {
+                    notices.push(Notice::FileUnreadable { name: file.name });
+                } else {
+                    read.push((file.name, file.bytes));
+                }
+            }
+            Ok(read_import_bytes(read, notices))
+        })
+        .await?;
+        self.stage_files(found)
+    }
+
+    /// What files held, into the import preview with their notices; `ImportEmpty` when nothing
+    /// was there before and none of them holds anything.
+    fn stage_files(&self, found: FoundFiles) -> CoreResult<()> {
         let mut notices = found.notices;
         {
             let mut st = self.lock();
@@ -914,6 +940,20 @@ impl Core {
         .await?;
         if batches.is_empty() {
             return Err(ErrorCode::ClipboardEmpty.into());
+        }
+        self.stage(batches)
+    }
+
+    /// Read a QR code the phone's camera scanned into the import preview. A QR code is one piece
+    /// of text: the line an account came from means nothing there.
+    pub fn import_scanned(&self, text: &str) -> CoreResult<()> {
+        self.ensure_unlocked()?;
+        let mut batches = text_batches(&ImportSource::Camera, text);
+        for batch in &mut batches {
+            batch.forget_lines();
+        }
+        if batches.is_empty() {
+            return Err(ErrorCode::ImportEmpty.into());
         }
         self.stage(batches)
     }
@@ -2153,6 +2193,24 @@ impl Batch {
             Self::Google { source, batch, items } => import.add_google(&source, batch, items),
         }
     }
+
+    /// The items name no line of their source.
+    fn forget_lines(&mut self) {
+        let (Self::Items { items, .. } | Self::Google { items, .. }) = self;
+        for item in items {
+            if let Item::Rejected { line, .. } = item {
+                *line = None;
+            }
+        }
+    }
+}
+
+/// A file picked on the phone: its name and what it holds.
+pub struct PickedFile {
+    /// The file name, without its directory.
+    pub name: String,
+    /// The file's bytes.
+    pub bytes: Zeroizing<Vec<u8>>,
 }
 
 struct FoundFiles {
@@ -2172,18 +2230,28 @@ fn text_batches(source: &ImportSource, text: &str) -> Vec<Batch> {
 }
 
 fn read_import_files(paths: &[PathBuf]) -> FoundFiles {
-    let mut found = FoundFiles { batches: Vec::new(), awaiting: None, notices: Vec::new() };
-    let mut files: Vec<(String, Zeroizing<Vec<u8>>, detect::Kind)> = Vec::new();
+    let mut notices = Vec::new();
+    let mut read = Vec::new();
     for path in paths {
         let name = file_name(path);
         match read_limited(path) {
-            Ok(bytes) => {
-                let kind = detect::detect(&bytes);
-                files.push((name, Zeroizing::new(bytes), kind));
-            }
-            Err(_) => found.notices.push(Notice::FileUnreadable { name }),
+            Ok(bytes) => read.push((name, Zeroizing::new(bytes))),
+            Err(_) => notices.push(Notice::FileUnreadable { name }),
         }
     }
+    read_import_bytes(read, notices)
+}
+
+/// What the files hold, by what their bytes are; `notices` already says which could not be read.
+fn read_import_bytes(read: Vec<(String, Zeroizing<Vec<u8>>)>, notices: Vec<Notice>) -> FoundFiles {
+    let mut found = FoundFiles { batches: Vec::new(), awaiting: None, notices };
+    let files: Vec<(String, Zeroizing<Vec<u8>>, detect::Kind)> = read
+        .into_iter()
+        .map(|(name, bytes)| {
+            let kind = detect::detect(&bytes);
+            (name, bytes, kind)
+        })
+        .collect();
     let wals: Vec<usize> = files.iter().enumerate().filter(|(_, f)| f.2 == detect::Kind::SqliteWal).map(|(i, _)| i).collect();
     let mut used_wals: Vec<usize> = Vec::new();
     for (name, bytes, kind) in &files {

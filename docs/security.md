@@ -79,7 +79,11 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   the recent apps); a copied code goes on marked `EXTRA_IS_SENSITIVE` (the paste preview and the
   keyboards' clipboard history leave it out) and comes off after the configured time only while the
   clipboard still holds it; the vault locks as soon as the app leaves the screen. It has no
-  keychain yet, so no "Remember on this device".
+  keychain yet, so no "Remember on this device". The camera's page is `FLAG_SECURE` too, and what
+  it reads, like the photos picked, goes to the import preview in Rust and never to the webview.
+  Leaving the app from the camera's page locks the vault at once; the system photo picker runs in
+  another app that Lockra cannot watch, so the vault stays unlocked behind it until the auto-lock
+  time.
 
 ## Updates
 

@@ -5,6 +5,7 @@ import { ipcFixtures } from "./fixtures";
 import {
   COMMAND_NAMES,
   RESULT_SCHEMAS,
+  PHONE_COMMAND_NAMES,
   SHELL_COMMAND_NAMES,
   codesFrameSchema,
   coreErrorSchema,
@@ -45,7 +46,11 @@ describe("IPC fixtures", () => {
       ([, state]) => !uiStateSchema.safeParse(state).success,
     );
     expect(failures.map(([name]) => name)).toEqual([]);
-    expect(uiStateSchema.parse(ipcFixtures.state.unlocked).import?.candidates).toHaveLength(7);
+    const candidates = uiStateSchema.parse(ipcFixtures.state.unlocked).import?.candidates;
+    expect(candidates).toHaveLength(8);
+    expect(candidates?.map((c) => c.source.type)).toEqual(
+      expect.arrayContaining(["file", "text", "clipboard", "camera"]),
+    );
   });
 
   it("every event parses and every notice kind appears", () => {
@@ -115,6 +120,7 @@ describe("IPC fixtures", () => {
     const names = ipcFixtures.commands.commands.map((c) => c.command);
     expect(names).toEqual(COMMAND_NAMES);
     expect(ipcFixtures.commands.shell_commands).toEqual([...SHELL_COMMAND_NAMES]);
+    expect(ipcFixtures.commands.phone_commands).toEqual([...PHONE_COMMAND_NAMES]);
     const failures = ipcFixtures.commands.commands.filter(
       (command) => !uiCommandSchema.safeParse(command).success,
     );

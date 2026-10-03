@@ -2724,9 +2724,11 @@ dependencies = [
 name = "lockra-mobile"
 version = "0.0.0"
 dependencies = [
+ "data-encoding",
  "lockra-bridge",
  "lockra-core",
  "lockra-vault",
+ "serde",
  "serde_json",
  "tao",
  "tauri",

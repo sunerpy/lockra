@@ -51,6 +51,7 @@ describe("labels", () => {
     expect(
       candidateSource(en, { ...base, source: { type: "file", name: "codes.png" }, line: null }),
     ).toBe("codes.png");
+    expect(candidateSource(zh, { ...base, source: { type: "camera" }, line: null })).toBe("相机");
   });
 
   it("every code has words in both languages", () => {

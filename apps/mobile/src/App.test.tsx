@@ -39,7 +39,7 @@ describe("the phone app", () => {
     });
     expect(screen.getByText("还没有账号")).toBeInTheDocument();
     expect(
-      screen.getByText("点按 + 添加：粘贴 otpauth 链接、从剪贴板导入，或手动输入密钥。"),
+      screen.getByText("点按 + 添加：扫描二维码、读取截图、粘贴 otpauth 链接，或手动输入密钥。"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "添加账号" })).toBeInTheDocument();
   });

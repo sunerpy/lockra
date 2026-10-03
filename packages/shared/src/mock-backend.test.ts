@@ -227,6 +227,18 @@ describe("MockBackend", () => {
     expect((await backend.getState()).import).toBeNull();
   });
 
+  it("scans with the camera into the preview, or says why it could not", async () => {
+    const TEXTS = { prompt: "Point at a code", cancel: "Cancel" };
+    const backend = new MockBackend({ phase: "unlocked" });
+    expect(await backend.scanImport(TEXTS)).toBe(false);
+    backend.setScan("otpauth://totp/Cam:era?secret=MFRGGZDF");
+    expect(await backend.scanImport(TEXTS)).toBe(true);
+    const preview = (await backend.getState()).import;
+    expect(preview?.candidates.map((c) => [c.issuer, c.source.type])).toEqual([["Cam", "camera"]]);
+    backend.setScan({ error: "camera_denied" });
+    expect(await errorCode(backend.scanImport(TEXTS))).toBe("camera_denied");
+  });
+
   it("backs up and restores", async () => {
     const backend = new MockBackend({ entries: sampleEntries().slice(0, 2) });
     const { notices } = recorder(backend);
