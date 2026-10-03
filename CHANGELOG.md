@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.7.0](https://github.com/sunerpy/lockra/compare/v0.6.0...v0.7.0) (2026-10-03)
+
+
+### Features
+
+* **mobile:** 增加 Android 应用骨架 ([#31](https://github.com/sunerpy/lockra/issues/31)) ([9c4786d](https://github.com/sunerpy/lockra/commit/9c4786d32ea35bedb962daccc9f707465aa3dd45))
+* **mobile:** 手机端保存备份与从备份恢复 ([#36](https://github.com/sunerpy/lockra/issues/36)) ([8405df3](https://github.com/sunerpy/lockra/commit/8405df308130aa2892dd4b334298f415a17dc588))
+* **mobile:** 手机端同步 ([#39](https://github.com/sunerpy/lockra/issues/39)) ([b1aed14](https://github.com/sunerpy/lockra/commit/b1aed14bb5f0ef82dc57a44077452f0f5d5e2e65))
+* **mobile:** 手机端导出账号到其他验证器 ([#37](https://github.com/sunerpy/lockra/issues/37)) ([709a5d3](https://github.com/sunerpy/lockra/commit/709a5d38efa16d23c67b60cd1fb2897b807f8f03))
+* **mobile:** 手机端手动检查更新 ([#42](https://github.com/sunerpy/lockra/issues/42)) ([bea4200](https://github.com/sunerpy/lockra/commit/bea4200cf440afa47b46e81eb7e7762e8bfae789))
+* **mobile:** 手机端添加、编辑与删除账号 ([#33](https://github.com/sunerpy/lockra/issues/33)) ([1f3cc2a](https://github.com/sunerpy/lockra/commit/1f3cc2ab1998cd42123897b0e1094e76886ff5a2))
+* **mobile:** 手机端用指纹解锁 ([#38](https://github.com/sunerpy/lockra/issues/38)) ([389776e](https://github.com/sunerpy/lockra/commit/389776e25c274150b2f05101e1426f323fb6a725))
+* **mobile:** 手机端设置页与从文件导入 ([#35](https://github.com/sunerpy/lockra/issues/35)) ([3409610](https://github.com/sunerpy/lockra/commit/3409610c3fce02b0df91e70d8d55e84e4dfc553a))
+* **mobile:** 用相机扫码或从照片读取二维码导入账号 ([#34](https://github.com/sunerpy/lockra/issues/34)) ([809d155](https://github.com/sunerpy/lockra/commit/809d155875aa119ac298fcd0fec4f234a242be28))
+* **unlock:** 可把 Touch ID、Windows Hello 或指纹设为默认解锁方式 ([#41](https://github.com/sunerpy/lockra/issues/41)) ([78a7151](https://github.com/sunerpy/lockra/commit/78a715182287374f7fd0a1f3fce9746dfe076b7f))
+
+
+### Bug Fixes
+
+* **mobile:** 手机端的平台识别为 Android ([#44](https://github.com/sunerpy/lockra/issues/44)) ([61473c6](https://github.com/sunerpy/lockra/commit/61473c637ebdf941288d02db0e6eb7ca8568ca7d))
+
 ## [0.6.0](https://github.com/sunerpy/lockra/compare/v0.5.1...v0.6.0) (2026-10-02)
 
 
