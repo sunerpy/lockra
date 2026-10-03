@@ -89,6 +89,23 @@ The AppImage runs without installing: make it executable and start it. Lockra ne
 which the deb and rpm packages pull in. To use **Remember on this device**, the desktop needs a
 Secret Service keychain such as GNOME Keyring or KWallet.
 
+## Android
+
+<StatusTag status="building" />
+
+From the Android app's first release, every release also carries
+`Lockra_<version>_android_arm64.apk`, for ARM64 phones with Android 8 or later. Download it on the
+phone from the [releases page](https://github.com/sunerpy/lockra/releases) and open it; the first
+time, Android asks whether the browser or the file manager that opens it may install apps. A newer
+APK from the releases page installs over the app and keeps its vault.
+
+Check the APK like any other download, with `SHA256SUMS` and
+`gh attestation verify Lockra_*_android_arm64.apk --repo sunerpy/lockra`. It is signed with
+Lockra's Android key: with the Android SDK's build tools,
+`apksigner verify --print-certs Lockra_*_android_arm64.apk` shows the certificate's SHA-256,
+`5ac2ccffe00d12e80d13dbfc23425cd3b89eec77cd5d21adda4fdac1cf4dcc28`. Android refuses to update the app with an APK signed by any other
+key.
+
 ## Next steps
 
 [Quick start](/guide/quick-start) creates the vault and brings in your first accounts.

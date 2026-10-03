@@ -34,6 +34,16 @@ There is no Lockra account, no Lockra server, no crash report and no telemetry. 
 icons ship inside the app. Accounts leave the device only when you export them, save a backup to a
 place that synchronises, or sync them, encrypted, through your storage.
 
+## On Android
+
+<StatusTag status="building" />
+
+The Android app keeps the vault and its settings in its private folder, which Android's backup and
+device transfer leave out, and the key for **Unlock with fingerprint** in the phone's secure
+hardware. It sends what a computer sends, with one difference: it checks for updates only when you
+tap **Check for updates**, and downloads nothing itself, since a newer release's page opens in
+your browser.
+
 ## The clipboard and the screen
 
 Copied codes go to the system clipboard, where other apps can read them until Lockra clears it.
