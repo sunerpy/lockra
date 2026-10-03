@@ -10,13 +10,10 @@ accounts from and to Google Authenticator and Microsoft Authenticator, otpauth l
 encrypted and automatic backups, end-to-end encrypted [sync between devices](/backup/sync) through
 storage of your own, protection for the vault (with Touch ID or Windows Hello where the computer
 has it), the clipboard and the screen, and signed in-app updates with a one-line install for every
-platform. Suggestions are welcome in the [issue tracker](https://github.com/sunerpy/lockra/issues).
-
-## In progress
-
-- **An Android app** <StatusTag status="building" />: the same vault on the phone, scanning QR codes
-  with the camera or from screenshots, unlocking with a fingerprint, and syncing with your other
-  devices.
+platform. From version 0.7.0 there is an [Android app](/reference/platforms#android) too: the same
+vault on the phone, scanning QR codes with the camera or from screenshots, unlocking with a
+fingerprint, and syncing with your other devices. Suggestions are welcome in the
+[issue tracker](https://github.com/sunerpy/lockra/issues).
 
 ## Deliberately left out
 

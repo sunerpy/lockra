@@ -177,7 +177,7 @@ home:
 
   platforms:
     title: 支持平台
-    intro: Lockra 在 Windows、macOS 和 Linux 上是同一个应用，Android 应用正在开发中。平台说明列出了它们之间的差异。
+    intro: Lockra 在 Windows、macOS、Linux 和 Android 手机上是同一个应用。平台说明列出了它们之间的差异。
     columns: [平台, 安装包, 在本机记住, 显示密钥时阻止截屏]
     rows:
       - name: Windows 10 和 11
@@ -199,7 +199,7 @@ home:
           - Secret Service（GNOME 钥匙圈、KWallet）
           - 否
       - name: Android 8 及以上
-        status: building
+        status: available
         cells:
           - ARM64 的 APK
           - 仅配合指纹解锁

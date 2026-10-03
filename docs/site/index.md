@@ -177,7 +177,7 @@ home:
 
   platforms:
     title: Platforms
-    intro: Lockra is the same app on Windows, macOS and Linux, and an Android app is being built. The platform notes list what differs between them.
+    intro: Lockra is the same app on Windows, macOS and Linux, and on Android phones. The platform notes list what differs between them.
     columns: [Platform, Packages, Remember on this device, Blocks screenshots of secrets]
     rows:
       - name: Windows 10 and 11
@@ -199,7 +199,7 @@ home:
           - Secret Service (GNOME Keyring, KWallet)
           - "No"
       - name: Android 8 or later
-        status: building
+        status: available
         cells:
           - An APK for ARM64
           - With the fingerprint only

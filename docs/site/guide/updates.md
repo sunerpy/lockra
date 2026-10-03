@@ -55,7 +55,7 @@ set up, Lockra makes no network connections.
 
 ### On Android
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.0.
 
 The Android app does not update itself. **Settings › About › Check for updates** asks GitHub for
 the newest version when you tap it; when a newer one is out, **Open the release page** opens it in

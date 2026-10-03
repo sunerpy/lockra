@@ -36,7 +36,7 @@ place that synchronises, or sync them, encrypted, through your storage.
 
 ## On Android
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.0.
 
 The Android app keeps the vault and its settings in its private folder, which Android's backup and
 device transfer leave out, and the key for **Unlock with fingerprint** in the phone's secure

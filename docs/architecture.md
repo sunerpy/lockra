@@ -1,7 +1,7 @@
 # Lockra architecture
 
 Lockra is a desktop TOTP/HOTP authenticator: a Rust core in a Tauri 2 shell, with a React
-webview for the interface; an Android app on the same core is in progress (below, "The phone
+webview for the interface; an Android app on the same core ships from 0.7.0 (below, "The phone
 shell"). Read this first; `docs/formats.md` has the file formats,
 `docs/security.md` the security model and `DESIGN.md` the design system.
 
@@ -24,7 +24,7 @@ apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
                    screen-capture protection, single instance).
   src/             The React app: shell, pages, dialogs.
-apps/mobile/       The Android app, not released yet.
+apps/mobile/       The Android app (from 0.7.0).
   src-tauri/       lockra-mobile: the phone's Tauri shell; gen/android is its Gradle project, with
                    a Kotlin class per native capability.
   src/             The React phone app: create or unlock the vault, the codes, adding accounts
@@ -102,7 +102,7 @@ representative states, events, commands and answers into `packages/shared/src/fi
 
 ## The phone shell
 
-`apps/mobile` is the Android app, in progress and not released yet. `lockra-mobile` (a `staticlib`,
+`apps/mobile` is the Android app, released from 0.7.0. `lockra-mobile` (a `staticlib`,
 `cdylib` and `rlib`, Tauri without its desktop features) starts the same core with the phone's ports
 and registers lockra-bridge's `PHONE_COMMANDS`: `lockra_dispatch`, `codes_subscribe`,
 `codes_unsubscribe`, `import_pick_files` (images with the photo picker, any other file with the

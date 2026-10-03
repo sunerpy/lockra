@@ -80,7 +80,7 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
 - The vault locks after the configured idle time and on demand (Ctrl+L); locking drops the
   decrypted entries, the import preview and every export session.
 - One process at a time writes the vault (single instance: a second start focuses the first).
-- The Android app (`apps/mobile`, in progress and not released) keeps these rules with the phone's
+- The Android app (`apps/mobile`, from 0.7.0) keeps these rules with the phone's
   means: its window is always `FLAG_SECURE` (no screenshots or screen recording, a blank card among
   the recent apps); a copied code goes on marked `EXTRA_IS_SENSITIVE` (the paste preview and the
   keyboards' clipboard history leave it out) and comes off after the configured time only while the

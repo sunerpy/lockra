@@ -11,7 +11,7 @@ How to work in this repository, for coding agents and people alike.
   sync: keyring, device snapshots, merge; no I/O) and `lockra-remote` (its S3 and WebDAV storage).
 - `apps/desktop` — the React app (`src/`) and the Tauri 2 shell (`src-tauri/`, crate
   `lockra-desktop`).
-- `apps/mobile` — the Android app, not released yet: the React phone app (`src/`) and its Tauri 2
+- `apps/mobile` — the Android app (released from 0.7.0): the React phone app (`src/`) and its Tauri 2
   shell (`src-tauri/`, crate `lockra-mobile`; `gen/android` is the Gradle project with the Kotlin
   plugins, generated once and then kept).
 - `packages/shared` (zod contract, backends, i18n, labels), `packages/ui` (design system).

@@ -34,7 +34,7 @@ service says otherwise, open **Advanced** and choose:
 
 ## On Android
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.0.
 
 On the phone, **Add** offers **Scan a QR code** (the camera), **Read from photos** (screenshots or
 photos of QR codes), **Import from files**, **Paste links**, **Import from the clipboard** and
