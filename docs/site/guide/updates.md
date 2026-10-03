@@ -50,8 +50,17 @@ well: turn on **Automatic updates** again if you want them.
 A check asks GitHub, where Lockra is released, for a short file that names the newest version; a
 download fetches the package from the same release. Nothing from your accounts, your vault or your
 settings goes with either request. GitHub sees the request and the address it came from, as for
-any download. Apart from checking for and downloading updates, Lockra makes no network
-connections.
+any download. Apart from checking for and downloading updates, and the [sync](/backup/sync) you
+set up, Lockra makes no network connections.
+
+### On Android
+
+<StatusTag status="building" />
+
+The Android app does not update itself. **Settings › About › Check for updates** asks GitHub for
+the newest version when you tap it; when a newer one is out, **Open the release page** opens it in
+the phone's browser, and the APK there installs over the app and keeps the vault. The phone never
+checks on its own. Uninstalling the app deletes its vault, so save a backup first.
 
 ## Where the files are
 
