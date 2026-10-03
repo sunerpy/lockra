@@ -156,9 +156,16 @@ fn a_backup_goes_out_and_comes_back_through_the_file_picker() {
     let state = shell.dispatch(json!({ "command": "app_state" })).unwrap();
     assert_eq!(state["restore"]["file_name"], "lockra-backup.lockrabackup");
     assert!(!tauri::async_runtime::block_on(files::restore(&core, Ok(None))).unwrap());
-    // This build has no file picker, and the commands say so.
+    // This build has no file picker, and the commands say so; a list's password is checked first.
     assert_eq!(shell.invoke("backup_save", json!({ "separatePassword": null })).unwrap_err(), json!({ "code": "io_failed" }));
     assert_eq!(shell.invoke("restore_pick", json!({})).unwrap_err(), json!({ "code": "io_failed" }));
+    let state = shell.dispatch(json!({ "command": "app_state" })).unwrap();
+    let id = state["entries"][0]["id"].clone();
+    let list = |password: &str| shell.invoke("export_otpauth_file", json!({ "entryIds": [id.clone()], "password": password }));
+    assert_eq!(list("wrong password").unwrap_err(), json!({ "code": "wrong_password" }));
+    assert_eq!(list(PASSWORD).unwrap_err(), json!({ "code": "io_failed" }));
+    assert_eq!(files::listed(Ok(Some(files::LIST_NAME.into()))).unwrap().as_deref(), Some(files::LIST_NAME));
+    assert_eq!(files::listed(Ok(None)).unwrap(), None);
 }
 
 #[test]

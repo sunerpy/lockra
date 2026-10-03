@@ -2,6 +2,7 @@
 // on top. Every page opened adds a history entry that records how deep it is, so the phone's back
 // gesture (the shell goes back in the webview's history) and the page's own back button close the
 // top page the same way, and going back several entries at once closes as many pages.
+import type { ExportStarted } from "@lockra/shared";
 import {
   type ReactNode,
   createContext,
@@ -21,6 +22,8 @@ export type Route =
   | { name: "password" }
   | { name: "backup" }
   | { name: "restore" }
+  | { name: "export" }
+  | { name: "exportView"; started: ExportStarted }
   | { name: "account"; id: string }
   | { name: "edit"; id: string }
   | { name: "reveal"; id: string };

@@ -1,10 +1,27 @@
 // The code list's logic, shared by the desktop and the phone: the order, the search, the sections
-// of groups, the groups in use, an account's avatar text cut to its length, and the kind a form's
-// fields describe.
-import { type EntryView, MARK_CHARS, type OtpKind, type SortOrder } from "./schema";
+// of groups, the groups in use, an account's avatar text cut to its length, the kind a form's
+// fields describe, and where an account can be exported.
+import {
+  type EntryView,
+  type ExportTarget,
+  MARK_CHARS,
+  type OtpKind,
+  type SortOrder,
+} from "./schema";
 
 /** How long a revealed secret (an account's, the sync key, an invitation) stays on screen. */
 export const REVEAL_SECONDS = 120;
+
+/** lockra-core `EXPORT_IDLE`: an export page stays up this long after it was shown. */
+export const EXPORT_SECONDS = 120;
+
+/** Where accounts go out: another authenticator's QR codes, or a plain otpauth list file. */
+export type ExportWay = ExportTarget | "file";
+
+/** Why `entry` cannot go to `way`, or `null` when it can (a file takes every account). */
+export function exportBlocker(entry: EntryView, way: ExportWay): EntryView["export"]["google"] {
+  return way === "file" ? null : entry.export[way];
+}
 
 /** The group menu's "all groups". */
 export const ALL_GROUPS = "";

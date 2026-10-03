@@ -182,6 +182,14 @@ export function Settings() {
               onClick={() => void pickRestore()}
               testId="settings-restore"
             />
+            <ActionRow
+              icon="qr"
+              label={t("export.title")}
+              hint={t("export.subtitle")}
+              opensPage
+              onClick={() => nav.open({ name: "export" })}
+              testId="settings-export"
+            />
           </div>
         </Section>
         <Section title={t("settings.section.about")}>

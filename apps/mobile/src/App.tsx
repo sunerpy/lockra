@@ -21,6 +21,8 @@ import { Add } from "./screens/Add";
 import { Backup } from "./screens/Backup";
 import { Codes } from "./screens/Codes";
 import { Edit } from "./screens/Edit";
+import { Export } from "./screens/Export";
+import { ExportView } from "./screens/ExportView";
 import { Manual } from "./screens/Manual";
 import { Password } from "./screens/Password";
 import { Preview } from "./screens/Preview";
@@ -86,6 +88,11 @@ function Pages() {
       void backend.dispatch({ command: "import_cancel" }).catch(() => undefined);
     if (was?.name === "restore" && restore !== null && route?.name !== "preview")
       void backend.dispatch({ command: "restore_cancel" }).catch(() => undefined);
+    // An export's codes go with their page: the session closes however the page is left.
+    if (was?.name === "exportView")
+      void backend
+        .dispatch({ command: "export_close", session: was.started.session })
+        .catch(() => undefined);
   }, [route, pending, restore, backend]);
   const id = route !== undefined && "id" in route ? route.id : undefined;
   const entry = id === undefined ? undefined : entries.find((e) => e.id === id);
@@ -128,6 +135,10 @@ function Pages() {
       return <Backup />;
     case "restore":
       return restore ? <Restore restore={restore} /> : null;
+    case "export":
+      return <Export />;
+    case "exportView":
+      return <ExportView started={route.started} />;
     case "account":
       return entry ? <Account entry={entry} /> : null;
     case "edit":

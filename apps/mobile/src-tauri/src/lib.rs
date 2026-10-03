@@ -27,7 +27,8 @@ use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
 use zeroize::Zeroizing;
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
-pub const COMMANDS: [&str; 7] = ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan", "backup_save", "restore_pick"];
+pub const COMMANDS: [&str; 8] =
+    ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan", "backup_save", "restore_pick", "export_otpauth_file"];
 
 /// What the shell wires into the core; tests replace the platform parts with fakes.
 pub struct ShellOptions {
@@ -123,6 +124,23 @@ async fn restore_pick<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> R
     files::restore(&core, picked).await
 }
 
+/// Save `entry_ids` as a plain otpauth list where the user picks, after the master password was
+/// checked (before the picker opens); the file's name, or `None` when the picker was left.
+#[tauri::command]
+async fn export_otpauth_file<R: Runtime>(
+    app: AppHandle<R>,
+    core: State<'_, Core>,
+    entry_ids: Vec<uuid::Uuid>,
+    password: Zeroizing<String>,
+) -> Result<Option<String>, CoreError> {
+    let list = core.export_otpauth_text(&entry_ids, password).await?;
+    let picker = files::Files::new(app);
+    let saved = tauri::async_runtime::spawn_blocking(move || picker.save(files::LIST_NAME, files::LIST_MIME, list.as_bytes()))
+        .await
+        .map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    files::listed(saved)
+}
+
 /// Scan a QR code with the camera into the import preview; `false` when left without one.
 /// `prompt` and `cancel` are the camera page's words, in the webview's language.
 #[tauri::command]
@@ -165,7 +183,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             import_pick_files,
             import_scan,
             backup_save,
-            restore_pick
+            restore_pick,
+            export_otpauth_file
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {

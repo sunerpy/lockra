@@ -1092,6 +1092,17 @@ impl Core {
 
     /// Write `entry_ids` as a plain `otpauth://` list to `path` (the user confirmed it is plaintext).
     pub async fn export_otpauth_file(&self, entry_ids: &[Uuid], password: Zeroizing<String>, path: PathBuf) -> CoreResult<String> {
+        let list = self.export_otpauth_text(entry_ids, password).await?;
+        blocking(move || {
+            write_private(&path, list.as_bytes())?;
+            Ok(file_name(&path))
+        })
+        .await
+    }
+
+    /// `entry_ids` as a plain `otpauth://` list, after checking the master password, for a shell
+    /// that saves files itself (the phone's file picker).
+    pub async fn export_otpauth_text(&self, entry_ids: &[Uuid], password: Zeroizing<String>) -> CoreResult<Zeroizing<String>> {
         let (sealed, auths) = {
             let st = self.lock();
             let session = unlocked(&st)?;
@@ -1104,8 +1115,7 @@ impl Core {
         blocking(move || {
             sealed.verify_password(password.as_bytes())?;
             let refs: Vec<&lockra_otp::OtpAuth> = auths.iter().collect();
-            write_private(&path, text::write(&refs).as_bytes())?;
-            Ok(file_name(&path))
+            Ok(text::write(&refs))
         })
         .await
     }
