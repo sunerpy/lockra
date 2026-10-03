@@ -25,6 +25,7 @@ import {
 } from "@lockra/ui";
 import { useState } from "react";
 import { useNav } from "../app/nav";
+import { usePhoneImport } from "../app/phone-import";
 import { Page } from "../components/Page";
 
 const STATUS_TONE: Record<CandidateStatus["type"], BadgeTone> = {
@@ -39,6 +40,7 @@ export function Preview({ view }: { view: ImportView }) {
   const t = useT();
   const nav = useNav();
   const dispatch = useDispatch();
+  const { scan } = usePhoneImport();
   const [chosen, setChosen] = useState<ReadonlyMap<number, CandidateAction>>(new Map());
   const choices = importChoices(view, chosen);
   const taken = takenCount(choices);
@@ -55,6 +57,12 @@ export function Preview({ view }: { view: ImportView }) {
               ` · ${t("import.preview.googleMissing", { missing: batch.missing.map((i) => i + 1).join(", ") })}`}
           </Banner>
         ))}
+        {/* A Google export of several codes: the rest join this preview as they are scanned. */}
+        {view.google_batches.some((batch) => batch.missing.length > 0) && (
+          <Button size="lg" icon="scan" onClick={() => void scan()} data-testid="preview-scan">
+            {t("mobile.scan.next")}
+          </Button>
+        )}
         <ul className="flex flex-col gap-2" aria-label={t("import.preview.title")}>
           {view.candidates.map((candidate) => (
             <Candidate

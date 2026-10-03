@@ -377,6 +377,26 @@
           "status": {
             "type": "new"
           }
+        },
+        {
+          "account": "me@example.com",
+          "algorithm": "sha1",
+          "default_action": "add",
+          "digits": 6,
+          "id": 7,
+          "issuer": "Cloud",
+          "kind": {
+            "period": 30,
+            "type": "totp"
+          },
+          "line": null,
+          "origin": "google",
+          "source": {
+            "type": "camera"
+          },
+          "status": {
+            "type": "new"
+          }
         }
       ],
       "google_batches": [

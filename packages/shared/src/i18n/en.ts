@@ -115,15 +115,23 @@ export const en: Messages = {
   },
   mobile: {
     emptyBody:
-      "Tap + to add one: paste otpauth links, import them from the clipboard or type the secret in.",
+      "Tap + to add one: scan a QR code, read a screenshot, paste otpauth links or type the secret in.",
     add: {
       title: "Add an account",
+      scan: "Scan a QR code",
+      scanHint: "Read a QR code with the camera, such as a Google Authenticator export",
+      images: "Read from photos",
+      imagesHint: "Pick screenshots or photos of QR codes",
       links: "Paste links",
       linksBody: "Paste one or more otpauth:// links, one per line.",
       clipboardHint: "Reads the otpauth links on the clipboard",
       manualHint: "Type in the service's name and secret",
     },
     groupSuggestions: "Groups in use",
+    scan: {
+      prompt: "Point the camera at a QR code",
+      next: "Scan the next code",
+    },
   },
   palette: {
     group: { accounts: "Accounts", pages: "Pages", actions: "Actions" },
@@ -337,6 +345,7 @@ export const en: Messages = {
       line: "line {n}",
       sourceClipboard: "Clipboard",
       sourceText: "Pasted text",
+      sourceCamera: "Camera",
       commit: { one: "Import {n} account", other: "Import {n} accounts" },
       cancel: "Discard this import",
       googleBatch: "Google export: {received} of {size} codes received",
@@ -682,6 +691,9 @@ export const en: Messages = {
     import_unreadable: "This file cannot be read",
     clipboard_empty: "The clipboard holds no QR code and no otpauth link",
     clipboard_failed: "The clipboard cannot be accessed",
+    camera_denied:
+      "Lockra may not use the camera: allow it in the system settings, then scan again",
+    camera_unavailable: "The camera cannot be opened",
     export_expired: "The codes expired; show them again",
     export_nothing: "None of the chosen accounts can go here",
     no_restore: "No backup file is open",

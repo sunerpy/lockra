@@ -188,6 +188,7 @@ export const importSourceSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("file"), name: z.string() }),
   z.object({ type: z.literal("clipboard") }),
   z.object({ type: z.literal("text") }),
+  z.object({ type: z.literal("camera") }),
 ]);
 export type ImportSource = z.infer<typeof importSourceSchema>;
 
@@ -263,6 +264,8 @@ export const ERROR_CODES = [
   "import_unreadable",
   "clipboard_empty",
   "clipboard_failed",
+  "camera_denied",
+  "camera_unavailable",
   "export_expired",
   "export_nothing",
   "no_restore",
@@ -699,6 +702,15 @@ export const SHELL_COMMAND_NAMES = [
   "backup_pick_dir",
   "restore_pick",
   "export_otpauth_file",
+] as const;
+
+/** The phone shell's own Tauri commands (lockra-bridge `PHONE_COMMANDS`). */
+export const PHONE_COMMAND_NAMES = [
+  "lockra_dispatch",
+  "codes_subscribe",
+  "codes_unsubscribe",
+  "import_pick_files",
+  "import_scan",
 ] as const;
 
 /** Commands that answer with something other than `null`. */

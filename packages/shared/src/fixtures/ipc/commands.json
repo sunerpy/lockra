@@ -245,6 +245,13 @@
       "command": "sync_disable"
     }
   ],
+  "phone_commands": [
+    "lockra_dispatch",
+    "codes_subscribe",
+    "codes_unsubscribe",
+    "import_pick_files",
+    "import_scan"
+  ],
   "shell_commands": [
     "lockra_dispatch",
     "codes_subscribe",

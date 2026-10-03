@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use lockra_bridge::{COMMANDS, SHELL_COMMANDS, UiCommand, dispatch};
+use lockra_bridge::{COMMANDS, PHONE_COMMANDS, SHELL_COMMANDS, UiCommand, dispatch};
 use lockra_core::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
 use lockra_core::settings::{AccentId, AutoBackup, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
@@ -224,6 +224,7 @@ fn import_view() -> ImportView {
             unsupported,
             hotp,
             candidate(6, file("mine.lockrabackup"), Origin::Backup, "Old", "account", CandidateStatus::New, CandidateAction::Add),
+            candidate(7, ImportSource::Camera, Origin::Google, "Cloud", "me@example.com", CandidateStatus::New, CandidateAction::Add),
         ],
         google_batches: vec![GoogleBatchView { id: 412_337, size: 3, received: vec![0, 2], missing: vec![1] }],
         awaiting_password: Some("other.lockrabackup".into()),
@@ -451,7 +452,7 @@ fn response_fixtures() {
 #[test]
 fn command_fixtures_cover_every_command_and_parse() {
     let commands = commands();
-    check("commands.json", &json!({ "commands": commands, "shell_commands": SHELL_COMMANDS }));
+    check("commands.json", &json!({ "commands": commands, "shell_commands": SHELL_COMMANDS, "phone_commands": PHONE_COMMANDS }));
     let names: Vec<&str> = commands.iter().map(|c| c["command"].as_str().unwrap()).collect();
     assert_eq!(names, COMMANDS, "commands.json must list every UiCommand once, in order");
     for command in &commands {

@@ -44,14 +44,17 @@ export function statusText(t: TFunction, status: CandidateStatus): string {
     : t(`import.status.${status.type}`);
 }
 
-/** Where a found account came from: the file, the clipboard or the pasted text, and its line. */
+/** Where a found account came from: the file, the clipboard, the pasted text or the camera, and
+ *  its line. */
 export function candidateSource(t: TFunction, candidate: CandidateView): string {
   const source =
     candidate.source.type === "file"
       ? candidate.source.name
       : candidate.source.type === "clipboard"
         ? t("import.preview.sourceClipboard")
-        : t("import.preview.sourceText");
+        : candidate.source.type === "camera"
+          ? t("import.preview.sourceCamera")
+          : t("import.preview.sourceText");
   return candidate.line === null
     ? source
     : `${source} · ${t("import.preview.line", { n: candidate.line })}`;

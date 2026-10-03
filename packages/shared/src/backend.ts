@@ -27,6 +27,9 @@ export interface Backend {
   /** Native file picker → import, filtered for one source (`any` shows every file: Microsoft's
    *  database has no extension). `false` when the user cancelled. */
   pickImportFiles(kind?: ImportPickKind): Promise<boolean>;
+  /** The phone's camera → import: the QR code it reads goes to the preview in Rust. `false` when
+   *  the scan was left without one. `texts` are the camera page's words, in the app's language. */
+  scanImport(texts: ScanTexts): Promise<boolean>;
   /** Native save dialog → backup. The file name, or `null` when cancelled. */
   saveBackup(separatePassword?: string): Promise<string | null>;
   /** Native folder picker → the automatic backup folder. The folder, or `null` when cancelled. */
@@ -35,6 +38,14 @@ export interface Backend {
   pickRestoreFile(): Promise<boolean>;
   /** Native save dialog → a plain otpauth list. The file name, or `null` when cancelled. */
   exportOtpauthFile(entryIds: readonly string[], password: string): Promise<string | null>;
+}
+
+/** The words on the phone's camera page. */
+export interface ScanTexts {
+  /** What to do, over the picture. */
+  prompt: string;
+  /** The button that leaves. */
+  cancel: string;
 }
 
 /** A failed command: the core's error code, and when a rate-limited unlock may be retried. */

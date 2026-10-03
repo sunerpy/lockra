@@ -5,7 +5,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2
 pattern='(#[0-9a-fA-F]{6}\b|#[0-9a-fA-F]{3}\b|\brgba?\(|\bhsla?\(|\boklch\()'
-matches=$(grep -rnE --include='*.tsx' "$pattern" packages/ui/src apps/desktop/src)
+matches=$(grep -rnE --include='*.tsx' "$pattern" packages/ui/src apps/desktop/src apps/mobile/src)
 status=$?
 if [ "$status" -gt 1 ]; then
   echo "check-no-literal-colors: grep failed with status $status"

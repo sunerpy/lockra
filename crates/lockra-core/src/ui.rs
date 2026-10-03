@@ -355,6 +355,8 @@ pub enum ImportSource {
     Clipboard,
     /// Text typed or pasted into the import box.
     Text,
+    /// A QR code the phone's camera read.
+    Camera,
 }
 
 /// What committing a candidate would do.

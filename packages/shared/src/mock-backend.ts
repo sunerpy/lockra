@@ -9,6 +9,7 @@ import {
   type FrameListener,
   type ImportPickKind,
   LockraError,
+  type ScanTexts,
   type Unsubscribe,
 } from "./backend";
 import {
@@ -54,6 +55,9 @@ export interface MockEntry {
   secret: string;
 }
 
+/** A camera scan: the QR code's text, `null` when left without one, or how it failed. */
+export type MockScan = string | null | { error: ErrorCode };
+
 export interface MockOptions {
   phase?: UiState["phase"];
   entries?: MockEntry[];
@@ -70,6 +74,8 @@ export interface MockOptions {
   biometricAnswer?: ErrorCode | null;
   /** Text the clipboard import reads. */
   clipboard?: string;
+  /** What a camera scan reads (`null`, the default: the scan is left), or the error it ends in. */
+  scan?: MockScan;
   now?: () => number;
   /** How this copy installs an update; `null`: it cannot update itself (the default). */
   updateMethod?: InstallMethod | null;
@@ -373,6 +379,7 @@ export class MockBackend implements Backend {
   private exports = new Map<string, MockExport>();
   private restoreEntries: MockEntry[] | null = null;
   private clipboard: string | undefined;
+  private scan: MockScan;
   private readonly now: () => number;
   private release: MockRelease | null;
   private updateFailure: MockOptions["updateFailure"];
@@ -390,6 +397,7 @@ export class MockBackend implements Backend {
     this.now = options.now ?? (() => Date.now());
     this.password = options.password ?? MOCK_PASSWORD;
     this.clipboard = options.clipboard;
+    this.scan = options.scan ?? null;
     this.release = options.release ?? null;
     this.updateFailure = options.updateFailure;
     this.space = options.sync ?? null;
@@ -453,6 +461,14 @@ export class MockBackend implements Backend {
     this.calls.push(command);
     const result = this.run(command);
     return result;
+  }
+
+  async scanImport(_texts: ScanTexts): Promise<boolean> {
+    this.requireUnlocked();
+    if (this.scan === null) return false;
+    if (typeof this.scan !== "string") throw new LockraError(this.scan.error);
+    this.importText(this.scan, { type: "camera" });
+    return true;
   }
 
   async pickImportFiles(_kind?: ImportPickKind): Promise<boolean> {
@@ -528,6 +544,11 @@ export class MockBackend implements Backend {
   /** Test hook: what the clipboard holds for `import_clipboard`. */
   setClipboard(text: string | undefined): void {
     this.clipboard = text;
+  }
+
+  /** Test hook: what the next camera scans read. */
+  setScan(scan: MockScan): void {
+    this.scan = scan;
   }
 
   /** Test hook: fire a notice as the core would. */

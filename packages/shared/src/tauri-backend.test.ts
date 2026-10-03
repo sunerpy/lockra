@@ -118,6 +118,7 @@ describe("TauriBackend", () => {
   it("calls the shell commands with their arguments", async () => {
     const f = fake({
       import_pick_files: true,
+      import_scan: false,
       backup_save: "b.lockrabackup",
       backup_pick_dir: null,
       restore_pick: false,
@@ -126,6 +127,7 @@ describe("TauriBackend", () => {
     const backend = new TauriBackend(f.transport);
     expect(await backend.pickImportFiles()).toBe(true);
     expect(await backend.pickImportFiles("images")).toBe(true);
+    expect(await backend.scanImport({ prompt: "Point at a code", cancel: "Cancel" })).toBe(false);
     expect(await backend.saveBackup("separate password")).toBe("b.lockrabackup");
     expect(await backend.saveBackup()).toBe("b.lockrabackup");
     expect(await backend.pickBackupDir()).toBeNull();
@@ -134,6 +136,7 @@ describe("TauriBackend", () => {
     expect(f.calls.map(([c, a]) => [c, a])).toEqual([
       ["import_pick_files", { kind: "any" }],
       ["import_pick_files", { kind: "images" }],
+      ["import_scan", { prompt: "Point at a code", cancel: "Cancel" }],
       ["backup_save", { separatePassword: "separate password" }],
       ["backup_save", { separatePassword: null }],
       ["backup_pick_dir", undefined],

@@ -11,6 +11,7 @@ import {
   type FrameListener,
   type ImportPickKind,
   LockraError,
+  type ScanTexts,
   type Unsubscribe,
 } from "./backend";
 import {
@@ -115,6 +116,12 @@ export class TauriBackend implements Backend {
 
   async pickImportFiles(kind: ImportPickKind = "any"): Promise<boolean> {
     return z.boolean().parse(await this.call("import_pick_files", { kind }));
+  }
+
+  async scanImport(texts: ScanTexts): Promise<boolean> {
+    return z
+      .boolean()
+      .parse(await this.call("import_scan", { prompt: texts.prompt, cancel: texts.cancel }));
   }
 
   async saveBackup(separatePassword?: string): Promise<string | null> {

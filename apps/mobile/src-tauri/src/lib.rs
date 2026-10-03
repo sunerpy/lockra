@@ -1,11 +1,16 @@
 //! Lockra mobile shell (Android): Tauri commands → `lockra-bridge` → `lockra-core`, as on the
 //! desktop (apps/desktop/src-tauri), with the phone's own adapters. Each native capability is a
-//! small Tauri plugin whose Kotlin half lives in `gen/android` (src/clipboard.rs); its answers stay
-//! in Rust. The webview gets the state and the codes, never a secret it did not ask to reveal.
+//! small Tauri plugin whose Kotlin half lives in `gen/android` (the clipboard, the camera, the
+//! photo picker); its answers stay in Rust. The webview gets the state and the codes, never a
+//! secret it did not ask to reveal.
 //! Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs` drives the real
 //! command layer on `tauri::test::MockRuntime` on the host.
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
+
 pub mod clipboard;
+pub mod files;
+pub mod scanner;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,14 +20,13 @@ use lockra_core::ports::{
     Biometrics, Clipboard, CodeSink, NoBiometrics, NoSecretStore, NoUpdater, PortError, RemoteStore, SecretStore, SyncError, SyncTransport, SystemClock,
 };
 use lockra_core::ui::{CodesFrame, Platform, UI_EVENT_NAME, UiEvent};
-use lockra_core::{Core, CoreConfig, CoreError, KdfCost, Ports, StorageConfig};
+use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports, StorageConfig};
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
 
-/// The shell's Tauri commands, in registration order: a part of lockra-bridge's `SHELL_COMMANDS`
-/// (the file commands come with the phone's file plugin).
-pub const COMMANDS: [&str; 3] = ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe"];
+/// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
+pub const COMMANDS: [&str; 5] = ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan"];
 
 /// What the shell wires into the core; tests replace the platform parts with fakes.
 pub struct ShellOptions {
@@ -86,6 +90,28 @@ async fn codes_unsubscribe(core: State<'_, Core>) -> Result<(), CoreError> {
     Ok(())
 }
 
+/// Pick images to import with the photo picker; `false` when none was picked. The phone picks
+/// images only for now (`kind` "images"); its other files come with the file plugin.
+#[tauri::command]
+async fn import_pick_files<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>, kind: Option<String>) -> Result<bool, CoreError> {
+    if kind.as_deref() != Some("images") {
+        return Err(ErrorCode::Internal.into());
+    }
+    let picker = files::Files::new(app);
+    let picked = tauri::async_runtime::spawn_blocking(move || picker.pick_images()).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    files::import(&core, picked).await
+}
+
+/// Scan a QR code with the camera into the import preview; `false` when left without one.
+/// `prompt` and `cancel` are the camera page's words, in the webview's language.
+#[tauri::command]
+async fn import_scan<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>, prompt: String, cancel: String) -> Result<bool, CoreError> {
+    let camera = scanner::Scanner::new(app);
+    let texts = scanner::ScanTexts { prompt, cancel };
+    let scan = tauri::async_runtime::spawn_blocking(move || camera.scan(&texts)).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    scanner::import(&core, scan)
+}
+
 /// Forward every core event to the webview.
 async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core) {
     let mut events = core.subscribe();
@@ -107,26 +133,32 @@ async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core) {
 
 /// The app with its commands, plugins and core.
 pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) -> tauri::Builder<R> {
-    builder.plugin(clipboard::init()).invoke_handler(tauri::generate_handler![lockra_dispatch, codes_subscribe, codes_unsubscribe]).setup(move |app| {
-        let data_dir = match options.data_dir.clone() {
-            Some(dir) => dir,
-            None => app.path().app_data_dir()?,
-        };
-        let config_dir = match options.config_dir.clone() {
-            Some(dir) => dir,
-            None => app.path().app_config_dir()?,
-        };
-        let secrets: Arc<dyn SecretStore> = options.secrets.clone().unwrap_or_else(|| Arc::new(NoSecretStore));
-        let clipboard: Arc<dyn Clipboard> = options.clipboard.clone().unwrap_or_else(|| Arc::new(clipboard::PhoneClipboard::new(app.handle().clone())));
-        let biometrics: Arc<dyn Biometrics> = options.biometrics.clone().unwrap_or_else(|| Arc::new(NoBiometrics));
-        let config = CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
-        let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater: Arc::new(NoUpdater), sync: Arc::new(NoSync), biometrics };
-        // The core's scheduler is a tokio task: start it inside Tauri's runtime.
-        let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
-        app.manage(core.clone());
-        tauri::async_runtime::spawn(forward_events(app.handle().clone(), core));
-        Ok(())
-    })
+    builder
+        .plugin(clipboard::init())
+        .plugin(files::init())
+        .plugin(scanner::init())
+        .invoke_handler(tauri::generate_handler![lockra_dispatch, codes_subscribe, codes_unsubscribe, import_pick_files, import_scan])
+        .setup(move |app| {
+            let data_dir = match options.data_dir.clone() {
+                Some(dir) => dir,
+                None => app.path().app_data_dir()?,
+            };
+            let config_dir = match options.config_dir.clone() {
+                Some(dir) => dir,
+                None => app.path().app_config_dir()?,
+            };
+            let secrets: Arc<dyn SecretStore> = options.secrets.clone().unwrap_or_else(|| Arc::new(NoSecretStore));
+            let clipboard: Arc<dyn Clipboard> = options.clipboard.clone().unwrap_or_else(|| Arc::new(clipboard::PhoneClipboard::new(app.handle().clone())));
+            let biometrics: Arc<dyn Biometrics> = options.biometrics.clone().unwrap_or_else(|| Arc::new(NoBiometrics));
+            let config =
+                CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
+            let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater: Arc::new(NoUpdater), sync: Arc::new(NoSync), biometrics };
+            // The core's scheduler is a tokio task: start it inside Tauri's runtime.
+            let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
+            app.manage(core.clone());
+            tauri::async_runtime::spawn(forward_events(app.handle().clone(), core));
+            Ok(())
+        })
 }
 
 /// The phone's entry point (and `cargo run` on a desktop, for development).

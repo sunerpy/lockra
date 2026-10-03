@@ -4,7 +4,8 @@
 //! fields snake_case); [`dispatch`] runs it on a [`Core`] and answers with JSON. The Tauri
 //! shell's `lockra_dispatch` forwards to it unchanged. No variant takes a file path: reading or
 //! writing files happens only through the shell's own commands, after the user picked the file in
-//! a native dialog ([`SHELL_COMMANDS`]), so a compromised webview cannot name one.
+//! a native dialog ([`SHELL_COMMANDS`]; on the phone the photo picker or the camera,
+//! [`PHONE_COMMANDS`]), so a compromised webview cannot name one.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
@@ -289,6 +290,10 @@ pub const COMMANDS: [&str; 44] = [
 /// open a native file dialog first.
 pub const SHELL_COMMANDS: [&str; 8] =
     ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "backup_save", "backup_pick_dir", "restore_pick", "export_otpauth_file"];
+
+/// The Tauri commands of the phone shell: the dispatcher, the code stream, and the actions that
+/// open the photo picker or the camera first; what they read goes to the import in Rust.
+pub const PHONE_COMMANDS: [&str; 5] = ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "import_scan"];
 
 impl UiCommand {
     /// Whether the answer carries a secret (the shell turns screen-capture protection on).

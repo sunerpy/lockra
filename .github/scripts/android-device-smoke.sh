@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # The Android app on a device: install the APK, start it, create a vault, leave the app (it locks)
-# and unlock it again, add an account by hand and copy its code (the clipboard plugin, through R8);
-# it stays up throughout with nothing fatal in its log, and the page gives way to the keyboard
-# rather than lie under it. A package that passes every check can still close on
+# and unlock it again, add an account by hand and copy its code (the clipboard plugin, through R8),
+# and open the camera's page (the emulator has no camera: the import says so, and the vault stays
+# open behind that page); it stays up throughout with nothing fatal in its log, and the page gives
+# way to the keyboard rather than lie under it. A package that passes every check can still close on
 # start (a Tauri app that panics before its first screen), so the app itself has to run. CI runs this against an emulator (`android-device` in ci.yml); it runs the
 # same against a phone over adb.
 #
@@ -183,6 +184,16 @@ showing 'Example' 30
 tap 'Example'
 showing 'Copied|已复制' 30
 
+# The camera's page answers through the scanner plugin: without a camera, the import says so,
+# and the app, hidden behind that page for a moment, did not lock.
+tap 'Add' '添加'
+showing 'Scan a QR code|扫描二维码' 30
+tap 'Scan a QR code' '扫描二维码'
+showing 'The camera cannot be opened|无法打开相机' 30
+if grep -qE 'The vault is locked|保险库已锁定' "$out/ui.xml"; then
+  fail "the vault locked behind the camera's page"
+fi
+
 # And it stays up. The 20 s are the check itself (an app that closes a few seconds after its
 # screen fails here), not a wait for something to finish.
 for _ in $(seq 1 10); do
@@ -196,4 +207,4 @@ adb logcat -d --pid="$pid" >"$out/app-logcat.txt" 2>&1 || true
 if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || grep -q "$package" "$out/crash.txt"; then
   fail "the app logged a fatal error although it is still running"
 fi
-echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account and copied its code ($(basename "$apk"))"
+echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code and heard from the camera's page ($(basename "$apk"))"

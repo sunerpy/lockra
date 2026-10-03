@@ -15,6 +15,7 @@ import {
 } from "@lockra/ui";
 import { useEffect, useRef } from "react";
 import { NavProvider, useNav } from "./app/nav";
+import { phoneScreenOpen } from "./app/phone-screen";
 import { Account } from "./screens/Account";
 import { Add } from "./screens/Add";
 import { Codes } from "./screens/Codes";
@@ -116,14 +117,15 @@ function NoticeBridge() {
 }
 
 /** The vault locks as soon as the app leaves the screen: another app, the home screen, the screen
- *  turned off. The webview hears it as the page becoming hidden. */
+ *  turned off. The webview hears it as the page becoming hidden; behind a screen of the phone's
+ *  own that Lockra opened (the camera, the photo picker), it is not left (app/phone-screen.ts). */
 function LockWhenLeaving() {
   const { backend, state } = useBackend();
   const unlocked = state?.phase === "unlocked";
   useEffect(() => {
     if (!unlocked) return undefined;
     const onChange = () => {
-      if (document.visibilityState === "hidden")
+      if (document.visibilityState === "hidden" && !phoneScreenOpen())
         void backend.dispatch({ command: "vault_lock" }).catch(() => undefined);
     };
     document.addEventListener("visibilitychange", onChange);
