@@ -21,9 +21,9 @@ export function platformFromUserAgent(userAgent: string): TitleBarPlatform {
   return "unknown";
 }
 
-/** Maps the core's `platform` onto the title-bar union. */
+/** Maps the core's `platform` onto the title-bar union (the phone draws no title bar). */
 export function platformFromIdentity(platform: Platform | undefined): TitleBarPlatform {
-  return platform ?? "unknown";
+  return platform === undefined || platform === "android" ? "unknown" : platform;
 }
 
 /** User agent first; the core identity only breaks a tie the UA could not resolve. */

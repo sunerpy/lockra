@@ -147,7 +147,7 @@
       "retry_at_ms": 1790000002000
     },
     "phase": "locked",
-    "platform": "linux",
+    "platform": "android",
     "restore": null,
     "settings": {
       "accent": "default",

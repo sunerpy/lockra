@@ -151,6 +151,7 @@ pub(crate) fn device_name(name: &str, platform: Platform) -> String {
         Platform::Windows => "Windows",
         Platform::Macos => "macOS",
         Platform::Linux => "Linux",
+        Platform::Android => "Android",
     }
     .to_owned()
 }
@@ -285,6 +286,7 @@ mod tests {
         assert_eq!(device_name(&"x".repeat(100), Platform::Linux).chars().count(), MAX_DEVICE_NAME_CHARS);
         assert_eq!(device_name(" \u{7} ", Platform::Macos), "macOS");
         assert_eq!(device_name("", Platform::Windows), "Windows");
+        assert_eq!(device_name("", Platform::Android), "Android");
     }
 
     #[test]

@@ -20,7 +20,7 @@ export function SyncSetup() {
   const nav = useNav();
   const { backend } = useBackend();
   const [storage, setStorage] = useState(emptyStorageForm);
-  const [deviceName, setDeviceName] = useState(() => t("mobile.sync.deviceName"));
+  const [deviceName, setDeviceName] = useState(() => t("sync.platformDevice.android"));
   const [password, setPassword] = useState("");
   const submit = useSubmit();
   const deliver = useSecretAnswer();

@@ -363,6 +363,7 @@ fn state_fixtures() {
     // The phone: locked, with the fingerprint in front of its remembered key.
     let mut phone = state(Phase::Locked);
     phone.lock.device_unlock.biometric.kind = Some(BiometricKind::Fingerprint);
+    phone.platform = Platform::Android;
     check(
         "state.json",
         &json!({ "unlocked": state(Phase::Unlocked), "locked": state(Phase::Locked), "no_vault": state(Phase::NoVault), "phone_locked": phone }),

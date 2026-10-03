@@ -139,7 +139,6 @@ export const zhCN = {
     sync: {
       rowOff: "设置同步",
       settingsHint: "在你自己的存储上与其他设备同步",
-      deviceName: "Android 手机",
       fromScan: "扫码",
       scan: "扫码加入",
       scanPrompt: "将相机对准另一台设备上的邀请码",
@@ -674,7 +673,12 @@ export const zhCN = {
       body: "这台设备不再同步，账号保留在本机。存储里的同步空间和其他设备不受影响，之后可以重新加入。",
       confirm: "关闭同步",
     },
-    platformDevice: { windows: "Windows 电脑", macos: "Mac", linux: "Linux 电脑" },
+    platformDevice: {
+      windows: "Windows 电脑",
+      macos: "Mac",
+      linux: "Linux 电脑",
+      android: "Android 手机",
+    },
   },
   error: {
     no_vault: "还没有创建保险库",
