@@ -150,16 +150,21 @@ describe("Unlock with the system's check as the default", () => {
     vi.spyOn(document, "hasFocus").mockImplementation(() => focused);
   });
   afterEach(() => vi.restoreAllMocks());
-  const leave = () =>
+  // Once the effects that listen for the focus have run: the lock screen's come after its render.
+  const leave = async () => {
+    await act(async () => {});
     act(() => {
       focused = false;
       window.dispatchEvent(new Event("blur"));
     });
-  const come = () =>
+  };
+  const come = async () => {
+    await act(async () => {});
     act(() => {
       focused = true;
       window.dispatchEvent(new Event("focus"));
     });
+  };
   const asked = (backend: MockBackend) =>
     backend.calls.filter((c) => c.command === "vault_unlock_device").length;
   const withCheck = {
@@ -190,11 +195,11 @@ describe("Unlock with the system's check as the default", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     // Not again until Lockra has been left and comes back.
-    come();
+    await come();
     expect(asked(backend)).toBe(1);
     backend.answerBiometric(null);
-    leave();
-    come();
+    await leave();
+    await come();
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
     expect(asked(backend)).toBe(2);
   });
@@ -207,15 +212,15 @@ describe("Unlock with the system's check as the default", () => {
     act(() => backend.autoLock());
     await waitFor(() => expect(asked(backend)).toBe(1));
     backend.answerBiometric(null);
-    leave();
-    come();
+    await leave();
+    await come();
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
     // Locked by itself in the background: when Lockra comes to the front.
-    leave();
+    await leave();
     act(() => backend.autoLock());
     await screen.findByTestId("page-unlock");
     expect(asked(backend)).toBe(2);
-    come();
+    await come();
     await waitFor(() => expect(asked(backend)).toBe(3));
   });
 
@@ -225,10 +230,10 @@ describe("Unlock with the system's check as the default", () => {
     await ready();
     await user.keyboard("{Control>}l{/Control}");
     await screen.findByTestId("page-unlock");
-    come();
+    await come();
     expect(asked(backend)).toBe(0);
-    leave();
-    come();
+    await leave();
+    await come();
     await waitFor(() => expect(asked(backend)).toBe(1));
   });
 
@@ -241,8 +246,8 @@ describe("Unlock with the system's check as the default", () => {
     });
     renderApp({ backend });
     await ready();
-    leave();
-    come();
+    await leave();
+    await come();
     expect(asked(backend)).toBe(0);
     expect(screen.getByRole("button", { name: "解锁" })).toHaveAttribute("data-variant", "primary");
     expect(screen.getByText("输入主密码解锁。")).toBeInTheDocument();
@@ -253,8 +258,8 @@ describe("Unlock with the system's check as the default", () => {
     const backend = new MockBackend({ ...withCheck, phase: "locked", platform: "macos" });
     renderApp({ backend });
     await ready();
-    leave();
-    come();
+    await leave();
+    await come();
     expect(asked(backend)).toBe(0);
   });
 });

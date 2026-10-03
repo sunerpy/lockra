@@ -8,8 +8,10 @@ function names(): string[] {
     .map((row) => row.querySelector(".truncate")?.textContent ?? "");
 }
 
-/** The page as the system hides it (another app in front, the screen off). */
-function leaveTheScreen() {
+/** The page as the system hides it (another app in front, the screen off), once the effects that
+ *  listen for it have run. */
+async function leaveTheScreen() {
+  await act(async () => {});
   Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
   act(() => {
     document.dispatchEvent(new Event("visibilitychange"));
@@ -99,7 +101,7 @@ describe("the phone app", () => {
   it("locks as the app leaves the screen, and from its button", async () => {
     const { user, backend } = renderApp();
     await ready();
-    leaveTheScreen();
+    await leaveTheScreen();
     expect(await screen.findByTestId("page-unlock")).toBeInTheDocument();
     expect(backend.calls.at(-1)).toEqual({ command: "vault_lock" });
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
@@ -109,7 +111,7 @@ describe("the phone app", () => {
     expect(await screen.findByTestId("page-unlock")).toBeInTheDocument();
     // Locked already: leaving again asks for nothing.
     const before = backend.calls.length;
-    leaveTheScreen();
+    await leaveTheScreen();
     expect(backend.calls).toHaveLength(before);
   });
 });
