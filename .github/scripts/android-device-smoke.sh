@@ -265,10 +265,10 @@ adb shell input keyevent KEYCODE_HOME
 adb shell am start -n "$package/.MainActivity" >/dev/null 2>&1 || fail "the activity did not come back"
 showing 'The vault is locked|保险库已锁定' 60
 
-# The master password opens it again.
-tap 'Master password' '主密码'
-adb shell input text "$password"
-adb shell input keyevent KEYCODE_ENTER
+# The master password opens it again. Typed into the field once the keyboard shows it focused: a
+# tap on the label alone may leave no field focused, and the first keys go nowhere (PR #39's run).
+type_into "$password" 'Master password' '主密码'
+tap 'Unlock' '解锁'
 showing 'No accounts yet|还没有账号' 120
 
 # An account by hand (a made-up secret), then a tap on it copies its code. The form's "Advanced"
