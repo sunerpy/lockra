@@ -713,6 +713,7 @@ export const PHONE_COMMAND_NAMES = [
   "import_scan",
   "backup_save",
   "restore_pick",
+  "export_otpauth_file",
 ] as const;
 
 /** Commands that answer with something other than `null`. */

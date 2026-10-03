@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   cutMark,
   entryGroups,
+  exportBlocker,
   filterEntries,
   groupSections,
   parseKind,
@@ -81,5 +82,18 @@ describe("parseKind", () => {
     expect(parseKind("hotp", "30", "7")).toEqual({ type: "hotp", counter: 7 });
     expect(parseKind("hotp", "30", "")).toBeUndefined();
     expect(parseKind("hotp", "30", "-1")).toBeUndefined();
+  });
+});
+
+describe("exportBlocker", () => {
+  it("takes every account into a file, and the core's reason for the others", () => {
+    const entry = mockEntry("Bank", "card", {}).view;
+    const blocked = {
+      ...entry,
+      export: { google: "hotp_not_supported" as const, microsoft: null },
+    };
+    expect(exportBlocker(blocked, "google")).toBe("hotp_not_supported");
+    expect(exportBlocker(blocked, "microsoft")).toBeNull();
+    expect(exportBlocker(blocked, "file")).toBeNull();
   });
 });

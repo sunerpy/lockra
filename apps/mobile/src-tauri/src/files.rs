@@ -20,6 +20,10 @@ pub const PICK_LIMIT: u32 = 10;
 pub const BACKUP_NAME: &str = "lockra-backup.lockrabackup";
 pub const BACKUP_MIME: &str = "application/octet-stream";
 
+/// The name a plain otpauth list is offered under, and its type.
+pub const LIST_NAME: &str = "lockra-accounts.txt";
+pub const LIST_MIME: &str = "text/plain";
+
 /// The Android plugin (`FilesPlugin.kt`).
 #[cfg(target_os = "android")]
 struct Plugin<R: Runtime>(tauri::plugin::PluginHandle<R>);
@@ -108,6 +112,14 @@ pub fn saved(core: &Core, saved: Result<Option<String>, PortError>) -> Result<Op
         core.backup_recorded(name);
     }
     Ok(name)
+}
+
+/// What a list's save means: its name, or nothing when the picker was left.
+pub fn listed(saved: Result<Option<String>, PortError>) -> Result<Option<String>, CoreError> {
+    saved.map_err(|error| {
+        tracing::warn!(%error, "the list could not be saved");
+        CoreError::from(ErrorCode::IoFailed)
+    })
 }
 
 /// What a backup picked means: open for restoring (`true`), or nothing picked (`false`).

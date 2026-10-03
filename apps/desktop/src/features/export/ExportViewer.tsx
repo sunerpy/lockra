@@ -1,7 +1,13 @@
 // The export codes, one page at a time, beside the current code of every account on the page (so
 // the phone's codes can be checked against them). The view closes itself when it has been idle for
 // as long as the core keeps the session, and when the core expires the session first.
-import { type ExportPage, type ExportStarted, entryLabel, incompatibleText } from "@lockra/shared";
+import {
+  EXPORT_SECONDS,
+  type ExportPage,
+  type ExportStarted,
+  entryLabel,
+  incompatibleText,
+} from "@lockra/shared";
 import {
   Button,
   Dialog,
@@ -16,9 +22,6 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useToaster } from "../../app/notices";
 import { useShell } from "../../app/shell-state";
-
-/** lockra-core `EXPORT_IDLE`: a page stays up this long after it was shown. */
-export const EXPORT_SECONDS = 120;
 
 export function ExportViewer({ started }: { started: ExportStarted }) {
   const t = useT();

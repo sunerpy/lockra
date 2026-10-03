@@ -2,10 +2,10 @@
 // for Microsoft Authenticator, or a plain otpauth list file. Every way out asks for the master
 // password again; the codes themselves open in the export viewer (an overlay of the shell).
 import {
-  type EntryView,
-  type ExportTarget,
+  type ExportWay,
   entryLabel,
   errorText,
+  exportBlocker,
   incompatibleText,
   parametersText,
 } from "@lockra/shared";
@@ -25,13 +25,6 @@ import {
 import { type SubmitEvent, useState } from "react";
 import { useSubmit } from "../app/dispatch";
 import { useShell } from "../app/shell-state";
-
-export type ExportWay = ExportTarget | "file";
-
-/** Why `entry` cannot go to `way`, or `null` when it can (a file takes every account). */
-export function exportBlocker(entry: EntryView, way: ExportWay): EntryView["export"]["google"] {
-  return way === "file" ? null : entry.export[way];
-}
 
 export function Export() {
   const t = useT();

@@ -738,6 +738,19 @@ async fn a_plain_list_export_writes_a_private_file() {
     }
 }
 
+#[tokio::test(start_paused = true)]
+async fn a_plain_list_export_comes_as_text_where_there_is_no_path() {
+    let h = Harness::unlocked().await;
+    let a = h.core.add_uri(&otpauth("A", "a", "GEZDGNBV")).unwrap();
+    let b = h.core.add_uri(&otpauth("B", "b", "MZXW6YTBOI")).unwrap();
+    assert_eq!(code_err(h.core.export_otpauth_text(&[a], pw("wrong")).await), ErrorCode::WrongPassword);
+    assert_eq!(code_err(h.core.export_otpauth_text(&[], pw(MASTER)).await), ErrorCode::ExportNothing);
+    let text = h.core.export_otpauth_text(&[a, b], pw(MASTER)).await.unwrap();
+    assert!(text.contains("otpauth://totp/A:a?secret=GEZDGNBV") && text.contains("otpauth://totp/B:b?secret=MZXW6YTBOI"), "{}", *text);
+    h.core.lock_vault();
+    assert_eq!(code_err(h.core.export_otpauth_text(&[a], pw(MASTER)).await), ErrorCode::Locked);
+}
+
 // ---- backup and restore -----------------------------------------------------------------------
 
 #[tokio::test(start_paused = true)]

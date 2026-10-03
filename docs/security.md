@@ -81,7 +81,8 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   clipboard still holds it; the vault locks as soon as the app leaves the screen. It has no
   keychain yet, so no "Remember on this device". The camera's page is `FLAG_SECURE` too, and what
   it reads, like the photos and files picked, goes to the import preview in Rust and never to the
-  webview; a backup leaves encrypted, written where the user picks.
+  webview; a backup leaves encrypted, written where the user picks, and a plain otpauth list only
+  after the master password and the user's acknowledgement that it is plaintext.
   Leaving the app from the camera's page locks the vault at once; the system photo picker runs in
   another app that Lockra cannot watch, so the vault stays unlocked behind it until the auto-lock
   time.
