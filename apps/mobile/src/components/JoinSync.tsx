@@ -41,7 +41,7 @@ export function JoinSync({
   const [syncKey, setSyncKey] = useState("");
   const [password, setPassword] = useState("");
   const [spacePassword, setSpacePassword] = useState("");
-  const [deviceName, setDeviceName] = useState(() => t("mobile.sync.deviceName"));
+  const [deviceName, setDeviceName] = useState(() => t("sync.platformDevice.android"));
   const submit = useSubmit();
   const sourceReady =
     mode === "scan" ||

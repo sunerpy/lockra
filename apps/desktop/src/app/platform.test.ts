@@ -76,6 +76,8 @@ describe("resolvePlatform", () => {
   it("maps the core's platform (a closed enum, checked by the IPC contract) onto the title-bar union", () => {
     expect(platformFromIdentity("macos")).toBe("macos");
     expect(platformFromIdentity("windows")).toBe("windows");
+    // The phone draws no title bar.
+    expect(platformFromIdentity("android")).toBe("unknown");
     expect(platformFromIdentity("linux")).toBe("linux");
     expect(platformFromIdentity(undefined)).toBe("unknown");
   });

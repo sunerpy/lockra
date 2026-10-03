@@ -147,7 +147,6 @@ export const en: Messages = {
     sync: {
       rowOff: "Set up sync",
       settingsHint: "Sync with your other devices on storage of your own",
-      deviceName: "Android phone",
       fromScan: "Scan",
       scan: "Scan to join",
       scanPrompt: "Point the camera at the invitation on the other device",
@@ -717,7 +716,12 @@ export const en: Messages = {
       body: "This device stops syncing and keeps its accounts. The sync space on the storage and the other devices are not affected, and you can join again later.",
       confirm: "Turn off sync",
     },
-    platformDevice: { windows: "Windows PC", macos: "Mac", linux: "Linux PC" },
+    platformDevice: {
+      windows: "Windows PC",
+      macos: "Mac",
+      linux: "Linux PC",
+      android: "Android phone",
+    },
   },
   error: {
     no_vault: "There is no vault yet",

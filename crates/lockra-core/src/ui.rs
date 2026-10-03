@@ -26,6 +26,8 @@ pub enum Platform {
     Macos,
     /// Linux and the other Unix desktops.
     Linux,
+    /// The Android app.
+    Android,
 }
 
 impl Platform {
@@ -35,6 +37,8 @@ impl Platform {
             Self::Windows
         } else if cfg!(target_os = "macos") {
             Self::Macos
+        } else if cfg!(target_os = "android") {
+            Self::Android
         } else {
             Self::Linux
         }
@@ -661,10 +665,13 @@ mod tests {
             Platform::Windows
         } else if cfg!(target_os = "macos") {
             Platform::Macos
+        } else if cfg!(target_os = "android") {
+            Platform::Android
         } else {
             Platform::Linux
         };
         assert_eq!(Platform::current(), expected);
         assert_eq!(serde_json::to_value(Platform::Macos).unwrap(), "macos");
+        assert_eq!(serde_json::to_value(Platform::Android).unwrap(), "android");
     }
 }

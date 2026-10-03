@@ -97,7 +97,7 @@ export function defaultSettings(): Settings {
 
 // ---- entries ---------------------------------------------------------------------------------
 
-export const PLATFORMS = ["windows", "macos", "linux"] as const;
+export const PLATFORMS = ["windows", "macos", "linux", "android"] as const;
 export const platformSchema = z.enum(PLATFORMS);
 export type Platform = z.infer<typeof platformSchema>;
 

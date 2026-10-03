@@ -937,7 +937,9 @@ export class MockBackend implements Backend {
       .slice(0, MAX_DEVICE_NAME_CHARS)
       .trim();
     if (cleaned !== "") return cleaned;
-    return { windows: "Windows", macos: "macOS", linux: "Linux" }[this.state.platform];
+    return { windows: "Windows", macos: "macOS", linux: "Linux", android: "Android" }[
+      this.state.platform
+    ];
   }
 
   /** A run, at once: syncing, then synced (or the test's failure). */
