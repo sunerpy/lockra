@@ -82,8 +82,8 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   keychain yet, so no "Remember on this device". The camera's page is `FLAG_SECURE` too, and what
   it reads, like the photos picked, goes to the import preview in Rust and never to the webview.
   Leaving the app from the camera's page locks the vault at once; the system photo picker runs in
-  another app that Lockra cannot watch, so leaving from it locks the vault when the user comes back
-  or at the auto-lock time, whichever comes first.
+  another app that Lockra cannot watch, so the vault stays unlocked behind it until the auto-lock
+  time.
 
 ## Updates
 

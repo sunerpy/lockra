@@ -70,7 +70,7 @@ describe("the camera and the photo picker", () => {
     expect(screen.getByTestId("page-preview")).toBeInTheDocument();
   });
 
-  it("keep the vault open while the camera is in front, and lock it if the app was left meanwhile", async () => {
+  it("keep the vault open while the camera is in front and as its page closes", async () => {
     const backend = new SlowCamera({ entries: sampleEntries(), settings: { locale: "zh-cn" } });
     const { user } = renderApp({ backend });
     await ready();
@@ -80,9 +80,14 @@ describe("the camera and the photo picker", () => {
     setVisibility("hidden");
     setVisibility("visible");
     setVisibility("hidden");
-    expect(backend.calls.some((c) => c.command === "vault_lock")).toBe(false);
-    // The scan ends while the app is in the background: the vault locks then.
+    // The page closes, and the answer comes back before the app is in front again (as on the
+    // phone, where the webview resumes after the page has gone).
     act(() => backend.answer?.(false));
+    await waitFor(() => expect(screen.getByTestId("page-add")).toBeInTheDocument());
+    setVisibility("visible");
+    expect(backend.calls.some((c) => c.command === "vault_lock")).toBe(false);
+    // In front again: leaving now locks the vault.
+    setVisibility("hidden");
     expect(await screen.findByTestId("page-unlock")).toBeInTheDocument();
     expect(backend.calls.at(-1)).toEqual({ command: "vault_lock" });
   });

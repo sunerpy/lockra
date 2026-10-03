@@ -9,24 +9,19 @@ export function usePhoneImport() {
   const t = useT();
   const { backend } = useBackend();
   const guarded = useGuarded();
-  const lock = useCallback(() => {
-    void backend.dispatch({ command: "vault_lock" }).catch(() => undefined);
-  }, [backend]);
   const scan = useCallback(
     async () =>
       (await guarded(() =>
-        overPhoneScreen(
-          () => backend.scanImport({ prompt: t("mobile.scan.prompt"), cancel: t("common.cancel") }),
-          lock,
+        overPhoneScreen(() =>
+          backend.scanImport({ prompt: t("mobile.scan.prompt"), cancel: t("common.cancel") }),
         ),
       )) === true,
-    [backend, guarded, lock, t],
+    [backend, guarded, t],
   );
   const pickImages = useCallback(
     async () =>
-      (await guarded(() => overPhoneScreen(() => backend.pickImportFiles("images"), lock))) ===
-      true,
-    [backend, guarded, lock],
+      (await guarded(() => overPhoneScreen(() => backend.pickImportFiles("images")))) === true,
+    [backend, guarded],
   );
   return { scan, pickImages };
 }

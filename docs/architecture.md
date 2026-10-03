@@ -129,8 +129,9 @@ content takes the keyboard's height as bottom padding and the field being typed 
 (the device smoke test checks that the webview gives way). The webview locks the vault when the page
 is hidden (`visibilitychange`: another app in front, the screen off), except behind a screen of the
 phone's own that Lockra opened, the camera's or the photo picker (`app/phone-screen.ts`): wry
-pauses the webview for any activity in front, even the permission prompt. If the page is still
-hidden when that call returns, the vault locks then.
+pauses the webview for any activity in front, even the permission prompt, and the call comes back
+as that screen closes, often before the webview has resumed, so the exception lasts until the page
+is visible again. Leaving from the camera's page locks the vault in Rust (`away`).
 
 The phone app (`apps/mobile/src`) uses `@lockra/ui` and `@lockra/shared` as the desktop does; what
 both need lives there: the codes list's logic (sorting, filtering, group sections) and a form's kind
