@@ -340,6 +340,8 @@ pub enum BiometricKind {
     TouchId,
     /// Windows: a fingerprint, the face or the Windows Hello PIN.
     WindowsHello,
+    /// Android: a strong biometric, a fingerprint in most phones.
+    Fingerprint,
 }
 
 /// Where imported accounts came from.

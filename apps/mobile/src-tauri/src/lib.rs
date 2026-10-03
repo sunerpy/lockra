@@ -1,13 +1,14 @@
 //! Lockra mobile shell (Android): Tauri commands → `lockra-bridge` → `lockra-core`, as on the
 //! desktop (apps/desktop/src-tauri), with the phone's own adapters. Each native capability is a
 //! small Tauri plugin whose Kotlin half lives in `gen/android` (the clipboard, the camera, the
-//! photo picker); its answers stay in Rust. The webview gets the state and the codes, never a
+//! pickers, the fingerprint and its key store); its answers stay in Rust. The webview gets the state and the codes, never a
 //! secret it did not ask to reveal.
 //! Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs` drives the real
 //! command layer on `tauri::test::MockRuntime` on the host.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod biometrics;
 pub mod clipboard;
 pub mod files;
 pub mod scanner;
@@ -16,9 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use lockra_bridge::{UiCommand, dispatch};
-use lockra_core::ports::{
-    Biometrics, Clipboard, CodeSink, NoBiometrics, NoSecretStore, NoUpdater, PortError, RemoteStore, SecretStore, SyncError, SyncTransport, SystemClock,
-};
+use lockra_core::ports::{Biometrics, Clipboard, CodeSink, NoUpdater, PortError, RemoteStore, SecretStore, SyncError, SyncTransport, SystemClock};
 use lockra_core::ui::{CodesFrame, Platform, UI_EVENT_NAME, UiEvent};
 use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports, StorageConfig};
 use serde_json::Value;
@@ -32,11 +31,11 @@ pub const COMMANDS: [&str; 8] =
 
 /// What the shell wires into the core; tests replace the platform parts with fakes.
 pub struct ShellOptions {
-    /// The keychain (default: none yet; the Android Keystore comes with the fingerprint).
+    /// The remembered key's store (default: sealed by the Android Keystore, src/biometrics.rs).
     pub secrets: Option<Arc<dyn SecretStore>>,
     /// The clipboard (default: the phone's, src/clipboard.rs).
     pub clipboard: Option<Arc<dyn Clipboard>>,
-    /// The check before the remembered key unlocks (default: none yet).
+    /// The check before the remembered key unlocks (default: the fingerprint, src/biometrics.rs).
     pub biometrics: Option<Arc<dyn Biometrics>>,
     /// Where the vault lives (default: the app's private data directory).
     pub data_dir: Option<PathBuf>,
@@ -176,6 +175,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
         .plugin(clipboard::init())
         .plugin(files::init())
         .plugin(scanner::init())
+        .plugin(biometrics::init())
         .invoke_handler(tauri::generate_handler![
             lockra_dispatch,
             codes_subscribe,
@@ -195,9 +195,10 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 Some(dir) => dir,
                 None => app.path().app_config_dir()?,
             };
-            let secrets: Arc<dyn SecretStore> = options.secrets.clone().unwrap_or_else(|| Arc::new(NoSecretStore));
+            let (fingerprint, keystore) = biometrics::ports(app.handle().clone());
+            let secrets: Arc<dyn SecretStore> = options.secrets.clone().unwrap_or_else(|| Arc::new(keystore));
             let clipboard: Arc<dyn Clipboard> = options.clipboard.clone().unwrap_or_else(|| Arc::new(clipboard::PhoneClipboard::new(app.handle().clone())));
-            let biometrics: Arc<dyn Biometrics> = options.biometrics.clone().unwrap_or_else(|| Arc::new(NoBiometrics));
+            let biometrics: Arc<dyn Biometrics> = options.biometrics.clone().unwrap_or_else(|| Arc::new(fingerprint));
             let config =
                 CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
             let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater: Arc::new(NoUpdater), sync: Arc::new(NoSync), biometrics };

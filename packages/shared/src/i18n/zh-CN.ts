@@ -123,6 +123,10 @@ export const zhCN = {
       manualHint: "输入服务名称和密钥",
     },
     groupSuggestions: "已有分组",
+    fingerprint: {
+      disableTitle: "关闭指纹解锁",
+      disablePrompt: "输入主密码以关闭指纹解锁，手机里保存的密钥会被删除。",
+    },
     scan: {
       prompt: "将相机对准二维码",
       next: "扫描下一个二维码",
@@ -172,10 +176,15 @@ export const zhCN = {
     password: "主密码",
     submit: "解锁",
     device: "使用本机记住的密钥解锁",
-    biometric: { touch_id: "使用 Touch ID 解锁", windows_hello: "使用 Windows Hello 解锁" },
+    biometric: {
+      touch_id: "使用 Touch ID 解锁",
+      windows_hello: "使用 Windows Hello 解锁",
+      fingerprint: "使用指纹解锁",
+    },
     biometricOffer: {
       touch_id: "解锁后，可以在「设置 › 安全」开启「使用 Touch ID 解锁」。",
       windows_hello: "解锁后，可以在「设置 › 安全」开启「使用 Windows Hello 解锁」。",
+      fingerprint: "解锁后，可以在「设置 › 安全」开启「使用指纹解锁」。",
     },
     biometricReason: "解锁保险库",
     failed: { one: "密码错误（第 {n} 次）", other: "密码错误（第 {n} 次）" },
@@ -476,14 +485,24 @@ export const zhCN = {
       deviceUnavailable: "这台电脑上没有可用的系统钥匙串",
       deviceDisableTitle: "关闭本机记住",
       deviceDisablePrompt: "输入主密码以关闭本机记住，钥匙串里的密钥会被删除。",
-      biometric: { touch_id: "使用 Touch ID 解锁", windows_hello: "使用 Windows Hello 解锁" },
+      biometric: {
+        touch_id: "使用 Touch ID 解锁",
+        windows_hello: "使用 Windows Hello 解锁",
+        fingerprint: "使用指纹解锁",
+      },
       biometricHint: {
         touch_id:
           "锁定后用指纹解锁，不用输入主密码；开启时会一并开启「在本机记住」。主密码始终可以解锁。",
         windows_hello:
           "锁定后用 Windows Hello（指纹、面容或 PIN）解锁，不用输入主密码；开启时会一并开启「在本机记住」。主密码始终可以解锁。",
+        fingerprint:
+          "锁定后用指纹解锁，不用输入主密码。密钥保存在手机的安全硬件里，录入新的指纹后需要重新开启。主密码始终可以解锁。",
       },
-      biometricReason: { touch_id: "开启 Touch ID 解锁", windows_hello: "开启 Windows Hello 解锁" },
+      biometricReason: {
+        touch_id: "开启 Touch ID 解锁",
+        windows_hello: "开启 Windows Hello 解锁",
+        fingerprint: "开启指纹解锁",
+      },
       biometricDisablePrompt:
         "输入主密码以关闭解锁前的验证。「在本机记住」会保持开启，如果不再需要，可以在上方关闭。",
       biometricDisableTitle: "关闭验证",
@@ -639,7 +658,7 @@ export const zhCN = {
     device_unlock_off: "这个保险库没有开启本机记住",
     biometric_cancelled: "验证已取消",
     biometric_failed: "验证未通过，请重试或输入主密码",
-    biometric_unavailable: "这台电脑现在无法使用指纹或 Windows Hello，请输入主密码",
+    biometric_unavailable: "这台设备现在无法使用指纹、Touch ID 或 Windows Hello，请输入主密码",
     entry_not_found: "账号不存在",
     duplicate_entry: "这个账号已经在保险库里了",
     invalid_uri: "不是有效的 otpauth 链接",

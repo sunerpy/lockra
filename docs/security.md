@@ -78,8 +78,13 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   means: its window is always `FLAG_SECURE` (no screenshots or screen recording, a blank card among
   the recent apps); a copied code goes on marked `EXTRA_IS_SENSITIVE` (the paste preview and the
   keyboards' clipboard history leave it out) and comes off after the configured time only while the
-  clipboard still holds it; the vault locks as soon as the app leaves the screen. It has no
-  keychain yet, so no "Remember on this device". The camera's page is `FLAG_SECURE` too, and what
+  clipboard still holds it; the vault locks as soon as the app leaves the screen. **Unlock with
+  fingerprint** keeps the device key sealed with AES-GCM by an Android Keystore key that the
+  secure hardware holds: it works only for ten seconds after a passed strong-biometric check, and
+  never again once a new fingerprint is enrolled (the master password unlocks then, and the
+  fingerprint is turned on anew). There is no "Remember on this device" without that check. The
+  app's data is kept out of Android's backups and device transfers (`allowBackup="false"` and the
+  data extraction rules): the vault leaves the phone only in Lockra's own encrypted backups. The camera's page is `FLAG_SECURE` too, and what
   it reads, like the photos and files picked, goes to the import preview in Rust and never to the
   webview; a backup leaves encrypted, written where the user picks, and a plain otpauth list only
   after the master password and the user's acknowledgement that it is plaintext.

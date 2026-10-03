@@ -120,6 +120,66 @@
       }
     }
   },
+  "phone_locked": {
+    "app_version": "0.1.0",
+    "auto_lock_at_ms": null,
+    "backup": {
+      "last_auto_error": null,
+      "last_auto_file": null,
+      "last_backup_ms": null
+    },
+    "collapsed_groups": [],
+    "data_dir": "/home/user/.local/share/dev.lockra.desktop",
+    "entries": [],
+    "import": null,
+    "lock": {
+      "device_unlock": {
+        "available": true,
+        "biometric": {
+          "enabled": true,
+          "kind": "fingerprint"
+        },
+        "enabled": true
+      },
+      "failed_attempts": 4,
+      "retry_at_ms": 1790000002000
+    },
+    "phase": "locked",
+    "platform": "linux",
+    "restore": null,
+    "settings": {
+      "accent": "default",
+      "auto_backup": {
+        "dir": null,
+        "enabled": false,
+        "keep": 10
+      },
+      "auto_lock_minutes": 5,
+      "auto_update": false,
+      "clipboard_clear_seconds": 30,
+      "density": "default",
+      "follow_system_theme": true,
+      "font_size_px": 14,
+      "group_codes": true,
+      "hide_codes": false,
+      "locale": "system",
+      "reduce_motion": false,
+      "sort": "name",
+      "theme": "light"
+    },
+    "sync": {
+      "space": null
+    },
+    "update": {
+      "method": "nsis",
+      "status": {
+        "received": 4194304,
+        "state": "downloading",
+        "total": 11508084,
+        "version": "0.2.0"
+      }
+    }
+  },
   "unlocked": {
     "app_version": "0.1.0",
     "auto_lock_at_ms": 1790000600000,
