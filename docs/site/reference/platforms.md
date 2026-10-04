@@ -25,6 +25,15 @@ This page lists what differs between Windows, macOS, Linux and the Android app.
 - **Clipboard**: copied codes are marked to stay out of clipboard history.
 - **Screenshots** of the window are blocked while a secret or an export code is shown.
 
+### No keychain prompt after an update
+
+<StatusTag status="building" />
+
+The Mac app is signed with Lockra's own fixed certificate, and an in-app update hands the
+remembered key to the new version before installing it. After the update and the restart, macOS no
+longer asks whether Lockra may use the Keychain, and Touch ID unlocks as before. The update from
+0.7 or earlier to this version, and a dmg installed by hand, still ask once.
+
 ## Linux
 
 - **Packages**: .deb, .rpm and AppImage, for x64 and ARM64. Lockra needs WebKitGTK 4.1; X11 and

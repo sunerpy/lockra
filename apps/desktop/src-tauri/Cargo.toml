@@ -30,6 +30,8 @@ lockra-remote.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# The name of a build's own keychain items: a hash of its code signature (src/code_identity.rs).
+sha2.workspace = true
 # CVE-2026-42184 / GHSA-7gmj-67g7-phm9 (remote pages reaching local-only IPC) is fixed from 2.11.1.
 tauri = { version = "=2.11.6", features = [] }
 # Native file dialogs, called from Rust only: the webview never holds a path (docs/security.md).
@@ -42,6 +44,7 @@ tauri-plugin-updater = { version = "=2.12.0", default-features = false, features
   "rustls-tls",
   "system-proxy",
 ] }
+thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
@@ -60,6 +63,18 @@ tao = { version = "=0.35.3", default-features = false }
 # unsafe platform calls stay inside robius-authentication: the workspace still forbids unsafe code.
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
 robius-authentication = "=0.3.1"
+
+# The keychain hand-over of a macOS update (src/handoff.rs): the verified update is expanded next
+# to the running build, as the updater itself does, with the same crates it uses.
+[target.'cfg(unix)'.dependencies]
+flate2 = "=1.1.10"
+tar = "=0.4.46"
+tempfile.workspace = true
+
+# The login keychain and the code-signing checks of the hand-over, through safe calls only
+# (src/macos_keychain.rs, src/keychain_handoff.rs): the same version keyring already uses.
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "=3.7.0"
 
 # Whether Windows Hello is set up (UserConsentVerifier), on the version tauri builds on.
 [target.'cfg(windows)'.dependencies]
