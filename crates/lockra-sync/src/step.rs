@@ -595,7 +595,8 @@ mod tests {
             original.doc.put(1, "GitHub", 10, 1);
             original.sync(&remote, &keys, 100).await.unwrap();
             // A copy of the vault, local part included, on another computer.
-            let mut copy = Device { number: 1, name: "Copy", keyring: original.keyring.clone(), state: original.state.clone(), doc: original.doc.clone(), floor: 0 };
+            let mut copy =
+                Device { number: 1, name: "Copy", keyring: original.keyring.clone(), state: original.state.clone(), doc: original.doc.clone(), floor: 0 };
             copy.doc.put(2, "Mail", 20, 1);
             copy.sync(&remote, &keys, 150).await.unwrap();
             original.doc.put(3, "Bank", 30, 1);

@@ -32,8 +32,8 @@ use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
 use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, SyncTransport, Updater};
 use crate::settings::{Settings, SettingsStore};
 use crate::sync::{
-    Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, SyncLocal, Working, config_error, device_name, merge_entries,
-    storage_view, sync_error,
+    Brought, LanLocal, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, SYNC_INTERVAL_LAN_FOREGROUND, Store, StoreKey, SyncLocal,
+    Working, config_error, device_name, merge_entries, storage_view, sync_error,
 };
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
@@ -44,6 +44,8 @@ use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker,
 
 /// The vault's file name in the data directory.
 pub const VAULT_FILE: &str = "vault.lockra";
+/// This installation's id, beside the settings.
+const INSTALL_ID_FILE: &str = "install-id";
 /// The shortest master password accepted (characters).
 pub const MIN_PASSWORD_CHARS: usize = 8;
 /// The largest file an import or a restore reads.
@@ -106,6 +108,8 @@ struct Shared {
     config: CoreConfig,
     ports: Ports,
     settings_store: SettingsStore,
+    /// This installation (`install-id` beside the settings).
+    install_id: Uuid,
     state: Mutex<State>,
     events: broadcast::Sender<UiEvent>,
     wake: Notify,
@@ -143,32 +147,67 @@ struct State {
 /// The sync as it runs; the vault keeps the space itself.
 #[derive(Default)]
 struct SyncRuntime {
-    /// A run is in progress.
+    /// A run is in progress; it takes the storages that became due meanwhile before it ends.
     busy: bool,
-    /// A run was asked for while one was in progress: another follows it.
-    again: bool,
-    /// When the next run is due.
-    at: Option<Instant>,
-    /// When the last run ended.
-    last_run: Option<Instant>,
-    /// What the last run did.
-    status: SyncStatus,
-    /// The last run's refused rollbacks and unreadable snapshots (device tags).
-    rolled_back: Vec<String>,
-    unreadable: Vec<String>,
-    /// The storage, opened once per space and storage settings.
-    remote: Option<(Uuid, StorageConfig, Arc<dyn RemoteStore>)>,
+    lan: StoreRuntime,
+    cloud: StoreRuntime,
 }
 
-/// What one run needs, taken from the vault when it starts.
+impl SyncRuntime {
+    fn store(&self, store: Store) -> &StoreRuntime {
+        match store {
+            Store::Lan => &self.lan,
+            Store::Cloud => &self.cloud,
+        }
+    }
+
+    fn store_mut(&mut self, store: Store) -> &mut StoreRuntime {
+        match store {
+            Store::Lan => &mut self.lan,
+            Store::Cloud => &mut self.cloud,
+        }
+    }
+
+    /// Everything forgotten (the vault locked, sync turned off); a run in progress finds the
+    /// vault changed and keeps nothing.
+    fn reset(&mut self) {
+        *self = Self { busy: self.busy, ..Self::default() };
+    }
+}
+
+/// The runs on one storage of the space.
+#[derive(Default)]
+struct StoreRuntime {
+    /// When its next run is due.
+    at: Option<Instant>,
+    /// Due: the next run takes it.
+    queued: bool,
+    /// No run on its own (a newer format there, a hub that no longer knows this device) until
+    /// the user asks for one.
+    held: bool,
+    /// When its last run ended.
+    last_run: Option<Instant>,
+    /// What its last run did.
+    status: SyncStatus,
+    /// Its last run did not reach the hub: away from it, which is no failure.
+    offline: bool,
+    /// Its last run's refused rollbacks and unreadable snapshots (device tags).
+    rolled_back: Vec<String>,
+    unreadable: Vec<String>,
+    /// The storage, opened once per space and settings.
+    remote: Option<(Uuid, StoreKey, Arc<dyn RemoteStore>)>,
+}
+
+/// What one run on one storage needs, taken from the vault when it starts.
 struct SyncJob {
     space_id: Uuid,
     remote: Option<Arc<dyn RemoteStore>>,
-    storage: StorageConfig,
+    key: StoreKey,
     keys: SpaceKeys,
     device: u64,
     device_name: String,
     keyring: Vec<u8>,
+    seq_floor: u64,
     state: SyncState,
     working: Working,
 }
@@ -197,6 +236,7 @@ impl Core {
     pub fn start(config: CoreConfig, ports: Ports) -> Self {
         let settings_store = SettingsStore::new(&config.config_dir);
         let settings = settings_store.load();
+        let install_id = install_id(&config.config_dir);
         let vault_path = config.data_dir.join(VAULT_FILE);
         let (phase, vault_id, device_slot, device_check) = match fs::read(&vault_path) {
             Ok(bytes) => match read_header(&bytes) {
@@ -230,7 +270,7 @@ impl Core {
             foreground: true,
         };
         let (events, _) = broadcast::channel(64);
-        let shared = Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new() });
+        let shared = Arc::new(Shared { config, ports, settings_store, install_id, state: Mutex::new(state), events, wake: Notify::new() });
         tokio::spawn(scheduler(Arc::clone(&shared)));
         let core = Self { shared };
         core.refresh_biometrics();
@@ -464,11 +504,17 @@ impl Core {
             st.failed_attempts = 0;
             st.retry_at_ms = None;
             st.last_activity = Instant::now();
-            // A device of a sync space syncs as soon as it is unlocked.
-            if data.sync().is_some() {
-                st.sync.at = Some(Instant::now());
+            let mut session = Session { sealed: opened.sealed, data, import: None, exports: Vec::new() };
+            // A LAN role taken on another installation is that one's: this copy of the vault
+            // leaves it, or the two would share one pairing.
+            if session.data.sync_mut().is_some_and(|sync| sync.leave_lan_of_other_install(self.shared.install_id))
+                && let Err(error) = self.write_vault(&session)
+            {
+                tracing::warn!(?error, "the vault without its LAN role was not written; the next unlock tries again");
             }
-            st.phase = PhaseState::Unlocked(Box::new(Session { sealed: opened.sealed, data, import: None, exports: Vec::new() }));
+            st.phase = PhaseState::Unlocked(Box::new(session));
+            // A device of a sync space syncs as soon as it is unlocked.
+            sync_due(&mut st, Instant::now(), true);
         }
         self.changed();
         Ok(())
@@ -490,7 +536,7 @@ impl Core {
                 st.phase = PhaseState::Locked;
                 st.auto_backup_at = None;
                 // A run in progress finds the vault locked and keeps nothing.
-                st.sync = SyncRuntime { busy: st.sync.busy, ..SyncRuntime::default() };
+                st.sync.reset();
             }
             was_unlocked
         };
@@ -559,24 +605,23 @@ impl Core {
                 return Err(ErrorCode::Internal.into());
             }
             let previous = std::mem::replace(&mut session.sealed, sealed);
-            let previous_keyring = match (&keyring, session.data.sync_mut()) {
-                (Some((space_id, keyring)), Some(sync)) if sync.space_id == *space_id => {
-                    Some((std::mem::replace(&mut sync.keyring, BASE64.encode(keyring)), std::mem::replace(&mut sync.keyring_written, false)))
-                }
-                _ => None,
-            };
+            let previous_space = session.data.sync().cloned();
+            if let (Some((space_id, keyring)), Some(sync)) = (&keyring, session.data.sync_mut())
+                && sync.space_id == *space_id
+            {
+                sync.keyring = BASE64.encode(keyring);
+                // Every storage holds the keyring before.
+                sync.keyring_sealed_again();
+            }
             if let Err(error) = self.write_vault(session) {
                 session.sealed = previous;
-                if let (Some((keyring, written)), Some(sync)) = (previous_keyring, session.data.sync_mut()) {
-                    sync.keyring = keyring;
-                    sync.keyring_written = written;
-                }
+                session.data.local_mut().sync = previous_space;
                 return Err(error);
             }
             st.device_slot = session_device(&st);
             self.schedule_auto_backup(&mut st);
             if keyring.is_some() {
-                st.sync.at = Some(Instant::now());
+                sync_due(&mut st, Instant::now(), false);
             }
         }
         if outcome == DeviceSlot::Dropped {
@@ -1230,7 +1275,12 @@ impl Core {
                 PhaseState::NoVault => {
                     fs::create_dir_all(&self.shared.config.data_dir)?;
                     restrict_dir(&self.shared.config.data_dir);
-                    let session = Session { sealed: opened.sealed, data, import: None, exports: Vec::new() };
+                    let mut session = Session { sealed: opened.sealed, data, import: None, exports: Vec::new() };
+                    // A vault file (not a backup) brings its sync space along; a LAN role in it
+                    // stays with the installation that took it.
+                    if let Some(sync) = session.data.sync_mut() {
+                        sync.leave_lan_of_other_install(self.shared.install_id);
+                    }
                     if let Err(error) = self.write_vault(&session) {
                         st.restore = Some(restore);
                         return Err(error);
@@ -1238,11 +1288,8 @@ impl Core {
                     let entries = u32::try_from(session.data.entries.len()).unwrap_or(u32::MAX);
                     st.vault_id = Some(session.sealed.vault_id());
                     st.device_slot = false;
-                    // A vault file (not a backup) brings its sync space along.
-                    if session.data.sync().is_some() {
-                        st.sync.at = Some(Instant::now());
-                    }
                     st.phase = PhaseState::Unlocked(Box::new(session));
+                    sync_due(&mut st, Instant::now(), true);
                     st.last_activity = Instant::now();
                     Some(Notice::Restored { entries })
                 }
@@ -1480,10 +1527,11 @@ impl Core {
         let mut space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
         // The key is shown once now; Settings › Sync reminds of it until it is saved.
         space.key_saved = false;
-        let first = Space { prefix: space.storage.prefix(), keys: &keys, device: number, device_name: &space.device_name, keyring: &keyring };
-        step(&*remote, &first, &mut space.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
-        space.keyring_written = true;
-        space.last_sync_ms = Some(self.now_ms());
+        let first =
+            Space { prefix: space.cloud.storage.prefix(), keys: &keys, device: number, device_name: &space.device_name, keyring: &keyring, seq_floor: 0 };
+        step(&*remote, &first, &mut space.cloud.sync.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
+        space.cloud.sync.keyring_written = true;
+        space.cloud.sync.last_ok_ms = Some(self.now_ms());
         let text = sync_key.to_text();
         self.join_space(vault_id, space, remote)?;
         Ok(SyncCreated { sync_key: text.to_string() })
@@ -1583,11 +1631,11 @@ impl Core {
             if session.data.sync().is_some() {
                 return Err(ErrorCode::SyncAlreadyOn.into());
             }
-            let cache = (space.space_id, space.storage.clone(), remote);
+            let cache = (space.space_id, StoreKey::Cloud(space.cloud.storage.clone()), remote);
             session.data.local_mut().sync = Some(space);
             self.save(&mut st, false, |s| s.data.local_mut().sync = None)?;
-            st.sync.remote = Some(cache);
-            st.sync.at = Some(Instant::now());
+            st.sync.cloud.remote = Some(cache);
+            sync_due(&mut st, Instant::now(), true);
         }
         self.changed();
         Ok(())
@@ -1600,7 +1648,7 @@ impl Core {
             if !matches!(st.phase, PhaseState::NoVault) {
                 return Err(ErrorCode::VaultExists.into());
             }
-            let cache = (space.space_id, space.storage.clone(), remote);
+            let cache = (space.space_id, StoreKey::Cloud(space.cloud.storage.clone()), remote);
             let mut data = VaultData::new();
             data.local_mut().sync = Some(space);
             let session = Session { sealed, data, import: None, exports: Vec::new() };
@@ -1609,8 +1657,8 @@ impl Core {
             st.device_slot = false;
             st.phase = PhaseState::Unlocked(Box::new(session));
             st.last_activity = Instant::now();
-            st.sync.remote = Some(cache);
-            st.sync.at = Some(Instant::now());
+            st.sync.cloud.remote = Some(cache);
+            sync_due(&mut st, Instant::now(), true);
         }
         self.changed();
         Ok(())
@@ -1625,7 +1673,7 @@ impl Core {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (sync.storage.clone(), sync.sync_key.clone())
+            (sync.cloud.storage.clone(), sync.sync_key.clone())
         };
         self.confirm_presence(password, reason).await?;
         let cost = self.shared.config.kdf;
@@ -1729,15 +1777,17 @@ impl Core {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
             let sync = session.data.sync_mut().filter(|s| s.space_id == space_id).ok_or(ErrorCode::SyncOff)?;
-            let cache = (space_id, storage.clone(), remote);
-            let previous = std::mem::replace(&mut sync.storage, storage);
+            let cache = (space_id, StoreKey::Cloud(storage.clone()), remote);
+            let previous = std::mem::replace(&mut sync.cloud.storage, storage);
             self.save(&mut st, false, move |s| {
                 if let Some(sync) = s.data.sync_mut() {
-                    sync.storage = previous;
+                    sync.cloud.storage = previous;
                 }
             })?;
-            st.sync.remote = Some(cache);
-            st.sync.at = Some(Instant::now());
+            let cloud = &mut st.sync.cloud;
+            cloud.remote = Some(cache);
+            cloud.held = false;
+            cloud.at = Some(Instant::now());
         }
         self.changed();
         Ok(())
@@ -1756,45 +1806,58 @@ impl Core {
                     sync.device_name = previous;
                 }
             })?;
-            st.sync.at = Some(Instant::now());
+            sync_due(&mut st, Instant::now(), false);
         }
         self.changed();
         Ok(())
     }
 
     /// Remove another device's snapshot from the space (a lost or retired device): it stops being
-    /// listed. A device still in use writes its snapshot again on its next run.
+    /// listed. On the LAN hub, from its copy too. A device still in use writes its snapshot again
+    /// on its next run.
     pub async fn sync_remove_device(&self, tag: &str) -> CoreResult<()> {
-        let (storage, keys, device) = {
+        let (space_id, stores, keys, device) = {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (sync.storage.clone(), sync.keys().map_err(|e| sync_error(&e))?, session.data.device())
+            // A client may not delete on its hub: the hub removes its devices itself.
+            let hub = matches!(sync.lan, Some(LanLocal::Hub { .. }));
+            let stores: Vec<(Store, StoreKey)> =
+                sync.stores().filter(|store| *store == Store::Cloud || hub).filter_map(|store| sync.store_key(store).map(|key| (store, key))).collect();
+            (sync.space_id, stores, sync.keys().map_err(|e| sync_error(&e))?, session.data.device())
         };
-        let remote = self.space_storage(keys.space_id(), &storage).map_err(|e| sync_error(&e))?;
-        let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: "", keyring: &[] };
-        match remove_device(&*remote, &space, &mut SyncState::default(), tag).await {
-            Ok(()) => {}
-            // This device, or not a device's name: nothing the interface offers.
-            Err(SyncError::Misplaced) => return Err(ErrorCode::Internal.into()),
-            Err(error) => return Err(sync_error(&error)),
+        for (store, key) in &stores {
+            let remote = self.space_storage(*store, space_id, key).map_err(|e| sync_error(&e))?;
+            let space = Space { prefix: key.prefix(), keys: &keys, device, device_name: "", keyring: &[], seq_floor: 0 };
+            match remove_device(&*remote, &space, &mut SyncState::default(), tag).await {
+                Ok(()) => {}
+                // This device, or not a device's name: nothing the interface offers.
+                Err(SyncError::Misplaced) => return Err(ErrorCode::Internal.into()),
+                Err(error) => return Err(sync_error(&error)),
+            }
         }
         {
             let mut st = self.lock();
             if let PhaseState::Unlocked(session) = &mut st.phase
-                && let Some(sync) = session.data.sync_mut().filter(|s| s.space_id == keys.space_id())
-                && let Some(seen) = sync.state.seen.remove(tag)
+                && let Some(sync) = session.data.sync_mut().filter(|s| s.space_id == space_id)
             {
-                let tag = tag.to_owned();
-                self.save(&mut st, false, move |s| {
-                    if let Some(sync) = s.data.sync_mut() {
-                        sync.state.seen.insert(tag, seen);
+                let previous = sync.clone();
+                let mut forgot = false;
+                for store in Store::ALL {
+                    if let Some(transport) = sync.transport_mut(store) {
+                        forgot |= transport.state.seen.remove(tag).is_some();
                     }
-                })?;
+                }
+                if forgot {
+                    self.save(&mut st, false, move |s| s.data.local_mut().sync = Some(previous))?;
+                }
             }
-            st.sync.rolled_back.retain(|t| t != tag);
-            st.sync.unreadable.retain(|t| t != tag);
-            st.sync.at = Some(Instant::now());
+            for store in Store::ALL {
+                let runtime = st.sync.store_mut(store);
+                runtime.rolled_back.retain(|t| t != tag);
+                runtime.unreadable.retain(|t| t != tag);
+            }
+            sync_due(&mut st, Instant::now(), false);
         }
         self.changed();
         Ok(())
@@ -1809,15 +1872,14 @@ impl Core {
             if std::mem::replace(&mut st.foreground, foreground) == foreground || !foreground || st.sync.busy {
                 return;
             }
-            if !matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some()) {
-                return;
-            }
             let now = Instant::now();
-            let due = st.sync.last_run.map_or(now, |last| (last + SYNC_FOCUS_MIN).max(now));
-            if st.sync.at.is_some_and(|at| at <= due) {
-                return;
+            for store in configured_stores(&st) {
+                let runtime = st.sync.store_mut(store);
+                let due = runtime.last_run.map_or(now, |last| (last + SYNC_FOCUS_MIN).max(now));
+                if !runtime.held && runtime.at.is_none_or(|at| at > due) {
+                    runtime.at = Some(due);
+                }
             }
-            st.sync.at = Some(due);
         }
         self.shared.wake.notify_one();
     }
@@ -1825,8 +1887,14 @@ impl Core {
     /// Run the sync now (Settings › Sync › "sync now").
     pub fn sync_now(&self) -> CoreResult<()> {
         {
-            let st = self.lock();
+            let mut st = self.lock();
             unlocked(&st)?.data.sync().ok_or(ErrorCode::SyncOff)?;
+            for store in configured_stores(&st) {
+                let runtime = st.sync.store_mut(store);
+                runtime.at = None;
+                runtime.held = false;
+                runtime.queued = true;
+            }
         }
         self.start_sync();
         Ok(())
@@ -1840,7 +1908,7 @@ impl Core {
             let session = unlocked_mut(&mut st)?;
             let previous = session.data.local_mut().sync.take().ok_or(ErrorCode::SyncOff)?;
             self.save(&mut st, false, move |s| s.data.local_mut().sync = Some(previous))?;
-            st.sync = SyncRuntime { busy: st.sync.busy, ..SyncRuntime::default() };
+            st.sync.reset();
         }
         self.changed();
         Ok(())
@@ -1850,22 +1918,17 @@ impl Core {
         self.shared.ports.sync.open(storage).map_err(|e| sync_error(&e))
     }
 
-    /// Start a run unless one is in progress, which another then follows.
+    /// Start a run of the storages that are due, unless one is in progress: that one takes them
+    /// before it ends.
     fn start_sync(&self) {
         {
             let mut st = self.lock();
-            if !matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some()) {
-                return;
-            }
-            st.sync.at = None;
-            if st.sync.busy {
-                st.sync.again = true;
+            let due = configured_stores(&st).into_iter().any(|store| st.sync.store(store).queued);
+            if !due || st.sync.busy {
                 return;
             }
             st.sync.busy = true;
-            st.sync.status = SyncStatus::Syncing;
         }
-        self.changed();
         let core = self.clone();
         tokio::spawn(async move { core.run_sync().await });
     }
@@ -1873,127 +1936,196 @@ impl Core {
     async fn run_sync(&self) {
         let mut renumbered = false;
         loop {
-            let (brought, result) = self.sync_once().await;
-            if brought.any() {
-                // In the vault whatever the run did next; a run that failed later no longer knows
-                // which devices it came from.
-                let devices = result.as_ref().map(|outcome| outcome.brought.clone()).unwrap_or_default();
-                self.notice(brought.notice(devices));
-            }
-            let now = self.now_ms();
-            let again = {
+            let stores: Vec<Store> = {
                 let mut st = self.lock();
-                let mut again = std::mem::take(&mut st.sync.again);
-                match &result {
-                    Ok(outcome) => {
-                        st.sync.status = SyncStatus::Synced { at_ms: now };
-                        st.sync.rolled_back.clone_from(&outcome.rolled_back);
-                        st.sync.unreadable.clone_from(&outcome.unreadable);
-                    }
-                    // Another device writes under this one's name: a copied vault, or this vault's
-                    // own state put back. This device becomes a new one of the space, once.
-                    Err(SyncError::DeviceClash) if !renumbered => {
-                        renumbered = true;
-                        match self.renumber(&mut st) {
-                            Ok(()) => again = true,
-                            Err(error) => st.sync.status = SyncStatus::Failed { code: error.code, at_ms: now },
-                        }
-                    }
-                    // Locked meanwhile, the space changed, or the vault could not be written (the
-                    // status says so already).
-                    Err(SyncError::Interrupted) => {}
-                    Err(error) => st.sync.status = SyncStatus::Failed { code: sync_error(error).code, at_ms: now },
-                }
-                let configured = matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some());
-                again &= configured;
-                if !again {
+                let mut stores = configured_stores(&st);
+                stores.retain(|store| std::mem::take(&mut st.sync.store_mut(*store).queued));
+                if stores.is_empty() {
                     st.sync.busy = false;
-                    st.sync.last_run = Some(Instant::now());
-                    if configured && st.sync.at.is_none() {
-                        // A failed run waits the long interval, in front too.
-                        let synced = matches!(st.sync.status, SyncStatus::Synced { .. });
-                        let interval = if synced && st.foreground { SYNC_INTERVAL_FOREGROUND } else { SYNC_INTERVAL };
-                        st.sync.at = Some(Instant::now() + interval);
-                    }
+                    return;
                 }
-                again
+                for store in &stores {
+                    st.sync.store_mut(*store).status = SyncStatus::Syncing;
+                }
+                stores
             };
             self.changed();
-            if !again {
-                break;
+            let (mut brought, mut devices, mut unknown) = (Brought::default(), Vec::<String>::new(), false);
+            for store in stores {
+                let (taken, result) = self.sync_once(store).await;
+                brought += taken;
+                match &result {
+                    Ok(outcome) => {
+                        for device in &outcome.brought {
+                            if !devices.contains(device) {
+                                devices.push(device.clone());
+                            }
+                        }
+                    }
+                    // In the vault whatever the run did next; a run that failed later no longer
+                    // knows which devices it came from.
+                    Err(_) => unknown |= taken.any(),
+                }
+                let clash = {
+                    let mut st = self.lock();
+                    match &result {
+                        // Another device writes under this one's name: a copied vault, or this
+                        // vault's own state put back. This device becomes a new one of the space,
+                        // once, on every storage.
+                        Err(SyncError::DeviceClash) if !renumbered => {
+                            renumbered = true;
+                            match self.renumber(&mut st) {
+                                Ok(()) => {
+                                    for again in configured_stores(&st) {
+                                        st.sync.store_mut(again).queued = true;
+                                    }
+                                    true
+                                }
+                                Err(error) => {
+                                    self.after_run(&mut st, store, &Err(SyncError::Storage(String::new())));
+                                    st.sync.store_mut(store).status = SyncStatus::Failed { code: error.code, at_ms: self.now_ms() };
+                                    false
+                                }
+                            }
+                        }
+                        _ => {
+                            self.after_run(&mut st, store, &result);
+                            false
+                        }
+                    }
+                };
+                self.changed();
+                if clash {
+                    break;
+                }
+            }
+            if brought.any() {
+                self.notice(brought.notice(if unknown { Vec::new() } else { devices }));
             }
         }
     }
 
-    /// One run: the other devices' snapshots in, this device's out, its keyring inside. With what
-    /// it took into the accounts, which stays there even when the run fails afterwards.
-    async fn sync_once(&self) -> (Brought, Result<SyncOutcome, SyncError>) {
+    /// A storage's run ended with `result`: what it did, and when it runs next. A failed run
+    /// waits the long interval, in front too; the LAN is tried again sooner, being away from the
+    /// hub being no failure; a storage holding a newer format, or a hub that no longer knows this
+    /// device, waits for the user.
+    fn after_run(&self, st: &mut State, store: Store, result: &Result<SyncOutcome, SyncError>) {
+        let now_ms = self.now_ms();
+        let foreground = st.foreground;
+        let configured = configured_stores(st).contains(&store);
+        let runtime = st.sync.store_mut(store);
+        runtime.last_run = Some(Instant::now());
+        let next = match result {
+            Ok(outcome) => {
+                runtime.status = SyncStatus::Synced { at_ms: now_ms };
+                runtime.offline = false;
+                runtime.rolled_back.clone_from(&outcome.rolled_back);
+                runtime.unreadable.clone_from(&outcome.unreadable);
+                Some(match (store, foreground) {
+                    (_, false) => SYNC_INTERVAL,
+                    (Store::Lan, true) => SYNC_INTERVAL_LAN_FOREGROUND,
+                    (Store::Cloud, true) => SYNC_INTERVAL_FOREGROUND,
+                })
+            }
+            // Locked meanwhile, the space or this storage changed, or the vault could not be
+            // written (the status says so already).
+            Err(SyncError::Interrupted) => Some(SYNC_INTERVAL),
+            Err(error) => {
+                runtime.status = SyncStatus::Failed { code: sync_error(error).code, at_ms: now_ms };
+                runtime.offline = store == Store::Lan && matches!(error, SyncError::Network(_));
+                match (store, error) {
+                    (Store::Lan, SyncError::Network(_)) if foreground => Some(SYNC_INTERVAL_FOREGROUND),
+                    (_, SyncError::Unsupported(_)) | (Store::Lan, SyncError::WrongCredentials) => None,
+                    _ => Some(SYNC_INTERVAL),
+                }
+            }
+        };
+        if !configured || runtime.queued || runtime.at.is_some() {
+            return;
+        }
+        match next {
+            Some(interval) => runtime.at = Some(Instant::now() + interval),
+            None => runtime.held = true,
+        }
+    }
+
+    /// One run on `store`: the other devices' snapshots in, this device's out, its keyring
+    /// inside. With what it took into the accounts, which stays there even when the run fails
+    /// afterwards.
+    async fn sync_once(&self, store: Store) -> (Brought, Result<SyncOutcome, SyncError>) {
         let mut brought = Brought::default();
-        let result = self.sync_into(&mut brought).await;
+        let result = self.sync_into(store, &mut brought).await;
         (brought, result)
     }
 
-    async fn sync_into(&self, brought: &mut Brought) -> Result<SyncOutcome, SyncError> {
-        let SyncJob { space_id, remote, storage, keys, device, device_name, keyring, mut state, mut working } = self.sync_job()?;
+    async fn sync_into(&self, store: Store, brought: &mut Brought) -> Result<SyncOutcome, SyncError> {
+        let SyncJob { space_id, remote, key, keys, device, device_name, keyring, seq_floor, mut state, mut working } = self.sync_job(store)?;
         let remote = remote.ok_or(SyncError::Interrupted)?;
-        let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: &device_name, keyring: &keyring };
+        let space = Space { prefix: key.prefix(), keys: &keys, device, device_name: &device_name, keyring: &keyring, seq_floor };
         let outcome = {
             let mut persist = |state: &SyncState, working: &Working| {
-                *brought += self.sync_keep(space_id, &storage, state, working, None)?;
+                *brought += self.sync_keep(store, space_id, &key, state, working, None)?;
                 Ok(())
             };
             step_with(&*remote, &space, &mut state, &mut working, self.now_ms(), &mut persist).await?
         };
-        *brought += self.sync_keep(space_id, &storage, &state, &working, Some((self.now_ms(), &keyring)))?;
+        *brought += self.sync_keep(store, space_id, &key, &state, &working, Some((self.now_ms(), &keyring)))?;
         Ok(outcome)
     }
 
-    fn sync_job(&self) -> Result<SyncJob, SyncError> {
-        let (job, storage) = {
+    fn sync_job(&self, store: Store) -> Result<SyncJob, SyncError> {
+        let job = {
             let st = self.lock();
             let PhaseState::Unlocked(session) = &st.phase else { return Err(SyncError::Interrupted) };
             let Some(sync) = session.data.sync() else { return Err(SyncError::Interrupted) };
-            let job = SyncJob {
+            let (Some(transport), Some(key)) = (sync.transport(store), sync.store_key(store)) else { return Err(SyncError::Interrupted) };
+            SyncJob {
                 space_id: sync.space_id,
                 remote: None,
-                storage: sync.storage.clone(),
+                key,
                 keys: sync.keys()?,
                 device: session.data.device(),
                 device_name: sync.device_name.clone(),
                 keyring: sync.keyring()?,
-                state: sync.state.clone(),
+                seq_floor: sync.seq_floor(),
+                state: transport.state.clone(),
                 working: Working { entries: session.data.entries.clone(), tombstones: session.data.tombstones.clone() },
-            };
-            (job, sync.storage.clone())
+            }
         };
-        let remote = self.space_storage(job.space_id, &storage)?;
+        let remote = self.space_storage(store, job.space_id, &job.key)?;
         Ok(SyncJob { remote: Some(remote), ..job })
     }
 
-    /// The space's storage: opened once and kept for the next runs, until the space or its
-    /// storage settings change. Opening (an HTTP client, the system's certificates) happens
+    /// The space's storage: opened once and kept for the next runs, until the space or the
+    /// storage's settings change. Opening (an HTTP client, the system's certificates) happens
     /// outside the state's lock.
-    fn space_storage(&self, space_id: Uuid, storage: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
-        if let Some((id, config, remote)) = &self.lock().sync.remote
+    fn space_storage(&self, store: Store, space_id: Uuid, key: &StoreKey) -> Result<Arc<dyn RemoteStore>, SyncError> {
+        if let Some((id, kept, remote)) = &self.lock().sync.store(store).remote
             && *id == space_id
-            && config == storage
+            && kept == key
         {
             return Ok(Arc::clone(remote));
         }
-        let remote = self.shared.ports.sync.open(storage)?;
-        self.lock().sync.remote = Some((space_id, storage.clone(), Arc::clone(&remote)));
+        let transport = &self.shared.ports.sync;
+        let remote = match key {
+            StoreKey::Cloud(storage) => transport.open(storage)?,
+            StoreKey::Hub { .. } => transport.open_hub_store(space_id)?,
+            StoreKey::Client(config) => transport.open_lan_client(config)?,
+        };
+        self.lock().sync.store_mut(store).remote = Some((space_id, key.clone(), Arc::clone(&remote)));
         Ok(remote)
     }
 
-    /// Fold a run's replica into the vault and keep its state; `finished` marks the end of a run,
-    /// with the keyring it carried. The accounts merge rather than replace: a change made while
-    /// the run was out stays, and the next run takes it along. A space or storage settings changed
-    /// meanwhile stop the run, before it writes to where the space no longer is. Answers what the
-    /// merge changed in the accounts.
+    /// Fold a run's replica into the vault and keep what the runs on `store` remember; `finished`
+    /// marks the end of a run, with the keyring it carried. The accounts merge rather than
+    /// replace: a change made while the run was out stays, and the next run takes it along. A
+    /// space or a storage changed meanwhile stop the run, before it writes to where the space no
+    /// longer is. Answers what the merge changed in the accounts.
     fn sync_keep(
         &self,
+        store: Store,
         space_id: Uuid,
-        storage: &StorageConfig,
+        key: &StoreKey,
         state: &SyncState,
         working: &Working,
         finished: Option<(u64, &[u8])>,
@@ -2002,7 +2134,8 @@ impl Core {
         let (changed, brought) = {
             let mut st = self.lock();
             let PhaseState::Unlocked(session) = &mut st.phase else { return Err(SyncError::Interrupted) };
-            if session.data.sync().map(|s| (s.space_id, &s.storage)) != Some((space_id, storage)) {
+            let here = session.data.sync().filter(|s| s.space_id == space_id).and_then(|s| s.store_key(store));
+            if !here.is_some_and(|here| here.same_store(key)) {
                 return Err(SyncError::Interrupted);
             }
             let before = session.data.clone();
@@ -2012,19 +2145,22 @@ impl Core {
                 session.data.observe_stamps();
             }
             if let Some(sync) = session.data.sync_mut() {
-                sync.state = state.clone();
-                if let Some((at, keyring)) = finished {
-                    sync.last_sync_ms = Some(at);
-                    // The storage holds the keyring the run carried: still this device's, unless a
-                    // new master password sealed another meanwhile.
-                    if sync.keyring().is_ok_and(|current| current == keyring) {
-                        sync.keyring_written = true;
+                // The storage holds the keyring the run carried: still this device's, unless a
+                // new master password sealed another meanwhile.
+                let current = sync.keyring().ok();
+                if let Some(transport) = sync.transport_mut(store) {
+                    transport.state = state.clone();
+                    if let Some((at, keyring)) = finished {
+                        transport.last_ok_ms = Some(at);
+                        if current.as_deref() == Some(keyring) {
+                            transport.keyring_written = true;
+                        }
                     }
                 }
             }
             if let Err(error) = self.write_vault(session) {
                 session.data = before;
-                st.sync.status = SyncStatus::Failed { code: error.code, at_ms: now };
+                st.sync.store_mut(store).status = SyncStatus::Failed { code: error.code, at_ms: now };
                 return Err(SyncError::Interrupted);
             }
             if changed {
@@ -2038,8 +2174,8 @@ impl Core {
         Ok(brought)
     }
 
-    /// Become a new device of the space: a new number (and clock), a fresh state. The snapshot
-    /// under the old number stays, as another device's, until it is removed.
+    /// Become a new device of the space: a new number (and clock), a fresh state on every
+    /// storage. The snapshots under the old number stay, as another device's, until removed.
     fn renumber(&self, st: &mut State) -> CoreResult<()> {
         let PhaseState::Unlocked(session) = &mut st.phase else { return Err(ErrorCode::Locked.into()) };
         let before = session.data.clone();
@@ -2048,7 +2184,11 @@ impl Core {
         clock.observe(local.clock.last());
         local.clock = clock;
         if let Some(sync) = local.sync.as_mut() {
-            sync.state = SyncState::default();
+            for store in Store::ALL {
+                if let Some(transport) = sync.transport_mut(store) {
+                    transport.state = SyncState::default();
+                }
+            }
         }
         if let Err(error) = self.write_vault(session) {
             session.data = before;
@@ -2271,7 +2411,8 @@ impl Core {
             }
             deadlines.extend(session.exports.iter().map(|e| e.expires_at));
             deadlines.extend(st.auto_backup_at);
-            deadlines.extend(st.sync.at);
+            deadlines.extend(st.sync.lan.at);
+            deadlines.extend(st.sync.cloud.at);
         }
         deadlines.extend(st.clipboard.as_ref().map(|(_, at)| *at));
         deadlines.extend(st.update.auto_at);
@@ -2287,9 +2428,14 @@ impl Core {
             if auto_update {
                 st.update.auto_at = None;
             }
-            let sync = st.sync.at.is_some_and(|at| now >= at);
-            if sync {
-                st.sync.at = None;
+            let mut sync = false;
+            for store in Store::ALL {
+                let runtime = st.sync.store_mut(store);
+                if runtime.at.is_some_and(|at| now >= at) {
+                    runtime.at = None;
+                    runtime.queued = true;
+                    sync = true;
+                }
             }
             let auto_lock = matches!(st.phase, PhaseState::Unlocked(_))
                 && st.settings.auto_lock_minutes > 0
@@ -2496,25 +2642,94 @@ fn current_code(entry: &Entry, now_ms: u64) -> String {
     code_view(entry, now_ms).code
 }
 
+/// The storages of the unlocked vault's space, in the order a run takes them.
+fn configured_stores(st: &State) -> Vec<Store> {
+    match &st.phase {
+        PhaseState::Unlocked(session) => session.data.sync().map(|sync| sync.stores().collect()).unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+/// The space's storages are due at `at` (unlocking, a command); the ones waiting for the user
+/// too when `held`, the user having asked.
+fn sync_due(st: &mut State, at: Instant, held: bool) {
+    for store in configured_stores(st) {
+        let runtime = st.sync.store_mut(store);
+        if held {
+            runtime.held = false;
+        }
+        if !runtime.held && runtime.at.is_none_or(|due| due > at) {
+            runtime.at = Some(at);
+        }
+    }
+}
+
 /// A change to sync: a run follows after the debounce.
 fn schedule_sync(st: &mut State) {
-    if matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some()) {
-        st.sync.at = Some(Instant::now() + SYNC_DEBOUNCE);
+    let at = Instant::now() + SYNC_DEBOUNCE;
+    for store in configured_stores(st) {
+        let runtime = st.sync.store_mut(store);
+        if !runtime.held {
+            runtime.at = Some(at);
+        }
     }
+}
+
+/// The space's status from its storages': a run in progress; else the latest failure (being
+/// away from the LAN hub is none); else the latest success; else nothing yet.
+fn sync_status(st: &State, stores: &[Store]) -> SyncStatus {
+    let runtimes: Vec<&StoreRuntime> = stores.iter().map(|store| st.sync.store(*store)).collect();
+    if runtimes.iter().any(|r| r.status == SyncStatus::Syncing) {
+        return SyncStatus::Syncing;
+    }
+    let failed = runtimes
+        .iter()
+        .filter(|r| !r.offline)
+        .filter_map(|r| match r.status {
+            SyncStatus::Failed { code, at_ms } => Some((at_ms, code)),
+            _ => None,
+        })
+        .max_by_key(|(at_ms, _)| *at_ms);
+    if let Some((at_ms, code)) = failed {
+        return SyncStatus::Failed { code, at_ms };
+    }
+    runtimes
+        .iter()
+        .filter_map(|r| match r.status {
+            SyncStatus::Synced { at_ms } => Some(at_ms),
+            _ => None,
+        })
+        .max()
+        .map_or(SyncStatus::Idle, |at_ms| SyncStatus::Synced { at_ms })
 }
 
 fn sync_view(st: &State) -> SyncView {
     let PhaseState::Unlocked(session) = &st.phase else { return SyncView { space: None } };
     let space = session.data.sync().map(|sync| {
         let own_tag = sync.keys().map(|keys| keys.device_tag(session.data.device())).unwrap_or_default();
+        let stores: Vec<Store> = sync.stores().collect();
+        let (mut rolled_back, mut unreadable) = (Vec::<String>::new(), Vec::<String>::new());
+        for store in &stores {
+            let runtime = st.sync.store(*store);
+            for tag in &runtime.rolled_back {
+                if !rolled_back.contains(tag) {
+                    rolled_back.push(tag.clone());
+                }
+            }
+            for tag in &runtime.unreadable {
+                if !unreadable.contains(tag) {
+                    unreadable.push(tag.clone());
+                }
+            }
+        }
         SyncSpaceView {
-            storage: storage_view(&sync.storage),
+            storage: storage_view(&sync.cloud.storage),
             device_name: sync.device_name.clone(),
             devices: sync.devices(own_tag),
-            status: st.sync.status.clone(),
-            last_sync_ms: sync.last_sync_ms,
-            rolled_back: st.sync.rolled_back.clone(),
-            unreadable: st.sync.unreadable.clone(),
+            status: sync_status(st, &stores),
+            last_sync_ms: sync.last_sync_ms(),
+            rolled_back,
+            unreadable,
             keyring_pending: sync.keyring_pending(),
             key_saved: sync.key_saved,
         }
@@ -2522,11 +2737,54 @@ fn sync_view(st: &State) -> SyncView {
     SyncView { space }
 }
 
+/// This installation's id, kept beside the settings and nowhere in the vault or a backup: made
+/// once. A vault opened by another installation leaves the LAN role taken here.
+fn install_id(config_dir: &Path) -> Uuid {
+    let path = config_dir.join(INSTALL_ID_FILE);
+    if let Ok(text) = fs::read_to_string(&path)
+        && let Ok(id) = Uuid::parse_str(text.trim())
+    {
+        return id;
+    }
+    let id = Uuid::new_v4();
+    if let Err(error) = fs::create_dir_all(config_dir).and_then(|()| write_atomic(&path, id.to_string().as_bytes())) {
+        tracing::warn!(?error, "the installation id was not kept: a LAN pairing lasts until the app quits");
+    }
+    id
+}
+
 fn unlocked(st: &State) -> CoreResult<&Session> {
     match &st.phase {
         PhaseState::Unlocked(session) => Ok(session),
         PhaseState::Locked => Err(ErrorCode::Locked.into()),
         PhaseState::NoVault => Err(ErrorCode::NoVault.into()),
+    }
+}
+
+/// What the tests need before the LAN has commands of its own.
+#[cfg(test)]
+impl Core {
+    /// This installation.
+    pub(crate) fn install_id(&self) -> Uuid {
+        self.shared.install_id
+    }
+
+    /// Give this device a LAN role, or take it away; its storages run at once.
+    pub(crate) fn set_lan(&self, lan: Option<LanLocal>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let sync = unlocked_mut(&mut st)?.data.sync_mut().ok_or(ErrorCode::SyncOff)?;
+            sync.lan = lan;
+            self.save(&mut st, false, |_| {})?;
+            sync_due(&mut st, Instant::now(), true);
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// The space as the vault keeps it.
+    pub(crate) fn sync_local(&self) -> Option<SyncLocal> {
+        unlocked(&self.lock()).ok().and_then(|session| session.data.sync().cloned())
     }
 }
 

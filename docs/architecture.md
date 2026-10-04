@@ -60,7 +60,11 @@ code window, auto-lock, clipboard clearing, the automatic backup debounce, expor
 automatic update, the next sync run — sleeps until the earliest deadline, and is woken through a
 `Notify` whenever the state changes, so nothing polls. The desktop shell tells the core when its
 window gains or loses the focus (`Core::set_foreground`): in front, sync runs every minute
-rather than every five. Core tests run on tokio's paused clock with the fakes.
+rather than every five. A space may sync with two storages, the user's own and a LAN hub's copy
+(`SyncTransport::open_hub_store` on the hub, `open_lan_client` on its clients; the shells have
+neither yet): each has its own state in the vault and its own runtime (when it is due, its last
+result), a run takes the due ones in turn, the LAN first, and a write's number is above every
+number this device gave on any of them. Core tests run on tokio's paused clock with the fakes.
 
 The in-app update follows Voltip's design. It is a run in the background, one at a time:
 `update_check` asks the `Updater` afresh (`UiState.update` goes `checking` → `up_to_date` /

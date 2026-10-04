@@ -24,6 +24,8 @@ pub const SYNC_DEBOUNCE: Duration = Duration::from_secs(3);
 pub const SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// Time between runs while the app is in front.
 pub const SYNC_INTERVAL_FOREGROUND: Duration = Duration::from_secs(60);
+/// Time between runs on the LAN hub while the app is in front.
+pub const SYNC_INTERVAL_LAN_FOREGROUND: Duration = Duration::from_secs(20);
 /// Coming to the front runs sync once the last run is this old.
 pub const SYNC_FOCUS_MIN: Duration = Duration::from_secs(30);
 /// The longest device name kept (characters), as a snapshot carries it.
@@ -103,7 +105,9 @@ pub(crate) enum LanLocal {
 impl fmt::Debug for LanLocal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Hub { hub_id, port, sync, .. } => f.debug_struct("Hub").field("hub_id", hub_id).field("port", port).field("sync", sync).finish_non_exhaustive(),
+            Self::Hub { hub_id, port, sync, .. } => {
+                f.debug_struct("Hub").field("hub_id", hub_id).field("port", port).field("sync", sync).finish_non_exhaustive()
+            }
             Self::Client { hub_id, peer_id, port, addrs, sync, .. } => f
                 .debug_struct("Client")
                 .field("hub_id", hub_id)
@@ -272,7 +276,10 @@ impl<'de> Deserialize<'de> for SyncLocal {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let kept = SyncLocalIn::deserialize(deserializer)?;
         Ok(Self {
-            cloud: CloudLocal { storage: kept.storage, sync: TransportLocal { state: kept.state, keyring_written: kept.keyring_written, last_ok_ms: kept.last_sync_ms } },
+            cloud: CloudLocal {
+                storage: kept.storage,
+                sync: TransportLocal { state: kept.state, keyring_written: kept.keyring_written, last_ok_ms: kept.last_sync_ms },
+            },
             space_id: kept.space_id,
             data_key: kept.data_key,
             sync_key: kept.sync_key,
@@ -699,6 +706,87 @@ mod tests {
         let mut older = whole;
         older.as_object_mut().unwrap().remove("key_saved");
         assert!(serde_json::from_value::<SyncLocal>(older).unwrap().key_saved);
+    }
+
+    fn laptop_space() -> SyncLocal {
+        let storage = StorageConfig::Webdav {
+            url: "https://dav.example.com/".into(),
+            prefix: String::new(),
+            username: "me".into(),
+            password: Zeroizing::new("pw".into()),
+        };
+        let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+        SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")
+    }
+
+    fn client_role(key: &[u8]) -> LanLocal {
+        LanLocal::Client {
+            install_id: Uuid::new_v4(),
+            hub_id: Uuid::new_v4(),
+            hub_name: "Desktop".into(),
+            peer_id: Uuid::new_v4(),
+            psk: Zeroizing::new(BASE64.encode(key)),
+            port: 47_100,
+            addrs: vec!["192.168.1.20".into()],
+            sync: TransportLocal::default(),
+        }
+    }
+
+    #[test]
+    fn a_space_keeps_the_cloud_where_earlier_versions_read_it_and_the_lan_beside() {
+        let mut kept = laptop_space();
+        kept.cloud.sync.state.own_seq = 4;
+        kept.cloud.sync.keyring_written = true;
+        kept.cloud.sync.last_ok_ms = Some(1_000);
+        // Without a LAN role: the fields earlier versions write, and nothing more.
+        let whole = serde_json::to_value(&kept).unwrap();
+        let mut names: Vec<&str> = whole.as_object().unwrap().keys().map(String::as_str).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["data_key", "device_name", "key_saved", "keyring", "keyring_written", "last_sync_ms", "space_id", "state", "storage", "sync_key"]);
+        assert_eq!(
+            (&whole["state"]["own_seq"], &whole["keyring_written"], &whole["last_sync_ms"]),
+            (&serde_json::json!(4), &serde_json::json!(true), &serde_json::json!(1000))
+        );
+        assert_eq!(serde_json::from_value::<SyncLocal>(whole).unwrap(), kept);
+        // With one, beside them: an earlier version syncs on with the cloud storage alone.
+        kept.lan = Some(LanLocal::Hub { install_id: Uuid::new_v4(), hub_id: Uuid::new_v4(), port: 47_100, sync: TransportLocal::default() });
+        let whole = serde_json::to_value(&kept).unwrap();
+        assert_eq!((&whole["lan"]["role"], &whole["state"]["own_seq"]), (&serde_json::json!("hub"), &serde_json::json!(4)));
+        assert_eq!(serde_json::from_value::<SyncLocal>(whole).unwrap(), kept);
+    }
+
+    #[test]
+    fn a_lan_role_this_version_cannot_use_is_left_out_not_the_space() {
+        let mut kept = laptop_space();
+        kept.lan = Some(client_role(&[7; 32]));
+        let back: SyncLocal = serde_json::from_value(serde_json::to_value(&kept).unwrap()).unwrap();
+        assert_eq!(back, kept);
+        assert!(back.store_key(Store::Lan).is_some());
+        // Its key is not one a hub gives: the role goes, the space and its cloud storage stay.
+        kept.lan = Some(client_role(&[7; 16]));
+        let back: SyncLocal = serde_json::from_value(serde_json::to_value(&kept).unwrap()).unwrap();
+        assert!(back.lan.is_none());
+        assert!(back.cloud == kept.cloud && back.space_id == kept.space_id);
+        // Nor does the key show in what is logged.
+        let LanLocal::Client { psk, .. } = client_role(&[9; 32]) else { unreachable!() };
+        let mut logged = laptop_space();
+        logged.lan = Some(client_role(&[9; 32]));
+        assert!(!format!("{logged:?}").contains(psk.as_str()));
+    }
+
+    #[test]
+    fn the_numbers_a_device_gave_on_any_storage_set_its_floor() {
+        let mut kept = laptop_space();
+        assert_eq!(kept.seq_floor(), 0);
+        kept.cloud.sync.state.own_seq = 3;
+        let mut lan = client_role(&[7; 32]);
+        lan.sync_mut().state.pending = Some(lockra_sync::PendingWrite { seq: 6, digest: "d".into() });
+        kept.lan = Some(lan);
+        assert_eq!(kept.seq_floor(), 6, "a write whose answer never came counts");
+        // Every storage is to receive a new keyring.
+        kept.cloud.sync.keyring_written = true;
+        kept.keyring_sealed_again();
+        assert!(kept.keyring_pending());
     }
 
     #[test]

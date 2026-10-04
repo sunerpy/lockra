@@ -324,6 +324,21 @@ mod tests {
     }
 
     #[test]
+    fn a_build_without_the_lan_opens_no_hub_and_a_clients_key_stays_out_of_logs() {
+        assert!(matches!(NoSync.open_hub_store(Uuid::nil()), Err(SyncError::Storage(_))));
+        let config = LanClientConfig {
+            hub_id: Uuid::nil(),
+            peer_id: Uuid::nil(),
+            psk: Zeroizing::new(b"the hub's key for this phone".to_vec()),
+            port: 47_100,
+            addrs: vec!["192.168.1.20".into()],
+        };
+        assert!(matches!(NoSync.open_lan_client(&config), Err(SyncError::Storage(_))));
+        let logged = format!("{config:?}");
+        assert!(logged.contains("192.168.1.20") && !logged.contains("hub's key") && !logged.contains("104, 117, 98"), "{logged}");
+    }
+
+    #[test]
     fn the_system_clock_is_after_2025() {
         assert!(SystemClock.now_ms() > 1_735_689_600_000);
     }
