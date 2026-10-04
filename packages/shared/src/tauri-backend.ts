@@ -11,6 +11,7 @@ import {
   type FrameListener,
   type ImportPickKind,
   LockraError,
+  type SaveSyncKey,
   type ScanJoin,
   type ScanTexts,
   type Unsubscribe,
@@ -133,6 +134,17 @@ export class TauriBackend implements Backend {
         password: join.password,
         deviceName: join.deviceName,
         spacePassword: join.spacePassword ?? null,
+      }),
+    );
+  }
+
+  async saveSyncKey(args: SaveSyncKey): Promise<boolean> {
+    return z.boolean().parse(
+      await this.call("sync_key_save", {
+        password: args.password ?? null,
+        reason: args.reason ?? null,
+        fileName: args.fileName,
+        template: args.template,
       }),
     );
   }

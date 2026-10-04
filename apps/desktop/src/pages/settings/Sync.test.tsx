@@ -1,4 +1,5 @@
 import {
+  MOCK_INVITE_CODE,
   MOCK_PASSWORD,
   MOCK_STORAGE_SECRET,
   MOCK_SYNC_KEY,
@@ -62,6 +63,9 @@ describe("Settings › Sync", () => {
     await user.click(screen.getByRole("button", { name: "我已保存" }));
     expect(screen.queryByTestId("sync-created")).not.toBeInTheDocument();
     expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
+    // "I have kept it" says so to the core: no reminder follows.
+    expect(backend.calls).toContainEqual({ command: "sync_key_acknowledge" });
+    expect(pane.queryByTestId("sync-key-reminder")).not.toBeInTheDocument();
     // The space: synced, this device listed, the storage shown without its secret.
     expect(pane.getByTestId("sync-status")).toHaveTextContent("已同步");
     expect(pane.getByTestId("sync-storage")).toHaveTextContent(
@@ -72,7 +76,8 @@ describe("Settings › Sync", () => {
   });
 
   it("joins a space with the storage settings and the sync key", async () => {
-    const { user, backend } = renderApp();
+    // This vault's master password is not the one the space's devices use.
+    const { user, backend } = renderApp({ mock: { password: "this vault's password" } });
     await ready();
     const pane = await openSync(user);
     await user.click(pane.getByTestId("sync-join-open"));
@@ -87,20 +92,27 @@ describe("Settings › Sync", () => {
     await user.type(form.getByLabelText("这台设备的主密码"), "a wrong password");
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(await form.findByText("密码错误")).toBeInTheDocument();
-    // The space's devices use another one: typed in apart, and said wrong there.
-    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
-    await user.type(form.getByLabelText("同步空间的主密码（可选）"), "a wrong password");
+    // Only one password is asked until the space turns out to use another one.
+    expect(form.queryByLabelText("同步空间的主密码")).not.toBeInTheDocument();
+    await user.type(form.getByLabelText("这台设备的主密码"), "this vault's password");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(
+      await form.findByText("这台设备的主密码打不开同步空间，请再输入同步空间中任一设备的主密码"),
+    ).toBeInTheDocument();
+    // Asked for now, and said wrong there.
+    await user.type(form.getByLabelText("这台设备的主密码"), "this vault's password");
+    await user.type(form.getByLabelText("同步空间的主密码"), "a wrong password");
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(await form.findByText("主密码或同步密钥不正确")).toBeInTheDocument();
-    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
-    await user.type(form.getByLabelText("同步空间的主密码（可选）"), MOCK_PASSWORD);
+    await user.type(form.getByLabelText("这台设备的主密码"), "this vault's password");
+    await user.type(form.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(await pane.findByTestId("sync-status")).toHaveTextContent("已同步");
     expect(
       backend.calls.find(
         (c) =>
           c.command === "sync_join" &&
-          c.password === MOCK_PASSWORD &&
+          c.password === "this vault's password" &&
           c.space_password === MOCK_PASSWORD,
       ),
     ).toMatchObject({
@@ -178,7 +190,9 @@ describe("Settings › Sync", () => {
       await user.type(within(prompt).getByLabelText("主密码"), MOCK_PASSWORD);
       await user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
       const invite = await screen.findByTestId("sync-invite");
-      expect(within(invite).getByTestId("invite-text")).toHaveTextContent(/^lockra-invite:1:/);
+      // The text to send is sealed; its code is shown apart, for another channel.
+      expect(within(invite).getByTestId("invite-text")).toHaveTextContent(/^lockra-invite:2:/);
+      expect(within(invite).getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
       expect(within(invite).getByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
       expect(screen.getByTestId("invite-countdown")).toHaveTextContent("120");
       // It hides itself after two minutes, and the secret view ends.
@@ -279,5 +293,97 @@ describe("Settings › Sync", () => {
       "secret_view_closed",
     ]);
     expect(screen.queryByTestId("sync-created")).not.toBeInTheDocument();
+  });
+
+  it("saves the new key with the password just typed, and reminds of a key left unsaved", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    let pane = await openSync(user);
+    const create = async () => {
+      await user.click(pane.getByTestId("sync-create-open"));
+      const form = within(pane.getByTestId("sync-create"));
+      await user.selectOptions(form.getByLabelText("服务商"), "aws");
+      await user.type(form.getByLabelText("区域"), "eu-central-1");
+      await user.type(form.getByLabelText("存储桶"), "b");
+      await user.type(form.getByLabelText("访问密钥 ID"), "a");
+      await user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
+      await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
+      await user.click(form.getByRole("button", { name: "开始同步" }));
+      return screen.findByTestId("sync-created");
+    };
+    await create();
+    await user.click(screen.getByRole("button", { name: "保存到文件…" }));
+    expect(await screen.findByTestId("sync-key-saved")).toHaveTextContent("同步密钥已保存到文件。");
+    expect(backend.savedSyncKeys).toEqual([
+      { fileName: "Lockra 同步密钥.txt", text: expect.stringContaining(MOCK_SYNC_KEY) as string },
+    ]);
+    // Saved with the master password typed for the space: no other prompt.
+    expect(backend.biometricReasons).toEqual([]);
+    await user.keyboard("{Escape}");
+    expect(pane.queryByTestId("sync-key-reminder")).not.toBeInTheDocument();
+
+    // Made again and closed without saving: Settings › Sync reminds of the key.
+    await user.click(pane.getByTestId("sync-disable-open"));
+    await user.click(
+      within(await screen.findByRole("dialog", { name: "关闭这台设备的同步？" })).getByRole(
+        "button",
+        { name: "关闭同步" },
+      ),
+    );
+    pane = within(await screen.findByRole("dialog", { name: "设置" }));
+    await create();
+    await user.keyboard("{Escape}");
+    const reminder = await pane.findByTestId("sync-key-reminder");
+    expect(reminder).toHaveTextContent("同步密钥还没有保存");
+    await user.click(pane.getByRole("button", { name: "我已记下" }));
+    expect(pane.queryByTestId("sync-key-reminder")).not.toBeInTheDocument();
+  });
+
+  it("shows the invitation after the biometric check that unlocks the vault", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace(),
+      biometric: "touch_id",
+      biometricUnlock: true,
+      deviceUnlock: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-invite-open"));
+    const prompt = await screen.findByRole("dialog", { name: "邀请其他设备" });
+    expect(prompt).toHaveTextContent("验证身份以显示邀请码，或输入主密码。");
+    await user.click(within(prompt).getByRole("button", { name: "使用 Touch ID 验证" }));
+    expect(await screen.findByTestId("sync-invite")).toBeInTheDocument();
+    expect(backend.biometricReasons.at(-1)).toBe("显示同步邀请码");
+    expect(backend.calls.find((c) => c.command === "sync_invite")).toEqual({
+      command: "sync_invite",
+      reason: "显示同步邀请码",
+    });
+  });
+
+  it("joins with a sealed invitation once its code is right", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-join-open"));
+    const form = within(pane.getByTestId("sync-join"));
+    expect(form.queryByLabelText("口令")).not.toBeInTheDocument();
+    await user.type(form.getByLabelText("邀请码"), "lockra-invite:2:TEtTSU5WVDI");
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    // A sealed text needs its code before it can join.
+    expect(form.getByRole("button", { name: "加入" })).toBeDisabled();
+    await user.type(form.getByLabelText("口令"), "AAAAA-BBBBB");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await form.findByText("口令不正确，请核对邀请码旁显示的口令")).toBeInTheDocument();
+    await user.clear(form.getByLabelText("口令"));
+    await user.type(form.getByLabelText("口令"), MOCK_INVITE_CODE.toLowerCase());
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await pane.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(backend.calls.filter((c) => c.command === "sync_join").at(-1)).toMatchObject({
+      source: { type: "invite", text: "lockra-invite:2:TEtTSU5WVDI", code: "7k2qm-xw4fd" },
+    });
   });
 });

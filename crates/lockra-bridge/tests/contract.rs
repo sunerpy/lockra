@@ -182,6 +182,7 @@ fn sync_space(status: SyncStatus) -> SyncSpaceView {
         rolled_back: Vec::new(),
         unreadable: vec![ALTERED_TAG.into()],
         keyring_pending: false,
+        key_saved: false,
     }
 }
 
@@ -335,10 +336,11 @@ fn commands() -> Vec<Value> {
         json!({"command": "update_install"}),
         json!({"command": "sync_create", "storage": s3_storage(), "password": "a new password", "device_name": "Desktop"}),
         json!({
-            "command": "sync_join", "source": {"type": "invite", "text": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0"},
+            "command": "sync_join", "source": {"type": "invite", "text": "lockra-invite:2:TEtTSU5WVDI", "code": "7K2QM-XW4FD"},
             "password": "a new password", "device_name": "Pixel 8", "space_password": "another device's password"
         }),
         json!({"command": "sync_invite", "password": "a new password"}),
+        json!({"command": "sync_key_acknowledge"}),
         json!({"command": "sync_set_storage", "storage": webdav_storage(), "password": "a new password"}),
         json!({"command": "sync_rename_device", "name": "Work desktop"}),
         json!({"command": "sync_remove_device", "tag": PHONE_TAG}),
@@ -450,6 +452,8 @@ fn response_fixtures() {
             "sync_invite": SyncInvite {
                 invite: "lockra-invite:1:eyJzdG9yYWdlIjp7fX0".into(),
                 svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
+                shared_text: "lockra-invite:2:TEtTSU5WVDI".into(),
+                code: "7K2QM-XW4FD".into(),
                 sync_key: SYNC_KEY.into(),
             },
             "codes_frame": codes,
@@ -487,6 +491,8 @@ fn secret_views_are_flagged_for_the_shell() {
     assert!(parse(json!({"command": "export_start", "target": "microsoft", "entry_ids": [], "password": "x"})).shows_secret());
     assert!(parse(json!({"command": "sync_create", "storage": s3_storage(), "password": "x", "device_name": "d"})).shows_secret());
     assert!(parse(json!({"command": "sync_invite", "password": "x"})).shows_secret());
+    // Without a password the biometric check proves presence; the answer is the same secret.
+    assert!(parse(json!({"command": "sync_invite", "reason": "show the invitation"})).shows_secret());
     assert!(!parse(json!({"command": "sync_now"})).shows_secret());
     assert!(!parse(json!({"command": "app_state"})).shows_secret());
     for command in [json!({"command": "secret_view_closed"}), json!({"command": "export_close", "session": id(1)}), json!({"command": "vault_lock"})] {

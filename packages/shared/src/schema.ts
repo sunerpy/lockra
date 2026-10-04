@@ -301,6 +301,8 @@ export const ERROR_CODES = [
   "sync_wrong_credentials",
   "sync_key_invalid",
   "sync_invite_invalid",
+  "sync_invite_code_wrong",
+  "sync_space_password_needed",
   "sync_data_corrupted",
   "sync_unsupported",
   "internal",
@@ -431,6 +433,8 @@ export const syncSpaceViewSchema = z.object({
   rolled_back: z.array(z.string()),
   unreadable: z.array(z.string()),
   keyring_pending: z.boolean(),
+  /** The sync key was saved or written down; until then Settings › Sync reminds of it. */
+  key_saved: z.boolean(),
 });
 export type SyncSpaceView = z.infer<typeof syncSpaceViewSchema>;
 
@@ -442,7 +446,8 @@ export type SyncView = z.infer<typeof syncViewSchema>;
 
 /** How a device joins a space (lockra-core `JoinSource`). */
 export const joinSourceSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("invite"), text: z.string() }),
+  /** `code` opens a sealed text (`lockra-invite:2:…`). */
+  z.object({ type: z.literal("invite"), text: z.string(), code: z.string().optional() }),
   z.object({ type: z.literal("manual"), storage: storageConfigSchema, sync_key: z.string() }),
 ]);
 export type JoinSource = z.infer<typeof joinSourceSchema>;
@@ -582,6 +587,10 @@ export type SyncCreated = z.infer<typeof syncCreatedSchema>;
 export const syncInviteSchema = z.object({
   invite: z.string(),
   svg: z.string(),
+  /** The invitation sealed for sending; it opens only with `code`. */
+  shared_text: z.string(),
+  /** The one-time code of `shared_text`, shown on the screen only. */
+  code: z.string(),
   sync_key: z.string(),
 });
 export type SyncInvite = z.infer<typeof syncInviteSchema>;
@@ -689,7 +698,13 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
     /** The master password of a device in the space, when it is not `password`. */
     space_password: password.optional(),
   }),
-  z.object({ command: z.literal("sync_invite"), password }),
+  /** Without a password, the biometric check that unlocks this vault proves presence. */
+  z.object({
+    command: z.literal("sync_invite"),
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
+  z.object({ command: z.literal("sync_key_acknowledge") }),
   z.object({ command: z.literal("sync_set_storage"), storage: storageConfigSchema, password }),
   z.object({ command: z.literal("sync_rename_device"), name: z.string() }),
   z.object({ command: z.literal("sync_remove_device"), tag: z.string() }),
@@ -713,6 +728,7 @@ export const SHELL_COMMAND_NAMES = [
   "backup_pick_dir",
   "restore_pick",
   "export_otpauth_file",
+  "sync_key_save",
 ] as const;
 
 /** The phone shell's own Tauri commands (lockra-bridge `PHONE_COMMANDS`). */
@@ -726,6 +742,7 @@ export const PHONE_COMMAND_NAMES = [
   "restore_pick",
   "export_otpauth_file",
   "sync_scan_join",
+  "sync_key_save",
   "update_open_release",
 ] as const;
 

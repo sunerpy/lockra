@@ -98,7 +98,10 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   behind the master password entered again: _reveal_ (the secret, its URI and QR code), an
   _export_ (QR codes; a plain otpauth file asks for the password before the save dialog opens),
   the new sync key when a sync space is created (`sync_create`), and a sync invitation
-  (`sync_invite`). The IPC contract test asserts that the known secrets of its fixtures, the sync
+  (`sync_invite`, which also accepts the biometric check that unlocks the vault). Saving the sync
+  key to a file (`sync_key_save`, the same proof) answers no secret: the core puts the key in the
+  interface's words in Rust and writes the file where the user chose, readable by its owner only
+  on the desktop. The IPC contract test asserts that the known secrets of its fixtures, the sync
   storage's credentials and the sync key included, appear in no other message
   (`crates/lockra-bridge/tests/contract.rs`).
 - While a secret view is open the window is excluded from screen capture
@@ -185,8 +188,11 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 - **Off unless set up, on storage of the user's own.** Sync stays off until the user sets up a
   space on an S3-compatible bucket or a WebDAV folder of their own; Lockra runs no server. With a
   space, Lockra contacts that storage only while the vault is unlocked: at unlock, 3 s after a
-  change, every 5 minutes, and on **Sync now**. Setting up, joining, showing an invitation and
-  moving the storage settings ask for the master password again.
+  change, every 5 minutes, and on **Sync now**. Setting up, joining and moving the storage
+  settings ask for the master password again. Showing an invitation and saving the sync key to a
+  file accept instead the biometric check that unlocks this vault (Touch ID, Windows Hello, the
+  fingerprint): it proves the user is at the device, and nothing is sealed under it, whereas
+  setting up and joining seal this device's keyring under its master password.
 - **The storage sees ciphertext.** A space is one snapshot per device under
   `lockra-sync-v1/<space id>/devices/` (`docs/formats.md` §9), and nothing else. A snapshot is the
   device's whole replica, secrets included, encrypted under a key derived from the space's random
@@ -207,12 +213,16 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   the merge of the snapshots, whatever order the runs take, so changes made at the same moment on
   two devices are both kept. Another device only ever deletes a snapshot (removing a device); a
   device still in use writes it again on its next run.
-- **Joining.** Another device shows an invitation (text and QR code): the storage settings with
-  their credentials and the sync key, everything but a master password, which the joining device
-  asks for: that of any device in the space. It is to be scanned on the user's own devices only.
+- **Joining.** Another device shows an invitation: the storage settings with their credentials
+  and the sync key, everything but a master password, which the joining device asks for: that of
+  any device in the space. The QR code carries it as it is, to be scanned on the user's own
+  devices only. The text to send is sealed under a one-time code shown only beside it (50 bits,
+  stretched with Argon2id; `docs/formats.md`): sent through a chat or a mail, it is of no use
+  without the code, which is to travel another way.
   Without another device, the storage settings and the sync key typed in do the same. A device
   with no vault yet becomes one, under that password. A device with a vault checks its own master
-  password first, and opens the space with it, or with another device's typed in apart. Either way
+  password first, and opens the space with it; only when that opens nothing does it ask for
+  another device's. Either way
   the joining device's keyring goes in under its own master password, so the passwords that open
   a space are those of its devices, no other.
 - **Altered, moved and older objects are refused; deletion is not prevented.** Every object

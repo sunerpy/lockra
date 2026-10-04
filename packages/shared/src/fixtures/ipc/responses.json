@@ -79,7 +79,9 @@
     "sync_key": "LKS1-AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH-IIII-JJJJ-KKKK-LLLL-MMMM-NNNN"
   },
   "sync_invite": {
+    "code": "7K2QM-XW4FD",
     "invite": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0",
+    "shared_text": "lockra-invite:2:TEtTSU5WVDI",
     "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
     "sync_key": "LKS1-AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH-IIII-JJJJ-KKKK-LLLL-MMMM-NNNN"
   }

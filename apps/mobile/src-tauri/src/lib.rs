@@ -31,7 +31,7 @@ use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
 use zeroize::Zeroizing;
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
-pub const COMMANDS: [&str; 10] = [
+pub const COMMANDS: [&str; 11] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -41,6 +41,7 @@ pub const COMMANDS: [&str; 10] = [
     "restore_pick",
     "export_otpauth_file",
     "sync_scan_join",
+    "sync_key_save",
     "update_open_release",
 ];
 
@@ -122,6 +123,34 @@ async fn backup_save<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>, separ
         .await
         .map_err(|_| CoreError::from(ErrorCode::Internal))?;
     files::saved(&core, saved)
+}
+
+/// Save the sync key where the user picks, once the core checked the user is there (the master
+/// password, or without it the fingerprint): `template` with the key in its slot, offered as
+/// `file_name`. `false` when the picker was left; a saved key stops the reminder.
+#[tauri::command]
+async fn sync_key_save<R: Runtime>(
+    app: AppHandle<R>,
+    core: State<'_, Core>,
+    password: Option<Zeroizing<String>>,
+    reason: Option<String>,
+    file_name: String,
+    template: String,
+) -> Result<bool, CoreError> {
+    let text = core.sync_key_file(password, reason, &template).await?;
+    let picker = files::Files::new(app);
+    let saved = tauri::async_runtime::spawn_blocking(move || picker.save(&file_name, files::LIST_MIME, text.as_bytes()))
+        .await
+        .map_err(|_| CoreError::from(ErrorCode::Internal))?
+        .map_err(|error| {
+            tracing::warn!(%error, "the sync key could not be saved");
+            CoreError::from(ErrorCode::IoFailed)
+        })?;
+    if saved.is_none() {
+        return Ok(false);
+    }
+    core.sync_key_acknowledge()?;
+    Ok(true)
 }
 
 /// Open a backup for restoring with the system's file picker; `false` when none was picked.
@@ -235,6 +264,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             restore_pick,
             export_otpauth_file,
             sync_scan_join,
+            sync_key_save,
             update_open_release
         ])
         .setup(move |app| {

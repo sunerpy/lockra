@@ -1470,6 +1470,8 @@ impl Core {
         })
         .await?;
         let mut space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
+        // The key is shown once now; Settings › Sync reminds of it until it is saved.
+        space.key_saved = false;
         let first = Space { prefix: space.storage.prefix(), keys: &keys, device: number, device_name: &space.device_name, keyring: &keyring };
         step(&*remote, &first, &mut space.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
         space.keyring_written = true;
@@ -1492,8 +1494,9 @@ impl Core {
         space_password: Option<Zeroizing<String>>,
     ) -> CoreResult<()> {
         let (storage, sync_key) = match source {
-            JoinSource::Invite { text } => {
-                let invite = Invite::from_text(&text).map_err(|e| sync_error(&e))?;
+            JoinSource::Invite { text, code } => {
+                // A sealed text costs an Argon2id derivation to open.
+                let invite = blocking(move || Invite::from_any_text(&text, code.as_ref().map(|c| c.as_str())).map_err(|e| sync_error(&e))).await?;
                 (invite.storage, invite.sync_key)
             }
             JoinSource::Manual { storage, sync_key } => (storage, SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?),
@@ -1521,6 +1524,9 @@ impl Core {
         }
         let remote = self.open_storage(&storage)?;
         let space_id = sync_key.space_id();
+        // Without a password of its own, a space whose devices use another one asks for it, rather
+        // than calling this vault's (verified) password wrong.
+        let ask_for_space_password = existing.is_some() && space_password.is_none();
         let opening = space_password.unwrap_or_else(|| password.clone());
         let keys = open_space(&*remote, storage.prefix(), space_id, |keyring| {
             let (sync_key, opening) = (sync_key.clone(), opening.clone());
@@ -1531,7 +1537,10 @@ impl Core {
             }
         })
         .await
-        .map_err(|e| sync_error(&e))?;
+        .map_err(|e| match e {
+            SyncError::WrongCredentials if ask_for_space_password => CoreError::from(ErrorCode::SyncSpacePasswordNeeded),
+            other => sync_error(&other),
+        })?;
         let (cost, now, data_dir) = (self.shared.config.kdf, self.now_ms(), self.shared.config.data_dir.clone());
         let create = existing.is_none();
         let (keys, sealed, sync_key, keyring) = blocking(move || {
@@ -1599,23 +1608,98 @@ impl Core {
         Ok(())
     }
 
-    /// The invitation for another device, after the master password was entered again: the
-    /// storage, its credentials and the sync key, as text and as a QR code.
-    pub async fn sync_invite(&self, password: Zeroizing<String>) -> CoreResult<SyncInvite> {
-        let (sealed, storage, sync_key) = {
+    /// The invitation for another device, once the user proved to be at this one (the master
+    /// password, or without it the biometric check that unlocks this vault): the storage, its
+    /// credentials and the sync key, as the QR code's text, and sealed under a one-time code for
+    /// sending.
+    pub async fn sync_invite(&self, password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<SyncInvite> {
+        let (storage, sync_key) = {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (session.sealed.clone(), sync.storage.clone(), sync.sync_key.clone())
+            (sync.storage.clone(), sync.sync_key.clone())
         };
+        self.confirm_presence(password, reason).await?;
+        let cost = self.shared.config.kdf;
         blocking(move || {
-            sealed.verify_password(password.as_bytes())?;
             let sync_key = SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?;
-            let text = Invite { storage, sync_key: sync_key.clone() }.to_text();
+            let invite = Invite { storage, sync_key: sync_key.clone() };
+            let text = invite.to_text();
             let svg = qr::svg(&text).map_err(|_| ErrorCode::Internal)?;
-            Ok(SyncInvite { invite: text.to_string(), svg: svg.to_string(), sync_key: sync_key.to_text().to_string() })
+            let (shared, code) = invite.to_shared_text(cost).map_err(|e| sync_error(&e))?;
+            Ok(SyncInvite {
+                invite: text.to_string(),
+                svg: svg.to_string(),
+                shared_text: shared.to_string(),
+                code: code.to_string(),
+                sync_key: sync_key.to_text().to_string(),
+            })
         })
         .await
+    }
+
+    /// The user is at this device: `password` is the vault's master password, or, without one,
+    /// the biometric check passes, where it is what unlocks this vault (Touch ID, Windows Hello,
+    /// the fingerprint). It proves presence only: nothing is sealed under it.
+    async fn confirm_presence(&self, password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<()> {
+        if let Some(password) = password {
+            let sealed = unlocked(&self.lock())?.sealed.clone();
+            return blocking(move || Ok(sealed.verify_password(password.as_bytes())?)).await;
+        }
+        let biometric = {
+            let st = self.lock();
+            let session = unlocked(&st)?;
+            st.biometric.is_some() && st.device_slot && session.sealed.device_check() == Some(&DeviceCheck::Biometric)
+        };
+        if !biometric {
+            return Err(ErrorCode::BiometricUnavailable.into());
+        }
+        self.check_user(reason).await
+    }
+
+    /// The user saved or wrote down the sync key: Settings › Sync stops reminding of it.
+    pub fn sync_key_acknowledge(&self) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let sync = session.data.sync_mut().ok_or(ErrorCode::SyncOff)?;
+            if sync.key_saved {
+                return Ok(());
+            }
+            sync.key_saved = true;
+            self.save(&mut st, false, |s| {
+                if let Some(sync) = s.data.sync_mut() {
+                    sync.key_saved = false;
+                }
+            })?;
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// The text of a sync key file, once the user proved to be at this device: `template` (the
+    /// interface's words, at most 8 KiB) with its one `{{sync_key}}` replaced by the key. The
+    /// shell writes it where the user chose (`sync_key_save`) and then calls
+    /// [`Self::sync_key_acknowledge`].
+    pub async fn sync_key_file(&self, password: Option<Zeroizing<String>>, reason: Option<String>, template: &str) -> CoreResult<Zeroizing<String>> {
+        const SLOT: &str = "{{sync_key}}";
+        if template.len() > 8 * 1024 || template.matches(SLOT).count() != 1 {
+            return Err(ErrorCode::Internal.into());
+        }
+        let sync_key = {
+            let st = self.lock();
+            unlocked(&st)?.data.sync().ok_or(ErrorCode::SyncOff)?.sync_key.clone()
+        };
+        self.confirm_presence(password, reason).await?;
+        Ok(Zeroizing::new(template.replacen(SLOT, &sync_key, 1)))
+    }
+
+    /// Write the sync key file to `path` (the desktop's save dialog chose it), readable by its
+    /// owner only, and stop the reminder.
+    pub async fn sync_key_save(&self, password: Option<Zeroizing<String>>, reason: Option<String>, template: &str, path: PathBuf) -> CoreResult<()> {
+        let text = self.sync_key_file(password, reason, template).await?;
+        blocking(move || Ok(write_private(&path, text.as_bytes())?)).await?;
+        self.sync_key_acknowledge()
     }
 
     /// Move the space's storage settings on (a new address or new credentials), after the master
@@ -2380,6 +2464,7 @@ fn sync_view(st: &State) -> SyncView {
             rolled_back: st.sync.rolled_back.clone(),
             unreadable: st.sync.unreadable.clone(),
             keyring_pending: sync.keyring_pending(),
+            key_saved: sync.key_saved,
         }
     });
     SyncView { space }

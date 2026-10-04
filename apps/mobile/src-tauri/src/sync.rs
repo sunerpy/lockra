@@ -32,5 +32,5 @@ pub async fn join(
     space_password: Option<Zeroizing<String>>,
 ) -> Result<bool, CoreError> {
     let Some(text) = scanner::read(core, scan)? else { return Ok(false) };
-    core.sync_join(JoinSource::Invite { text }, password, device, space_password).await.map(|()| true)
+    core.sync_join(JoinSource::Invite { text, code: None }, password, device, space_password).await.map(|()| true)
 }

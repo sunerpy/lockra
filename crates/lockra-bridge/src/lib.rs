@@ -209,11 +209,18 @@ pub enum UiCommand {
         #[serde(default)]
         space_password: Option<Zeroizing<String>>,
     },
-    /// The invitation for another device; answers with it (a secret).
+    /// The invitation for another device; answers with it (a secret). Without a password the
+    /// biometric check that unlocks this vault proves the user is there.
     SyncInvite {
         /// The master password.
-        password: Zeroizing<String>,
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The words of the biometric prompt.
+        #[serde(default)]
+        reason: Option<String>,
     },
+    /// The user saved or wrote down the sync key: the reminder goes.
+    SyncKeyAcknowledge,
     /// New storage settings for the space (an address, new credentials).
     SyncSetStorage {
         /// Where the space is now, with the credentials.
@@ -239,7 +246,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 44] = [
+pub const COMMANDS: [&str; 45] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -279,6 +286,7 @@ pub const COMMANDS: [&str; 44] = [
     "sync_create",
     "sync_join",
     "sync_invite",
+    "sync_key_acknowledge",
     "sync_set_storage",
     "sync_rename_device",
     "sync_remove_device",
@@ -288,12 +296,21 @@ pub const COMMANDS: [&str; 44] = [
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
 /// open a native file dialog first.
-pub const SHELL_COMMANDS: [&str; 8] =
-    ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "backup_save", "backup_pick_dir", "restore_pick", "export_otpauth_file"];
+pub const SHELL_COMMANDS: [&str; 9] = [
+    "lockra_dispatch",
+    "codes_subscribe",
+    "codes_unsubscribe",
+    "import_pick_files",
+    "backup_save",
+    "backup_pick_dir",
+    "restore_pick",
+    "export_otpauth_file",
+    "sync_key_save",
+];
 
 /// The Tauri commands of the phone shell: the dispatcher, the code stream, and the actions that
 /// open the photo picker, the file picker or the camera first; what they read stays in Rust.
-pub const PHONE_COMMANDS: [&str; 10] = [
+pub const PHONE_COMMANDS: [&str; 11] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -303,6 +320,7 @@ pub const PHONE_COMMANDS: [&str; 10] = [
     "restore_pick",
     "export_otpauth_file",
     "sync_scan_join",
+    "sync_key_save",
     "update_open_release",
 ];
 
@@ -374,7 +392,8 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::UpdateInstall => unit(core.update_install())?,
         UiCommand::SyncCreate { storage, password, device_name } => json!(core.sync_create(storage, password, device_name).await?),
         UiCommand::SyncJoin { source, password, device_name, space_password } => unit(core.sync_join(source, password, device_name, space_password).await)?,
-        UiCommand::SyncInvite { password } => json!(core.sync_invite(password).await?),
+        UiCommand::SyncInvite { password, reason } => json!(core.sync_invite(password, reason).await?),
+        UiCommand::SyncKeyAcknowledge => unit(core.sync_key_acknowledge())?,
         UiCommand::SyncSetStorage { storage, password } => unit(core.sync_set_storage(storage, password).await)?,
         UiCommand::SyncRenameDevice { name } => unit(core.sync_rename_device(&name))?,
         UiCommand::SyncRemoveDevice { tag } => unit(core.sync_remove_device(&tag).await)?,

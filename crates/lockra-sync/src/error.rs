@@ -43,6 +43,9 @@ pub enum SyncError {
     /// The invitation text is not one Lockra wrote.
     #[error("the invitation is not valid")]
     BadInvite,
+    /// A shared invitation's one-time code is missing or does not open it.
+    #[error("the invitation code is not right")]
+    BadInviteCode,
     /// The caller stopped the run before it wrote (the vault was locked meanwhile).
     #[error("the run was stopped")]
     Interrupted,

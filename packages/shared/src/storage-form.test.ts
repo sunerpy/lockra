@@ -1,5 +1,6 @@
 import {
   emptyStorageForm,
+  isSealedInvite,
   storageComplete,
   storageConfig,
   storageFormFrom,
@@ -79,5 +80,11 @@ describe("the sync storage form", () => {
       password: "",
     });
     expect(storageSummary(dav)).toBe("not an address");
+  });
+
+  it("tells a sealed invitation, which needs its code, from a plain one", () => {
+    expect(isSealedInvite("  lockra-invite:2:TEtTSU5WVDI\n")).toBe(true);
+    expect(isSealedInvite("lockra-invite:1:eyJzdG9yYWdlIjp7fX0")).toBe(false);
+    expect(isSealedInvite("")).toBe(false);
   });
 });

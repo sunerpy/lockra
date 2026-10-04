@@ -52,8 +52,17 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 8] =
-    ["lockra_dispatch", "codes_subscribe", "codes_unsubscribe", "import_pick_files", "backup_save", "backup_pick_dir", "restore_pick", "export_otpauth_file"];
+pub const COMMANDS: [&str; 9] = [
+    "lockra_dispatch",
+    "codes_subscribe",
+    "codes_unsubscribe",
+    "import_pick_files",
+    "backup_save",
+    "backup_pick_dir",
+    "restore_pick",
+    "export_otpauth_file",
+    "sync_key_save",
+];
 
 /// `true` only when a debug build was explicitly asked for the in-memory keychain.
 pub fn dev_memory_store_requested(value: Option<&str>, debug_build: bool) -> bool {
@@ -221,6 +230,25 @@ async fn backup_save<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>, separ
     Ok(Some(core.backup_to(path, separate_password).await?))
 }
 
+/// Save the sync key to a file the user chooses: the save dialog first, then the core checks the
+/// user is there (the master password, or without it the biometric check) and writes `template`
+/// with the key in its slot. `false` when the dialog was cancelled.
+#[tauri::command]
+async fn sync_key_save<R: Runtime>(
+    app: AppHandle<R>,
+    core: State<'_, Core>,
+    password: Option<Zeroizing<String>>,
+    reason: Option<String>,
+    file_name: String,
+    template: String,
+) -> Result<bool, CoreError> {
+    let dialog = app.dialog().clone();
+    let picked = on_dialog_thread(move || dialog.file().add_filter("Text", &["txt"]).set_file_name(&file_name).blocking_save_file()).await?;
+    let Some(path) = picked.and_then(to_path) else { return Ok(false) };
+    core.sync_key_save(password, reason, &template, path).await?;
+    Ok(true)
+}
+
 /// Choose the automatic backup folder; the folder, or `None` when cancelled.
 #[tauri::command]
 async fn backup_pick_dir<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<Option<String>, CoreError> {
@@ -332,7 +360,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             backup_save,
             backup_pick_dir,
             restore_pick,
-            export_otpauth_file
+            export_otpauth_file,
+            sync_key_save
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {

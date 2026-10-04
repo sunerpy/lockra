@@ -119,6 +119,9 @@ pub struct SyncSpaceView {
     pub unreadable: Vec<String>,
     /// A new master password still has to reach the space's keyring.
     pub keyring_pending: bool,
+    /// The sync key was saved or written down (set on the device that made the space once the
+    /// user says so); until then Settings › Sync reminds of it.
+    pub key_saved: bool,
 }
 
 /// A sync storage as the interface shows it: everything but the secret.
@@ -202,6 +205,11 @@ pub struct SyncInvite {
     pub invite: String,
     /// The invitation as a QR code (SVG).
     pub svg: String,
+    /// The invitation sealed for sending through a chat or a mail (`lockra-invite:2:…`): it opens
+    /// only with `code`.
+    pub shared_text: String,
+    /// The one-time code of `shared_text` (`ABCDE-FGHJK`), shown on the screen only.
+    pub code: String,
     /// The sync key alone, for writing down.
     pub sync_key: String,
 }
@@ -214,6 +222,9 @@ pub enum JoinSource {
     Invite {
         /// Its text (scanned or pasted).
         text: zeroize::Zeroizing<String>,
+        /// The one-time code a sealed text (`lockra-invite:2:…`) opens with.
+        #[serde(default)]
+        code: Option<zeroize::Zeroizing<String>>,
     },
     /// The storage and the sync key, typed in (recovery without another device).
     Manual {

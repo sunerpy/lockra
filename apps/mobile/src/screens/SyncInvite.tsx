@@ -1,8 +1,19 @@
-// An invitation for another device, after the master password is entered again: the QR code the
-// other device scans, the text it can paste instead, and the sync key alone. They hide after
-// REVEAL_SECONDS like any secret (app/secret-page.ts).
+// An invitation for another device, once the user proved to be here (the fingerprint that unlocks
+// this vault, or the master password): the QR code the other device scans, the sealed text to
+// send it instead with its code apart, and the sync key alone. They hide after REVEAL_SECONDS
+// like any secret (app/secret-page.ts).
 import { type SyncInvite as Invite, errorText } from "@lockra/shared";
-import { Banner, Button, PasswordField, QrView, useBackend, useSubmit, useT } from "@lockra/ui";
+import {
+  Banner,
+  Button,
+  PasswordField,
+  QrView,
+  unlockBiometric,
+  useBackend,
+  useSubmit,
+  useT,
+  useUiState,
+} from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
 import { useSecretAnswer, useSecretPage } from "../app/secret-page";
@@ -13,23 +24,46 @@ export function SyncInvite() {
   const t = useT();
   const nav = useNav();
   const { backend } = useBackend();
+  const { lock } = useUiState();
+  const biometric = unlockBiometric(lock);
   const [password, setPassword] = useState("");
   const [invite, setInvite] = useState<{ answer: Invite; at: number } | undefined>(undefined);
   const submit = useSubmit();
   const deliver = useSecretAnswer();
   const left = useSecretPage(invite?.at);
+  const ask = async (typed?: string) => {
+    const answer = await submit.run(() =>
+      backend.dispatch(
+        typed === undefined
+          ? { command: "sync_invite", reason: t("sync.invite.reason") }
+          : { command: "sync_invite", password: typed },
+      ),
+    );
+    setPassword("");
+    if (answer !== undefined) deliver(() => setInvite({ answer, at: Date.now() }));
+  };
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (password === "") return;
-    const answer = await submit.run(() => backend.dispatch({ command: "sync_invite", password }));
-    setPassword("");
-    if (answer !== undefined) deliver(() => setInvite({ answer, at: Date.now() }));
+    await ask(password);
   };
   if (invite === undefined) {
     return (
       <Page title={t("sync.invite.open")} testId="page-sync-invite">
         <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-4">
-          <p className="text-[14px] text-fg">{t("sync.invite.prompt")}</p>
+          <p className="text-[14px] text-fg">
+            {t(biometric === null ? "sync.invite.prompt" : "sync.invite.promptBiometric")}
+          </p>
+          {biometric !== null && (
+            <Button
+              variant="outline"
+              size="lg"
+              icon="fingerprint"
+              loading={submit.busy}
+              onClick={() => void ask()}>
+              {t(`sync.invite.verifyWith.${biometric}`)}
+            </Button>
+          )}
           <PasswordField
             size="lg"
             label={t("sync.masterPassword")}
@@ -67,8 +101,17 @@ export function SyncInvite() {
           <div
             className="mono max-h-32 overflow-y-auto text-[12px] break-all text-fg-muted select-all"
             data-testid="invite-text">
-            {answer.invite}
+            {answer.shared_text}
           </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <span className="text-[13px] text-fg-muted">{t("sync.invite.code")}</span>
+          <div
+            className="mono text-[20px] tracking-wide text-fg select-all"
+            data-testid="invite-code">
+            {answer.code}
+          </div>
+          <p className="text-[13px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[13px] text-fg-muted">{t("sync.created.key")}</span>

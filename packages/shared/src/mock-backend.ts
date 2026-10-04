@@ -9,6 +9,7 @@ import {
   type FrameListener,
   type ImportPickKind,
   LockraError,
+  type SaveSyncKey,
   type ScanJoin,
   type ScanTexts,
   type Unsubscribe,
@@ -104,6 +105,8 @@ export interface MockRelease {
 export const MOCK_PASSWORD = "correct horse battery";
 /** The storage secret the mock accepts (any other is refused, like wrong credentials). */
 export const MOCK_STORAGE_SECRET = "storage secret";
+/** The one-time code of the mock's sealed invitation. */
+export const MOCK_INVITE_CODE = "7K2QM-XW4FD";
 /** The sync key of the mock's spaces. */
 export const MOCK_SYNC_KEY =
   "LKS1-MFRG-GZDF-MZTW-Q2LK-NNWG-23TP-OBYX-E43U-OR3W-C6DZ-PI2D-AMBR-GQ2D-ARQA";
@@ -301,6 +304,7 @@ export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpace
     rolled_back: [],
     unreadable: [],
     keyring_pending: false,
+    key_saved: true,
     ...overrides,
   };
 }
@@ -525,6 +529,22 @@ export class MockBackend implements Backend {
     this.notice({ type: "backup_written", file_name: name, automatic: false });
     this.publish();
     return name;
+  }
+
+  async saveSyncKey(args: SaveSyncKey): Promise<boolean> {
+    this.requireSpace();
+    if (args.template.split("{{sync_key}}").length !== 2) throw new LockraError("internal");
+    if (this.cancelNextSave) {
+      this.cancelNextSave = false;
+      return false;
+    }
+    this.confirmPresence(args.password, args.reason);
+    this.savedSyncKeys.push({
+      fileName: args.fileName,
+      text: args.template.replace("{{sync_key}}", MOCK_SYNC_KEY),
+    });
+    this.setSpace({ ...this.requireSpace(), key_saved: true });
+    return true;
   }
 
   async pickBackupDir(): Promise<string | null> {
@@ -878,7 +898,10 @@ export class MockBackend implements Backend {
           command.space_password,
         );
       case "sync_invite":
-        return this.syncInvite(command.password);
+        return this.syncInvite(command.password, command.reason);
+      case "sync_key_acknowledge":
+        this.setSpace({ ...this.requireSpace(), key_saved: true });
+        return null;
       case "sync_set_storage": {
         const space = this.requireSpace();
         this.checkPassword(command.password);
@@ -973,6 +996,7 @@ export class MockBackend implements Backend {
       rolled_back: [],
       unreadable: [],
       keyring_pending: false,
+      key_saved: true,
     });
   }
 
@@ -986,6 +1010,8 @@ export class MockBackend implements Backend {
     checkStorage(storage);
     this.checkPassword(password);
     this.newSpace(storage, deviceName, []);
+    // The key is shown once now; Settings › Sync reminds of it until it is saved.
+    this.setSpace({ ...this.requireSpace(), key_saved: false });
     return { sync_key: MOCK_SYNC_KEY };
   }
 
@@ -995,7 +1021,12 @@ export class MockBackend implements Backend {
     deviceName: string,
     spacePassword?: string,
   ): null {
-    if (source.type === "invite" && !source.text.trim().startsWith("lockra-invite:1:"))
+    const text = source.type === "invite" ? source.text.trim() : "";
+    if (source.type === "invite" && text.startsWith("lockra-invite:2:")) {
+      const typed = (source.code ?? "").toUpperCase().replace(/[\s-]/g, "");
+      if (typed !== MOCK_INVITE_CODE.replace("-", ""))
+        throw new LockraError("sync_invite_code_wrong");
+    } else if (source.type === "invite" && !text.startsWith("lockra-invite:1:"))
       throw new LockraError("sync_invite_invalid");
     if (
       source.type === "manual" &&
@@ -1018,7 +1049,14 @@ export class MockBackend implements Backend {
             password: MOCK_STORAGE_SECRET,
           };
     checkStorage(storage);
-    // The space's device uses the mock's master password.
+    // The space's device uses the mock's master password. A vault of its own whose password is
+    // another asks for the space's first, as the core does.
+    if (
+      this.state.phase === "unlocked" &&
+      spacePassword === undefined &&
+      password !== MOCK_PASSWORD
+    )
+      throw new LockraError("sync_space_password_needed");
     if ((spacePassword ?? password) !== MOCK_PASSWORD)
       throw new LockraError("sync_wrong_credentials");
     const others = [
@@ -1035,15 +1073,34 @@ export class MockBackend implements Backend {
     return null;
   }
 
-  private syncInvite(password: string): SyncInvite {
+  private syncInvite(password: string | undefined, reason: string | undefined): SyncInvite {
     this.requireSpace();
-    this.checkPassword(password);
+    this.confirmPresence(password, reason);
     return {
       invite: `lockra-invite:1:${btoa(`mock-invite:${this.now()}`)}`,
       svg: placeholderSvg("invite"),
+      shared_text: `lockra-invite:2:${btoa(`mock-shared-invite:${this.now()}`)}`,
+      code: MOCK_INVITE_CODE,
       sync_key: MOCK_SYNC_KEY,
     };
   }
+
+  /** The master password, or without it the biometric check that unlocks this vault. */
+  private confirmPresence(password: string | undefined, reason: string | undefined): void {
+    if (password !== undefined) {
+      this.checkPassword(password);
+      return;
+    }
+    if (!this.state.lock.device_unlock.biometric.enabled)
+      throw new LockraError("biometric_unavailable");
+    this.checkUser(reason);
+  }
+
+  /** The sync key files saved, for tests (the template with the key in its slot). */
+  readonly savedSyncKeys: { fileName: string; text: string }[] = [];
+
+  /** Test hook: the next save dialog is cancelled. */
+  cancelNextSave = false;
 
   /** Test hook: the sync reached `status` (a failure, a run in progress), as the core would
    *  publish it. */
