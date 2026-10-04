@@ -74,7 +74,7 @@ leaving the app locks the vault.
 
 ### Fingerprint by default
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.1.
 
 On a phone with an enrolled fingerprint, **Unlock with fingerprint** on the welcome page is on when
 you create a vault, restore one from a backup or join a sync space: one fingerprint check once the

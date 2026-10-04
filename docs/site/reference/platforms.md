@@ -20,19 +20,19 @@ This page lists what differs between Windows, macOS, Linux and the Android app.
 - **Versions**: macOS 11 or later, a dmg for Apple silicon and one for Intel.
 - **First start**: the app is not signed with an Apple Developer ID yet; allow it in **System
   Settings › Privacy & Security › Open Anyway**.
-- **Remember on this device** uses the Keychain. After an update, macOS may ask again whether
-  Lockra may use the key.
+- **Remember on this device** uses the Keychain; an in-app update keeps the key without asking
+  (below).
 - **Clipboard**: copied codes are marked to stay out of clipboard history.
 - **Screenshots** of the window are blocked while a secret or an export code is shown.
 
 ### No keychain prompt after an update
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.1.
 
 The Mac app is signed with Lockra's own fixed certificate, and an in-app update hands the
 remembered key to the new version before installing it. After the update and the restart, macOS no
 longer asks whether Lockra may use the Keychain, and Touch ID unlocks as before. The update from
-0.7 or earlier to this version, and a dmg installed by hand, still ask once.
+0.7.0 or earlier to 0.7.1, and a dmg installed by hand, still ask once.
 
 ## Linux
 
