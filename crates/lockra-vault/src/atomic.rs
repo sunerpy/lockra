@@ -8,6 +8,8 @@ use std::path::{Path, PathBuf};
 pub(crate) enum Step {
     /// The new content is in `<file>.tmp`, not yet flushed.
     Written,
+    /// The current file has been copied to `<file>.prev.tmp` and flushed, not yet renamed.
+    PreviousCopied,
     /// The current file has been copied to `<file>.prev`.
     PreviousKept,
 }
@@ -39,6 +41,7 @@ fn replace(path: &Path, tmp: &Path, bytes: &[u8], hook: &mut dyn FnMut(Step) -> 
         let prev_tmp = sibling(path, ".prev.tmp");
         fs::copy(path, &prev_tmp)?;
         File::open(&prev_tmp)?.sync_all()?;
+        hook(Step::PreviousCopied)?;
         fs::rename(&prev_tmp, sibling(path, ".prev"))?;
     }
     hook(Step::PreviousKept)?;
@@ -102,7 +105,7 @@ mod tests {
 
     #[test]
     fn a_failure_before_the_rename_leaves_the_old_file_intact() {
-        for step in [Step::Written, Step::PreviousKept] {
+        for step in [Step::Written, Step::PreviousCopied, Step::PreviousKept] {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("vault.lockra");
             write_atomic(&path, b"old").unwrap();
@@ -110,7 +113,22 @@ mod tests {
             assert_eq!(err.to_string(), "injected");
             assert_eq!(fs::read(&path).unwrap(), b"old", "{step:?}");
             assert!(!dir.path().join("vault.lockra.tmp").exists(), "{step:?}");
+            assert!(!dir.path().join("vault.lockra.prev.tmp").exists(), "{step:?}");
         }
+    }
+
+    /// What a failed save left behind on Windows up to 0.7.1: `<file>.prev.tmp`, a copy of the
+    /// current file. The next save replaces it and leaves nothing behind.
+    #[test]
+    fn a_copy_left_by_an_earlier_failure_does_not_get_in_the_way() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("vault.lockra");
+        write_atomic(&path, b"one").unwrap();
+        fs::write(dir.path().join("vault.lockra.prev.tmp"), b"one, copied by a save that failed").unwrap();
+        write_atomic(&path, b"two").unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"two");
+        assert_eq!(fs::read(dir.path().join("vault.lockra.prev")).unwrap(), b"one");
+        assert!(!dir.path().join("vault.lockra.prev.tmp").exists());
     }
 
     #[test]

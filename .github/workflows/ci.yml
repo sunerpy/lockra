@@ -394,9 +394,9 @@ jobs:
   # The template's optional early warning for Windows-only compile breaks (about 6-10 minutes with
   # a warm cache; a full Windows bundle leg is 15-36 minutes).
   windows-check:
-    name: Windows cargo check
+    name: Windows cargo check and tests
     runs-on: windows-2025
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -418,13 +418,19 @@ jobs:
       - name: Cargo check
         shell: bash
         run: cargo check --locked --workspace --exclude lockra-mobile --all-targets
+      # The crates that write files, tested on Windows itself: a check cannot see what the file
+      # system refuses at run time (up to 0.7.1, every save of an existing vault failed here with
+      # "Access is denied": FlushFileBuffers needs a handle opened for writing).
+      - name: Crate tests (vault, core)
+        shell: bash
+        run: cargo test --locked -p lockra-vault -p lockra-core
 
   # The same early warning for macOS-only code (the shell's Touch ID check, the keychain store of
-  # the releases), on the runner the release bundles macOS on; then the keychain hand-over of an
-  # update on this Mac's login keychain, with its real partitions (docs/security.md, "Keychain
-  # items across updates").
+  # the releases), on the runner the release bundles macOS on; the crates that write files, tested
+  # here; then the keychain hand-over of an update on this Mac's login keychain, with its real
+  # partitions (docs/security.md, "Keychain items across updates").
   macos-check:
-    name: macOS cargo check
+    name: macOS cargo check and tests
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -446,6 +452,9 @@ jobs:
         run: mkdir -p apps/desktop/dist
       - name: Clippy
         run: cargo clippy --locked -p lockra-desktop --all-targets -- -D warnings
+      # The crates that write files, tested on macOS itself (as on Windows, above).
+      - name: Crate tests (vault, core)
+        run: cargo test --locked -p lockra-vault -p lockra-core
       - name: Keychain hand-over across builds (login keychain)
         timeout-minutes: 25
         run: .github/scripts/check-keychain-handoff.sh
