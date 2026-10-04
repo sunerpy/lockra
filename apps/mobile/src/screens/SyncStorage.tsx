@@ -37,6 +37,7 @@ export function SyncStorage({ space }: { space: SyncSpaceView }) {
         data-testid="sync-storage-form">
         <p className="text-[14px] text-fg-muted">{t("sync.storageEditBody")}</p>
         <StorageFields
+          failure={submit.error}
           size="lg"
           form={form}
           onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}

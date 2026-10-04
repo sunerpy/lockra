@@ -48,6 +48,7 @@ export function SyncSetup() {
         data-testid="sync-create">
         <p className="text-[14px] text-fg-muted">{t("sync.off.createBody")}</p>
         <StorageFields
+          failure={submit.error}
           size="lg"
           form={storage}
           onChange={(patch) => setStorage((form) => ({ ...form, ...patch }))}

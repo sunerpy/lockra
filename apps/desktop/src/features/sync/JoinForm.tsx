@@ -97,6 +97,7 @@ export function JoinForm({
       ) : (
         <>
           <StorageFields
+            failure={submit.error}
             form={storage}
             onChange={(patch) => setStorage((form) => ({ ...form, ...patch }))}
           />

@@ -2,9 +2,22 @@
 // ones they start from. The secret (S3 secret key, WebDAV password) is typed in every time: the
 // core never sends it back.
 import type { StorageConfig, StorageKind, StorageView } from "./schema";
+import {
+  type PresetId,
+  PRESETS,
+  customPreset,
+  detectPreset,
+  presetProblem,
+} from "./storage-presets";
 
 export interface StorageForm {
   kind: StorageKind;
+  /** The service chosen by name (storage-presets.ts); the custom ones ask for every field. */
+  preset: PresetId;
+  /** Cloudflare R2's account id. */
+  account: string;
+  /** The server of a Nextcloud or Synology preset, with its port when not the usual one. */
+  host: string;
   endpoint: string;
   region: string;
   bucket: string;
@@ -20,6 +33,9 @@ export interface StorageForm {
 export function emptyStorageForm(): StorageForm {
   return {
     kind: "s3",
+    preset: customPreset("s3"),
+    account: "",
+    host: "",
     endpoint: "",
     region: "",
     bucket: "",
@@ -33,21 +49,31 @@ export function emptyStorageForm(): StorageForm {
   };
 }
 
-/** A space's settings as the form shows them, the secret left empty. */
+/** A space's settings as the form shows them, the secret left empty, on the preset that makes
+ *  them when there is one. */
 export function storageFormFrom(view: StorageView): StorageForm {
   const empty = emptyStorageForm();
+  const { region, ...preset } = detectPreset(view);
   return view.kind === "s3"
     ? {
         ...empty,
+        ...preset,
         kind: "s3",
         endpoint: view.endpoint,
-        region: view.region,
+        region: region ?? view.region,
         bucket: view.bucket,
         accessKeyId: view.access_key_id,
         pathStyle: view.path_style,
         prefix: view.prefix,
       }
-    : { ...empty, kind: "webdav", url: view.url, username: view.username, prefix: view.prefix };
+    : {
+        ...empty,
+        ...preset,
+        kind: "webdav",
+        url: view.url,
+        username: view.username,
+        prefix: view.prefix,
+      };
 }
 
 /** The settings the core receives (the core checks them again). */
@@ -72,8 +98,12 @@ export function storageConfig(form: StorageForm): StorageConfig {
       };
 }
 
-/** Every field the kind needs is filled. */
+/** Every field the kind needs is filled, and the preset's settings can be used. */
 export function storageComplete(form: StorageForm): boolean {
+  // A preset of the other kind (a form put together by hand) counts as the custom one.
+  const own =
+    PRESETS[form.preset].kind === form.kind ? form : { ...form, preset: customPreset(form.kind) };
+  if (presetProblem(own) !== null) return false;
   const required =
     form.kind === "s3"
       ? [form.endpoint, form.region, form.bucket, form.accessKeyId, form.secretAccessKey]

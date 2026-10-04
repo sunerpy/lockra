@@ -2,7 +2,9 @@
 # The release web bundle carries no development code (the in-memory mock core, the component
 # showcase) and names no host it could load from: the only URLs allowed are XML namespaces,
 # schema identifiers and the error-decoder links React and Tailwind leave in comments and
-# messages, none of which is ever fetched (the CSP would refuse it anyway).
+# messages, none of which is ever fetched (the CSP would refuse it anyway). Besides those, the
+# sync storage presets (packages/shared/src/storage-presets.ts) carry the start of the addresses
+# they fill in, exactly as listed: the core connects to the storage from Rust, the webview never.
 # Usage: scripts/check-web-bundle.sh   (builds apps/desktop first)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -18,8 +20,9 @@ for marker in "MockBackend" "correct horse battery" "sampleEntries" "placeholder
 done
 
 allowed='^https?://(www\.w3\.org/|json-schema\.org/|react\.dev/errors/|tailwindcss\.com$)'
+presets='^https://(s3\.|s3\.oss-|cos\.|dav\.jianguoyun\.com/dav/?)$'
 while IFS= read -r url; do
-  if ! [[ $url =~ $allowed ]]; then
+  if ! [[ $url =~ $allowed ]] && ! [[ $url =~ $presets ]]; then
     echo "check-web-bundle: unexpected URL in the bundle: $url"
     status=1
   fi

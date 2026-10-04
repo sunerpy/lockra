@@ -638,6 +638,56 @@ export const en: Messages = {
       passwordHint: "Use an app password where the service offers one.",
       httpsOnly:
         "HTTPS addresses only (plain HTTP only to this computer). The credentials are kept in the encrypted vault and never shown again.",
+      provider: "Provider",
+      presets: {
+        aws: "AWS S3 (global regions)",
+        "aws-cn": "AWS S3 (China regions)",
+        r2: "Cloudflare R2",
+        oss: "Alibaba Cloud OSS",
+        cos: "Tencent Cloud COS",
+        b2: "Backblaze B2",
+        minio: "MinIO",
+        "s3-custom": "Other S3-compatible service",
+        jianguoyun: "Jianguoyun",
+        nextcloud: "Nextcloud",
+        synology: "Synology NAS",
+        "webdav-custom": "Other WebDAV service",
+      },
+      presetHints: {
+        aws: "For the China regions (Beijing, Ningxia), choose AWS S3 (China regions): their accounts and keys are separate.",
+        "aws-cn":
+          "Beijing (cn-north-1) or Ningxia (cn-northwest-1). Keys of the China regions do not work in the global regions.",
+        r2: "On the R2 object storage page of the Cloudflare dashboard, Account Details shows the account ID; create the access key with Manage next to API Tokens there.",
+        oss: "OSS accounts opened after 20 March 2025 cannot reach buckets in mainland China regions through the default address (a custom domain is required); a region such as Hong Kong works.",
+        cos: "The bucket name includes the APPID, for example examplebucket-1250000000.",
+        b2: "The region is part of the bucket's endpoint: us-west-004 in s3.us-west-004.backblazeb2.com.",
+        minio: "Enter your MinIO address; path-style access is on.",
+        jianguoyun:
+          "The user name is your Jianguoyun account. Use an app password: add an app under Account info › Security › Third-party apps on the Jianguoyun website.",
+        nextcloud: "Use an app password: create one under Settings › Security in Nextcloud.",
+        synology:
+          "Install and enable WebDAV Server on the NAS; HTTPS uses port 5006 by default. Start the folder with a shared folder, for example home/lockra.",
+      },
+      account: "Account ID",
+      host: "Server",
+      hostHint: "For example cloud.example.com, with the port when it is not the usual one.",
+      address: "Address",
+      regionChoices: "Regions",
+      problems: {
+        awsChinaRegion: "This is a China region: choose AWS S3 (China regions).",
+        awsGlobalRegion: "The China regions are cn-north-1 and cn-northwest-1.",
+        regionFormat: "A region is written like us-east-1.",
+        r2Account: "The account ID is 32 hexadecimal characters.",
+      },
+      failures: {
+        awsPartition:
+          "Check that the partition matches the keys: China and global accounts and keys are separate.",
+        appPassword: "Use an app password, not the sign-in password.",
+        ossDomain:
+          "Accounts opened after 20 March 2025 cannot reach buckets in mainland China regions through the default address.",
+        cosBucket:
+          "Check that the bucket name includes the APPID and that the region is the bucket's.",
+      },
     },
     deviceName: "This device's name",
     deviceNameHint: "The other devices list it under this name.",
