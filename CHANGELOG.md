@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.8.0](https://github.com/sunerpy/lockra/compare/v0.7.0...v0.8.0) (2026-10-04)
+
+
+### Features
+
+* **mobile:** 有指纹的手机默认开启指纹解锁 ([#48](https://github.com/sunerpy/lockra/issues/48)) ([9947ca7](https://github.com/sunerpy/lockra/commit/9947ca758c3e730aa66a5ead8f59ae83a05213b5))
+
+
+### Bug Fixes
+
+* **desktop:** macOS 应用内更新后不再弹出钥匙串询问 ([#50](https://github.com/sunerpy/lockra/issues/50)) ([732d70f](https://github.com/sunerpy/lockra/commit/732d70fea62320e0ec086d7ef1b22fe04b8c16c6))
+
 ## [0.7.0](https://github.com/sunerpy/lockra/compare/v0.6.0...v0.7.0) (2026-10-03)
 
 
