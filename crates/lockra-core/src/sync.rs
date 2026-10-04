@@ -2,8 +2,9 @@
 //! the views and the error codes. The runs and the commands are in `session.rs`, beside the
 //! others; lockra-sync does the cryptography and the merge.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::ops::AddAssign;
 use std::time::Duration;
 
 use data_encoding::BASE64;
@@ -14,12 +15,16 @@ use zeroize::Zeroizing;
 
 use crate::entry::{Entry, clean_name};
 use crate::error::{CoreError, ErrorCode};
-use crate::ui::{Platform, StorageView, SyncDeviceView};
+use crate::ui::{Notice, Platform, StorageView, SyncDeviceView};
 
 /// Delay between the last change and the sync run it causes.
 pub const SYNC_DEBOUNCE: Duration = Duration::from_secs(3);
-/// Time between runs while the vault is unlocked.
+/// Time between runs while the vault is unlocked, behind other windows, and after a failed run.
 pub const SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// Time between runs while the app is in front.
+pub const SYNC_INTERVAL_FOREGROUND: Duration = Duration::from_secs(60);
+/// Coming to the front runs sync once the last run is this old.
+pub const SYNC_FOCUS_MIN: Duration = Duration::from_secs(30);
 /// The longest device name kept (characters), as a snapshot carries it.
 pub const MAX_DEVICE_NAME_CHARS: usize = 64;
 /// The format of the payload inside a snapshot: the accounts and the deletions.
@@ -221,6 +226,49 @@ pub(crate) fn merge_entries(entries: &mut Vec<Entry>, tombstones: &mut Vec<Tombs
     changed
 }
 
+/// What a run took into this device's accounts.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Brought {
+    pub added: u32,
+    pub updated: u32,
+    pub removed: u32,
+}
+
+impl Brought {
+    /// The accounts after a merge against the ones before it.
+    pub(crate) fn between(before: &[Entry], after: &[Entry]) -> Self {
+        let previous: HashMap<Uuid, &Entry> = before.iter().map(|e| (e.id, e)).collect();
+        let kept: HashSet<Uuid> = after.iter().map(|e| e.id).collect();
+        Self {
+            added: count(after.iter().filter(|e| !previous.contains_key(&e.id))),
+            updated: count(after.iter().filter(|e| previous.get(&e.id).is_some_and(|p| *p != *e))),
+            removed: count(before.iter().filter(|e| !kept.contains(&e.id))),
+        }
+    }
+
+    /// Whether the run changed any account here.
+    pub(crate) fn any(self) -> bool {
+        self != Self::default()
+    }
+
+    /// The notice for it, naming the devices it came from.
+    pub(crate) fn notice(self, devices: Vec<String>) -> Notice {
+        Notice::SyncBrought { added: self.added, updated: self.updated, removed: self.removed, devices }
+    }
+}
+
+impl AddAssign for Brought {
+    fn add_assign(&mut self, other: Self) {
+        self.added = self.added.saturating_add(other.added);
+        self.updated = self.updated.saturating_add(other.updated);
+        self.removed = self.removed.saturating_add(other.removed);
+    }
+}
+
+fn count<T>(items: impl Iterator<Item = T>) -> u32 {
+    u32::try_from(items.count()).unwrap_or(u32::MAX)
+}
+
 /// The code the interface shows for a sync failure.
 pub(crate) fn sync_error(error: &SyncError) -> CoreError {
     CoreError::from(match error {
@@ -281,6 +329,27 @@ mod tests {
         assert_eq!((working.entries[0].issuer.as_str(), working.entries[0].last_used_at_ms), ("Renamed", Some(500)));
         // Nothing newer: nothing changes.
         assert!(!working.absorb(&theirs.payload()).unwrap());
+    }
+
+    #[test]
+    fn what_a_merge_brought_counts_new_changed_and_gone_accounts() {
+        let a = entry("otpauth://totp/A:a?secret=JBSWY3DPEHPK3PXP", 10, 1);
+        let b = entry("otpauth://totp/B:b?secret=GEZDGNBV", 10, 1);
+        let c = entry("otpauth://totp/C:c?secret=MFRGGZDF", 10, 1);
+        let d = entry("otpauth://totp/D:d?secret=MZXW6YTB", 10, 1);
+        let mut renamed = b.clone();
+        renamed.issuer = "B2".into();
+        let before = [a.clone(), b, c];
+        let brought = Brought::between(&before, &[a.clone(), renamed, d]);
+        assert_eq!(brought, Brought { added: 1, updated: 1, removed: 1 });
+        assert!(brought.any());
+        assert!(!Brought::between(&before, &before).any());
+
+        let mut total = Brought::default();
+        total += brought;
+        total += Brought { added: 2, updated: 0, removed: u32::MAX };
+        assert_eq!(total, Brought { added: 3, updated: 1, removed: u32::MAX });
+        assert_eq!(total.notice(vec!["Phone".into()]), Notice::SyncBrought { added: 3, updated: 1, removed: u32::MAX, devices: vec!["Phone".into()] });
     }
 
     #[test]

@@ -864,6 +864,13 @@ export const zhCN = {
     autoLocked: "长时间没有操作，保险库已自动锁定",
     exportExpired: "二维码已过期并隐藏",
     deviceUnlockTurnedOff: "读不到钥匙串里的密钥，本机记住已关闭，请重新开启",
+    syncBrought: "已从 {devices} 同步：{changes}",
+    syncBroughtFailed: "已同步来自其他设备的更改：{changes}",
+    syncAdded: "新增 {n} 个",
+    syncUpdated: "修改 {n} 个",
+    syncRemoved: "删除 {n} 个",
+    syncChangesSeparator: "，",
+    syncDevicesSeparator: "、",
   },
   update: {
     title: "发现新版本 {version}",

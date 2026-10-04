@@ -288,6 +288,8 @@ fn notices() -> Vec<Notice> {
         Notice::AutoLocked,
         Notice::ExportExpired { session: id(100) },
         Notice::DeviceUnlockTurnedOff,
+        Notice::SyncBrought { added: 2, updated: 1, removed: 0, devices: vec!["MacBook".into(), "Pixel 8".into()] },
+        Notice::SyncBrought { added: 0, updated: 0, removed: 1, devices: vec![] },
     ]
 }
 

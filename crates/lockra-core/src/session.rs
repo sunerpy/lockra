@@ -31,7 +31,10 @@ use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
 use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, SyncTransport, Updater};
 use crate::settings::{Settings, SettingsStore};
-use crate::sync::{SYNC_DEBOUNCE, SYNC_INTERVAL, SyncLocal, Working, config_error, device_name, merge_entries, storage_view, sync_error};
+use crate::sync::{
+    Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, SyncLocal, Working, config_error, device_name, merge_entries,
+    storage_view, sync_error,
+};
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
     InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent,
@@ -133,6 +136,8 @@ struct State {
     last_activity: Instant,
     update: UpdateState,
     sync: SyncRuntime,
+    /// The app is in front (the desktop's window has the focus); a phone app is, while it runs.
+    foreground: bool,
 }
 
 /// The sync as it runs; the vault keeps the space itself.
@@ -144,6 +149,8 @@ struct SyncRuntime {
     again: bool,
     /// When the next run is due.
     at: Option<Instant>,
+    /// When the last run ended.
+    last_run: Option<Instant>,
     /// What the last run did.
     status: SyncStatus,
     /// The last run's refused rollbacks and unreadable snapshots (device tags).
@@ -220,6 +227,7 @@ impl Core {
             last_activity: Instant::now(),
             update,
             sync: SyncRuntime::default(),
+            foreground: true,
         };
         let (events, _) = broadcast::channel(64);
         let shared = Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new() });
@@ -1792,6 +1800,28 @@ impl Core {
         Ok(())
     }
 
+    /// The app came to the front or went behind other windows (the desktop's window focus; a
+    /// phone app is in front while it runs). In front, a run follows the last one after a minute
+    /// rather than five; coming back makes one due as soon as the last is half a minute old.
+    pub fn set_foreground(&self, foreground: bool) {
+        {
+            let mut st = self.lock();
+            if std::mem::replace(&mut st.foreground, foreground) == foreground || !foreground || st.sync.busy {
+                return;
+            }
+            if !matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some()) {
+                return;
+            }
+            let now = Instant::now();
+            let due = st.sync.last_run.map_or(now, |last| (last + SYNC_FOCUS_MIN).max(now));
+            if st.sync.at.is_some_and(|at| at <= due) {
+                return;
+            }
+            st.sync.at = Some(due);
+        }
+        self.shared.wake.notify_one();
+    }
+
     /// Run the sync now (Settings › Sync › "sync now").
     pub fn sync_now(&self) -> CoreResult<()> {
         {
@@ -1843,7 +1873,13 @@ impl Core {
     async fn run_sync(&self) {
         let mut renumbered = false;
         loop {
-            let result = self.sync_once().await;
+            let (brought, result) = self.sync_once().await;
+            if brought.any() {
+                // In the vault whatever the run did next; a run that failed later no longer knows
+                // which devices it came from.
+                let devices = result.as_ref().map(|outcome| outcome.brought.clone()).unwrap_or_default();
+                self.notice(brought.notice(devices));
+            }
             let now = self.now_ms();
             let again = {
                 let mut st = self.lock();
@@ -1872,8 +1908,12 @@ impl Core {
                 again &= configured;
                 if !again {
                     st.sync.busy = false;
+                    st.sync.last_run = Some(Instant::now());
                     if configured && st.sync.at.is_none() {
-                        st.sync.at = Some(Instant::now() + SYNC_INTERVAL);
+                        // A failed run waits the long interval, in front too.
+                        let synced = matches!(st.sync.status, SyncStatus::Synced { .. });
+                        let interval = if synced && st.foreground { SYNC_INTERVAL_FOREGROUND } else { SYNC_INTERVAL };
+                        st.sync.at = Some(Instant::now() + interval);
                     }
                 }
                 again
@@ -1885,16 +1925,26 @@ impl Core {
         }
     }
 
-    /// One run: the other devices' snapshots in, this device's out, its keyring inside.
-    async fn sync_once(&self) -> Result<SyncOutcome, SyncError> {
+    /// One run: the other devices' snapshots in, this device's out, its keyring inside. With what
+    /// it took into the accounts, which stays there even when the run fails afterwards.
+    async fn sync_once(&self) -> (Brought, Result<SyncOutcome, SyncError>) {
+        let mut brought = Brought::default();
+        let result = self.sync_into(&mut brought).await;
+        (brought, result)
+    }
+
+    async fn sync_into(&self, brought: &mut Brought) -> Result<SyncOutcome, SyncError> {
         let SyncJob { space_id, remote, storage, keys, device, device_name, keyring, mut state, mut working } = self.sync_job()?;
         let remote = remote.ok_or(SyncError::Interrupted)?;
         let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: &device_name, keyring: &keyring };
-        let core = self.clone();
-        let settings = storage.clone();
-        let mut persist = move |state: &SyncState, working: &Working| core.sync_keep(space_id, &settings, state, working, None);
-        let outcome = step_with(&*remote, &space, &mut state, &mut working, self.now_ms(), &mut persist).await?;
-        self.sync_keep(space_id, &storage, &state, &working, Some((self.now_ms(), &keyring)))?;
+        let outcome = {
+            let mut persist = |state: &SyncState, working: &Working| {
+                *brought += self.sync_keep(space_id, &storage, state, working, None)?;
+                Ok(())
+            };
+            step_with(&*remote, &space, &mut state, &mut working, self.now_ms(), &mut persist).await?
+        };
+        *brought += self.sync_keep(space_id, &storage, &state, &working, Some((self.now_ms(), &keyring)))?;
         Ok(outcome)
     }
 
@@ -1938,7 +1988,8 @@ impl Core {
     /// Fold a run's replica into the vault and keep its state; `finished` marks the end of a run,
     /// with the keyring it carried. The accounts merge rather than replace: a change made while
     /// the run was out stays, and the next run takes it along. A space or storage settings changed
-    /// meanwhile stop the run, before it writes to where the space no longer is.
+    /// meanwhile stop the run, before it writes to where the space no longer is. Answers what the
+    /// merge changed in the accounts.
     fn sync_keep(
         &self,
         space_id: Uuid,
@@ -1946,9 +1997,9 @@ impl Core {
         state: &SyncState,
         working: &Working,
         finished: Option<(u64, &[u8])>,
-    ) -> Result<(), SyncError> {
+    ) -> Result<Brought, SyncError> {
         let now = self.now_ms();
-        let changed = {
+        let (changed, brought) = {
             let mut st = self.lock();
             let PhaseState::Unlocked(session) = &mut st.phase else { return Err(SyncError::Interrupted) };
             if session.data.sync().map(|s| (s.space_id, &s.storage)) != Some((space_id, storage)) {
@@ -1956,6 +2007,7 @@ impl Core {
             }
             let before = session.data.clone();
             let changed = merge_entries(&mut session.data.entries, &mut session.data.tombstones, &working.entries, &working.tombstones);
+            let brought = if changed { Brought::between(&before.entries, &session.data.entries) } else { Brought::default() };
             if changed {
                 session.data.observe_stamps();
             }
@@ -1978,12 +2030,12 @@ impl Core {
             if changed {
                 self.schedule_auto_backup(&mut st);
             }
-            changed
+            (changed, brought)
         };
         if changed {
             self.changed();
         }
-        Ok(())
+        Ok(brought)
     }
 
     /// Become a new device of the space: a new number (and clock), a fresh state. The snapshot

@@ -130,6 +130,9 @@ pub struct DeviceView {
 pub struct Outcome {
     /// The replica took something in.
     pub changed: bool,
+    /// The names of the devices whose snapshot changed the replica, in the order read: what
+    /// this run brought, whether or not the storage gives etags.
+    pub brought: Vec<String>,
     /// This device's snapshot was written.
     pub wrote: bool,
     /// Devices whose snapshot went back in sequence: refused, the newer state stays.
@@ -218,7 +221,12 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
         // A new etag is folded in even at a sequence number already seen: a copied vault writes
         // under the same numbers, and folding the same state in twice changes nothing.
         match replica.absorb(&snapshot.payload) {
-            Ok(changed) => outcome.changed |= changed,
+            Ok(changed) => {
+                outcome.changed |= changed;
+                if changed && !outcome.brought.contains(&snapshot.device_name) {
+                    outcome.brought.push(snapshot.device_name.clone());
+                }
+            }
             Err(_) => {
                 outcome.unreadable.push(tag);
                 continue;
@@ -462,10 +470,12 @@ mod tests {
             laptop.doc.put(1, "GitHub", 10, 1);
             let first = laptop.sync(&remote, &keys, 100).await.unwrap();
             assert!(first.wrote && !first.changed);
+            assert!(first.brought.is_empty());
             assert_eq!(first.devices.len(), 1);
 
             let joined = phone.sync(&remote, &keys, 200).await.unwrap();
             assert!(joined.changed && joined.wrote, "{joined:?}");
+            assert_eq!(joined.brought, ["Laptop"], "what came in, and from whom");
             assert_eq!(phone.doc.values(), ["GitHub"]);
             assert_eq!(joined.devices.iter().map(|d| (d.name.as_str(), d.this_device)).collect::<Vec<_>>(), [("Phone", true), ("Laptop", false)]);
 
@@ -474,10 +484,13 @@ mod tests {
             phone.sync(&remote, &keys, 300).await.unwrap();
             let back = laptop.sync(&remote, &keys, 400).await.unwrap();
             assert!(back.changed);
+            assert_eq!(back.brought, ["Phone"]);
             assert_eq!(laptop.doc.values(), ["Mail"], "the deletion and the new account arrived");
             assert_eq!(laptop.doc, phone.doc, "conditional={conditional}");
-            // The phone reads the laptop's merged snapshot: it holds nothing new, so nothing is written.
-            assert!(!phone.sync(&remote, &keys, 450).await.unwrap().wrote);
+            // The phone reads the laptop's merged snapshot: it holds nothing new, so nothing is written
+            // and nothing is said to have come in.
+            let quiet = phone.sync(&remote, &keys, 450).await.unwrap();
+            assert!(!quiet.wrote && quiet.brought.is_empty(), "{quiet:?}");
 
             // Nothing new: both runs read nothing again and write nothing.
             let calls = remote.calls().len();

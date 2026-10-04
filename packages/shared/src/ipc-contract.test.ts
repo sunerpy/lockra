@@ -59,7 +59,7 @@ describe("IPC fixtures", () => {
       const parsed = uiEventSchema.parse(event);
       if (parsed.type === "notice") kinds.add(parsed.notice.type);
     }
-    expect(kinds.size).toBe(11);
+    expect(kinds.size).toBe(12);
   });
 
   it("every update view parses, each state and each install method once at least", () => {

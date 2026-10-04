@@ -57,9 +57,10 @@ export sessions; leaving it drops them.
 
 Argon2 and file I/O run on `spawn_blocking`. One **scheduler task** owns every timer — the next
 code window, auto-lock, clipboard clearing, the automatic backup debounce, export expiry, the
-automatic update — sleeps until the earliest deadline, and is woken through a `Notify`
-whenever the state changes, so nothing polls. Core tests run on tokio's paused clock with the
-fakes.
+automatic update, the next sync run — sleeps until the earliest deadline, and is woken through a
+`Notify` whenever the state changes, so nothing polls. The desktop shell tells the core when its
+window gains or loses the focus (`Core::set_foreground`): in front, sync runs every minute
+rather than every five. Core tests run on tokio's paused clock with the fakes.
 
 The in-app update follows Voltip's design. It is a run in the background, one at a time:
 `update_check` asks the `Updater` afresh (`UiState.update` goes `checking` → `up_to_date` /
@@ -90,7 +91,8 @@ the main thread and freeze the window while Argon2 works):
   once (empty while locked); then one at each code window's end.
 
 Events: `lockra://event` carries `{type: "state", state}` (the whole `UiState` after every change)
-and `{type: "notice", notice}` (copied, imported, backup written or failed, auto-locked…);
+and `{type: "notice", notice}` (copied, imported, backup written or failed, auto-locked, what a
+sync run brought…);
 `lockra://drag` carries `enter` / `leave` while files are dragged over the window (dropped files
 go to the import in Rust).
 
