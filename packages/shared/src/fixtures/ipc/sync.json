@@ -33,7 +33,8 @@
       "unreadable": [
         "ffeeddccbbaa99887766554433221100"
       ],
-      "keyring_pending": false
+      "keyring_pending": false,
+      "key_saved": false
     }
   },
   {
@@ -70,7 +71,8 @@
       "unreadable": [
         "ffeeddccbbaa99887766554433221100"
       ],
-      "keyring_pending": false
+      "keyring_pending": false,
+      "key_saved": false
     }
   },
   {
@@ -108,7 +110,8 @@
       "unreadable": [
         "ffeeddccbbaa99887766554433221100"
       ],
-      "keyring_pending": false
+      "keyring_pending": false,
+      "key_saved": false
     }
   },
   {
@@ -147,7 +150,8 @@
       "unreadable": [
         "ffeeddccbbaa99887766554433221100"
       ],
-      "keyring_pending": false
+      "keyring_pending": false,
+      "key_saved": false
     }
   },
   {
@@ -175,7 +179,8 @@
         "0a9b8c7d6e5f40312233445566778899"
       ],
       "unreadable": [],
-      "keyring_pending": true
+      "keyring_pending": true,
+      "key_saved": false
     }
   },
   {

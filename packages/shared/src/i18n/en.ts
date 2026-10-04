@@ -706,9 +706,11 @@ export const en: Messages = {
       vaultPassword: "This device's master password",
       vaultPasswordHint:
         "Checked against this vault; from then on it opens the sync space as well.",
-      otherPassword: "The sync space's master password (optional)",
+      otherPassword: "The sync space's master password",
       otherPasswordHint:
-        "When the space's devices use another master password; leave it empty to use this device's.",
+        "The space's devices use another master password: enter that of any of them.",
+      code: "Code",
+      codeHint: "This invitation needs its code: enter the code shown on the inviting device.",
     },
     created: {
       title: "Keep your sync key",
@@ -717,6 +719,21 @@ export const en: Messages = {
       again: "You can see it again under Invite another device.",
       hideIn: "The sync key hides in {s} s",
       done: "I have kept it",
+      save: "Save to a file…",
+      savedTo: "The sync key was saved to a file.",
+    },
+    keyReminder: {
+      body: "The sync key is not saved yet. Adding a device with no other one at hand, or recovering the accounts after losing every device, needs it and a master password.",
+      save: "Save the sync key…",
+      done: "I wrote it down",
+      password: "Enter the master password to save the sync key",
+      submit: "Save",
+    },
+    keyFile: {
+      name: "Lockra sync key.txt",
+      heading: "Lockra sync key",
+      body: "Adding a device with no other one at hand, or recovering the accounts after losing every device, needs this sync key and the master password of a device in the sync space. Keep it apart from the master password and do not send it to anyone.",
+      reason: "save the sync key",
     },
     status: {
       label: "Status",
@@ -760,11 +777,21 @@ export const en: Messages = {
     invite: {
       open: "Invite another device",
       prompt: "Enter the master password to show the invitation.",
+      promptBiometric: "Verify to show the invitation, or enter the master password.",
+      verifyWith: {
+        touch_id: "Verify with Touch ID",
+        windows_hello: "Verify with Windows Hello",
+        fingerprint: "Verify with fingerprint",
+      },
+      reason: "show the sync invitation",
       submit: "Show invitation",
-      body: "On the new device, scan the QR code or paste the text below, then enter the master password.",
+      body: "On the new device, scan the QR code. Where scanning is awkward, send the invitation below to the new device and paste it there with its code. Then enter the master password.",
       warning:
         "The invitation holds the storage's credentials and the sync key: use it on your own devices only.",
-      text: "Invitation text",
+      text: "Invitation to send",
+      code: "Code",
+      codeHint:
+        "Tell it in person or by phone, never through the channel that carried the invitation.",
       hideIn: "The invitation hides in {s} s",
     },
     disable: {
@@ -840,6 +867,9 @@ export const en: Messages = {
     sync_wrong_credentials: "The master password or the sync key is wrong",
     sync_key_invalid: "The sync key is mistyped",
     sync_invite_invalid: "This is not a Lockra sync invitation",
+    sync_invite_code_wrong: "The code is not right: check the code shown next to the invitation",
+    sync_space_password_needed:
+      "This device's master password does not open the sync space: also enter the master password of a device in the space",
     sync_data_corrupted: "The sync data on the storage is damaged or was altered",
     sync_unsupported: "The sync data comes from a newer Lockra; update Lockra first",
     internal: "An internal error occurred",

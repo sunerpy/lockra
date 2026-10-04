@@ -2,6 +2,8 @@ import {
   type JoinSource,
   emptyStorageForm,
   errorText,
+  isLockraError,
+  isSealedInvite,
   storageComplete,
   storageConfig,
 } from "@lockra/shared";
@@ -21,10 +23,10 @@ import { useSubmit } from "../../app/dispatch";
 
 type Mode = "invite" | "key";
 
-/** Joining a space: another device's invitation, or the storage and the sync key typed in. On the
- *  welcome screen (`newVault`) the master password of a device in the space becomes this vault's;
- *  with a vault, its own master password is checked and opens the space unless the space's devices
- *  use another one, typed in apart. */
+/** Joining a space: another device's invitation (a sealed one with its code), or the storage and
+ *  the sync key typed in. On the welcome screen (`newVault`) the master password of a device in
+ *  the space becomes this vault's; with a vault, its own master password is checked and opens the
+ *  space, and only when the space's devices use another one does the form ask for that too. */
 export function JoinForm({
   newVault = false,
   onCancel,
@@ -37,38 +39,55 @@ export function JoinForm({
   const { platform } = useUiState();
   const [mode, setMode] = useState<Mode>("invite");
   const [invite, setInvite] = useState("");
+  const [code, setCode] = useState("");
+  // The core said this vault's password opens nothing in the space: the space's is asked for.
+  const [askSpace, setAskSpace] = useState(false);
   const [storage, setStorage] = useState(emptyStorageForm);
   const [syncKey, setSyncKey] = useState("");
   const [password, setPassword] = useState("");
   const [spacePassword, setSpacePassword] = useState("");
   const [deviceName, setDeviceName] = useState(() => t(`sync.platformDevice.${platform}`));
   const submit = useSubmit();
+  const sealed = mode === "invite" && isSealedInvite(invite);
   const sourceReady =
-    mode === "invite" ? invite.trim() !== "" : storageComplete(storage) && syncKey.trim() !== "";
+    mode === "invite"
+      ? invite.trim() !== "" && (!sealed || code.trim() !== "")
+      : storageComplete(storage) && syncKey.trim() !== "";
   const ready = sourceReady && password !== "";
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!ready) return;
     const source: JoinSource =
       mode === "invite"
-        ? { type: "invite", text: invite.trim() }
+        ? { type: "invite", text: invite.trim(), code: sealed ? code.trim() : undefined }
         : { type: "manual", storage: storageConfig(storage), sync_key: syncKey.trim() };
     const space_password = newVault || spacePassword === "" ? undefined : spacePassword;
-    await submit.run(() =>
-      backend.dispatch({
-        command: "sync_join",
-        source,
-        password,
-        device_name: deviceName,
-        space_password,
-      }),
-    );
+    await submit.run(async () => {
+      try {
+        return await backend.dispatch({
+          command: "sync_join",
+          source,
+          password,
+          device_name: deviceName,
+          space_password,
+        });
+      } catch (failure: unknown) {
+        if (isLockraError(failure) && failure.code === "sync_space_password_needed")
+          setAskSpace(true);
+        throw failure;
+      }
+    });
     setPassword("");
     setSpacePassword("");
   };
   const error = submit.error === undefined ? undefined : errorText(t, submit.error);
-  // A space that does not open with the other password typed in says so there.
-  const spaceError = !newVault && spacePassword !== "" && submit.error === "sync_wrong_credentials";
+  const showSpace = !newVault && askSpace;
+  // What the space's password is asked for, or refused for, shows under it.
+  const spaceError =
+    showSpace &&
+    (submit.error === "sync_space_password_needed" ||
+      (spacePassword !== "" && submit.error === "sync_wrong_credentials"));
+  const codeError = submit.error === "sync_invite_code_wrong";
   return (
     <form
       onSubmit={(e) => void onSubmit(e)}
@@ -89,7 +108,7 @@ export function JoinForm({
           label={t("sync.join.invite")}
           value={invite}
           onChange={(e) => setInvite(e.target.value)}
-          placeholder="lockra-invite:1:…"
+          placeholder="lockra-invite:…"
           mono
           rows={3}
           spellCheck={false}
@@ -115,6 +134,20 @@ export function JoinForm({
       {mode === "invite" && (
         <p className="-mt-1 text-[12px] text-fg-subtle">{t("sync.join.inviteHint")}</p>
       )}
+      {sealed && (
+        <Input
+          label={t("sync.join.code")}
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          help={t("sync.join.codeHint")}
+          error={codeError ? error : undefined}
+          placeholder="XXXXX-XXXXX"
+          mono
+          spellCheck={false}
+          autoComplete="off"
+          className="sm:max-w-xs"
+        />
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
         <Input
           label={t("sync.deviceName")}
@@ -122,8 +155,8 @@ export function JoinForm({
           onChange={(e) => setDeviceName(e.target.value)}
           help={t("sync.deviceNameHint")}
           maxLength={64}
-          // With a vault, the two passwords share the next row.
-          className={newVault ? undefined : "sm:col-span-2"}
+          // Asked for the space's password too, the two passwords share the next row.
+          className={showSpace ? "sm:col-span-2" : undefined}
         />
         <PasswordField
           label={t(newVault ? "sync.spacePassword" : "sync.join.vaultPassword")}
@@ -131,9 +164,9 @@ export function JoinForm({
           onChange={setPassword}
           help={t(newVault ? "sync.spacePasswordHint" : "sync.join.vaultPasswordHint")}
           autoComplete="current-password"
-          error={spaceError ? undefined : error}
+          error={spaceError || codeError ? undefined : error}
         />
-        {!newVault && (
+        {showSpace && (
           <PasswordField
             label={t("sync.join.otherPassword")}
             value={spacePassword}

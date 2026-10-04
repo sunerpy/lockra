@@ -114,6 +114,11 @@ pub enum ErrorCode {
     SyncKeyInvalid,
     /// The invitation is not one Lockra made.
     SyncInviteInvalid,
+    /// A shared invitation's one-time code is missing or wrong.
+    SyncInviteCodeWrong,
+    /// This vault's master password is right but opens nothing in the space: the space's devices
+    /// use another one, which the join needs as well.
+    SyncSpacePasswordNeeded,
     /// The space's data on the storage is damaged or was altered.
     SyncDataCorrupted,
     /// The space was written by a newer Lockra.

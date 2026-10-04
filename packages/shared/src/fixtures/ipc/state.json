@@ -533,6 +533,7 @@
             "written_at_ms": 1789996400000
           }
         ],
+        "key_saved": false,
         "keyring_pending": false,
         "last_sync_ms": 1789999940000,
         "rolled_back": [],

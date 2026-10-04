@@ -38,7 +38,7 @@ export function SyncSetup() {
     );
     setPassword("");
     if (answer !== undefined)
-      deliver(() => nav.replace({ name: "syncKey", syncKey: answer.sync_key }));
+      deliver(() => nav.replace({ name: "syncKey", syncKey: answer.sync_key, password }));
   };
   return (
     <Page title={t("sync.off.createTitle")} testId="page-sync-setup">

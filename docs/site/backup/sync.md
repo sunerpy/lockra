@@ -81,6 +81,15 @@ password and the sync key. The master password of any device in the space, with 
 adds a device. After you change the master password on a device, the new one works from that
 device's next sync, and the old one no longer opens the space unless another device still uses it.
 
+### Easier inviting and joining
+
+<StatusTag status="building" />
+
+- **Show the invitation with Touch ID, Windows Hello or the fingerprint**: on a device that unlocks with one of them, **Invite another device** accepts it instead of the master password.
+- **An invitation you can send**: a 10-character code is shown beside the invitation. Send the invitation to the new device by chat or mail, and tell the code another way, in person or by phone; the new device pastes the invitation and enters the code. Scanning the QR code needs no code.
+- **One password to join**: a device with a vault enters only its own master password; Lockra asks for another device's only when the space's devices use another one.
+- **Save the sync key**: after setting up, you can save the sync key to a file you choose. Until you save it or choose **I have kept it**, **Settings › Sync** reminds you.
+
 ## Adding a phone
 
 <StatusTag status="available" /> Available from version 0.7.0.

@@ -17,6 +17,7 @@ import {
   IconButton,
   Input,
   LampText,
+  SyncKeyReminder,
   useBackend,
   useDispatch,
   useNow,
@@ -88,6 +89,7 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
   const close = () => setDialog(null);
   return (
     <div className="flex flex-col gap-5">
+      <SyncKeyReminder size="lg" />
       <Card className="flex flex-col gap-3">
         <LampText tone={line.tone} pulse={syncing}>
           <span data-testid="sync-status">{line.text}</span>

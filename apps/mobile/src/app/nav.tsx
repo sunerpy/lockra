@@ -26,7 +26,9 @@ export type Route =
   | { name: "exportView"; started: ExportStarted }
   | { name: "sync" }
   | { name: "syncSetup" }
-  | { name: "syncKey"; syncKey: string }
+  /** The new space's key, with the password it was made with: saving the key uses it, and it
+   *  goes with the page. */
+  | { name: "syncKey"; syncKey: string; password: string }
   | { name: "syncJoin" }
   | { name: "syncInvite" }
   | { name: "syncStorage" }

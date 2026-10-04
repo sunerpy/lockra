@@ -125,3 +125,8 @@ export function storageSummary(view: StorageView): string {
     " / ",
   );
 }
+
+/** A sealed invitation (`lockra-invite:2:…`): it opens with the one-time code shown beside it. */
+export function isSealedInvite(text: string): boolean {
+  return text.trim().startsWith("lockra-invite:2:");
+}

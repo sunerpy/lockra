@@ -261,4 +261,12 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
 - **The sync key** is `LKS1-` and 14 groups of four Base32 characters: the 32-byte key and three
   bytes of its SHA-256, so a mistyped character is caught. Case, spaces and dashes do not matter.
 - **An invitation** is `lockra-invite:1:` and Base64url (no padding) of
-  `{storage, sync_key}`: the storage settings with their credentials, and the sync key text.
+  `{storage, sync_key}`: the storage settings with their credentials, and the sync key text. The QR
+  code carries it so.
+- **A sealed invitation**, the text to send, is `lockra-invite:2:` and Base64url (no padding) of an
+  object framed like the others: magic `LKSINVT2`, the header `{format: 2, kdf, nonce}`, then
+  XChaCha20-Poly1305 of the plain invitation's JSON, the header bytes as associated data. The key
+  is HKDF-SHA256(Argon2id(code, salt), info `lockra-sync v1 shared invitation`) at the vault's
+  cost, with the usual bounds on the parameters. The code is ten characters of Crockford's Base32
+  (50 bits, shown as `ABCDE-FGHJK`); case, spaces and dashes do not matter, and O reads as 0, I
+  and L as 1.

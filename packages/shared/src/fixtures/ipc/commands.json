@@ -212,7 +212,8 @@
       "device_name": "Pixel 8",
       "password": "a new password",
       "source": {
-        "text": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0",
+        "code": "7K2QM-XW4FD",
+        "text": "lockra-invite:2:TEtTSU5WVDI",
         "type": "invite"
       },
       "space_password": "another device's password"
@@ -220,6 +221,9 @@
     {
       "command": "sync_invite",
       "password": "a new password"
+    },
+    {
+      "command": "sync_key_acknowledge"
     },
     {
       "command": "sync_set_storage",
@@ -257,6 +261,7 @@
     "restore_pick",
     "export_otpauth_file",
     "sync_scan_join",
+    "sync_key_save",
     "update_open_release"
   ],
   "shell_commands": [
@@ -267,6 +272,7 @@
     "backup_save",
     "backup_pick_dir",
     "restore_pick",
-    "export_otpauth_file"
+    "export_otpauth_file",
+    "sync_key_save"
   ]
 }

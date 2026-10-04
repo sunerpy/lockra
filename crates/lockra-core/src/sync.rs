@@ -53,6 +53,14 @@ pub(crate) struct SyncLocal {
     /// When a run last finished without error, Unix milliseconds.
     #[serde(default)]
     pub last_sync_ms: Option<u64>,
+    /// The sync key was saved or written down. Only the device that made the space starts
+    /// without; spaces kept by earlier versions count as saved (they showed the key when made).
+    #[serde(default = "saved")]
+    pub key_saved: bool,
+}
+
+fn saved() -> bool {
+    true
 }
 
 impl fmt::Debug for SyncLocal {
@@ -63,6 +71,7 @@ impl fmt::Debug for SyncLocal {
             .field("device_name", &self.device_name)
             .field("state", &self.state)
             .field("keyring_written", &self.keyring_written)
+            .field("key_saved", &self.key_saved)
             .finish_non_exhaustive()
     }
 }
@@ -80,6 +89,7 @@ impl SyncLocal {
             keyring: BASE64.encode(keyring),
             keyring_written: false,
             last_sync_ms: None,
+            key_saved: true,
         }
     }
 
@@ -223,6 +233,7 @@ pub(crate) fn sync_error(error: &SyncError) -> CoreError {
         SyncError::NoSpace => ErrorCode::SyncSpaceNotFound,
         SyncError::BadSyncKey => ErrorCode::SyncKeyInvalid,
         SyncError::BadInvite => ErrorCode::SyncInviteInvalid,
+        SyncError::BadInviteCode => ErrorCode::SyncInviteCodeWrong,
         SyncError::Interrupted => ErrorCode::Locked,
         SyncError::Random => ErrorCode::Internal,
     })
@@ -314,6 +325,25 @@ mod tests {
     }
 
     #[test]
+    fn a_space_kept_before_the_key_reminder_counts_its_key_as_saved() {
+        let storage = StorageConfig::Webdav {
+            url: "https://dav.example.com".into(),
+            prefix: String::new(),
+            username: "me".into(),
+            password: Zeroizing::new("pw".into()),
+        };
+        let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+        let mut kept = SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring");
+        kept.key_saved = false;
+        let whole = serde_json::to_value(&kept).unwrap();
+        assert!(!serde_json::from_value::<SyncLocal>(whole.clone()).unwrap().key_saved);
+        // Written by 0.7.2 or earlier: no such field, and the key was shown when the space was made.
+        let mut older = whole;
+        older.as_object_mut().unwrap().remove("key_saved");
+        assert!(serde_json::from_value::<SyncLocal>(older).unwrap().key_saved);
+    }
+
+    #[test]
     fn every_failure_has_a_code() {
         let cases = [
             (SyncError::Network("x".into()), ErrorCode::SyncNetwork),
@@ -329,6 +359,7 @@ mod tests {
             (SyncError::NoSpace, ErrorCode::SyncSpaceNotFound),
             (SyncError::BadSyncKey, ErrorCode::SyncKeyInvalid),
             (SyncError::BadInvite, ErrorCode::SyncInviteInvalid),
+            (SyncError::BadInviteCode, ErrorCode::SyncInviteCodeWrong),
             (SyncError::Interrupted, ErrorCode::Locked),
             (SyncError::Random, ErrorCode::Internal),
         ];

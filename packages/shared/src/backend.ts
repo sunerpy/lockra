@@ -15,6 +15,14 @@ export type ImportPickKind = "images" | "text" | "backup" | "any";
 export type FrameListener = (frame: CodesFrame) => void;
 export type Unsubscribe = () => void;
 
+/** What `saveSyncKey` needs: the proof of presence and the file's words. */
+export interface SaveSyncKey {
+  password?: string;
+  reason?: string;
+  fileName: string;
+  template: string;
+}
+
 export interface Backend {
   /** The state to render (`app_state`). */
   getState(): Promise<UiState>;
@@ -36,6 +44,10 @@ export interface Backend {
   scanJoin(texts: ScanTexts, join: ScanJoin): Promise<boolean>;
   /** Native save dialog → backup. The file name, or `null` when cancelled. */
   saveBackup(separatePassword?: string): Promise<string | null>;
+  /** Native save dialog (the phone's file picker) → the sync key in a file: the core checks the
+   *  user is there (`password`, else the biometric check with `reason`) and writes `template`
+   *  with the key in its one `{{sync_key}}`; the key never comes here. `false` when cancelled. */
+  saveSyncKey(args: SaveSyncKey): Promise<boolean>;
   /** Native folder picker → the automatic backup folder. The folder, or `null` when cancelled. */
   pickBackupDir(): Promise<string | null>;
   /** Native file picker → a backup opened for restoring. `false` when cancelled. */

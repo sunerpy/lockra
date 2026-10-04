@@ -23,6 +23,7 @@ import {
   SettingsSection,
   StatusRow,
   StorageFields,
+  SyncKeyReminder,
   useBackend,
   useClock,
   useT,
@@ -38,21 +39,30 @@ import { InviteDialog, SyncKeyDialog, useSecretAnswer } from "../../features/syn
 export function Sync() {
   const t = useT();
   const { sync } = useUiState();
-  // Above the switch between the two panes: creating a space switches to the second one.
-  const [created, setCreated] = useState<string | undefined>(undefined);
+  // Above the switch between the two panes: creating a space switches to the second one. The
+  // password typed for it stays with the key's dialog, which saves the key with it, and goes
+  // with the dialog.
+  const [created, setCreated] = useState<{ syncKey: string; password: string } | undefined>(
+    undefined,
+  );
   const deliver = useSecretAnswer();
-  const onCreated = (syncKey: string) => deliver(() => setCreated(syncKey));
+  const onCreated = (syncKey: string, password: string) =>
+    deliver(() => setCreated({ syncKey, password }));
   return (
     <SettingsPane title={t("settings.section.sync")} lede={t("sync.lede")}>
       {sync.space === null ? <SyncOff onCreated={onCreated} /> : <SyncOn space={sync.space} />}
       {created !== undefined && (
-        <SyncKeyDialog syncKey={created} onClose={() => setCreated(undefined)} />
+        <SyncKeyDialog
+          syncKey={created.syncKey}
+          password={created.password}
+          onClose={() => setCreated(undefined)}
+        />
       )}
     </SettingsPane>
   );
 }
 
-function SyncOff({ onCreated }: { onCreated: (syncKey: string) => void }) {
+function SyncOff({ onCreated }: { onCreated: (syncKey: string, password: string) => void }) {
   const t = useT();
   const [open, setOpen] = useState<"create" | "join" | null>(null);
   return (
@@ -98,7 +108,7 @@ function CreateForm({
   onCreated,
   onCancel,
 }: {
-  onCreated: (syncKey: string) => void;
+  onCreated: (syncKey: string, password: string) => void;
   onCancel: () => void;
 }) {
   const t = useT();
@@ -121,7 +131,7 @@ function CreateForm({
       }),
     );
     setPassword("");
-    if (answer !== undefined) onCreated(answer.sync_key);
+    if (answer !== undefined) onCreated(answer.sync_key, password);
   };
   return (
     <form
@@ -184,6 +194,7 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
       : undefined;
   return (
     <>
+      <SyncKeyReminder />
       <SettingsRows>
         <StatusRow
           label={t("sync.status.label")}

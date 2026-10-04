@@ -8,8 +8,10 @@ import {
   Dialog,
   PasswordField,
   QrView,
+  unlockBiometric,
   useBackend,
   useClock,
+  useSaveSyncKey,
   useT,
   useUiState,
 } from "@lockra/ui";
@@ -71,13 +73,33 @@ function SyncKeyText({ value }: { value: string }) {
   );
 }
 
-/** The sync key of a space just created: shown once (an invitation shows it again). */
-export function SyncKeyDialog({ syncKey, onClose }: { syncKey: string; onClose: () => void }) {
+/** The sync key of a space just created: shown once (an invitation shows it again). "Save to a
+ *  file" uses `password`, the one the space was just made with; "I have kept it" says the key is
+ *  written down. Closed otherwise, Settings › Sync goes on reminding of it. */
+export function SyncKeyDialog({
+  syncKey,
+  password,
+  onClose,
+}: {
+  syncKey: string;
+  password: string;
+  onClose: () => void;
+}) {
   const t = useT();
+  const { backend } = useBackend();
   const now = useClock();
   const [at] = useState(() => Date.now());
   const left = secondsLeft(now, at);
+  const saving = useSaveSyncKey();
+  const [saved, setSaved] = useState(false);
   useSecretView(true, left, onClose);
+  const save = async () => {
+    if ((await saving.save(password)) === true) setSaved(true);
+  };
+  const kept = async () => {
+    await backend.dispatch({ command: "sync_key_acknowledge" }).catch(() => undefined);
+    onClose();
+  };
   return (
     <Dialog
       open
@@ -86,9 +108,14 @@ export function SyncKeyDialog({ syncKey, onClose }: { syncKey: string; onClose: 
       width={560}
       hint={<span data-testid="sync-key-countdown">{t("sync.created.hideIn", { s: left })}</span>}
       actions={
-        <Button variant="primary" onClick={onClose} data-autofocus>
-          {t("sync.created.done")}
-        </Button>
+        <>
+          <Button variant="ghost" icon="download" onClick={() => void save()} loading={saving.busy}>
+            {t("sync.created.save")}
+          </Button>
+          <Button variant="primary" onClick={() => void kept()} data-autofocus>
+            {t("sync.created.done")}
+          </Button>
+        </>
       }>
       <div className="flex flex-col gap-3" data-testid="sync-created">
         <Banner tone="warn" marker="icon">
@@ -97,16 +124,28 @@ export function SyncKeyDialog({ syncKey, onClose }: { syncKey: string; onClose: 
         <div className="text-[12px] text-fg-muted">{t("sync.created.key")}</div>
         <SyncKeyText value={syncKey} />
         <p className="text-[12px] text-fg-subtle">{t("sync.created.again")}</p>
+        {saved && (
+          <p className="text-[12px] text-ok" role="status" data-testid="sync-key-saved">
+            {t("sync.created.savedTo")}
+          </p>
+        )}
+        {saving.error !== undefined && (
+          <p className="text-[12px] text-danger" role="alert">
+            {errorText(t, saving.error)}
+          </p>
+        )}
       </div>
     </Dialog>
   );
 }
 
-/** An invitation for another device, after the master password was entered again. */
+/** An invitation for another device, once the user proved to be here: the biometric check that
+ *  unlocks this vault, or the master password. */
 export function InviteDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const { backend } = useBackend();
-  const { platform } = useUiState();
+  const { platform, lock } = useUiState();
+  const biometric = unlockBiometric(lock);
   const formId = useId();
   const now = useClock();
   const [password, setPassword] = useState("");
@@ -115,12 +154,21 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
   const deliver = useSecretAnswer();
   const left = secondsLeft(now, invite?.at);
   useSecretView(invite !== undefined, left, onClose);
+  const ask = async (typed?: string) => {
+    const answer = await submit.run(() =>
+      backend.dispatch(
+        typed === undefined
+          ? { command: "sync_invite", reason: t("sync.invite.reason") }
+          : { command: "sync_invite", password: typed },
+      ),
+    );
+    setPassword("");
+    if (answer !== undefined) deliver(() => setInvite({ answer, at: Date.now() }));
+  };
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (password === "") return;
-    const answer = await submit.run(() => backend.dispatch({ command: "sync_invite", password }));
-    setPassword("");
-    if (answer !== undefined) deliver(() => setInvite({ answer, at: Date.now() }));
+    await ask(password);
   };
   if (invite === undefined) {
     return (
@@ -145,7 +193,17 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
           </>
         }>
         <form id={formId} onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-3">
-          <p>{t("sync.invite.prompt")}</p>
+          <p>{t(biometric === null ? "sync.invite.prompt" : "sync.invite.promptBiometric")}</p>
+          {biometric !== null && (
+            <Button
+              variant="outline"
+              icon="fingerprint"
+              className="self-start"
+              loading={submit.busy}
+              onClick={() => void ask()}>
+              {t(`sync.invite.verifyWith.${biometric}`)}
+            </Button>
+          )}
           <PasswordField
             label={t("sync.masterPassword")}
             value={password}
@@ -184,8 +242,17 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
               <div
                 className="mono max-h-28 overflow-auto text-[11px] break-all text-fg-muted select-all"
                 data-testid="invite-text">
-                {answer.invite}
+                {answer.shared_text}
               </div>
+            </div>
+            <div>
+              <div className="text-[12px] text-fg-muted">{t("sync.invite.code")}</div>
+              <div
+                className="mono text-[18px] tracking-wide text-fg select-all"
+                data-testid="invite-code">
+                {answer.code}
+              </div>
+              <p className="text-[12px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
             </div>
             <div>
               <div className="text-[12px] text-fg-muted">{t("sync.created.key")}</div>

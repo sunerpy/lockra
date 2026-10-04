@@ -109,18 +109,24 @@ async fn a_space_created_on_one_device_is_joined_by_a_new_one_and_both_converge(
 async fn an_invitation_joins_an_unlocked_vault_and_its_accounts_join_the_space() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
-    assert_eq!(code_err(desktop.core.sync_invite(pw("wrong password")).await), ErrorCode::WrongPassword);
-    let invite = desktop.core.sync_invite(pw(MASTER)).await.unwrap();
+    assert_eq!(code_err(desktop.core.sync_invite(Some(pw("wrong password")), None).await), ErrorCode::WrongPassword);
+    let invite = desktop.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
     assert!(invite.invite.starts_with("lockra-invite:1:") && invite.svg.contains("<svg"));
     assert_eq!(invite.sync_key, sync_key);
 
     let laptop = device(&transport);
     laptop.core.create_vault(pw("another password")).await.unwrap();
     laptop.core.add_uri(&otpauth("Bank", "card", "MZXW6YTBOI")).unwrap();
-    let invited = || JoinSource::Invite { text: pw(&invite.invite) };
+    let invited = || JoinSource::Invite { text: pw(&invite.invite), code: None };
     // This vault's own master password is checked; alone, it opens nothing of the space.
     assert_eq!(code_err(laptop.core.sync_join(invited(), pw(MASTER), "Laptop".into(), None).await), ErrorCode::WrongPassword);
-    assert_eq!(code_err(laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), None).await), ErrorCode::SyncWrongCredentials);
+    // Its own password is right but opens nothing in the space: the join asks for the space's.
+    assert_eq!(code_err(laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), None).await), ErrorCode::SyncSpacePasswordNeeded);
+    // A wrong space password, once asked for, is wrong.
+    assert_eq!(
+        code_err(laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), Some(pw("not the space's"))).await),
+        ErrorCode::SyncWrongCredentials
+    );
     laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), Some(pw(MASTER))).await.unwrap();
     settle().await;
     assert_eq!(issuers(&laptop), ["Bank", "GitHub"]);
@@ -136,6 +142,79 @@ async fn an_invitation_joins_an_unlocked_vault_and_its_accounts_join_the_space()
     phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("another password"), "Phone".into(), None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["Bank", "GitHub"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_shared_invitation_joins_with_its_code_and_the_biometric_check_can_show_it() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    // Without a password, only the biometric check that unlocks this vault proves presence.
+    assert_eq!(code_err(desktop.core.sync_invite(None, None).await), ErrorCode::BiometricUnavailable);
+    desktop.core.enable_device_biometric(None).await.unwrap();
+    let invite = desktop.core.sync_invite(None, Some("show the invitation".into())).await.unwrap();
+    assert_eq!(desktop.biometrics.reasons(), ["unlock Lockra".to_owned(), "show the invitation".to_owned()]);
+    assert!(invite.shared_text.starts_with("lockra-invite:2:") && !invite.shared_text.contains(STORAGE_SECRET));
+    assert_eq!(invite.code.len(), 11);
+    assert_eq!(invite.sync_key, sync_key);
+    desktop.biometrics.answer(Err(crate::ports::BiometricError::Cancelled));
+    assert_eq!(code_err(desktop.core.sync_invite(None, None).await), ErrorCode::BiometricCancelled);
+
+    let sealed = |code: Option<&str>| JoinSource::Invite { text: pw(&invite.shared_text), code: code.map(pw) };
+    let phone = device(&transport);
+    for wrong in [None, Some("ABCDE-FGHJK")] {
+        assert_eq!(code_err(phone.core.sync_join(sealed(wrong), pw(MASTER), "Phone".into(), None).await), ErrorCode::SyncInviteCodeWrong);
+    }
+    assert_eq!(phone.core.state().phase, Phase::NoVault);
+    phone.core.sync_join(sealed(Some(&invite.code.to_lowercase())), pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
+    assert_eq!(issuers(&phone), ["GitHub"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_device_that_made_the_space_is_reminded_of_the_key_until_it_is_saved() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    assert!(!space(&desktop).key_saved);
+    // The key file: the interface's words with the key in its one slot, after presence is proved.
+    let template = "Lockra sync key: {{sync_key}}";
+    assert_eq!(code_err(desktop.core.sync_key_file(Some(pw(MASTER)), None, "no slot").await), ErrorCode::Internal);
+    assert_eq!(code_err(desktop.core.sync_key_file(Some(pw(MASTER)), None, "{{sync_key}} {{sync_key}}").await), ErrorCode::Internal);
+    assert_eq!(code_err(desktop.core.sync_key_file(Some(pw(MASTER)), None, &"x".repeat(9000)).await), ErrorCode::Internal);
+    assert_eq!(code_err(desktop.core.sync_key_file(Some(pw("wrong password")), None, template).await), ErrorCode::WrongPassword);
+    assert_eq!(code_err(desktop.core.sync_key_file(None, None, template).await), ErrorCode::BiometricUnavailable);
+    let text = desktop.core.sync_key_file(Some(pw(MASTER)), None, template).await.unwrap();
+    assert_eq!(text.as_str(), format!("Lockra sync key: {sync_key}"));
+    assert!(!space(&desktop).key_saved, "making the text saves nothing");
+    // Saved to a file (the desktop's save dialog chose it): written, private, and the reminder goes.
+    let file = desktop.dir.path().join("lockra-sync-key.txt");
+    desktop.core.sync_key_save(Some(pw(MASTER)), None, template, file.clone()).await.unwrap();
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), format!("Lockra sync key: {sync_key}"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+    assert!(space(&desktop).key_saved);
+    // It stays saved across a lock, and saying so again changes nothing.
+    desktop.core.lock_vault();
+    desktop.core.unlock(pw(MASTER)).await.unwrap();
+    assert!(space(&desktop).key_saved);
+    desktop.core.sync_key_acknowledge().unwrap();
+
+    // A device that joined has nothing to save: the reminder is the maker's.
+    let phone = device(&transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    assert!(space(&phone).key_saved);
+    // The maker can also just say it wrote the key down.
+    let (laptop, _) = first_device(&Arc::new(FakeTransport::default()), webdav()).await;
+    assert!(!space(&laptop).key_saved);
+    laptop.core.sync_key_acknowledge().unwrap();
+    assert!(space(&laptop).key_saved);
+    // Without a space, there is no key to save.
+    let empty = device(&transport);
+    empty.core.create_vault(pw(MASTER)).await.unwrap();
+    assert_eq!(code_err(empty.core.sync_key_acknowledge()), ErrorCode::SyncOff);
+    assert_eq!(code_err(empty.core.sync_key_file(Some(pw(MASTER)), None, template).await), ErrorCode::SyncOff);
 }
 
 #[tokio::test(start_paused = true)]
@@ -158,7 +237,7 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     assert_eq!(code_err(join(manual(plain, &sync_key), MASTER).await), ErrorCode::SyncInsecure);
     let no_user = StorageConfig::Webdav { url: "https://dav.example.com".into(), prefix: String::new(), username: " ".into(), password: pw(STORAGE_SECRET) };
     assert_eq!(code_err(join(manual(no_user, &sync_key), MASTER).await), ErrorCode::SyncConfigInvalid);
-    assert_eq!(code_err(join(JoinSource::Invite { text: pw("otpauth://totp/x?secret=GEZDGNBV") }, MASTER).await), ErrorCode::SyncInviteInvalid);
+    assert_eq!(code_err(join(JoinSource::Invite { text: pw("otpauth://totp/x?secret=GEZDGNBV"), code: None }, MASTER).await), ErrorCode::SyncInviteInvalid);
     assert_eq!(code_err(join(manual(s3(STORAGE_SECRET), &sync_key), "short").await), ErrorCode::PasswordTooShort);
 
     // Setting up: once, with the master password, on an unlocked vault.
@@ -171,7 +250,7 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     assert!(laptop.core.state().sync.space.is_none());
     // Without a space, the space's commands say so.
     assert_eq!(code_err(laptop.core.sync_now()), ErrorCode::SyncOff);
-    assert_eq!(code_err(laptop.core.sync_invite(pw(MASTER)).await), ErrorCode::SyncOff);
+    assert_eq!(code_err(laptop.core.sync_invite(Some(pw(MASTER)), None).await), ErrorCode::SyncOff);
     assert_eq!(code_err(laptop.core.sync_disable()), ErrorCode::SyncOff);
     assert_eq!(code_err(laptop.core.sync_rename_device("x")), ErrorCode::SyncOff);
     assert_eq!(code_err(laptop.core.sync_remove_device("x").await), ErrorCode::SyncOff);

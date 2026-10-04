@@ -1,4 +1,5 @@
 import {
+  MOCK_INVITE_CODE,
   MOCK_PASSWORD,
   MOCK_STORAGE_SECRET,
   MOCK_SYNC_KEY,
@@ -70,9 +71,17 @@ describe("sync on the phone", () => {
       storage: { kind: "s3", bucket: "my-lockra", prefix: "lockra" },
       device_name: "Android 手机",
     });
+    // Saved to a file with the password the space was just made with: no other prompt.
+    await user.click(page.getByRole("button", { name: "保存到文件…" }));
+    expect(await page.findByTestId("sync-key-saved")).toHaveTextContent("同步密钥已保存到文件。");
+    expect(backend.savedSyncKeys).toEqual([
+      { fileName: "Lockra 同步密钥.txt", text: expect.stringContaining(MOCK_SYNC_KEY) as string },
+    ]);
+    expect(backend.biometricReasons).toEqual([]);
     await user.click(page.getByRole("button", { name: "我已保存" }));
     // Back on the sync page, now with the space; the key went with its page.
     expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(screen.queryByTestId("sync-key-reminder")).not.toBeInTheDocument();
     expect(screen.queryByTestId("sync-key")).not.toBeInTheDocument();
     expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
     expect(screen.getByTestId("sync-storage")).toHaveTextContent(
@@ -113,7 +122,8 @@ describe("sync on the phone", () => {
   });
 
   it("joins with a pasted invitation, or the storage and the sync key", async () => {
-    const { user, backend } = renderApp();
+    // This phone's master password is not the one the space's devices use.
+    const { user, backend } = renderApp({ mock: { password: "this phone's password" } });
     await ready();
     await openSync(user);
     await user.click(screen.getByTestId("sync-join-open"));
@@ -126,21 +136,26 @@ describe("sync on the phone", () => {
     await user.type(form.getByLabelText("访问密钥 ID"), "AKID");
     await user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
     await user.type(form.getByLabelText("同步密钥"), "LKS1-not-a-key");
-    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.type(form.getByLabelText("这台设备的主密码"), "this phone's password");
     await user.click(join);
     expect(await form.findByRole("alert")).toHaveTextContent("同步密钥");
     await user.click(form.getByRole("radio", { name: "邀请码" }));
     await user.type(form.getByLabelText("邀请码"), "  lockra-invite:1:bW9jaw  ");
-    await user.type(form.getByLabelText("同步空间的主密码（可选）"), MOCK_PASSWORD);
-    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    // One password until the space turns out to use another one.
+    expect(form.queryByLabelText("同步空间的主密码")).not.toBeInTheDocument();
+    await user.type(form.getByLabelText("这台设备的主密码"), "this phone's password");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await form.findByRole("alert")).toHaveTextContent("打不开同步空间");
+    await user.type(form.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
+    await user.type(form.getByLabelText("这台设备的主密码"), "this phone's password");
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
     expect(
-      backend.calls.find((c) => c.command === "sync_join" && c.source.type === "invite"),
+      backend.calls.filter((c) => c.command === "sync_join" && c.source.type === "invite").at(-1),
     ).toEqual({
       command: "sync_join",
       source: { type: "invite", text: "lockra-invite:1:bW9jaw" },
-      password: MOCK_PASSWORD,
+      password: "this phone's password",
       device_name: "Android 手机",
       space_password: MOCK_PASSWORD,
     });
@@ -155,7 +170,8 @@ describe("sync on the phone", () => {
     await user.click(welcome.getByRole("button", { name: "加入同步…" }));
     const form = within(await screen.findByTestId("sync-join"));
     expect(form.getByText(/这部手机上还没有保险库/)).toBeInTheDocument();
-    expect(form.queryByLabelText("同步空间的主密码（可选）")).not.toBeInTheDocument();
+    // One password: on a new phone, the space's becomes the vault's.
+    expect(form.getAllByLabelText(/主密码/)).toHaveLength(1);
     await user.type(form.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
     backend.setScan("lockra-invite:1:bW9jaw");
     await user.click(form.getByRole("button", { name: "扫码加入" }));
@@ -212,7 +228,9 @@ describe("sync on the phone", () => {
     await user.type(page.getByLabelText("主密码"), "wrong{Enter}");
     expect(await page.findByText("密码错误")).toBeInTheDocument();
     await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
-    expect(await page.findByTestId("invite-text")).toHaveTextContent(/^lockra-invite:1:/);
+    // The text to send is sealed; its code is shown apart, for another channel.
+    expect(await page.findByTestId("invite-text")).toHaveTextContent(/^lockra-invite:2:/);
+    expect(page.getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
     expect(page.getByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
     expect(page.getByTestId("invite-countdown")).toHaveTextContent("120");
     expect(page.getByRole("img", { name: "二维码" })).toBeInTheDocument();
@@ -231,5 +249,66 @@ describe("sync on the phone", () => {
     await user.click(dialog.getByRole("button", { name: "关闭同步" }));
     expect(await screen.findByTestId("sync-setup-open")).toBeInTheDocument();
     expect((await backend.getState()).entries.length).toBeGreaterThan(0);
+  });
+
+  it("reminds of a sync key left unsaved, and saves it with the fingerprint", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace({ key_saved: false }),
+      biometric: "fingerprint",
+      biometricUnlock: true,
+      deviceUnlock: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    const reminder = await screen.findByTestId("sync-key-reminder");
+    expect(reminder).toHaveTextContent("同步密钥还没有保存");
+    await user.click(screen.getByRole("button", { name: "保存同步密钥…" }));
+    await waitFor(() => expect(screen.queryByTestId("sync-key-reminder")).not.toBeInTheDocument());
+    expect(backend.biometricReasons).toEqual(["保存同步密钥"]);
+  });
+
+  it("shows an invitation after the fingerprint that unlocks the vault", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace(),
+      biometric: "fingerprint",
+      biometricUnlock: true,
+      deviceUnlock: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-invite-open"));
+    const page = within(await screen.findByTestId("page-sync-invite"));
+    await user.click(page.getByRole("button", { name: "使用指纹验证" }));
+    expect(await page.findByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
+    expect(backend.biometricReasons.at(-1)).toBe("显示同步邀请码");
+  });
+
+  it("joins with a pasted sealed invitation and its code", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-join-open"));
+    const form = within(await screen.findByTestId("sync-join"));
+    await user.click(form.getByRole("radio", { name: "邀请码" }));
+    await user.type(form.getByLabelText("邀请码"), "lockra-invite:2:TEtTSU5WVDI");
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    expect(form.getByRole("button", { name: "加入" })).toBeDisabled();
+    await user.type(form.getByLabelText("口令"), "AAAAA-BBBBB");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await form.findByRole("alert")).toHaveTextContent("口令不正确");
+    await user.clear(form.getByLabelText("口令"));
+    await user.type(form.getByLabelText("口令"), MOCK_INVITE_CODE);
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(backend.calls.filter((c) => c.command === "sync_join").at(-1)).toMatchObject({
+      source: { type: "invite", text: "lockra-invite:2:TEtTSU5WVDI", code: MOCK_INVITE_CODE },
+    });
   });
 });
