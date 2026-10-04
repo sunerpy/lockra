@@ -37,6 +37,13 @@ Versions: `package.json` is the only source (`tauri.conf.json` points at it, `Ca
 release. The first release is `0.1.0` (`initial-version` in `release-please-config.json`): with no
 earlier release tag, release-please would otherwise start at `1.0.0`.
 
+release-please picks the next version from the commits since the last tag: a `fix` bumps the patch,
+a `feat` the minor (below 1.0 a breaking change too, `bump-minor-pre-major`). To release another
+version, for example only a patch after a `feat`, squash-merge a pull request whose commit message
+ends with the footer `Release-As: X.Y.Z` (pass the body to `gh pr merge --body-file`): the release
+pull request switches to that version. The footer counts for that release only; later releases
+follow the commits again.
+
 ## Repository setup
 
 The repository was created and configured on 2026-10-01 with these commands. They double as the
