@@ -129,6 +129,7 @@ function CreateForm({
       className="flex flex-col gap-3"
       data-testid="sync-create">
       <StorageFields
+        failure={submit.error}
         form={storage}
         onChange={(patch) => setStorage((form) => ({ ...form, ...patch }))}
       />
@@ -386,6 +387,7 @@ function StorageRow({ space }: { space: SyncSpaceView }) {
           data-testid="sync-storage-form">
           <p className="text-[12px] text-fg-muted">{t("sync.storageEditBody")}</p>
           <StorageFields
+            failure={submit.error}
             form={form}
             onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
           />

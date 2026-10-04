@@ -124,6 +124,7 @@ export function JoinSync({
       {mode === "key" && (
         <>
           <StorageFields
+            failure={submit.error}
             size="lg"
             form={storage}
             onChange={(patch) => setStorage((form) => ({ ...form, ...patch }))}

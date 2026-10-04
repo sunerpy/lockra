@@ -18,6 +18,28 @@ before it leaves the device.
 - An address that starts with `https://`. Lockra refuses plain `http://`, except for an address
   on the same computer.
 
+### By provider
+
+<StatusTag status="building" />
+
+After the storage type, choose the provider: Lockra fills in the address and the addressing, and
+asks only for what the table lists besides the credentials. For a service that is not listed,
+choose **Other S3-compatible service** or **Other WebDAV service** and fill in every field as
+described below.
+
+| Provider                | You enter                                            | Note                                                                                                                             |
+| ----------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| AWS S3 (global regions) | Region, bucket, access key                           | For Beijing or Ningxia choose AWS S3 (China regions): China and global accounts and keys are separate.                           |
+| AWS S3 (China regions)  | `cn-north-1` or `cn-northwest-1`, bucket, access key | The address ends in `.amazonaws.com.cn`.                                                                                         |
+| Cloudflare R2           | Account ID, bucket, access key                       | The region is `auto`.                                                                                                            |
+| Alibaba Cloud OSS       | Region ID (`cn-hangzhou`), bucket, AccessKey         | Accounts opened after 20 March 2025 cannot reach buckets in mainland China regions through the default address; Hong Kong works. |
+| Tencent Cloud COS       | Region (`ap-guangzhou`), bucket with its APPID, key  | A bucket is named like `examplebucket-1250000000`.                                                                               |
+| Backblaze B2            | Region (`us-west-004`), bucket, application key      | The region is part of the bucket's endpoint.                                                                                     |
+| MinIO                   | Address, region, bucket, access key                  | Path-style access is on.                                                                                                         |
+| Jianguoyun              | Account, app password                                | Create the app password under Account info › Security › Third-party apps on the Jianguoyun website.                              |
+| Nextcloud               | Server, user name, app password                      | Create the app password under Settings › Security.                                                                               |
+| Synology NAS            | Server, user name, password                          | Needs the WebDAV Server package (HTTPS on port 5006 by default); start **Folder** with a shared folder, such as `home/lockra`.   |
+
 ## Starting to sync
 
 1. On the first device, open **Settings › Sync** and choose **Start syncing**.

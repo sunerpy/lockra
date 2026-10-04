@@ -8,4 +8,5 @@ export * from "./labels";
 export * from "./password";
 export * from "./schema";
 export * from "./storage-form";
+export * from "./storage-presets";
 export * from "./tauri-backend";
