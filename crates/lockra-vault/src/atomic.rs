@@ -17,32 +17,38 @@ pub(crate) enum Step {
 /// Replace `path` with `bytes`: write `<file>.tmp` and flush it to disk, keep the current file as
 /// `<file>.prev`, rename the new file over the old one (atomic on the same file system, Windows
 /// included), then flush the directory entry on Unix. On any failure before the rename the old
-/// file is untouched and the temporary file is removed. New files are readable by the owner only.
+/// file is untouched and the temporary files are removed. New files are readable by the owner only.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     write_with(path, bytes, &mut |_| Ok(()))
 }
 
 pub(crate) fn write_with(path: &Path, bytes: &[u8], hook: &mut dyn FnMut(Step) -> io::Result<()>) -> io::Result<()> {
     let tmp = sibling(path, ".tmp");
-    let result = replace(path, &tmp, bytes, hook);
+    let prev_tmp = sibling(path, ".prev.tmp");
+    let result = replace(path, &tmp, &prev_tmp, bytes, hook);
     if result.is_err() {
+        // Best effort: the error that stopped the write is the one the caller gets.
         let _ = fs::remove_file(&tmp);
+        let _ = fs::remove_file(&prev_tmp);
     }
     result
 }
 
-fn replace(path: &Path, tmp: &Path, bytes: &[u8], hook: &mut dyn FnMut(Step) -> io::Result<()>) -> io::Result<()> {
+fn replace(path: &Path, tmp: &Path, prev_tmp: &Path, bytes: &[u8], hook: &mut dyn FnMut(Step) -> io::Result<()>) -> io::Result<()> {
     let mut file = create_private(tmp)?;
     file.write_all(bytes)?;
     hook(Step::Written)?;
     file.sync_all()?;
     drop(file);
     if path.exists() {
-        let prev_tmp = sibling(path, ".prev.tmp");
-        fs::copy(path, &prev_tmp)?;
-        File::open(&prev_tmp)?.sync_all()?;
+        // Written and flushed through the handle that created the copy: Windows refuses to flush
+        // a handle opened for reading only (FlushFileBuffers: "Access is denied", os error 5).
+        let mut copy = create_private(prev_tmp)?;
+        io::copy(&mut File::open(path)?, &mut copy)?;
+        copy.sync_all()?;
+        drop(copy);
         hook(Step::PreviousCopied)?;
-        fs::rename(&prev_tmp, sibling(path, ".prev"))?;
+        fs::rename(prev_tmp, sibling(path, ".prev"))?;
     }
     hook(Step::PreviousKept)?;
     fs::rename(tmp, path)?;
