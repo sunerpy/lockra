@@ -63,8 +63,23 @@ mod harness {
             return 2;
         };
         let words: Vec<&str> = args.iter().map(String::as_str).collect();
+        // The staged side shares its parent's stdout: its line goes to stderr, so the parent's
+        // output stays the one line the check reads.
+        if let [arg] = words.as_slice()
+            && *arg == HANDOFF_ARG
+        {
+            return match release.take_handoff() {
+                Ok(n) => {
+                    eprintln!("{}: stored {n}", build());
+                    0
+                }
+                Err(error) => {
+                    eprintln!("{}: {error}", build());
+                    1
+                }
+            };
+        }
         let outcome = match words.as_slice() {
-            [arg] if *arg == HANDOFF_ARG => release.take_handoff().map(|n| format!("stored {n}")),
             ["account"] => release.store().map(|store| store.account()).ok_or_else(|| "no store".to_owned()),
             ["put", entry, value] => {
                 release.store().ok_or_else(|| "no store".to_owned()).and_then(|store| store.set(entry, value).map(|()| "stored".to_owned()).map_err(|e| e.0))
