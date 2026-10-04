@@ -917,6 +917,13 @@ export const en: Messages = {
     exportExpired: "The QR codes expired and were hidden",
     deviceUnlockTurnedOff:
       "The keychain key was unreadable, so remembering is off; turn it on again",
+    syncBrought: "Synced from {devices}: {changes}",
+    syncBroughtFailed: "Synced changes from other devices: {changes}",
+    syncAdded: "{n} added",
+    syncUpdated: "{n} changed",
+    syncRemoved: "{n} removed",
+    syncChangesSeparator: ", ",
+    syncDevicesSeparator: ", ",
   },
   update: {
     title: "Version {version} is available",

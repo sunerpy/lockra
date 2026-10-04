@@ -648,6 +648,18 @@ pub enum Notice {
     /// Changing the master password could not keep "remember on this device" (the keychain key
     /// was unreadable); it is off now.
     DeviceUnlockTurnedOff,
+    /// A sync run changed the accounts here.
+    SyncBrought {
+        /// Accounts new to this device.
+        added: u32,
+        /// Accounts changed on another device.
+        updated: u32,
+        /// Accounts deleted on another device.
+        removed: u32,
+        /// The devices the changes came from, as they name themselves; empty when the run failed
+        /// after taking them in.
+        devices: Vec<String>,
+    },
 }
 
 /// One event on [`UI_EVENT_NAME`].

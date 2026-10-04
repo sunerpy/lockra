@@ -110,7 +110,28 @@ export function noticeText(t: TFunction, notice: Notice): string {
       return t("notice.exportExpired");
     case "device_unlock_turned_off":
       return t("notice.deviceUnlockTurnedOff");
+    case "sync_brought":
+      return syncBroughtText(t, notice);
   }
+}
+
+/** `已从 Pixel 8 同步：新增 2 个，修改 1 个`: what a sync run brought, the counts that are not zero. */
+function syncBroughtText(t: TFunction, notice: Extract<Notice, { type: "sync_brought" }>): string {
+  const counts = [
+    ["notice.syncAdded", notice.added],
+    ["notice.syncUpdated", notice.updated],
+    ["notice.syncRemoved", notice.removed],
+  ] as const;
+  const changes = counts
+    .filter(([, n]) => n > 0)
+    .map(([key, n]) => t(key, { n }))
+    .join(t("notice.syncChangesSeparator"));
+  return notice.devices.length === 0
+    ? t("notice.syncBroughtFailed", { changes })
+    : t("notice.syncBrought", {
+        devices: notice.devices.join(t("notice.syncDevicesSeparator")),
+        changes,
+      });
 }
 
 /** `512 KB`, `4.0 MB`: a download's size for people. */

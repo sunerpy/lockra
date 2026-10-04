@@ -106,6 +106,18 @@ While the vault is unlocked, a device syncs when you unlock it, three seconds af
 every five minutes, and when you choose **Sync now**. While the vault is locked, nothing goes out.
 The status line shows **Synced** and when, or why the last run failed; the next run tries again.
 
+### Syncing sooner
+
+<StatusTag status="building" />
+
+- **More often in front**: while Lockra is in front, a device syncs every minute; on a computer,
+  behind other windows, every five minutes. Back in Lockra, a computer syncs once the last run is
+  30 seconds old. After a failed run, the next one comes five minutes later, or choose **Sync
+  now**.
+- **What a run brought**: when a run adds, changes or deletes accounts on this device, Lockra
+  says so and names the devices the changes came from, for example "Synced from Pixel 8: 2 added,
+  1 changed".
+
 When the same account was changed on two devices, the later change wins on every device. A
 deletion removes the account on every device, unless the account was changed after the deletion.
 The order of recently used accounts stays on each device.

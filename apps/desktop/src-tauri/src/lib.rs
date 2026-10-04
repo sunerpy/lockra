@@ -336,6 +336,17 @@ fn watch_drops<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
     });
 }
 
+/// The window's focus is the app being in front, where sync runs more often and coming back runs
+/// it (the core decides when). Watched before the window shows, so its first focus is heard.
+fn watch_focus<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
+    core.set_foreground(window.is_focused().unwrap_or(true));
+    window.on_window_event(move |event| {
+        if let WindowEvent::Focused(focused) = event {
+            core.set_foreground(*focused);
+        }
+    });
+}
+
 /// The app with every command, the core and its wiring; `run` adds the real context.
 pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) -> tauri::Builder<R> {
     let builder = if options.single_instance {
@@ -388,6 +399,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             app.manage(core.clone());
             tauri::async_runtime::spawn(forward_events(app.handle().clone(), core.clone()));
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
+                watch_focus(&window, core.clone());
                 watch_drops(&window, core);
                 // Declared invisible so it never flashes white before the theme is applied.
                 let _ = window.show();

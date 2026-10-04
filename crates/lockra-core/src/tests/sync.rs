@@ -6,7 +6,7 @@ use tokio::sync::Notify;
 use super::*;
 use crate::settings::Settings;
 use crate::ui::{JoinSource, StorageView, SyncStatus};
-use crate::{SYNC_DEBOUNCE, SYNC_INTERVAL, StorageConfig};
+use crate::{SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, StorageConfig};
 
 const STORAGE_SECRET: &str = FakeTransport::SECRET;
 
@@ -268,6 +268,10 @@ async fn runs_follow_unlocking_changes_and_the_interval_and_stop_when_locked() {
     desktop.core.set_settings(Settings { auto_lock_minutes: 0, ..desktop.core.state().settings }).unwrap();
     let store = transport.store(&s3(STORAGE_SECRET));
     let calls = || store.calls().len();
+    // Behind other windows, from a run that ended there.
+    desktop.core.set_foreground(false);
+    desktop.core.sync_now().unwrap();
+    settle().await;
     let quiet = calls();
     advance(SYNC_INTERVAL - Duration::from_secs(1)).await;
     assert_eq!(calls(), quiet, "nothing before the interval");
@@ -291,6 +295,118 @@ async fn runs_follow_unlocking_changes_and_the_interval_and_stop_when_locked() {
     assert!(calls() > locked, "unlocking runs at once");
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
     assert!(space(&desktop).last_sync_ms.is_some());
+}
+
+#[tokio::test(start_paused = true)]
+async fn in_front_runs_come_every_minute_and_coming_back_runs_soon() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, _) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    desktop.core.set_settings(Settings { auto_lock_minutes: 0, ..desktop.core.state().settings }).unwrap();
+    let store = transport.store(&s3(STORAGE_SECRET));
+    let calls = || store.calls().len();
+    // In front (where the app starts): a run a minute after the last.
+    let quiet = calls();
+    advance(SYNC_INTERVAL_FOREGROUND - Duration::from_secs(1)).await;
+    assert_eq!(calls(), quiet, "nothing before the minute");
+    advance(Duration::from_secs(2)).await;
+    assert!(calls() > quiet, "the run a minute later");
+
+    // Behind: the run already planned, then five minutes.
+    desktop.core.set_foreground(false);
+    let behind = calls();
+    advance(SYNC_INTERVAL_FOREGROUND).await;
+    assert!(calls() > behind, "the planned run");
+    let after = calls();
+    advance(SYNC_INTERVAL - Duration::from_secs(1)).await;
+    assert_eq!(calls(), after, "behind: five minutes");
+
+    // Back in front, the last run long enough ago: a run at once.
+    desktop.core.set_foreground(true);
+    settle().await;
+    assert!(calls() > after, "coming back runs");
+    // Back again just after: the next run comes half a minute after the last, not at once.
+    let back = calls();
+    desktop.core.set_foreground(false);
+    desktop.core.set_foreground(true);
+    settle().await;
+    assert_eq!(calls(), back, "not again at once");
+    advance(SYNC_FOCUS_MIN - Duration::from_secs(1)).await;
+    assert_eq!(calls(), back);
+    advance(Duration::from_secs(2)).await;
+    assert!(calls() > back, "half a minute after the last run");
+    assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
+}
+
+#[tokio::test(start_paused = true)]
+async fn in_front_a_failed_run_still_waits_five_minutes() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, _) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    desktop.core.set_settings(Settings { auto_lock_minutes: 0, ..desktop.core.state().settings }).unwrap();
+    let store = transport.store(&s3(STORAGE_SECRET));
+    let calls = || store.calls().len();
+    store.fail_next(SyncError::Network("offline".into()));
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert!(matches!(space(&desktop).status, SyncStatus::Failed { code: ErrorCode::SyncNetwork, .. }));
+    let failed = calls();
+    advance(SYNC_INTERVAL - Duration::from_secs(1)).await;
+    assert_eq!(calls(), failed, "a failure waits the long interval");
+    advance(Duration::from_secs(2)).await;
+    assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
+    // Then, in front again, every minute.
+    let recovered = calls();
+    advance(SYNC_INTERVAL_FOREGROUND + Duration::from_secs(1)).await;
+    assert!(calls() > recovered);
+}
+
+/// The sync notices among a device's notices since the last look.
+fn brought(h: &mut Harness) -> Vec<Notice> {
+    h.notices().into_iter().filter(|n| matches!(n, Notice::SyncBrought { .. })).collect()
+}
+
+#[tokio::test(start_paused = true)]
+async fn what_a_run_brings_is_told_with_the_devices_it_came_from() {
+    let transport = Arc::new(FakeTransport::default());
+    let (mut desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    desktop.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    desktop.core.add_uri(&otpauth("Bank", "me", "MFRGGZDF")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    assert_eq!(brought(&mut desktop), [], "its own changes are not news");
+
+    // Joining brings the space's accounts.
+    let mut phone = device(&transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
+    assert_eq!(brought(&mut phone), [Notice::SyncBrought { added: 3, updated: 0, removed: 0, devices: vec!["Desktop".into()] }]);
+
+    // A rename, a deletion and a new account on the phone, told on the desktop.
+    let id_of = |h: &Harness, issuer: &str| h.core.state().entries.iter().find(|e| e.issuer == issuer).unwrap().id;
+    let github = id_of(&phone, "GitHub");
+    phone.core.update_entry(github, EntryPatch { issuer: Some("GitHub Enterprise".into()), ..EntryPatch::default() }).unwrap();
+    phone.core.delete_entry(id_of(&phone, "Bank")).unwrap();
+    phone.core.add_uri(&otpauth("Wiki", "me", "GEZDGNBVGY3TQOJQ")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert_eq!(issuers(&desktop), ["GitHub Enterprise", "Mail", "Wiki"]);
+    assert_eq!(brought(&mut desktop), [Notice::SyncBrought { added: 1, updated: 1, removed: 1, devices: vec!["Phone".into()] }]);
+    // A run that brings nothing tells nothing.
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert_eq!(brought(&mut desktop), []);
+
+    // Taken in, then the run failed writing: still told, without the devices.
+    phone.core.add_uri(&otpauth("Shop", "me", "MFRGGZDFMZTWQ2LK")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    transport.store(&s3(STORAGE_SECRET)).fail_next_put(SyncError::Network("offline".into()), false);
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert!(matches!(space(&desktop).status, SyncStatus::Failed { .. }), "{:?}", space(&desktop).status);
+    assert_eq!(brought(&mut desktop), [Notice::SyncBrought { added: 1, updated: 0, removed: 0, devices: vec![] }]);
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
+    assert_eq!(brought(&mut desktop), [], "told once");
 }
 
 #[tokio::test(start_paused = true)]

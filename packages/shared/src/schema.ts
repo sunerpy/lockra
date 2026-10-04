@@ -514,6 +514,14 @@ export const noticeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("auto_locked") }),
   z.object({ type: z.literal("export_expired"), session: idSchema }),
   z.object({ type: z.literal("device_unlock_turned_off") }),
+  /** A sync run changed the accounts here; `devices` is empty when the run failed after it. */
+  z.object({
+    type: z.literal("sync_brought"),
+    added: z.number().int(),
+    updated: z.number().int(),
+    removed: z.number().int(),
+    devices: z.array(z.string()),
+  }),
 ]);
 export type Notice = z.infer<typeof noticeSchema>;
 
