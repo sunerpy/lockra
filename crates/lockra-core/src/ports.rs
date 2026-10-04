@@ -3,6 +3,7 @@
 //! runtime's critical path.
 
 use std::collections::HashMap;
+use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -10,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use lockra_sync::{RemoteStore, StorageConfig, SyncError};
 use parking_lot::Mutex;
+use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::ui::{BiometricKind, CodesFrame, InstallMethod};
@@ -157,12 +159,50 @@ pub trait Updater: Send + Sync {
     fn install(&self) -> UpdateFuture<'_, ()>;
 }
 
-/// Opens the storage of a sync space: lockra-remote over HTTPS in the shells. Opening contacts
-/// nothing; the requests go out when the core runs the sync, which it does only for a space the
-/// user set up on storage of their own.
+/// Where a client of a LAN hub finds it, and the key the hub gave it.
+#[derive(Clone, PartialEq, Eq)]
+pub struct LanClientConfig {
+    /// The hub, as its clients know it.
+    pub hub_id: Uuid,
+    /// This device, as the hub knows it.
+    pub peer_id: Uuid,
+    /// The key the hub gave this device.
+    pub psk: Zeroizing<Vec<u8>>,
+    /// The port the hub listens on.
+    pub port: u16,
+    /// Where the hub was last reached.
+    pub addrs: Vec<String>,
+}
+
+impl fmt::Debug for LanClientConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LanClientConfig")
+            .field("hub_id", &self.hub_id)
+            .field("peer_id", &self.peer_id)
+            .field("port", &self.port)
+            .field("addrs", &self.addrs)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Opens the storages of a sync space: lockra-remote over HTTPS in the shells, and the hub's
+/// folder over the local network. Opening contacts nothing; the requests go out when the core
+/// runs the sync, which it does only for a space the user set up.
 pub trait SyncTransport: Send + Sync {
     /// The storage `config` names, ready for requests.
     fn open(&self, config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError>;
+
+    /// The hub's copy of space `space_id`, on this computer: the hub's own runs.
+    fn open_hub_store(&self, space_id: Uuid) -> Result<Arc<dyn RemoteStore>, SyncError> {
+        let _ = space_id;
+        Err(SyncError::Storage("LAN sync is not available in this build".into()))
+    }
+
+    /// The hub `config` names, over the local network: its clients' runs.
+    fn open_lan_client(&self, config: &LanClientConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+        let _ = config;
+        Err(SyncError::Storage("LAN sync is not available in this build".into()))
+    }
 }
 
 /// No sync storage (a build without it): every space fails to open.

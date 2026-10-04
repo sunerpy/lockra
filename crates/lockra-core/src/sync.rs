@@ -2,19 +2,20 @@
 //! the views and the error codes. The runs and the commands are in `session.rs`, beside the
 //! others; lockra-sync does the cryptography and the merge.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::ops::AddAssign;
 use std::time::Duration;
 
 use data_encoding::BASE64;
-use lockra_sync::{ConfigError, Replica, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, Tombstone, merge};
-use serde::{Deserialize, Deserializer, Serialize};
+use lockra_sync::{ConfigError, Replica, Seen, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, Tombstone, merge};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::entry::{Entry, clean_name};
 use crate::error::{CoreError, ErrorCode};
+use crate::ports::LanClientConfig;
 use crate::ui::{Notice, Platform, StorageView, SyncDeviceView};
 
 /// Delay between the last change and the sync run it causes.
@@ -30,11 +31,165 @@ pub const MAX_DEVICE_NAME_CHARS: usize = 64;
 /// The format of the payload inside a snapshot: the accounts and the deletions.
 const PAYLOAD_FORMAT: u32 = 1;
 
-/// This device's sync space, in the vault's local part.
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct SyncLocal {
-    /// Where the space is stored, with the credentials.
+/// One of a space's storages. A run takes them in this order: the LAN first, near and quick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Store {
+    /// The hub's folder: on this computer for the hub, over the local network for its clients.
+    Lan,
+    /// The user's own storage (S3 or WebDAV).
+    Cloud,
+}
+
+impl Store {
+    pub const ALL: [Self; 2] = [Self::Lan, Self::Cloud];
+}
+
+/// What the runs on one storage remember.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct TransportLocal {
+    /// This device's object there, and the other devices' as last read.
+    #[serde(default)]
+    pub state: SyncState,
+    /// The storage holds this device's keyring: a run wrote it, or found it there, since it was
+    /// sealed.
+    #[serde(default)]
+    pub keyring_written: bool,
+    /// When a run there last finished without error, Unix milliseconds.
+    #[serde(default)]
+    pub last_ok_ms: Option<u64>,
+}
+
+/// The space's storage of the user's own, with its credentials.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct CloudLocal {
     pub storage: StorageConfig,
+    pub sync: TransportLocal,
+}
+
+/// This device's part in a sync over the local network.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "role", rename_all = "snake_case")]
+pub(crate) enum LanLocal {
+    /// This computer keeps a copy of the space for the devices paired with it.
+    Hub {
+        /// The installation that took the role: a vault opened by another one leaves it.
+        install_id: Uuid,
+        /// The hub, as its clients know it.
+        hub_id: Uuid,
+        /// The port it listens on.
+        port: u16,
+        #[serde(default)]
+        sync: TransportLocal,
+    },
+    /// Paired with a hub.
+    Client {
+        /// The installation that paired: a vault opened by another one leaves the role.
+        install_id: Uuid,
+        hub_id: Uuid,
+        hub_name: String,
+        /// This device, as the hub knows it.
+        peer_id: Uuid,
+        /// The key the hub gave this device (Base64 of 32 bytes).
+        psk: Zeroizing<String>,
+        port: u16,
+        /// Where the hub was last reached.
+        #[serde(default)]
+        addrs: Vec<String>,
+        #[serde(default)]
+        sync: TransportLocal,
+    },
+}
+
+impl fmt::Debug for LanLocal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Hub { hub_id, port, sync, .. } => f.debug_struct("Hub").field("hub_id", hub_id).field("port", port).field("sync", sync).finish_non_exhaustive(),
+            Self::Client { hub_id, peer_id, port, addrs, sync, .. } => f
+                .debug_struct("Client")
+                .field("hub_id", hub_id)
+                .field("peer_id", peer_id)
+                .field("port", port)
+                .field("addrs", addrs)
+                .field("sync", sync)
+                .finish_non_exhaustive(),
+        }
+    }
+}
+
+impl LanLocal {
+    pub fn sync(&self) -> &TransportLocal {
+        match self {
+            Self::Hub { sync, .. } | Self::Client { sync, .. } => sync,
+        }
+    }
+
+    pub fn sync_mut(&mut self) -> &mut TransportLocal {
+        match self {
+            Self::Hub { sync, .. } | Self::Client { sync, .. } => sync,
+        }
+    }
+
+    pub fn install_id(&self) -> Uuid {
+        match self {
+            Self::Hub { install_id, .. } | Self::Client { install_id, .. } => *install_id,
+        }
+    }
+
+    /// Where the runs find the space's copy.
+    fn store_key(&self) -> Option<StoreKey> {
+        match self {
+            Self::Hub { hub_id, .. } => Some(StoreKey::Hub { hub_id: *hub_id }),
+            Self::Client { hub_id, peer_id, psk, port, addrs, .. } => {
+                let psk = Zeroizing::new(BASE64.decode(psk.as_bytes()).ok()?);
+                Some(StoreKey::Client(LanClientConfig { hub_id: *hub_id, peer_id: *peer_id, psk, port: *port, addrs: addrs.clone() }))
+            }
+        }
+    }
+
+    /// A role this version can use: a client's key is 32 bytes. Anything else is left out, the
+    /// space kept.
+    fn usable(&self) -> bool {
+        match self {
+            Self::Hub { .. } => true,
+            Self::Client { psk, .. } => BASE64.decode(psk.as_bytes()).is_ok_and(|key| key.len() == 32),
+        }
+    }
+}
+
+/// What names one storage of the space: a run that finds another there by the time it writes
+/// stops, and an opened storage is kept for the runs while its key stays.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum StoreKey {
+    Cloud(StorageConfig),
+    Hub { hub_id: Uuid },
+    Client(LanClientConfig),
+}
+
+impl StoreKey {
+    /// The same storage: a LAN client's hub found at other addresses is still its hub.
+    pub fn same_store(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Client(a), Self::Client(b)) => (a.hub_id, a.peer_id) == (b.hub_id, b.peer_id),
+            _ => self == other,
+        }
+    }
+
+    /// The prefix the space lives under there.
+    pub fn prefix(&self) -> &str {
+        match self {
+            Self::Cloud(storage) => storage.prefix(),
+            Self::Hub { .. } | Self::Client(_) => "",
+        }
+    }
+}
+
+/// This device's sync space, in the vault's local part. Kept in the shape earlier versions read
+/// for the cloud storage (`storage`, `state`, `keyring_written`, `last_sync_ms`), the LAN role
+/// beside it: an earlier version goes on syncing with the cloud storage and leaves the LAN out.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct SyncLocal {
+    /// The storage of the user's own.
+    pub cloud: CloudLocal,
     /// The space.
     pub space_id: Uuid,
     /// The space's data key (Base64).
@@ -43,25 +198,90 @@ pub(crate) struct SyncLocal {
     pub sync_key: Zeroizing<String>,
     /// This device's name in the space.
     pub device_name: String,
-    /// What the runs remember.
-    #[serde(default)]
-    pub state: SyncState,
     /// This device's keyring: the data key under this vault's master password and the sync key
     /// (Base64). Its snapshots carry it; a new master password seals it again. A space kept
     /// without one, or with an empty one, does not read as a space: the vault leaves it out
     /// (`VaultData::from_bytes`), and no snapshot ever goes out without a keyring.
-    #[serde(deserialize_with = "keyring_text")]
     pub keyring: String,
-    /// The storage holds this keyring: a run wrote it, or found it there, since it was sealed.
-    #[serde(default)]
-    pub keyring_written: bool,
-    /// When a run last finished without error, Unix milliseconds.
-    #[serde(default)]
-    pub last_sync_ms: Option<u64>,
     /// The sync key was saved or written down. Only the device that made the space starts
     /// without; spaces kept by earlier versions count as saved (they showed the key when made).
-    #[serde(default = "saved")]
     pub key_saved: bool,
+    /// This device's part in a sync over the local network.
+    pub lan: Option<LanLocal>,
+}
+
+/// [`SyncLocal`] as the vault file holds it.
+#[derive(Serialize)]
+struct SyncLocalOut<'a> {
+    storage: &'a StorageConfig,
+    space_id: Uuid,
+    data_key: &'a str,
+    sync_key: &'a str,
+    device_name: &'a str,
+    state: &'a SyncState,
+    keyring: &'a str,
+    keyring_written: bool,
+    last_sync_ms: Option<u64>,
+    key_saved: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lan: Option<&'a LanLocal>,
+}
+
+#[derive(Deserialize)]
+struct SyncLocalIn {
+    storage: StorageConfig,
+    space_id: Uuid,
+    data_key: Zeroizing<String>,
+    sync_key: Zeroizing<String>,
+    device_name: String,
+    #[serde(default)]
+    state: SyncState,
+    #[serde(deserialize_with = "keyring_text")]
+    keyring: String,
+    #[serde(default)]
+    keyring_written: bool,
+    #[serde(default)]
+    last_sync_ms: Option<u64>,
+    #[serde(default = "saved")]
+    key_saved: bool,
+    #[serde(default)]
+    lan: Option<LanLocal>,
+}
+
+impl Serialize for SyncLocal {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let CloudLocal { storage, sync } = &self.cloud;
+        SyncLocalOut {
+            storage,
+            space_id: self.space_id,
+            data_key: &self.data_key,
+            sync_key: &self.sync_key,
+            device_name: &self.device_name,
+            state: &sync.state,
+            keyring: &self.keyring,
+            keyring_written: sync.keyring_written,
+            last_sync_ms: sync.last_ok_ms,
+            key_saved: self.key_saved,
+            lan: self.lan.as_ref(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SyncLocal {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let kept = SyncLocalIn::deserialize(deserializer)?;
+        Ok(Self {
+            cloud: CloudLocal { storage: kept.storage, sync: TransportLocal { state: kept.state, keyring_written: kept.keyring_written, last_ok_ms: kept.last_sync_ms } },
+            space_id: kept.space_id,
+            data_key: kept.data_key,
+            sync_key: kept.sync_key,
+            device_name: kept.device_name,
+            keyring: kept.keyring,
+            key_saved: kept.key_saved,
+            lan: kept.lan.filter(LanLocal::usable),
+        })
+    }
 }
 
 fn saved() -> bool {
@@ -71,12 +291,12 @@ fn saved() -> bool {
 impl fmt::Debug for SyncLocal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SyncLocal")
-            .field("storage", &self.storage)
+            .field("storage", &self.cloud.storage)
+            .field("cloud", &self.cloud.sync)
             .field("space_id", &self.space_id)
             .field("device_name", &self.device_name)
-            .field("state", &self.state)
-            .field("keyring_written", &self.keyring_written)
             .field("key_saved", &self.key_saved)
+            .field("lan", &self.lan)
             .finish_non_exhaustive()
     }
 }
@@ -85,16 +305,14 @@ impl SyncLocal {
     /// A space just created or joined, with this device's `keyring`.
     pub fn new(storage: StorageConfig, keys: &SpaceKeys, sync_key: &SyncKey, device_name: String, keyring: &[u8]) -> Self {
         Self {
-            storage,
+            cloud: CloudLocal { storage, sync: TransportLocal::default() },
             space_id: keys.space_id(),
             data_key: keys.data_key_text(),
             sync_key: sync_key.to_text(),
             device_name,
-            state: SyncState::default(),
             keyring: BASE64.encode(keyring),
-            keyring_written: false,
-            last_sync_ms: None,
             key_saved: true,
+            lan: None,
         }
     }
 
@@ -110,22 +328,93 @@ impl SyncLocal {
         BASE64.decode(self.keyring.as_bytes()).map_err(|_| SyncError::Corrupted)
     }
 
-    /// A new master password's keyring is still to reach the storage: this device's snapshot
-    /// there carries the one before.
-    pub fn keyring_pending(&self) -> bool {
-        self.state.own_seq > 0 && !self.keyring_written
+    /// The storages this device syncs with, in the order a run takes them.
+    pub fn stores(&self) -> impl Iterator<Item = Store> + '_ {
+        Store::ALL.into_iter().filter(|store| self.transport(*store).is_some())
     }
 
-    /// The devices as the last runs found them, this one (`own_tag`) first, the others by name.
+    pub fn transport(&self, store: Store) -> Option<&TransportLocal> {
+        match store {
+            Store::Cloud => Some(&self.cloud.sync),
+            Store::Lan => self.lan.as_ref().map(LanLocal::sync),
+        }
+    }
+
+    pub fn transport_mut(&mut self, store: Store) -> Option<&mut TransportLocal> {
+        match store {
+            Store::Cloud => Some(&mut self.cloud.sync),
+            Store::Lan => self.lan.as_mut().map(LanLocal::sync_mut),
+        }
+    }
+
+    pub fn store_key(&self, store: Store) -> Option<StoreKey> {
+        match store {
+            Store::Cloud => Some(StoreKey::Cloud(self.cloud.storage.clone())),
+            Store::Lan => self.lan.as_ref().and_then(LanLocal::store_key),
+        }
+    }
+
+    /// The highest number this device gave a write on any of its storages, or meant to: the
+    /// next write anywhere takes a higher one.
+    pub fn seq_floor(&self) -> u64 {
+        Store::ALL
+            .into_iter()
+            .filter_map(|store| self.transport(store))
+            .map(|t| t.state.own_seq.max(t.state.pending.as_ref().map_or(0, |p| p.seq)))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// When a run last finished without error on any storage.
+    pub fn last_sync_ms(&self) -> Option<u64> {
+        self.stores().filter_map(|store| self.transport(store).and_then(|t| t.last_ok_ms)).max()
+    }
+
+    /// A new master password's keyring is still to reach a storage: this device's snapshot there
+    /// carries the one before.
+    pub fn keyring_pending(&self) -> bool {
+        self.stores().filter_map(|store| self.transport(store)).any(|t| t.state.own_seq > 0 && !t.keyring_written)
+    }
+
+    /// Every storage is to receive a new keyring.
+    pub fn keyring_sealed_again(&mut self) {
+        for store in Store::ALL {
+            if let Some(transport) = self.transport_mut(store) {
+                transport.keyring_written = false;
+            }
+        }
+    }
+
+    /// Leave the LAN role taken by another installation (the vault was copied there): its pairing
+    /// is that installation's. Whether there was one to leave.
+    pub fn leave_lan_of_other_install(&mut self, install_id: Uuid) -> bool {
+        if self.lan.as_ref().is_some_and(|lan| lan.install_id() != install_id) {
+            self.lan = None;
+            return true;
+        }
+        false
+    }
+
+    /// The devices as the last runs found them on any storage, this one (`own_tag`) first, the
+    /// others by name; a device read on two storages shows its latest snapshot.
     pub fn devices(&self, own_tag: String) -> Vec<SyncDeviceView> {
-        let mut others: Vec<SyncDeviceView> = self
-            .state
-            .seen
-            .iter()
-            .map(|(tag, seen)| SyncDeviceView { tag: tag.clone(), name: seen.name.clone(), written_at_ms: Some(seen.written_at_ms), this_device: false })
+        let mut latest: BTreeMap<&str, &Seen> = BTreeMap::new();
+        let mut own_written_at_ms = None;
+        for transport in self.stores().filter_map(|store| self.transport(store)) {
+            own_written_at_ms = own_written_at_ms.max(transport.state.own_written_at_ms);
+            for (tag, seen) in &transport.state.seen {
+                let newer = latest.get(tag.as_str()).is_none_or(|kept| (seen.seq, seen.written_at_ms) > (kept.seq, kept.written_at_ms));
+                if newer {
+                    latest.insert(tag, seen);
+                }
+            }
+        }
+        let mut others: Vec<SyncDeviceView> = latest
+            .into_iter()
+            .map(|(tag, seen)| SyncDeviceView { tag: tag.to_owned(), name: seen.name.clone(), written_at_ms: Some(seen.written_at_ms), this_device: false })
             .collect();
         others.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.tag.cmp(&b.tag)));
-        let mut devices = vec![SyncDeviceView { tag: own_tag, name: self.device_name.clone(), written_at_ms: self.state.own_written_at_ms, this_device: true }];
+        let mut devices = vec![SyncDeviceView { tag: own_tag, name: self.device_name.clone(), written_at_ms: own_written_at_ms, this_device: true }];
         devices.extend(others);
         devices
     }
