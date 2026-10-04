@@ -39,7 +39,8 @@
           "keep": 10
         },
         "auto_update": false,
-        "default_unlock": "biometric"
+        "default_unlock": "biometric",
+        "biometric_offer": true
       },
       "import": null,
       "backup": {

@@ -180,3 +180,122 @@ describe("the fingerprint on the phone", () => {
     expect(screen.getByRole("button", { name: "解锁" })).toHaveAttribute("data-variant", "primary");
   });
 });
+
+describe("the fingerprint by default", () => {
+  const enabled = async (backend: MockBackend) =>
+    (await backend.getState()).lock.device_unlock.biometric.enabled;
+  const enables = (backend: MockBackend) =>
+    backend.calls.filter((c) => c.command === "device_biometric_enable");
+
+  async function createVault(user: ReturnType<typeof renderApp>["user"]) {
+    await user.type(screen.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.type(screen.getByLabelText("再输入一次"), MOCK_PASSWORD);
+    await user.click(screen.getByRole("button", { name: "创建保险库" }));
+    await screen.findByTestId("page-codes");
+  }
+
+  it("turns on for a new vault with one check, the switch on unless turned off", async () => {
+    const backend = phone({ phase: "no_vault", entries: [] });
+    const { user } = renderApp({ backend });
+    await ready();
+    const row = within(screen.getByTestId("welcome-fingerprint"));
+    expect(row.getByRole("switch", { name: "使用指纹解锁" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await createVault(user);
+    await waitFor(async () => expect(await enabled(backend)).toBe(true));
+    expect(enables(backend)).toEqual([
+      { command: "device_biometric_enable", reason: "开启指纹解锁" },
+    ]);
+    // Nothing more to offer.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("turned off for a new vault, asks for nothing and is not offered later", async () => {
+    const backend = phone({ phase: "no_vault", entries: [] });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.click(within(screen.getByTestId("welcome-fingerprint")).getByRole("switch"));
+    await createVault(user);
+    await waitFor(async () =>
+      expect((await backend.getState()).settings.biometric_offer).toBe(false),
+    );
+    expect(enables(backend)).toEqual([]);
+    // Unlocked again with the master password: no offer.
+    await user.click(screen.getByTestId("codes-lock"));
+    await user.type(await screen.findByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    await screen.findByTestId("page-codes");
+    await act(async () => {});
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("turns on for a vault restored from a backup too", async () => {
+    const backend = phone({ phase: "no_vault", entries: [] });
+    const { user } = renderApp({ backend });
+    await ready();
+    const restore = within(screen.getByTestId("welcome-restore"));
+    await user.click(restore.getByRole("button", { name: "选择备份文件…" }));
+    await user.type(await restore.findByLabelText("备份密码"), `${MOCK_PASSWORD}{Enter}`);
+    await screen.findByTestId("page-codes");
+    await waitFor(async () => expect(await enabled(backend)).toBe(true));
+  });
+
+  it("is offered once after a master-password unlock, and 暂不 ends the offer", async () => {
+    const backend = phone({ phase: "locked" });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.type(screen.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    const offer = within(await screen.findByRole("dialog", { name: "使用指纹解锁？" }));
+    expect(offer.getByText(/打开或切回 Lockra 时验证指纹即可解锁/)).toBeInTheDocument();
+    await user.click(offer.getByRole("button", { name: "暂不" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "settings_set",
+      settings: { biometric_offer: false },
+    });
+    expect(enables(backend)).toEqual([]);
+    await user.click(screen.getByTestId("codes-lock"));
+    await user.type(await screen.findByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    await screen.findByTestId("page-codes");
+    await act(async () => {});
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("turns on from the offer with one check; a cancelled check offers it again next time", async () => {
+    const backend = phone({ phase: "locked" });
+    const { user } = renderApp({ backend });
+    await ready();
+    backend.answerBiometric("biometric_cancelled");
+    await user.type(screen.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    let offer = within(await screen.findByRole("dialog", { name: "使用指纹解锁？" }));
+    await user.click(offer.getByRole("button", { name: "开启" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(await enabled(backend)).toBe(false);
+    expect((await backend.getState()).settings.biometric_offer).toBe(true);
+    await user.click(screen.getByTestId("codes-lock"));
+    backend.answerBiometric(null);
+    await user.type(await screen.findByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    offer = within(await screen.findByRole("dialog", { name: "使用指纹解锁？" }));
+    await user.click(offer.getByRole("button", { name: "开启" }));
+    await waitFor(async () => expect(await enabled(backend)).toBe(true));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(enables(backend)).toHaveLength(2);
+  });
+
+  it("is neither switched on nor offered where no fingerprint is enrolled", async () => {
+    const welcome = renderApp({
+      backend: phone({ phase: "no_vault", entries: [], biometric: null }),
+    });
+    await ready();
+    expect(screen.queryByTestId("welcome-fingerprint")).not.toBeInTheDocument();
+    welcome.unmount();
+    const backend = phone({ phase: "locked", biometric: null });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.type(screen.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    await screen.findByTestId("page-codes");
+    await act(async () => {});
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});

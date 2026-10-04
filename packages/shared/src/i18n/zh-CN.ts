@@ -126,6 +126,12 @@ export const zhCN = {
     fingerprint: {
       disableTitle: "关闭指纹解锁",
       disablePrompt: "输入主密码以关闭指纹解锁，手机里保存的密钥会被删除。",
+      welcomeHint: "创建、恢复或加入保险库后，验证一次指纹即可开启。主密码始终可以解锁。",
+      offerTitle: "使用指纹解锁？",
+      offerBody:
+        "开启后，打开或切回 Lockra 时验证指纹即可解锁，主密码仍然可用。之后可以在「设置 › 安全」中关闭。",
+      offerEnable: "开启",
+      offerLater: "暂不",
     },
     scan: {
       prompt: "将相机对准二维码",

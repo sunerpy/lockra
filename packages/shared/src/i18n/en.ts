@@ -134,6 +134,13 @@ export const en: Messages = {
       disableTitle: "Turn off fingerprint unlock",
       disablePrompt:
         "Enter the master password to turn off fingerprint unlock; the key kept on the phone is deleted.",
+      welcomeHint:
+        "Turns on with one fingerprint check once the vault is created, restored or joined. The master password always unlocks.",
+      offerTitle: "Unlock with your fingerprint?",
+      offerBody:
+        "Once it is on, a fingerprint check unlocks Lockra when you open it or come back to it; the master password still works. You can turn it off in Settings › Security.",
+      offerEnable: "Turn on",
+      offerLater: "Not now",
     },
     scan: {
       prompt: "Point the camera at a QR code",

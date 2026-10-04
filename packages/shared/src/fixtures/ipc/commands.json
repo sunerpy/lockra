@@ -169,6 +169,7 @@
         },
         "auto_lock_minutes": 10,
         "auto_update": true,
+        "biometric_offer": false,
         "clipboard_clear_seconds": 20,
         "default_unlock": "password",
         "density": "compact",

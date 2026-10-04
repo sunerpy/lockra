@@ -152,6 +152,10 @@ pub struct Settings {
     pub auto_update: bool,
     /// How the lock screen unlocks first where the system's check is turned on.
     pub default_unlock: DefaultUnlock,
+    /// Offer the system's check once the vault is unlocked with the master password, while it is
+    /// off on this device (the phone's fingerprint). 「暂不」, or the switch turned off when the
+    /// vault was made, turns the offer off; the check stays in Settings › Security.
+    pub biometric_offer: bool,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -183,6 +187,7 @@ impl Default for Settings {
             auto_backup: AutoBackup::default(),
             auto_update: false,
             default_unlock: DefaultUnlock::default(),
+            biometric_offer: true,
         }
     }
 }
@@ -320,6 +325,21 @@ mod tests {
         let store = SettingsStore::new(dir.path());
         store.save(&Settings { default_unlock: DefaultUnlock::Password, ..Settings::default() }).unwrap();
         assert!(fs::read_to_string(&path).unwrap().contains(r#""default_unlock": "password""#));
+    }
+
+    #[test]
+    fn the_fingerprint_is_offered_until_declined() {
+        assert!(Settings::default().biometric_offer);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let load = || SettingsStore::new(dir.path()).load().biometric_offer;
+        // A file from before the offer: it is made once.
+        fs::write(&path, r#"{"schema":2,"default_unlock":"password"}"#).unwrap();
+        assert!(load());
+        let store = SettingsStore::new(dir.path());
+        store.save(&Settings { biometric_offer: false, ..Settings::default() }).unwrap();
+        assert!(!load());
+        assert!(fs::read_to_string(&path).unwrap().contains(r#""biometric_offer": false"#));
     }
 
     #[test]

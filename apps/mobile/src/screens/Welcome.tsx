@@ -4,6 +4,7 @@
 import { errorText, formatDateTime, passwordLongEnough } from "@lockra/shared";
 import {
   Button,
+  Card,
   Logo,
   PasswordField,
   useBackend,
@@ -11,10 +12,13 @@ import {
   useGuarded,
   useI18n,
   useSubmit,
+  useUiState,
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { overPhoneScreen } from "../app/phone-screen";
+import { fingerprintOffered, useNewVaultFingerprint } from "../components/FingerprintOnboarding";
 import { JoinSync } from "../components/JoinSync";
+import { SwitchRow } from "../components/Rows";
 
 export function Welcome() {
   const { t } = useI18n();
@@ -38,6 +42,7 @@ export function Welcome() {
         <h1 className="text-[22px] font-semibold text-fg">{t("welcome.title")}</h1>
         <p className="text-[14px] text-fg-muted">{t("welcome.subtitle")}</p>
       </header>
+      <NewVaultFingerprint />
       <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-4">
         <h2 className="text-[16px] font-medium text-fg">{t("welcome.create.title")}</h2>
         <p className="text-[14px] text-fg-muted">{t("welcome.create.body")}</p>
@@ -72,6 +77,26 @@ export function Welcome() {
       <RestoreBackup />
       <JoinFromSync />
     </main>
+  );
+}
+
+/** The fingerprint for whichever way the vault comes: on unless turned off, where one is enrolled
+ *  (FingerprintOnboarding turns it on once the vault is open). */
+function NewVaultFingerprint() {
+  const { t } = useI18n();
+  const { lock } = useUiState();
+  const choice = useNewVaultFingerprint();
+  if (!fingerprintOffered(lock)) return null;
+  return (
+    <Card padding="none">
+      <SwitchRow
+        label={t("settings.security.biometric.fingerprint")}
+        hint={t("mobile.fingerprint.welcomeHint")}
+        checked={choice.on}
+        onChange={choice.setOn}
+        testId="welcome-fingerprint"
+      />
+    </Card>
   );
 }
 

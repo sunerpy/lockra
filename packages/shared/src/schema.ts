@@ -71,6 +71,8 @@ export const settingsSchema = z.object({
   auto_backup: autoBackupSchema,
   auto_update: z.boolean(),
   default_unlock: defaultUnlockSchema,
+  /** Offer the phone's fingerprint once after a master-password unlock, until declined. */
+  biometric_offer: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -92,6 +94,7 @@ export function defaultSettings(): Settings {
     auto_backup: { enabled: false, dir: null, keep: 10 },
     auto_update: false,
     default_unlock: "biometric",
+    biometric_offer: true,
   };
 }
 
