@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/sunerpy/lockra/compare/v0.7.1...v0.7.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* **vault:** 修复 Windows 上保存已有保险库与设置时拒绝访问 ([#53](https://github.com/sunerpy/lockra/issues/53)) ([6d3a856](https://github.com/sunerpy/lockra/commit/6d3a856fb29e5e21a858078ffddce86c5cf5be93))
+
 ## [0.7.1](https://github.com/sunerpy/lockra/compare/v0.7.0...v0.7.1) (2026-10-04)
 
 
