@@ -122,10 +122,21 @@ impl<R: Runtime> Updater for PluginUpdater<R> {
             // Installing writes files and may wait for an administrator prompt (pkexec for a .deb or
             // an .rpm): off the async runtime. On Windows the installer takes over and the process
             // exits inside `install`.
-            tauri::async_runtime::spawn_blocking(move || update.install(package))
-                .await
-                .map_err(|_| UpdateFailure::Install)?
-                .map_err(|e| failure("install", &e))?;
+            tauri::async_runtime::spawn_blocking(move || {
+                // macOS: the staged new build takes this build's keychain entries first, so it
+                // starts without asking for them (keychain_handoff.rs). Without the hand-over the
+                // update still installs; the new build then asks once.
+                #[cfg(target_os = "macos")]
+                match crate::keychain_handoff::prepare_update(&package) {
+                    Ok(0) => {}
+                    Ok(entries) => tracing::info!(entries, "the staged update stored the keychain hand-over"),
+                    Err(error) => tracing::warn!(%error, "no keychain hand-over before the update; the new version asks for the keychain once"),
+                }
+                update.install(package)
+            })
+            .await
+            .map_err(|_| UpdateFailure::Install)?
+            .map_err(|e| failure("install", &e))?;
             tracing::info!("update installed; restarting");
             self.app.request_restart();
             Ok(())

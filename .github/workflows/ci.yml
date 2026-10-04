@@ -419,12 +419,14 @@ jobs:
         shell: bash
         run: cargo check --locked --workspace --exclude lockra-mobile --all-targets
 
-  # The same early warning for macOS-only code (the shell's Touch ID check), on the runner the
-  # release bundles macOS on.
+  # The same early warning for macOS-only code (the shell's Touch ID check, the keychain store of
+  # the releases), on the runner the release bundles macOS on; then the keychain hand-over of an
+  # update on this Mac's login keychain, with its real partitions (docs/security.md, "Keychain
+  # items across updates").
   macos-check:
     name: macOS cargo check
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -444,6 +446,9 @@ jobs:
         run: mkdir -p apps/desktop/dist
       - name: Clippy
         run: cargo clippy --locked -p lockra-desktop --all-targets -- -D warnings
+      - name: Keychain hand-over across builds (login keychain)
+        timeout-minutes: 25
+        run: .github/scripts/check-keychain-handoff.sh
 
   # The phone app (apps/mobile): clippy for aarch64-linux-android over every workspace crate it
   # links, then the release APK and AAB built unsigned, signed in a step of their own with a key

@@ -53,6 +53,40 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   a system prompt never comes up over another app.
 - Unlock attempts slow down after three failures (1 s, doubling, at most 30 s).
 
+### Keychain items across updates (macOS)
+
+The login keychain gives every item a partition list, and a program signed with a certificate that
+has no Apple Team ID gets the partition `cdhash:<that build>`: reading an item another build
+created shows the system's dialog, even when the item's access list trusts the signing
+requirement, and 「始终允许」 (_Always Allow_) lets in only the build it was pressed for. Up to 0.7
+the releases were signed ad hoc and kept the device key in one item, so every update asked once.
+The method is Voltip's, measured on GitHub's Macs and users' keychains in 2026-09:
+
+- **One certificate.** Releases are signed with the project's self-signed "Lockra Code Signing"
+  certificate (docs/release.md, "macOS signing"); its designated requirement,
+  `identifier "dev.lockra.desktop" and certificate leaf = H"d660…6855"`, is compiled into the app
+  (`code_identity::RELEASE_REQUIREMENT`) and checked against `.github/macos-signing.json`.
+- **An item per build.** A process that satisfies that requirement keeps each secret in an item it
+  created: service `dev.lockra.desktop/<vault id>`, account `lockra.signed.<build>`, the build
+  being a hash of its own code signature (`per_build.rs`, `code_identity.rs`). Reads go quietly
+  first, with the dialog off; an item of its own never needs it.
+- **The hand-over before installation.** Once the updater has verified a package's minisign
+  signature, the running build expands it into a temporary directory, starts the staged executable
+  with `--lockra-keychain-handoff` and one end of a socket pair as its stdin, and sends the entries
+  its store holds (every item of its own, read quietly, and what this process wrote or deleted).
+  Each side first checks the other process against the requirement (`SecCodeCopyGuestWithAttributes`
+  by pid), so the values only ever go from one release to the next; nothing goes through the disk,
+  the command line or the environment. The staged build writes items of its own, reads them back
+  and only then acknowledges; on any failure it rolls its items back and the update installs
+  without a hand-over. The installed build reads its own item and removes the older copies, which
+  needs no permission (removing goes by reference and never reads the value).
+- **Without a hand-over** (a dmg installed by hand, an update from 0.7 or earlier, a hand-over
+  that failed) the build reads the newest older copy once, with the dialog, and moves it into its
+  own item; the item of 0.7 (service `dev.lockra.desktop`, account the vault id) is the oldest.
+- **Not signed so** (local and CI builds, ad hoc): the keyring store as before, and no hand-over.
+
+All of it is security-framework's safe calls: the workspace keeps forbidding unsafe code.
+
 ## In the running app
 
 - **The webview holds no paths and no secrets.** Every file is opened by Rust after a native dialog
@@ -218,9 +252,12 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
 
 - With "remember on this device" on, the vault is as safe as the OS account: anyone who can sign
   in to the computer can open it.
-- An ad-hoc signed macOS build may ask for keychain access again after every update, or lose
-  access to the "remember on this device" key; unlocking with the master password and turning the
-  option on again restores it.
+- macOS asks once for the keychain item on the first update that brings the hand-over (from an
+  ad hoc 0.7 or earlier), after a dmg installed by hand, and after a change of the release
+  certificate. A downgrade to an ad hoc build finds no item of its own: unlocking with the master password and
+  turning the option on again restores it. The hand-over trusts any process that satisfies the
+  release requirement; whoever holds the release certificate's private key could have a program
+  accepted as the next build.
 - The updater trusts the release key (a GitHub Actions secret, with an offline copy kept by the
   maintainer) and GitHub's TLS and release storage. Whoever holds the key and can publish a release
   of `sunerpy/lockra` can ship an update; a stolen key alone cannot, because the manifest's address

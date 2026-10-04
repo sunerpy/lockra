@@ -127,14 +127,15 @@ gh run list --repo $R --branch release-please--branches--main--components--lockr
 
 ## Secrets
 
-| Secret                                                                                        | Needed for                              | Notes                                                                                                              |
-| --------------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| none                                                                                          | releases                                | `GITHUB_TOKEN` creates the tag, the draft and the assets                                                           |
-| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`                             | releases (the in-app update)            | the minisign key every package is signed with; `preflight` fails without it (below)                                |
-| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD`                | releases (the Android app)              | the PKCS12 keystore (base64, one line) and its password, twice (PKCS12 keeps one); `preflight` fails without them  |
-| `FIRLAB_DOCS_TOKEN`                                                                           | `publish-site.yml`                      | a fine-grained token for `sunerpy/firlab` only, Contents read and write; see [docs/site/README.md](site/README.md) |
-| `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_API_*`    | optional macOS signing and notarization | without them the app is unsigned and Gatekeeper warns                                                              |
-| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` with `bundle.windows.signCommand` | optional Windows signing                | without them SmartScreen warns                                                                                     |
+| Secret                                                                                        | Needed for                             | Notes                                                                                                                        |
+| --------------------------------------------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| none                                                                                          | releases                               | `GITHUB_TOKEN` creates the tag, the draft and the assets                                                                     |
+| `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`                             | releases (the in-app update)           | the minisign key every package is signed with; `preflight` fails without it (below)                                          |
+| `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD`                | releases (the Android app)             | the PKCS12 keystore (base64, one line) and its password, twice (PKCS12 keeps one); `preflight` fails without them            |
+| `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGNING_IDENTITY`                   | releases (the macOS app)               | the self-signed release certificate (`.p12`, base64, one line), its password, its SHA-1; see [macOS signing](#macos-signing) |
+| `FIRLAB_DOCS_TOKEN`                                                                           | `publish-site.yml`                     | a fine-grained token for `sunerpy/firlab` only, Contents read and write; see [docs/site/README.md](site/README.md)           |
+| `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_API_*`                              | optional Developer ID and notarization | unset: the release certificate above signs, without notarization, and Gatekeeper warns once                                  |
+| `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` with `bundle.windows.signCommand` | optional Windows signing               | without them SmartScreen warns                                                                                               |
 
 `FIRLAB_DOCS_TOKEN` is the owner's fine-grained token `lockra-docs-sync` (Settings, Developer
 settings, Fine-grained tokens): repository access `sunerpy/firlab` only, permission Contents read
@@ -249,6 +250,44 @@ on, `publish-site.yml` updates the site after every merge that touches `docs/sit
 document, and `docs-site.yml` builds it on pull requests (docs/site/README.md). Before that merge
 both workflows fail without publishing anything.
 
+## macOS signing
+
+The macOS packages are signed with the project's own self-signed code signing certificate,
+"Lockra Code Signing", the same for every release, so each build can hand its keychain items to
+the next instead of making macOS ask again after an update (docs/security.md, "Keychain items
+across updates"; the method Voltip uses). It is not a Developer ID: Gatekeeper still asks once
+before the first start of a hand-installed copy.
+
+**The certificate.** Made with OpenSSL on 2026-10-04 on the maintainer's machine: RSA 2048,
+SHA-256, valid until 2126-10-05, key usage digital signature, extended key usage code signing,
+exported as PKCS12 with `-certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1` (macOS's
+`security import` does not read OpenSSL 3's default algorithms). Its SHA-1,
+`D660014E62B11FA7743E582E5FD52C110DA66855`, is pinned in `.github/macos-signing.json`, and the app
+compiles in the same requirement (`code_identity::RELEASE_REQUIREMENT`; a test keeps the two
+equal). The `.p12` and its password are two of the secrets above, which GitHub never gives back:
+the maintainer keeps both in a password manager and an offline copy.
+
+**In the release.** After phase 1 (no signing material while dependency code runs),
+`.github/scripts/macos-signing.sh import` puts the certificate in a keychain of the job and trusts
+it for code signing; Tauri signs with `APPLE_SIGNING_IDENTITY` (the SHA-1); `check` then requires
+that the app and the app inside the updater's `.app.tar.gz` carry exactly the pinned designated
+requirement; `remove` deletes the job's keychain. Local and CI builds stay ad hoc, and an ad hoc
+build keeps the keyring store and hands nothing over.
+
+**In CI.** `macos-check` runs `.github/scripts/check-keychain-handoff.sh` on the runner's login
+keychain (a keychain made with `security create-keychain` skips the partition check): three builds
+of `examples/keychain_harness.rs` with different code, signed with certificates made for the run,
+show that a build cannot read another build's item without the dialog, that the hand-over before
+installation lets the new build read its own item without it, and that a build signed otherwise
+is handed nothing and gives nothing.
+
+- **Lost:** sign the next release with a new certificate (below); every Mac user allows the
+  keychain once more after that update.
+- **Leaked or rotated:** make a new certificate the same way, update the three secrets,
+  `.github/macos-signing.json` and `RELEASE_REQUIREMENT` in one pull request, and say in the release
+  notes that this update asks for the keychain once. The old build refuses to hand over to the new
+  one (another requirement), so the new build reads the old item once, with the dialog.
+
 ## Manual checks on real devices
 
 What the automated gates cannot cover, before announcing a release:
@@ -277,6 +316,11 @@ What the automated gates cannot cover, before announcing a release:
    _Master password_, nothing comes by itself.
 8. **Windows Hello** (a PC with Windows Hello): the same steps; the Hello dialog comes up in front of
    Lockra, and its PIN is accepted as well as a fingerprint or the face.
-9. **Android** (an arm64 phone): install the release's APK and go through
-   `docs/acceptance/android.md`; an APK from a pull request (signed with that run's key) has to be
-   uninstalled first.
+9. **Keychain across an update** (a Mac with _Remember on this device_ or Touch ID on): updating
+   from 0.7 or earlier to the first release with the hand-over asks once for the keychain item (the
+   old build has no hand-over to give); from there on, _Update now_ and the restart that follows
+   open Lockra without the system's keychain dialog, and Touch ID still unlocks. A dmg installed by
+   hand asks once.
+10. **Android** (an arm64 phone): install the release's APK and go through
+    `docs/acceptance/android.md`; an APK from a pull request (signed with that run's key) has to be
+    uninstalled first.

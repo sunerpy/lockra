@@ -165,6 +165,25 @@ jobs:
             exit 1
           fi
 
+      # The macOS packages are signed with the project's self-signed release certificate, so each
+      # build can hand its keychain items to the next (docs/release.md, macOS signing): without it,
+      # no leg starts. As above, the secrets are only compared to the empty string inside env.
+      - name: Require the macOS release certificate and its pin
+        env:
+          MACOS_CERTIFICATE_PRESENT: ${{ secrets.MACOS_CERTIFICATE != '' }}
+          MACOS_CERTIFICATE_PASSWORD_PRESENT: ${{ secrets.MACOS_CERTIFICATE_PASSWORD != '' }}
+          MACOS_SIGNING_IDENTITY_PRESENT: ${{ secrets.MACOS_SIGNING_IDENTITY != '' }}
+        run: |
+          set -euo pipefail
+          for name in MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD MACOS_SIGNING_IDENTITY; do
+            present="${name}_PRESENT"
+            if [ "${!present}" != true ]; then
+              echo "::error::the ${name} secret is missing; the macOS packages are signed with the release certificate (docs/release.md, macOS signing)"
+              exit 1
+            fi
+          done
+          jq -e '.certificate_sha1 | test("^[0-9A-F]{40}$")' .github/macos-signing.json >/dev/null
+
       # The Android packages are signed with the project's one key: without it, no leg starts.
       # As above, the secrets are only compared to the empty string inside env.
       - name: Require the Android release key and its pin
@@ -289,6 +308,17 @@ jobs:
           esac
           "${tauri[@]}" build --no-bundle --target "$TARGET"
 
+      # The release certificate in a keychain of this job, trusted for code signing; Tauri signs
+      # with it by its SHA-1 (APPLE_SIGNING_IDENTITY below). Only after phase 1: no dependency code
+      # runs while the private key is on the runner.
+      - name: Import the macOS release certificate
+        if: matrix.platform == 'macos'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: .github/scripts/macos-signing.sh import
+
       # Phase 2: bundling, code signing and updater signatures. The Tauri CLI
       # imports APPLE_CERTIFICATE into a temporary keychain itself and signs the
       # updater artifacts with TAURI_SIGNING_PRIVATE_KEY after bundling, so any
@@ -305,7 +335,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_CERTIFICATE: ${{ matrix.platform == 'macos' && secrets.APPLE_CERTIFICATE || '' }}
           APPLE_CERTIFICATE_PASSWORD: ${{ matrix.platform == 'macos' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_SIGNING_IDENTITY: ${{ matrix.platform == 'macos' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ matrix.platform == 'macos' && secrets.MACOS_SIGNING_IDENTITY || '' }}
           APPLE_API_KEY: ${{ matrix.platform == 'macos' && secrets.APPLE_API_KEY || '' }}
           APPLE_API_ISSUER: ${{ matrix.platform == 'macos' && secrets.APPLE_API_ISSUER || '' }}
           APPLE_API_KEY_CONTENT: ${{ matrix.platform == 'macos' && secrets.APPLE_API_KEY_CONTENT || '' }}
@@ -336,6 +366,19 @@ jobs:
             *) echo "::error::unsupported PACKAGE_MANAGER '$PACKAGE_MANAGER'"; exit 1 ;;
           esac
           "${tauri[@]}" bundle --target "$TARGET" --bundles "$BUNDLES"
+
+      # The app and the app in the updater's archive carry the requirement the app trusts: an ad hoc
+      # or otherwise signed bundle would hand nothing over and must not ship.
+      - name: Check the macOS signature against the pinned certificate
+        if: matrix.platform == 'macos'
+        env:
+          TARGET: ${{ matrix.target }}
+        run: .github/scripts/macos-signing.sh check "target/$TARGET/release/bundle"
+
+      - name: Remove the macOS signing keychain
+        if: always() && matrix.platform == 'macos'
+        continue-on-error: true
+        run: .github/scripts/macos-signing.sh remove
 
       # Copies dmg/nsis/msi/deb/rpm/AppImage (+ .sig) into dist/ with
       # collision-free names and records name/size/sha256 per file; macOS ships

@@ -6,10 +6,19 @@
 //! command is `async` (a sync command runs on the main thread and would freeze the webview while
 //! Argon2 works). Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs`
 //! drives the real command layer on `tauri::test::MockRuntime` without a window.
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod biometrics;
 pub mod clipboard;
+pub mod code_identity;
+#[cfg(unix)]
+pub mod handoff;
 pub mod keychain;
+#[cfg(target_os = "macos")]
+pub mod keychain_handoff;
+#[cfg(target_os = "macos")]
+pub mod macos_keychain;
+pub mod per_build;
 pub mod sync;
 pub mod updater;
 
@@ -106,6 +115,12 @@ pub fn secret_store() -> Arc<dyn SecretStore> {
     if dev_memory_store_requested(std::env::var(DEV_SECRET_STORE_ENV).ok().as_deref(), cfg!(debug_assertions)) {
         tracing::warn!("debug build: the keychain is in memory ({DEV_SECRET_STORE_ENV}=memory)");
         return Arc::new(MemorySecretStore::default());
+    }
+    // A macOS release keeps its items in ones it created itself, so an update does not ask again
+    // (keychain_handoff.rs); local and CI builds are ad hoc and keep the keyring store.
+    #[cfg(target_os = "macos")]
+    if let Some(store) = keychain_handoff::release_store() {
+        return store;
     }
     let store = keychain::KeyringStore::probe(KEYCHAIN_SERVICE);
     if store.status() == lockra_core::ports::KeychainStatus::Available { Arc::new(store) } else { Arc::new(NoSecretStore) }
@@ -357,6 +372,12 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
 pub fn run() {
     let _ =
         tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "lockra=info".into())).try_init();
+    // A staged update started by the running build to take its keychain entries: that, and nothing
+    // else, before any window or the single-instance check.
+    #[cfg(target_os = "macos")]
+    if keychain_handoff::asked_for_handoff() {
+        std::process::exit(keychain_handoff::take_handoff());
+    }
     let options = ShellOptions { plugin_updates: true, ..ShellOptions::default() };
     let app = build_app(tauri::Builder::default(), options).run(tauri::generate_context!());
     if let Err(error) = app {
