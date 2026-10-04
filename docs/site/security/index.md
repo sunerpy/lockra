@@ -72,6 +72,16 @@ turned on again. With **Default unlock** on **Fingerprint**, opening Lockra or c
 asks for the fingerprint by itself. Lockra is always kept out of screenshots on the phone, and
 leaving the app locks the vault.
 
+### Fingerprint by default
+
+<StatusTag status="building" />
+
+On a phone with an enrolled fingerprint, **Unlock with fingerprint** on the welcome page is on when
+you create a vault, restore one from a backup or join a sync space: one fingerprint check once the
+vault is open turns it on. Turning that switch off leaves it off, and Lockra does not ask again. An
+existing vault unlocked with the master password asks once whether to turn it on; after **Not now**
+this phone does not ask again, and the switch stays in **Settings › Security**.
+
 ## Locking
 
 Lockra locks after five minutes without a key press or click (**Settings › Security › Auto-lock**:

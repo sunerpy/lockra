@@ -16,6 +16,10 @@ import {
 import { useEffect, useRef } from "react";
 import { NavProvider, useNav } from "./app/nav";
 import { phoneScreenOpen } from "./app/phone-screen";
+import {
+  FingerprintChoiceProvider,
+  FingerprintOnboarding,
+} from "./components/FingerprintOnboarding";
 import { Account } from "./screens/Account";
 import { Add } from "./screens/Add";
 import { Backup } from "./screens/Backup";
@@ -59,7 +63,10 @@ function Root() {
       <ToasterProvider store={toasts}>
         <NoticeBridge />
         <LockWhenLeaving />
-        <Screen />
+        <FingerprintChoiceProvider>
+          <Screen />
+          <FingerprintOnboarding />
+        </FingerprintChoiceProvider>
         <ToastViewport toasts={toasts.toasts} onDismiss={toasts.dismiss} />
       </ToasterProvider>
     </I18nProvider>

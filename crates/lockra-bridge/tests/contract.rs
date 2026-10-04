@@ -122,6 +122,7 @@ fn settings() -> Settings {
         auto_backup: AutoBackup { enabled: true, dir: Some("/home/user/Backups/Lockra".into()), keep: 7 },
         auto_update: true,
         default_unlock: DefaultUnlock::Password,
+        biometric_offer: false,
     }
 }
 

@@ -88,7 +88,11 @@ The HTTP client and TLS stack reach the desktop build only through tauri-plugin-
   fingerprint** keeps the device key sealed with AES-GCM by an Android Keystore key that the
   secure hardware holds: it works only for ten seconds after a passed strong-biometric check, and
   never again once a new fingerprint is enrolled (the master password unlocks then, and the
-  fingerprint is turned on anew). There is no "Remember on this device" without that check. The
+  fingerprint is turned on anew). There is no "Remember on this device" without that check. Where
+  a fingerprint is enrolled, a vault made, restored or joined on the phone turns it on by default
+  (the welcome page's switch, one check once the vault is open), and an existing vault unlocked
+  with the master password offers it once (settings `biometric_offer`, off after **Not now**); the
+  key is made only by that passed check, never without it. The
   app's data is kept out of Android's backups and device transfers (`allowBackup="false"` and the
   data extraction rules): the vault leaves the phone only in Lockra's own encrypted backups. The
   camera's page is `FLAG_SECURE` too, and what it reads, like the photos and files picked, goes to
