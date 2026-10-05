@@ -1524,16 +1524,17 @@ impl Core {
             Ok((keys, sync_key, keyring))
         })
         .await?;
-        let mut space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
+        let mut space = SyncLocal::new(Some(storage), &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
         // The key is shown once now; Settings › Sync reminds of it until it is saved.
         space.key_saved = false;
-        let first =
-            Space { prefix: space.cloud.storage.prefix(), keys: &keys, device: number, device_name: &space.device_name, keyring: &keyring, seq_floor: 0 };
-        step(&*remote, &first, &mut space.cloud.sync.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
-        space.cloud.sync.keyring_written = true;
-        space.cloud.sync.last_ok_ms = Some(self.now_ms());
+        let name = space.device_name.clone();
+        let cloud = space.cloud.as_mut().ok_or(ErrorCode::Internal)?;
+        let first = Space { prefix: cloud.storage.prefix(), keys: &keys, device: number, device_name: &name, keyring: &keyring, seq_floor: 0 };
+        step(&*remote, &first, &mut cloud.sync.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
+        cloud.sync.keyring_written = true;
+        cloud.sync.last_ok_ms = Some(self.now_ms());
         let text = sync_key.to_text();
-        self.join_space(vault_id, space, remote)?;
+        self.join_space(vault_id, space, Some(remote))?;
         Ok(SyncCreated { sync_key: text.to_string() })
     }
 
@@ -1612,16 +1613,17 @@ impl Core {
             Ok((keys, sealed, sync_key, keyring))
         })
         .await?;
-        let space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
+        let space = SyncLocal::new(Some(storage), &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
         match (existing.as_ref().map(Sealed::vault_id), sealed) {
-            (Some(vault_id), _) => self.join_space(vault_id, space, remote),
-            (None, Some(sealed)) => self.create_joined(sealed, space, remote),
+            (Some(vault_id), _) => self.join_space(vault_id, space, Some(remote)),
+            (None, Some(sealed)) => self.create_joined(sealed, space, Some(remote)),
             (None, None) => Err(ErrorCode::Internal.into()),
         }
     }
 
-    /// Record `space` in the unlocked vault `vault_id`; the first run follows.
-    fn join_space(&self, vault_id: Uuid, space: SyncLocal, remote: Arc<dyn RemoteStore>) -> CoreResult<()> {
+    /// Record `space` in the unlocked vault `vault_id`, its cloud storage opened as `remote`; the
+    /// first run follows.
+    fn join_space(&self, vault_id: Uuid, space: SyncLocal, remote: Option<Arc<dyn RemoteStore>>) -> CoreResult<()> {
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
@@ -1631,10 +1633,10 @@ impl Core {
             if session.data.sync().is_some() {
                 return Err(ErrorCode::SyncAlreadyOn.into());
             }
-            let cache = (space.space_id, StoreKey::Cloud(space.cloud.storage.clone()), remote);
+            let cache = cloud_cache(&space, remote);
             session.data.local_mut().sync = Some(space);
             self.save(&mut st, false, |s| s.data.local_mut().sync = None)?;
-            st.sync.cloud.remote = Some(cache);
+            st.sync.cloud.remote = cache;
             sync_due(&mut st, Instant::now(), true);
         }
         self.changed();
@@ -1642,13 +1644,13 @@ impl Core {
     }
 
     /// A new vault, made by joining `space` where there was none.
-    fn create_joined(&self, sealed: Sealed, space: SyncLocal, remote: Arc<dyn RemoteStore>) -> CoreResult<()> {
+    fn create_joined(&self, sealed: Sealed, space: SyncLocal, remote: Option<Arc<dyn RemoteStore>>) -> CoreResult<()> {
         {
             let mut st = self.lock();
             if !matches!(st.phase, PhaseState::NoVault) {
                 return Err(ErrorCode::VaultExists.into());
             }
-            let cache = (space.space_id, StoreKey::Cloud(space.cloud.storage.clone()), remote);
+            let cache = cloud_cache(&space, remote);
             let mut data = VaultData::new();
             data.local_mut().sync = Some(space);
             let session = Session { sealed, data, import: None, exports: Vec::new() };
@@ -1657,7 +1659,7 @@ impl Core {
             st.device_slot = false;
             st.phase = PhaseState::Unlocked(Box::new(session));
             st.last_activity = Instant::now();
-            st.sync.cloud.remote = Some(cache);
+            st.sync.cloud.remote = cache;
             sync_due(&mut st, Instant::now(), true);
         }
         self.changed();
@@ -1673,7 +1675,7 @@ impl Core {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (sync.cloud.storage.clone(), sync.sync_key.clone())
+            (sync.cloud.as_ref().ok_or(ErrorCode::SyncNoStorage)?.storage.clone(), sync.sync_key.clone())
         };
         self.confirm_presence(password, reason).await?;
         let cost = self.shared.config.kdf;
@@ -1777,11 +1779,12 @@ impl Core {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
             let sync = session.data.sync_mut().filter(|s| s.space_id == space_id).ok_or(ErrorCode::SyncOff)?;
+            let cloud = sync.cloud.as_mut().ok_or(ErrorCode::SyncNoStorage)?;
             let cache = (space_id, StoreKey::Cloud(storage.clone()), remote);
-            let previous = std::mem::replace(&mut sync.cloud.storage, storage);
+            let previous = std::mem::replace(&mut cloud.storage, storage);
             self.save(&mut st, false, move |s| {
-                if let Some(sync) = s.data.sync_mut() {
-                    sync.cloud.storage = previous;
+                if let Some(cloud) = s.data.sync_mut().and_then(|sync| sync.cloud.as_mut()) {
+                    cloud.storage = previous;
                 }
             })?;
             let cloud = &mut st.sync.cloud;
@@ -2642,6 +2645,11 @@ fn current_code(entry: &Entry, now_ms: u64) -> String {
     code_view(entry, now_ms).code
 }
 
+/// The cloud storage of `space` opened as `remote`, for the runtime to keep.
+fn cloud_cache(space: &SyncLocal, remote: Option<Arc<dyn RemoteStore>>) -> Option<(Uuid, StoreKey, Arc<dyn RemoteStore>)> {
+    Some((space.space_id, space.store_key(Store::Cloud)?, remote?))
+}
+
 /// The storages of the unlocked vault's space, in the order a run takes them.
 fn configured_stores(st: &State) -> Vec<Store> {
     match &st.phase {
@@ -2723,7 +2731,7 @@ fn sync_view(st: &State) -> SyncView {
             }
         }
         SyncSpaceView {
-            storage: storage_view(&sync.cloud.storage),
+            storage: sync.cloud.as_ref().map(|cloud| storage_view(&cloud.storage)),
             device_name: sync.device_name.clone(),
             devices: sync.devices(own_tag),
             status: sync_status(st, &stores),
