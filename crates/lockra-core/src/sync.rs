@@ -25,6 +25,10 @@ pub const SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
 pub const SYNC_INTERVAL_FOREGROUND: Duration = Duration::from_secs(60);
 /// Coming to the front runs sync once the last run is this old.
 pub const SYNC_FOCUS_MIN: Duration = Duration::from_secs(30);
+/// A folder on this computer, in front: looking at it costs nothing (no request, no rate limit).
+pub const SYNC_INTERVAL_FOLDER_FOREGROUND: Duration = Duration::from_secs(15);
+/// A folder on this computer, behind other windows and after a failed run.
+pub const SYNC_INTERVAL_FOLDER: Duration = Duration::from_secs(60);
 /// The longest device name kept (characters), as a snapshot carries it.
 pub const MAX_DEVICE_NAME_CHARS: usize = 64;
 /// The format of the payload inside a snapshot: the accounts and the deletions.
@@ -152,6 +156,7 @@ pub(crate) fn storage_view(storage: &StorageConfig) -> StorageView {
             path_style: *path_style,
         },
         StorageConfig::Webdav { url, prefix, username, .. } => StorageView::Webdav { url: url.clone(), prefix: prefix.clone(), username: username.clone() },
+        StorageConfig::Folder { path } => StorageView::Folder { path: path.display().to_string() },
     }
 }
 
@@ -282,6 +287,7 @@ pub(crate) fn sync_error(error: &SyncError) -> CoreError {
         SyncError::BadSyncKey => ErrorCode::SyncKeyInvalid,
         SyncError::BadInvite => ErrorCode::SyncInviteInvalid,
         SyncError::BadInviteCode => ErrorCode::SyncInviteCodeWrong,
+        SyncError::FolderMissing => ErrorCode::SyncFolderMissing,
         SyncError::Interrupted => ErrorCode::Locked,
         SyncError::Random => ErrorCode::Internal,
     })

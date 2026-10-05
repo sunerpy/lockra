@@ -152,6 +152,11 @@ pub enum StorageView {
         /// The user name (the password is never shown).
         username: String,
     },
+    /// A folder on this computer that a cloud drive keeps in sync.
+    Folder {
+        /// The folder, as the system writes it.
+        path: String,
+    },
 }
 
 /// A device of the sync space.
@@ -212,6 +217,9 @@ pub struct SyncInvite {
     pub code: String,
     /// The sync key alone, for writing down.
     pub sync_key: String,
+    /// The invitation carries the storage; not for a space in a folder of this computer, where
+    /// the other device says how it reaches the space (the same drive's folder, its WebDAV).
+    pub includes_storage: bool,
 }
 
 /// How a device joins a space.
@@ -225,6 +233,10 @@ pub enum JoinSource {
         /// The one-time code a sealed text (`lockra-invite:2:…`) opens with.
         #[serde(default)]
         code: Option<zeroize::Zeroizing<String>>,
+        /// How this device reaches the space, instead of the storage the invitation carries;
+        /// needed when it carries none.
+        #[serde(default)]
+        storage: Option<lockra_sync::StorageConfig>,
     },
     /// The storage and the sync key, typed in (recovery without another device).
     Manual {

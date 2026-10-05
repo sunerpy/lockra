@@ -6,6 +6,7 @@ import type {
   CommandOf,
   ErrorCode,
   ResultOf,
+  StorageConfig,
   UiEvent,
   UiState,
 } from "./schema";
@@ -50,6 +51,10 @@ export interface Backend {
   saveSyncKey(args: SaveSyncKey): Promise<boolean>;
   /** Native folder picker → the automatic backup folder. The folder, or `null` when cancelled. */
   pickBackupDir(): Promise<string | null>;
+  /** Native folder picker (the desktop's) → the folder for a sync space, one a cloud drive keeps in
+   *  sync: the core keeps it for the next storage `{ kind: "folder" }`. The folder, to show, or
+   *  `null` when cancelled. */
+  pickSyncFolder(): Promise<string | null>;
   /** Native file picker → a backup opened for restoring. `false` when cancelled. */
   pickRestoreFile(): Promise<boolean>;
   /** Native save dialog → a plain otpauth list. The file name, or `null` when cancelled. */
@@ -76,6 +81,8 @@ export interface ScanJoin {
   deviceName: string;
   /** The master password of the space's devices, when it is not `password`. */
   spacePassword?: string;
+  /** This device's way to the space, for an invitation with the sync key alone. */
+  storage?: StorageConfig;
 }
 
 /** A failed command: the core's error code, and when a rate-limited unlock may be retried. */

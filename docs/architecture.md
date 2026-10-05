@@ -19,7 +19,8 @@ crates/
   lockra-bridge    The wire contract: the UiCommand enum, dispatch, and the contract fixtures.
   lockra-sync      End-to-end encrypted sync, without I/O: the device snapshots and the keyrings
                    they carry, hybrid logical clocks, the last-writer-wins merge, one sync step.
-  lockra-remote    The sync's storage over HTTP (S3-compatible or WebDAV, through OpenDAL).
+  lockra-remote    The sync's storage: over HTTP (S3-compatible or WebDAV, through OpenDAL), or a
+                   folder a cloud drive keeps in sync (FolderStore).
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
                    screen-capture protection, single instance).
@@ -47,7 +48,7 @@ cheap handle; the shell injects the ports:
 | `Clock`                     | `SystemClock`                                                                     | `FakeClock`                         |
 | `CodeSink` (code frames)    | a Tauri `Channel`                                                                 | `RecordingSink`                     |
 | `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy        | `FakeUpdater`, `NoUpdater`          |
-| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS (`src-tauri/src/sync.rs`)                  | `FakeTransport`, `NoSync`           |
+| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS or a folder (`src-tauri/src/sync.rs`)      | `FakeTransport`, `NoSync`           |
 | `Biometrics` (unlock check) | Touch ID, Windows Hello via robius-authentication (`src-tauri/src/biometrics.rs`) | `FakeBiometrics`, `NoBiometrics`    |
 
 State machine: **NoVault → Locked → Unlocked**. Create or restore leads from NoVault to Unlocked;
@@ -84,8 +85,11 @@ the main thread and freeze the window while Argon2 works):
 - `lockra_dispatch { command }` — every core command. `UiCommand` is one tagged enum
   (`{"command": "vault_unlock", "password": …}`); its struct variants reject unknown fields, and
   no variant carries a path.
-- `import_pick_files`, `backup_save`, `backup_pick_dir`, `restore_pick`, `export_otpauth_file` —
-  the native dialogs, run by Rust; the webview gets a file name or `false`, never a path.
+- `import_pick_files`, `backup_save`, `backup_pick_dir`, `restore_pick`, `export_otpauth_file`,
+  `sync_key_save`, `sync_pick_folder` — the native dialogs, run by Rust; the webview gets a file
+  name, a folder to show or `false`, and never sends a path. `sync_pick_folder` hands the folder to
+  the core (`Core::sync_choose_folder`), and the storage `{kind: "folder"}` of the next setup, join
+  or move stands for it.
 - `codes_subscribe { onFrame }` / `codes_unsubscribe` — code frames through a `Channel` created by
   the webview. The core keeps one subscription; a new one replaces it. The first frame arrives at
   once (empty while locked); then one at each code window's end.
@@ -139,7 +143,9 @@ a blocking thread; its answers stay in Rust:
   prompt. The store's status is learnt with the fingerprint's availability, which the core asks
   for at start and at every lock, never from a call of its own (the state reads it all the time).
 
-The sync storage is lockra-remote's, as on the desktop, except for the certificate authorities:
+The sync storage is lockra-remote's, as on the desktop (the phone chooses no folder: a space in a
+computer's cloud drive folder is reached over the same drive's WebDAV, `sync_scan_join` carrying
+that storage when the invitation holds the sync key alone), except for the certificate authorities:
 on Android they are read from the files the system keeps them in (the platform verifier would need
 JNI glue in unsafe code; docs/security.md, "Sync"). The updater is `src/updater.rs`: it reads the
 release manifest with the same client when the user checks, and is `InstallMethod::Android`, for

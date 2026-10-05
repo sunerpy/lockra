@@ -82,6 +82,18 @@ describe("the sync storage form", () => {
     expect(storageSummary(dav)).toBe("not an address");
   });
 
+  it("names a folder only as the one the dialog chose, and asks for it again", () => {
+    const folder = { ...emptyStorageForm(), kind: "folder" as const, preset: "folder" as const };
+    expect(storageComplete(folder)).toBe(false);
+    const chosen = { ...folder, folder: "/Users/me/Dropbox/Lockra" };
+    expect(storageComplete(chosen)).toBe(true);
+    // No path goes to the core: it takes the folder its dialog chose.
+    expect(storageConfig(chosen)).toEqual({ kind: "folder" });
+    const view = { kind: "folder" as const, path: "C:\\Users\\me\\OneDrive\\Lockra" };
+    expect(storageSummary(view)).toBe("C:\\Users\\me\\OneDrive\\Lockra");
+    expect(storageFormFrom(view)).toMatchObject({ kind: "folder", preset: "folder", folder: "" });
+  });
+
   it("tells a sealed invitation, which needs its code, from a plain one", () => {
     expect(isSealedInvite("  lockra-invite:2:TEtTSU5WVDI\n")).toBe(true);
     expect(isSealedInvite("lockra-invite:1:eyJzdG9yYWdlIjp7fX0")).toBe(false);

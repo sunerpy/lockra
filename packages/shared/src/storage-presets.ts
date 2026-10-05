@@ -17,7 +17,8 @@ export type PresetId =
   | "jianguoyun"
   | "nextcloud"
   | "synology"
-  | "webdav-custom";
+  | "webdav-custom"
+  | "folder";
 
 /** What a preset asks for besides the credentials and the folder. */
 export type PresetField = "endpoint" | "region" | "account" | "url" | "host" | "pathStyle";
@@ -235,6 +236,8 @@ export const PRESETS: Readonly<Record<PresetId, Preset>> = {
     },
   },
   "webdav-custom": { id: "webdav-custom", kind: "webdav", fields: ["url"] },
+  // A folder a cloud drive keeps in sync: the system's folder dialog chooses it, nothing is typed.
+  folder: { id: "folder", kind: "folder", fields: [] },
 };
 
 /** The presets of a kind, in the order the form lists them. */
@@ -244,6 +247,7 @@ export function presetsOf(kind: StorageKind): Preset[] {
 
 /** The preset a kind starts with: the one that asks for every field. */
 export function customPreset(kind: StorageKind): PresetId {
+  if (kind === "folder") return "folder";
   return kind === "s3" ? "s3-custom" : "webdav-custom";
 }
 
@@ -300,6 +304,7 @@ export function detectPreset(
   view: StorageView,
 ): Pick<StorageForm, "preset" | "account" | "host"> & { region?: string } {
   const none = { account: "", host: "" };
+  if (view.kind === "folder") return { preset: "folder", ...none };
   if (view.kind === "s3") {
     const endpoint = view.endpoint.trim().replace(/\/+$/, "");
     const matchers: [PresetId, RegExp][] = [

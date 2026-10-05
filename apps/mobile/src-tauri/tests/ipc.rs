@@ -13,7 +13,7 @@ use lockra_core::fakes::{FakeClipboard, FakeTransport};
 use lockra_core::ports::{PortError, SyncTransport as _};
 use lockra_core::{Core, ErrorCode, KdfCost, PickedFile, StorageConfig};
 use lockra_mobile_lib::scanner::Scan;
-use lockra_mobile_lib::sync::HttpSync;
+use lockra_mobile_lib::sync::Storages;
 use lockra_mobile_lib::{COMMANDS, ShellOptions, build_app, files, scanner, sync};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
@@ -190,8 +190,48 @@ fn the_code_stream_subscribes_through_a_channel_and_stops() {
 #[test]
 fn the_phone_s_sync_storage_opens_without_contacting_it_and_plain_http_elsewhere_is_refused() {
     let dav = |url: &str| StorageConfig::Webdav { url: url.into(), prefix: String::new(), username: "me".into(), password: Zeroizing::new("pw".into()) };
-    assert!(matches!(HttpSync.open(&dav("https://dav.example.com/dav/")), Ok(storage) if !storage.conditional_puts()));
-    assert!(HttpSync.open(&dav("http://192.168.1.2/dav/")).is_err());
+    assert!(matches!(Storages.open(&dav("https://dav.example.com/dav/")), Ok(storage) if !storage.conditional_puts()));
+    assert!(Storages.open(&dav("http://192.168.1.2/dav/")).is_err());
+}
+
+#[test]
+fn an_invitation_with_the_sync_key_alone_joins_through_this_phones_own_storage() {
+    let transport = Arc::new(FakeTransport::default());
+    // A computer keeps the space in a cloud drive's folder: its invitation holds the sync key only.
+    let computer = shell_on(Arc::clone(&transport));
+    computer.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    let folder = tempfile::tempdir().unwrap();
+    computer.core().sync_choose_folder(folder.path()).unwrap();
+    computer.dispatch(json!({ "command": "sync_create", "storage": { "kind": "folder" }, "password": PASSWORD, "device_name": "Windows" })).unwrap();
+    let invite = computer.dispatch(json!({ "command": "sync_invite", "password": PASSWORD })).unwrap();
+    assert_eq!(invite["includes_storage"], false);
+    let invite = invite["invite"].as_str().unwrap().to_owned();
+    // The phone reaches the same folder over the drive's WebDAV.
+    let dav = StorageConfig::Webdav {
+        url: "https://dav.example.com/".into(),
+        prefix: String::new(),
+        username: "me".into(),
+        password: Zeroizing::new(FakeTransport::SECRET.into()),
+    };
+    transport.share(&dav, &StorageConfig::Folder { path: folder.path().into() });
+    let phone = shell_on(transport);
+    let core = phone.core();
+    let join = |storage| {
+        tauri::async_runtime::block_on(sync::join(
+            &core,
+            Ok(Scan::Code(Zeroizing::new(invite.clone()))),
+            Zeroizing::new(PASSWORD.into()),
+            "Phone".into(),
+            None,
+            storage,
+        ))
+    };
+    assert_eq!(join(None).unwrap_err().code, ErrorCode::SyncInviteNeedsStorage);
+    assert_eq!(phone.dispatch(json!({ "command": "app_state" })).unwrap()["phase"], "no_vault", "nothing tried yet");
+    assert!(join(Some(dav)).unwrap());
+    let state = phone.dispatch(json!({ "command": "app_state" })).unwrap();
+    assert_eq!(state["phase"], "unlocked");
+    assert_eq!(state["sync"]["space"]["storage"]["kind"], "webdav");
 }
 
 #[test]
@@ -214,7 +254,7 @@ fn an_invitation_the_camera_reads_joins_its_space() {
     // A new phone: the master password of the space's devices becomes its vault's.
     let phone = shell_on(transport);
     let core = phone.core();
-    let join = |scan| tauri::async_runtime::block_on(sync::join(&core, scan, Zeroizing::new(PASSWORD.into()), "Phone".into(), None));
+    let join = |scan| tauri::async_runtime::block_on(sync::join(&core, scan, Zeroizing::new(PASSWORD.into()), "Phone".into(), None, None));
     assert!(!join(Ok(Scan::Left)).unwrap());
     let account = "otpauth://totp/Scanned:me?secret=MZXW6YTBOI&issuer=Scanned";
     assert_eq!(join(Ok(Scan::Code(Zeroizing::new(account.into())))).unwrap_err().code, ErrorCode::SyncInviteInvalid);

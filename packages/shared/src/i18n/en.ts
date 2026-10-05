@@ -617,6 +617,7 @@ export const en: Messages = {
       kind: "Storage",
       s3: "S3-compatible",
       webdav: "WebDAV",
+      folder: "Cloud drive folder",
       s3Hint: "AWS S3, Cloudflare R2, Backblaze B2, Alibaba OSS, MinIO and others.",
       webdavHint: "Nextcloud, Jianguoyun, Synology NAS and other WebDAV services.",
       endpoint: "Endpoint",
@@ -652,6 +653,7 @@ export const en: Messages = {
         nextcloud: "Nextcloud",
         synology: "Synology NAS",
         "webdav-custom": "Other WebDAV service",
+        folder: "A folder your cloud drive's app syncs",
       },
       presetHints: {
         aws: "For the China regions (Beijing, Ningxia), choose AWS S3 (China regions): their accounts and keys are separate.",
@@ -667,6 +669,8 @@ export const en: Messages = {
         nextcloud: "Use an app password: create one under Settings › Security in Nextcloud.",
         synology:
           "Install and enable WebDAV Server on the NAS; HTTPS uses port 5006 by default. Start the folder with a shared folder, for example home/lockra.",
+        folder:
+          "Choose a folder that OneDrive, iCloud Drive, Dropbox, Jianguoyun, Nextcloud, Synology Drive or Syncthing keeps in sync. Lockra only writes encrypted files into it, and the drive carries them to your other devices; on a phone, reach the same folder over that drive's WebDAV.",
       },
       account: "Account ID",
       host: "Server",
@@ -870,6 +874,11 @@ export const en: Messages = {
     sync_invite_code_wrong: "The code is not right: check the code shown next to the invitation",
     sync_space_password_needed:
       "This device's master password does not open the sync space: also enter the master password of a device in the space",
+    sync_invite_needs_storage:
+      "This invitation carries the sync key alone: the space is in a cloud drive folder on that computer, so choose how this device reaches the same folder",
+    sync_folder_not_chosen: "Choose the folder first",
+    sync_folder_missing:
+      "The sync folder is missing: the cloud drive's app may not be running, or the folder was moved or deleted",
     sync_data_corrupted: "The sync data on the storage is damaged or was altered",
     sync_unsupported: "The sync data comes from a newer Lockra; update Lockra first",
     internal: "An internal error occurred",

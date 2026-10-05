@@ -16,6 +16,10 @@ pub enum SyncError {
     /// Anything else the storage answered.
     #[error("the storage failed: {0}")]
     Storage(String),
+    /// The folder on this computer the space is kept in is not there: moved, deleted, or its
+    /// drive not connected. Nothing is written until it is back.
+    #[error("the sync folder is missing")]
+    FolderMissing,
     /// Not a Lockra sync object.
     #[error("not a Lockra sync object")]
     NotLockra,

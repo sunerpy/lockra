@@ -1,7 +1,9 @@
 //! The invitation one device of a space shows another: the storage, its credentials and the sync
 //! key, as one text (and the QR code of that text). It holds everything but a master password,
 //! so the device that scans it still needs the master password of a device in the space to open
-//! that device's keyring.
+//! that device's keyring. A space in a folder of the inviting computer invites with the sync key
+//! alone: the folder is of no use elsewhere, and the joining device says how it reaches the space
+//! (the same cloud drive's folder, or its WebDAV).
 //!
 //! The QR code carries the invitation as it is (`lockra-invite:1:`): it never leaves the screen.
 //! The text to send through a chat or a mail is sealed (`lockra-invite:2:`) under a one-time code
@@ -42,8 +44,9 @@ struct SharedHeader {
 /// What a device needs, besides the master password, to join a space.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Invite {
-    /// Where the space is stored.
-    pub storage: StorageConfig,
+    /// Where the space is stored; none when the inviting device keeps it in a folder of its own
+    /// (a folder never goes into the text).
+    pub storage: Option<StorageConfig>,
     /// The space's sync key (it names the space too, [`SyncKey::space_id`]).
     pub sync_key: SyncKey,
 }
@@ -51,17 +54,18 @@ pub struct Invite {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Wire {
-    storage: StorageConfig,
+    /// Absent in an invitation with the sync key alone; as in 0.7 otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    storage: Option<StorageConfig>,
     sync_key: Zeroizing<String>,
 }
 
 impl Invite {
     /// `lockra-invite:1:` and the invitation in Base64url.
     pub fn to_text(&self) -> Zeroizing<String> {
-        let wire = Wire { storage: self.storage.clone(), sync_key: self.sync_key.to_text() };
         // Serializing plain data structures to JSON cannot fail.
         #[allow(clippy::expect_used)]
-        let json = Zeroizing::new(serde_json::to_vec(&wire).expect("an invitation serializes"));
+        let json = Zeroizing::new(serde_json::to_vec(&self.wire()).expect("an invitation serializes"));
         let mut text = Zeroizing::new(String::with_capacity(INVITE_PREFIX.len() + json.len() * 4 / 3 + 4));
         text.push_str(INVITE_PREFIX);
         text.push_str(&Zeroizing::new(BASE64URL_NOPAD.encode(&json)));
@@ -84,8 +88,17 @@ impl Invite {
         Self::from_json(&json)
     }
 
+    /// What the text carries: never a folder.
+    fn wire(&self) -> Wire {
+        Wire { storage: self.storage.clone().filter(|storage| !storage.is_folder()), sync_key: self.sync_key.to_text() }
+    }
+
     fn from_json(json: &[u8]) -> Result<Self, SyncError> {
         let wire: Wire = serde_json::from_slice(json).map_err(|_| SyncError::BadInvite)?;
+        // A path from outside is never taken (only a native dialog names a folder).
+        if wire.storage.as_ref().is_some_and(StorageConfig::is_folder) {
+            return Err(SyncError::BadInvite);
+        }
         let sync_key = SyncKey::from_text(&wire.sync_key).map_err(|_| SyncError::BadInvite)?;
         Ok(Self { storage: wire.storage, sync_key })
     }
@@ -98,10 +111,9 @@ impl Invite {
         let key = shared_key(&kdf, &code)?;
         let header = SharedHeader { format: SHARED_FORMAT, kdf, nonce: random()? };
         let mut object = header_bytes(SHARED_MAGIC, &header)?;
-        let wire = Wire { storage: self.storage.clone(), sync_key: self.sync_key.to_text() };
         // Serializing plain data structures to JSON cannot fail.
         #[allow(clippy::expect_used)]
-        let json = Zeroizing::new(serde_json::to_vec(&wire).expect("an invitation serializes"));
+        let json = Zeroizing::new(serde_json::to_vec(&self.wire()).expect("an invitation serializes"));
         let sealed = cipher(&key).encrypt(&XNonce::from(header.nonce), Payload { msg: json.as_ref(), aad: &object }).map_err(|_| SyncError::Corrupted)?;
         object.extend_from_slice(&sealed);
         let mut text = Zeroizing::new(String::with_capacity(SHARED_PREFIX.len() + object.len() * 4 / 3 + 4));
@@ -192,14 +204,50 @@ mod tests {
 
     fn invite() -> Invite {
         Invite {
-            storage: StorageConfig::Webdav {
+            storage: Some(StorageConfig::Webdav {
                 url: "https://dav.example.com/dav/".into(),
                 prefix: "lockra".into(),
                 username: "me".into(),
                 password: Zeroizing::new("app password".into()),
-            },
+            }),
             sync_key: SyncKey::generate().unwrap(),
         }
+    }
+
+    fn json_of(text: &str) -> serde_json::Value {
+        serde_json::from_slice(&BASE64URL_NOPAD.decode(&text.as_bytes()[INVITE_PREFIX.len()..]).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn an_invitation_with_its_storage_reads_as_before() {
+        // The fields of 0.7: an older Lockra reads it.
+        let json = json_of(&invite().to_text());
+        let keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys, ["storage", "sync_key"]);
+    }
+
+    #[test]
+    fn an_invitation_without_storage_carries_the_sync_key_only() {
+        let original = Invite { storage: None, sync_key: SyncKey::generate().unwrap() };
+        let text = original.to_text();
+        let keys: Vec<String> = json_of(&text).as_object().unwrap().keys().cloned().collect();
+        assert_eq!(keys, ["sync_key"]);
+        assert_eq!(Invite::from_text(&text).unwrap(), original);
+        let (shared, code) = original.to_shared_text(KdfCost::FAST_INSECURE).unwrap();
+        assert_eq!(Invite::from_any_text(&shared, Some(&code)).unwrap(), original);
+    }
+
+    #[test]
+    fn an_invitation_never_names_a_folder() {
+        // A folder is a place on the computer that made the space: no use elsewhere, and a path
+        // that would come in from outside.
+        let folder = serde_json::json!({ "kind": "folder", "path": std::env::temp_dir().join("Lockra") });
+        let key = SyncKey::generate().unwrap();
+        let json = serde_json::json!({ "storage": folder, "sync_key": key.to_text().as_str() });
+        let text = format!("{INVITE_PREFIX}{}", BASE64URL_NOPAD.encode(json.to_string().as_bytes()));
+        assert_eq!(Invite::from_text(&text).err(), Some(SyncError::BadInvite));
+        let leaving = Invite { storage: Some(StorageConfig::Folder { path: std::env::temp_dir() }), sync_key: key };
+        assert_eq!(json_of(&leaving.to_text()).get("storage"), None, "a folder's space invites with its key only");
     }
 
     #[test]

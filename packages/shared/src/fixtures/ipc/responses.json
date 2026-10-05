@@ -40,6 +40,9 @@
       "code": "sync_wrong_credentials"
     },
     {
+      "code": "sync_invite_needs_storage"
+    },
+    {
       "code": "internal"
     }
   ],
@@ -80,6 +83,7 @@
   },
   "sync_invite": {
     "code": "7K2QM-XW4FD",
+    "includes_storage": true,
     "invite": "lockra-invite:1:eyJzdG9yYWdlIjp7fX0",
     "shared_text": "lockra-invite:2:TEtTSU5WVDI",
     "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",

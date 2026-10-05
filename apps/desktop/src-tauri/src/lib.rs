@@ -52,7 +52,7 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 9] = [
+pub const COMMANDS: [&str; 10] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -62,6 +62,7 @@ pub const COMMANDS: [&str; 9] = [
     "restore_pick",
     "export_otpauth_file",
     "sync_key_save",
+    "sync_pick_folder",
 ];
 
 /// `true` only when a debug build was explicitly asked for the in-memory keychain.
@@ -249,6 +250,18 @@ async fn sync_key_save<R: Runtime>(
     Ok(true)
 }
 
+/// Choose the folder for a sync space (one a cloud drive keeps in sync): the folder dialog, then the
+/// core keeps it for the next setup, join or move that asks for "the folder chosen". The folder, to
+/// show, or `None` when cancelled.
+#[tauri::command]
+async fn sync_pick_folder<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<Option<String>, CoreError> {
+    let dialog = app.dialog().clone();
+    let picked = on_dialog_thread(move || dialog.file().blocking_pick_folder()).await?;
+    let Some(dir) = picked.and_then(to_path) else { return Ok(None) };
+    core.sync_choose_folder(&dir)?;
+    Ok(Some(dir.display().to_string()))
+}
+
 /// Choose the automatic backup folder; the folder, or `None` when cancelled.
 #[tauri::command]
 async fn backup_pick_dir<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<Option<String>, CoreError> {
@@ -372,7 +385,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             backup_pick_dir,
             restore_pick,
             export_otpauth_file,
-            sync_key_save
+            sync_key_save,
+            sync_pick_folder
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {
@@ -392,7 +406,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 None if options.plugin_updates => Arc::new(updater::PluginUpdater::new(app.handle().clone(), updater::install_method())),
                 None => Arc::new(NoUpdater),
             };
-            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
+            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::Storages));
             let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics: biometric_check() };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });

@@ -303,6 +303,9 @@ export const ERROR_CODES = [
   "sync_invite_invalid",
   "sync_invite_code_wrong",
   "sync_space_password_needed",
+  "sync_invite_needs_storage",
+  "sync_folder_not_chosen",
+  "sync_folder_missing",
   "sync_data_corrupted",
   "sync_unsupported",
   "internal",
@@ -365,7 +368,8 @@ export type UpdateView = z.infer<typeof updateViewSchema>;
 // ---- multi-device sync -----------------------------------------------------------------------
 
 /** Where a sync space is stored, credentials included: what the webview sends (lockra-sync
- *  `StorageConfig`). The core never sends the secret back. */
+ *  `StorageConfig`). The core never sends the secret back. A folder of this computer (one a cloud
+ *  drive keeps in sync) has no path here: it is "the folder chosen" through `pickSyncFolder`. */
 export const storageConfigSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("s3"),
@@ -384,6 +388,7 @@ export const storageConfigSchema = z.discriminatedUnion("kind", [
     username: z.string(),
     password: z.string(),
   }),
+  z.object({ kind: z.literal("folder") }),
 ]);
 export type StorageConfig = z.infer<typeof storageConfigSchema>;
 export type StorageKind = StorageConfig["kind"];
@@ -405,6 +410,8 @@ export const storageViewSchema = z.discriminatedUnion("kind", [
     prefix: z.string(),
     username: z.string(),
   }),
+  /** A folder of this computer that a cloud drive keeps in sync, as the system writes it. */
+  z.object({ kind: z.literal("folder"), path: z.string() }),
 ]);
 export type StorageView = z.infer<typeof storageViewSchema>;
 
@@ -446,8 +453,14 @@ export type SyncView = z.infer<typeof syncViewSchema>;
 
 /** How a device joins a space (lockra-core `JoinSource`). */
 export const joinSourceSchema = z.discriminatedUnion("type", [
-  /** `code` opens a sealed text (`lockra-invite:2:…`). */
-  z.object({ type: z.literal("invite"), text: z.string(), code: z.string().optional() }),
+  /** `code` opens a sealed text (`lockra-invite:2:…`); `storage` is this device's own way to the
+   *  space, needed when the invitation holds the sync key alone (`sync_invite_needs_storage`). */
+  z.object({
+    type: z.literal("invite"),
+    text: z.string(),
+    code: z.string().optional(),
+    storage: storageConfigSchema.optional(),
+  }),
   z.object({ type: z.literal("manual"), storage: storageConfigSchema, sync_key: z.string() }),
 ]);
 export type JoinSource = z.infer<typeof joinSourceSchema>;
@@ -600,6 +613,9 @@ export const syncInviteSchema = z.object({
   /** The one-time code of `shared_text`, shown on the screen only. */
   code: z.string(),
   sync_key: z.string(),
+  /** The invitation carries the storage; not for a space in a folder of this computer, where the
+   *  other device says how it reaches the space. */
+  includes_storage: z.boolean(),
 });
 export type SyncInvite = z.infer<typeof syncInviteSchema>;
 
@@ -737,6 +753,7 @@ export const SHELL_COMMAND_NAMES = [
   "restore_pick",
   "export_otpauth_file",
   "sync_key_save",
+  "sync_pick_folder",
 ] as const;
 
 /** The phone shell's own Tauri commands (lockra-bridge `PHONE_COMMANDS`). */
