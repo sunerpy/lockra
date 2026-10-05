@@ -144,6 +144,7 @@ fn update_statuses() -> Vec<UpdateStatus> {
         UpdateStatus::Ready { version: "0.2.0".into() },
         UpdateStatus::Installing { version: "0.2.0".into() },
         UpdateStatus::Failed { code: ErrorCode::UpdateSignature, at_ms: T0 - 5_000 },
+        UpdateStatus::Failed { code: ErrorCode::UpdateKeychain, at_ms: T0 - 4_000 },
     ]
 }
 

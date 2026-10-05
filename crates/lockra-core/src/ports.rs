@@ -134,6 +134,9 @@ pub enum UpdateFailure {
     Install,
     /// The user cancelled the administrator prompt.
     Cancelled,
+    /// macOS: the new version did not take over this version's keychain items before installing,
+    /// so nothing was installed (it would have asked for the keychain on its first start).
+    Keychain,
 }
 
 /// An update step that waits on the network or on an installer.

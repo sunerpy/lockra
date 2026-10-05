@@ -122,26 +122,61 @@ impl<R: Runtime> Updater for PluginUpdater<R> {
             // Installing writes files and may wait for an administrator prompt (pkexec for a .deb or
             // an .rpm): off the async runtime. On Windows the installer takes over and the process
             // exits inside `install`.
-            tauri::async_runtime::spawn_blocking(move || {
-                // macOS: the staged new build takes this build's keychain entries first, so it
-                // starts without asking for them (keychain_handoff.rs). Without the hand-over the
-                // update still installs; the new build then asks once.
-                #[cfg(target_os = "macos")]
-                match crate::keychain_handoff::prepare_update(&package) {
-                    Ok(0) => {}
-                    Ok(entries) => tracing::info!(entries, "the staged update stored the keychain hand-over"),
-                    Err(error) => tracing::warn!(%error, "no keychain hand-over before the update; the new version asks for the keychain once"),
+            let installed = tauri::async_runtime::spawn_blocking(move || prepare_then_install(package, hand_over, |package| update.install(package)))
+                .await
+                .map_err(|_| UpdateFailure::Install)?;
+            match installed {
+                Ok(()) => {}
+                Err(Installing::Handoff(reason)) => {
+                    tracing::error!(%reason, "the keychain hand-over failed; the update was not installed");
+                    return Err(UpdateFailure::Keychain);
                 }
-                update.install(package)
-            })
-            .await
-            .map_err(|_| UpdateFailure::Install)?
-            .map_err(|e| failure("install", &e))?;
+                Err(Installing::Install(error)) => return Err(failure("install", &error)),
+            }
             tracing::info!("update installed; restarting");
             self.app.request_restart();
             Ok(())
         })
     }
+}
+
+/// Why [`prepare_then_install`] installed nothing, or failed installing.
+#[derive(Debug)]
+enum Installing<E> {
+    /// The hand-over before installation failed: nothing was installed.
+    Handoff(String),
+    /// The installation itself failed.
+    Install(E),
+}
+
+/// Install `package` only once `hand_over` has succeeded: the staged new build holds this build's
+/// keychain entries in items of its own (macOS; docs/security.md, "Keychain items across
+/// updates"). A failed hand-over installs nothing, rather than a version that would ask for the
+/// keychain on its first start.
+fn prepare_then_install<E>(
+    package: Vec<u8>,
+    hand_over: impl FnOnce(&[u8]) -> Result<(), String>,
+    install: impl FnOnce(Vec<u8>) -> Result<(), E>,
+) -> Result<(), Installing<E>> {
+    hand_over(&package).map_err(Installing::Handoff)?;
+    install(package).map_err(Installing::Install)
+}
+
+/// macOS: hand this build's keychain entries to the staged new build (keychain_handoff.rs).
+#[cfg(target_os = "macos")]
+fn hand_over(package: &[u8]) -> Result<(), String> {
+    match crate::keychain_handoff::prepare_update(package)? {
+        0 => tracing::info!("nothing in the keychain to hand over"),
+        entries => tracing::info!(entries, "the staged update stored the keychain hand-over"),
+    }
+    Ok(())
+}
+
+/// Elsewhere the keychain does not tie an item to the build that made it: nothing to hand over.
+#[cfg(not(target_os = "macos"))]
+#[allow(clippy::unnecessary_wraps, reason = "the macOS hand-over can fail")]
+fn hand_over(_package: &[u8]) -> Result<(), String> {
+    Ok(())
 }
 
 /// Log a failed step with every cause, and classify it.
@@ -228,6 +263,47 @@ mod tests {
         assert_eq!(describe(&chain), "error sending request: client error (Connect): dns error");
         let repeated = Layer("operation timed out: deadline", Some(Box::new(Layer("deadline", Some(Box::new(Layer("", None)))))));
         assert_eq!(describe(&repeated), "operation timed out: deadline");
+    }
+
+    /// Regression (user report 2026-10-05: macOS asked for the keychain after an update): a
+    /// hand-over that fails installs nothing, so the running version keeps working and its
+    /// keychain items, and no new version starts without them.
+    #[test]
+    fn regression_a_failed_hand_over_installs_nothing() {
+        let installs = std::cell::Cell::new(0);
+        let outcome = prepare_then_install(
+            vec![7],
+            |_| Err("the staged build exited with exit status: 1".to_owned()),
+            |_| {
+                installs.set(installs.get() + 1);
+                Ok::<(), PluginError>(())
+            },
+        );
+        assert!(matches!(outcome, Err(Installing::Handoff(ref reason)) if reason.contains("exit status: 1")));
+        assert_eq!(installs.get(), 0);
+    }
+
+    #[test]
+    fn the_package_installs_once_the_hand_over_is_done() {
+        let order = std::cell::RefCell::new(Vec::new());
+        let outcome = prepare_then_install(
+            vec![7],
+            |package| {
+                assert_eq!(package, [7]);
+                order.borrow_mut().push("hand over");
+                Ok(())
+            },
+            |package| {
+                assert_eq!(package, [7]);
+                order.borrow_mut().push("install");
+                Ok::<(), PluginError>(())
+            },
+        );
+        assert!(outcome.is_ok());
+        assert_eq!(*order.borrow(), ["hand over", "install"]);
+        // An install that fails after the hand-over is the plugin's failure.
+        let failed = prepare_then_install(vec![7], |_| Ok(()), |_| Err(PluginError::InvalidUpdaterFormat));
+        assert!(matches!(failed, Err(Installing::Install(PluginError::InvalidUpdaterFormat))));
     }
 
     #[test]

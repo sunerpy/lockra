@@ -7,8 +7,9 @@
 //! verified update next to it, starts the staged executable with [`HANDOFF_ARG`] and hands over
 //! what its store holds ([`crate::handoff`]); the staged build stores and reads back items of its
 //! own before acknowledging. Each side first checks that the other process satisfies the release
-//! requirement, so the secrets only go from one release to the next. A build that is not signed
-//! that way (local and CI builds are ad hoc) keeps the keyring store and hands nothing over.
+//! requirement, so the secrets only go from one release to the next. Without the acknowledgement
+//! the updater installs nothing (`updater::prepare_then_install`). A build that is not signed that
+//! way (local and CI builds are ad hoc) keeps the keyring store and hands nothing over.
 //!
 //! Everything here is security-framework's safe calls: the requirement is written out from the
 //! pinned certificate instead of asked of the system, and the build's name comes from its own code
@@ -42,10 +43,22 @@ pub struct Release {
     quiet: bool,
 }
 
+/// The requirement the releases are recognised by and hand over to: [`RELEASE_REQUIREMENT`]. A
+/// debug build compiled with `LOCKRA_DEV_RELEASE_REQUIREMENT` takes that one instead, so CI can
+/// sign the real app with a certificate of its run and check the hand-over end to end
+/// (`.github/scripts/check-keychain-preinstall.sh`). A release build never reads it.
+fn trusted_requirement() -> &'static str {
+    #[cfg(debug_assertions)]
+    if let Some(requirement) = option_env!("LOCKRA_DEV_RELEASE_REQUIREMENT") {
+        return requirement;
+    }
+    RELEASE_REQUIREMENT
+}
+
 impl Release {
     /// Lockra's releases: [`RELEASE_REQUIREMENT`] and the service `dev.lockra.desktop`.
     pub fn production() -> Option<Self> {
-        Self::new(RELEASE_REQUIREMENT, crate::KEYCHAIN_SERVICE, false)
+        Self::new(trusted_requirement(), crate::KEYCHAIN_SERVICE, false)
     }
 
     /// The signing `requirement` (code requirement language) and the items' `service`.
@@ -94,7 +107,7 @@ impl Release {
         if !self.signed() {
             return Err("this build is not signed for the hand-over".into());
         }
-        let entries = store.handoff_entries();
+        let entries = store.handoff_entries().map_err(|e| e.0)?;
         if entries.is_empty() {
             return Ok(0);
         }
@@ -136,6 +149,46 @@ pub fn release_store() -> Option<Arc<PerBuildStore<LoginKeychain>>> {
 /// `true` when this process was started to take an update's hand-over.
 pub fn asked_for_handoff() -> bool {
     std::env::args_os().nth(1).is_some_and(|arg| arg == HANDOFF_ARG)
+}
+
+/// Debug builds only: `--lockra-keychain-probe <entry>` reads one entry from this build's store
+/// without ever asking and exits, printing `found <the first 8 bytes of its SHA-256, in hex>`,
+/// `none` or why it could not (never the value). How the end-to-end check of the hand-over sees
+/// that the installed build reads its item quietly (`.github/scripts/check-keychain-preinstall.sh`).
+#[cfg(debug_assertions)]
+pub const PROBE_ARG: &str = "--lockra-keychain-probe";
+
+/// The entry [`PROBE_ARG`] names, when this process was started with it.
+#[cfg(debug_assertions)]
+pub fn asked_for_probe() -> Option<String> {
+    let mut args = std::env::args().skip(1);
+    if args.next().as_deref() == Some(PROBE_ARG) { args.next() } else { None }
+}
+
+/// Run [`PROBE_ARG`]: the exit status, 0 when the entry was read or is known to be absent.
+#[cfg(debug_assertions)]
+pub fn probe(entry: &str) -> i32 {
+    use lockra_core::ports::SecretStore as _;
+    use sha2::{Digest as _, Sha256};
+    let Some(store) = Release::new(trusted_requirement(), crate::KEYCHAIN_SERVICE, true).and_then(|release| release.store()) else {
+        println!("no store: this build is not signed with the requirement it trusts");
+        return 2;
+    };
+    match store.get(entry) {
+        Ok(Some(value)) => {
+            let digest = Sha256::digest(value.as_bytes());
+            println!("found {}", digest[..8].iter().map(|b| format!("{b:02x}")).collect::<String>());
+            0
+        }
+        Ok(None) => {
+            println!("none");
+            0
+        }
+        Err(error) => {
+            println!("failed: {}", error.0);
+            1
+        }
+    }
 }
 
 /// The staged build's side, run instead of the app when [`asked_for_handoff`]: the exit status,

@@ -290,6 +290,7 @@ export const ERROR_CODES = [
   "update_signature",
   "update_install_failed",
   "update_cancelled",
+  "update_keychain",
   "sync_off",
   "sync_already_on",
   "sync_config_invalid",

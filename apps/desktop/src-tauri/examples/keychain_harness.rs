@@ -16,6 +16,17 @@
 //!   check that the staged build refuses a parent signed otherwise)
 //! - `wipe <entry>`: remove every item of `entry`
 //! - `--lockra-keychain-handoff`: the staged build's side, as in the app
+//!
+//! And, for `.github/scripts/check-keychain-preinstall.sh`, the running build of an update as the
+//! app's own updater code is: the app's store (service `dev.lockra.desktop`, built with
+//! `LOCKRA_DEV_RELEASE_REQUIREMENT`) and the hand-over before installation.
+//! - `release account`: this build's account in the app's store
+//! - `release put <entry> <value>`: store a value there
+//! - `release peek <entry> <account>`: as `peek`, without the value (`found`, `missing`, `would-ask`)
+//! - `release accounts <entry>`: the accounts holding `entry`, sorted, one per line
+//! - `release preinstall <package>`: what the updater does with a verified `.app.tar.gz` before it
+//!   installs it (`keychain_handoff::prepare_update`): `handed <n>`
+//! - `release wipe <entry>`: remove every item of `entry`
 
 #[cfg(target_os = "macos")]
 fn main() {
@@ -35,7 +46,7 @@ mod harness {
 
     use lockra_core::ports::SecretStore as _;
     use lockra_desktop_lib::handoff::{self, HANDOFF_ARG, PeerCheck};
-    use lockra_desktop_lib::keychain_handoff::Release;
+    use lockra_desktop_lib::keychain_handoff::{self, Release};
     use lockra_desktop_lib::per_build::{Ask, Keychain as _, Read};
 
     const SERVICE: &str = "dev.lockra.ci-harness";
@@ -58,6 +69,9 @@ mod harness {
 
     pub fn run() -> i32 {
         let args: Vec<String> = std::env::args().skip(1).collect();
+        if args.first().map(String::as_str) == Some("release") {
+            return finish(release_command(&args[1..].iter().map(String::as_str).collect::<Vec<_>>()));
+        }
         let Some(release) = Release::new(requirement(), SERVICE, true) else {
             eprintln!("{}: LOCKRA_HARNESS_REQUIREMENT is missing or does not parse", build());
             return 2;
@@ -105,6 +119,10 @@ mod harness {
             ["wipe", entry] => wipe(entry),
             _ => Err(format!("unknown command {args:?}")),
         };
+        finish(outcome)
+    }
+
+    fn finish(outcome: Result<String, String>) -> i32 {
         match outcome {
             Ok(line) => {
                 println!("{line}");
@@ -114,6 +132,37 @@ mod harness {
                 eprintln!("{}: {error}", build());
                 1
             }
+        }
+    }
+
+    /// The `release …` commands, on the app's own store.
+    fn release_command(words: &[&str]) -> Result<String, String> {
+        let store = keychain_handoff::release_store().ok_or("no store: this build is not signed with the requirement it trusts")?;
+        let service = |entry: &str| format!("{}/{entry}", lockra_desktop_lib::KEYCHAIN_SERVICE);
+        match words {
+            ["account"] => Ok(store.account()),
+            ["put", entry, value] => store.set(entry, value).map(|()| "stored".to_owned()).map_err(|e| e.0),
+            ["peek", entry, account] => match store.keychain().read(&service(entry), account, Ask::Never).map_err(|e| e.0)? {
+                Read::Found(_) => Ok("found".into()),
+                Read::Missing => Ok("missing".into()),
+                Read::WouldAsk => Ok("would-ask".into()),
+            },
+            ["accounts", entry] => {
+                let mut accounts: Vec<String> = store.keychain().items(&service(entry)).map_err(|e| e.0)?.into_iter().map(|item| item.account).collect();
+                accounts.sort();
+                Ok(accounts.join("\n"))
+            }
+            ["preinstall", package] => {
+                let bytes = std::fs::read(package).map_err(|e| e.to_string())?;
+                keychain_handoff::prepare_update(&bytes).map(|n| format!("handed {n}"))
+            }
+            ["wipe", entry] => {
+                for item in store.keychain().items(&service(entry)).map_err(|e| e.0)? {
+                    store.keychain().remove(&item.service, &item.account).map_err(|e| e.0)?;
+                }
+                Ok("removed".into())
+            }
+            _ => Err(format!("unknown command release {words:?}")),
         }
     }
 

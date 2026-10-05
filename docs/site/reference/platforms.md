@@ -34,6 +34,16 @@ remembered key to the new version before installing it. After the update and the
 longer asks whether Lockra may use the Keychain, and Touch ID unlocks as before. The update from
 0.7.0 or earlier to 0.7.1, and a dmg installed by hand, still ask once.
 
+### When the new version cannot take the key over
+
+<StatusTag status="building" />
+
+If the new version cannot take over the remembered key, the update is not installed. Lockra keeps
+running the version you have, shows "The new version could not take over the device key in the
+Keychain; nothing was installed", and writes the reason to
+`~/Library/Logs/dev.lockra.desktop/lockra.log`. Up to 0.7.4 the update installed anyway, and macOS
+asked once after the restart.
+
 ## Linux
 
 - **Packages**: .deb, .rpm and AppImage, for x64 and ARM64. Lockra needs WebKitGTK 4.1; X11 and

@@ -16,6 +16,7 @@ pub mod handoff;
 pub mod keychain;
 #[cfg(target_os = "macos")]
 pub mod keychain_handoff;
+pub mod logging;
 #[cfg(target_os = "macos")]
 pub mod macos_keychain;
 pub mod per_build;
@@ -425,13 +426,16 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
 
 /// The desktop entry point.
 pub fn run() {
-    let _ =
-        tracing_subscriber::fmt().with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "lockra=info".into())).try_init();
+    logging::init();
     // A staged update started by the running build to take its keychain entries: that, and nothing
     // else, before any window or the single-instance check.
     #[cfg(target_os = "macos")]
     if keychain_handoff::asked_for_handoff() {
         std::process::exit(keychain_handoff::take_handoff());
+    }
+    #[cfg(all(target_os = "macos", debug_assertions))]
+    if let Some(entry) = keychain_handoff::asked_for_probe() {
+        std::process::exit(keychain_handoff::probe(&entry));
     }
     let options = ShellOptions { plugin_updates: true, ..ShellOptions::default() };
     let app = build_app(tauri::Builder::default(), options).run(tauri::generate_context!());
