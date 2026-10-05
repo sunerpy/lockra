@@ -418,12 +418,12 @@ jobs:
       - name: Cargo check
         shell: bash
         run: cargo check --locked --workspace --exclude lockra-mobile --all-targets
-      # The crates that write files, tested on Windows itself: a check cannot see what the file
-      # system refuses at run time (up to 0.7.1, every save of an existing vault failed here with
-      # "Access is denied": FlushFileBuffers needs a handle opened for writing).
-      - name: Crate tests (vault, core)
+      # The crates that write files or open sockets, tested on Windows itself: a check cannot see
+      # what the system refuses at run time (up to 0.7.1, every save of an existing vault failed
+      # here with "Access is denied": FlushFileBuffers needs a handle opened for writing).
+      - name: Crate tests (vault, core, LAN)
         shell: bash
-        run: cargo test --locked -p lockra-vault -p lockra-core
+        run: cargo test --locked -p lockra-vault -p lockra-core -p lockra-lan
 
   # The same early warning for macOS-only code (the shell's Touch ID check, the keychain store of
   # the releases), on the runner the release bundles macOS on; the crates that write files, tested
@@ -452,9 +452,9 @@ jobs:
         run: mkdir -p apps/desktop/dist
       - name: Clippy
         run: cargo clippy --locked -p lockra-desktop --all-targets -- -D warnings
-      # The crates that write files, tested on macOS itself (as on Windows, above).
-      - name: Crate tests (vault, core)
-        run: cargo test --locked -p lockra-vault -p lockra-core
+      # The crates that write files or open sockets, tested on macOS itself (as on Windows, above).
+      - name: Crate tests (vault, core, LAN)
+        run: cargo test --locked -p lockra-vault -p lockra-core -p lockra-lan
       - name: Keychain hand-over across builds (login keychain)
         timeout-minutes: 25
         run: .github/scripts/check-keychain-handoff.sh

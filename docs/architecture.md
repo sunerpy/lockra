@@ -20,6 +20,9 @@ crates/
   lockra-sync      End-to-end encrypted sync, without I/O: the device snapshots and the keyrings
                    they carry, hybrid logical clocks, the last-writer-wins merge, one sync step.
   lockra-remote    The sync's storage over HTTP (S3-compatible or WebDAV, through OpenDAL).
+  lockra-lan       Sync over the local network: the hub's folder of a space, the hub's server and
+                   its clients over Noise NNpsk0, pairing offers and discovery (not in the shells
+                   yet).
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
                    screen-capture protection, single instance).

@@ -89,6 +89,10 @@ reason = "rustls runs on ring, which the update check installs as the process's 
 [[bans.deny]]
 name = "aws-lc-sys"
 reason = "rustls runs on ring; no second crypto library (and no C toolchain for it on every target)."
+[[bans.deny]]
+name = "snow"
+wrappers = ["lockra-lan"]
+reason = "The LAN sync is Lockra's third network access: Noise between a hub and its paired devices, on loopback, private and link-local addresses only (crates/lockra-lan, docs/security.md)."
 
 [advisories]
 version = 2

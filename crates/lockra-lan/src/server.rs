@@ -358,3 +358,55 @@ fn probe_answer(shared: &Shared, bytes: &[u8], from: SocketAddr) -> Option<[u8; 
     }?;
     Some(probe.answer(key))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::net::IpAddr;
+
+    use super::*;
+    use crate::discover::discover;
+
+    #[test]
+    fn a_tag_is_lowercase_hex_and_an_object_lies_directly_in_the_spaces_directory() {
+        let dir = "lockra-sync-v1/x/devices/";
+        assert_eq!(tag_in(dir, "lockra-sync-v1/x/devices/0123abcd.lks"), Some("0123abcd"));
+        for path in [
+            "lockra-sync-v1/x/devices/0123ABCD.lks",
+            "lockra-sync-v1/x/devices/sub/0123abcd.lks",
+            "lockra-sync-v1/y/devices/0123abcd.lks",
+            "lockra-sync-v1/x/devices/0123abcd.txt",
+            "lockra-sync-v1/x/devices/.lks",
+            "lockra-sync-v1/x/devices/abc.lks",
+        ] {
+            assert_eq!(tag_in(dir, path), None, "{path}");
+        }
+        assert!(is_tag(&"a".repeat(64)) && !is_tag(&"a".repeat(65)) && !is_tag("abcdefg1"));
+    }
+
+    #[tokio::test]
+    async fn a_probe_is_answered_for_a_paired_device_and_the_offer_only() {
+        let folder = tempfile::tempdir().unwrap();
+        let config = HubConfig {
+            hub_id: Uuid::from_u128(1),
+            space_id: Uuid::from_u128(2),
+            own_tag: "00".repeat(8),
+            peers: vec![HubPeer { peer_id: Uuid::from_u128(3), key: Zeroizing::new([5; 32]), tag: None }],
+            removed: vec![Zeroizing::new([6; 32])],
+            pairing: Some(Zeroizing::new([7; 32])),
+        };
+        let (sender, _events) = mpsc::unbounded_channel();
+        let hub = HubServer::start(FolderStore::new(folder.path()), 0, config, sender).await.unwrap();
+        let (port, here) = (hub.port(), [IpAddr::V4(Ipv4Addr::LOCALHOST)]);
+        let probe = |kind, byte| async move { discover(kind, &Zeroizing::new([byte; 32]), port, &here, false).await };
+        let (paired, offer, removed, stranger, offer_as_session, peer_as_pairing) = tokio::join!(
+            probe(Kind::Session, 5),
+            probe(Kind::Pairing, 7),
+            probe(Kind::Session, 6),
+            probe(Kind::Session, 9),
+            probe(Kind::Session, 7),
+            probe(Kind::Pairing, 5)
+        );
+        assert_eq!((paired, offer), (Some(here[0]), Some(here[0])));
+        assert_eq!((removed, stranger, offer_as_session, peer_as_pairing), (None, None, None, None));
+    }
+}

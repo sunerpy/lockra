@@ -8,7 +8,8 @@ How to work in this repository, for coding agents and people alike.
   encrypted container), `lockra-transfer` (Google, Microsoft, otpauth lists, QR codes),
   `lockra-core` (the platform-free application core: commands in, state and notices out, ports for
   everything native), `lockra-bridge` (the IPC contract), `lockra-sync` (the end-to-end encrypted
-  sync: keyring, device snapshots, merge; no I/O) and `lockra-remote` (its S3 and WebDAV storage).
+  sync: keyring, device snapshots, merge; no I/O), `lockra-remote` (its S3 and WebDAV storage) and
+  `lockra-lan` (the LAN sync: the hub's folder, its server and its clients over Noise).
 - `apps/desktop` — the React app (`src/`) and the Tauri 2 shell (`src-tauri/`, crate
   `lockra-desktop`).
 - `apps/mobile` — the Android app (released from 0.7.0): the React phone app (`src/`) and its Tauri 2

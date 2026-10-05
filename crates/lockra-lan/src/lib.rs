@@ -51,3 +51,13 @@ pub fn new_key() -> Result<Key, lockra_sync::SyncError> {
     getrandom::fill(key.as_mut()).map_err(|_| lockra_sync::SyncError::Random)?;
     Ok(key)
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn keys_are_random() {
+        let (a, b) = (super::new_key().unwrap(), super::new_key().unwrap());
+        assert_ne!(*a, *b);
+        assert_ne!(*a, [0u8; 32]);
+    }
+}
