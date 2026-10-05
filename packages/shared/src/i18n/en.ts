@@ -159,6 +159,8 @@ export const en: Messages = {
       scanPrompt: "Point the camera at the invitation on the other device",
       scanHint:
         "Show the invitation on the other device (Settings › Sync › Invite another device), enter the master password, then scan it.",
+      needsStorage:
+        "This invitation carries the sync key alone: the space is in a cloud drive folder on that computer. Fill in the storage this phone reaches the same folder at, such as that drive's WebDAV, then scan again.",
       newVault:
         "There is no vault on this phone yet: joining creates one under this master password.",
       welcomeBody:
@@ -620,6 +622,12 @@ export const en: Messages = {
       folder: "Cloud drive folder",
       s3Hint: "AWS S3, Cloudflare R2, Backblaze B2, Alibaba OSS, MinIO and others.",
       webdavHint: "Nextcloud, Jianguoyun, Synology NAS and other WebDAV services.",
+      folderHint:
+        "A folder your cloud drive's app keeps in sync on this computer; no credentials needed.",
+      folderLabel: "Folder",
+      folderChoose: "Choose folder…",
+      folderChange: "Choose another folder…",
+      folderNone: "No folder chosen yet",
       endpoint: "Endpoint",
       endpointHint: "Starts with https:// — s3.eu-central-1.amazonaws.com for AWS S3, for example.",
       region: "Region",
@@ -703,6 +711,8 @@ export const en: Messages = {
       fromKey: "Sync key",
       invite: "Invitation",
       inviteHint: "From Settings › Sync › Invite another device, on a device of the space.",
+      needsStorage:
+        "This invitation carries the sync key alone: the space is in a cloud drive folder on that computer. Choose how this computer reaches it: the same drive's folder, or that drive's WebDAV.",
       syncKey: "Sync key",
       submit: "Join",
       newVault:
@@ -792,6 +802,9 @@ export const en: Messages = {
       body: "On the new device, scan the QR code. Where scanning is awkward, send the invitation below to the new device and paste it there with its code. Then enter the master password.",
       warning:
         "The invitation holds the storage's credentials and the sync key: use it on your own devices only.",
+      warningKeyOnly: "The invitation holds the sync key: use it on your own devices only.",
+      keyOnly:
+        "This space is in a cloud drive folder on this computer, so the invitation carries the sync key alone. The other device chooses how it reaches the same folder: a computer, the same drive's folder; a phone, that drive's WebDAV.",
       text: "Invitation to send",
       code: "Code",
       codeHint:

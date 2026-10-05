@@ -1,4 +1,4 @@
-import { type ErrorCode, type StorageForm, emptyStorageForm } from "@lockra/shared";
+import { type ErrorCode, LockraError, type StorageForm, emptyStorageForm } from "@lockra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -8,10 +8,12 @@ function Form({
   size,
   onForm,
   failure,
+  pickFolder,
 }: {
   size?: "md" | "lg";
   onForm: (form: StorageForm) => void;
   failure?: ErrorCode;
+  pickFolder?: () => Promise<string | null>;
 }) {
   const [form, setForm] = useState(emptyStorageForm);
   return (
@@ -19,6 +21,7 @@ function Form({
       form={form}
       size={size}
       failure={failure}
+      pickFolder={pickFolder}
       onChange={(patch) =>
         setForm((current) => {
           const next = { ...current, ...patch };
@@ -31,6 +34,43 @@ function Form({
 }
 
 describe("StorageFields", () => {
+  it("offers a cloud drive's folder where the folder dialog is, and shows the one it chose", async () => {
+    const user = userEvent.setup();
+    let form = emptyStorageForm();
+    const answers: (string | null | LockraError)[] = [
+      null,
+      new LockraError("sync_folder_missing"),
+      "C:\\Users\\me\\OneDrive\\Lockra",
+    ];
+    const pickFolder = async () => {
+      const answer = answers.shift() ?? null;
+      if (answer instanceof LockraError) throw answer;
+      return answer;
+    };
+    render(<Form onForm={(next) => (form = next)} pickFolder={pickFolder} />);
+    await user.click(screen.getByRole("radio", { name: "网盘文件夹" }));
+    expect(form).toMatchObject({ kind: "folder", preset: "folder", folder: "" });
+    expect(screen.getByText("还没有选择文件夹")).toBeInTheDocument();
+    // Nothing typed: no address, no credentials, no folder inside.
+    expect(screen.queryByLabelText("服务地址")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("文件夹（可选）")).not.toBeInTheDocument();
+    // Cancelled: nothing chosen. Then a folder that is no longer there. Then one.
+    await user.click(screen.getByRole("button", { name: "选择文件夹…" }));
+    expect(form.folder).toBe("");
+    await user.click(screen.getByRole("button", { name: "选择文件夹…" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("找不到同步文件夹");
+    await user.click(screen.getByRole("button", { name: "选择文件夹…" }));
+    expect(form.folder).toBe("C:\\Users\\me\\OneDrive\\Lockra");
+    expect(screen.getByTestId("storage-folder-path")).toHaveTextContent("OneDrive");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "更换文件夹…" })).toBeInTheDocument();
+  });
+
+  it("offers no folder without the folder dialog (the phone)", () => {
+    render(<Form onForm={() => undefined} />);
+    expect(screen.queryByRole("radio", { name: "网盘文件夹" })).not.toBeInTheDocument();
+  });
+
   it("asks for an S3 bucket's settings, or a WebDAV folder's", async () => {
     const user = userEvent.setup();
     let form = emptyStorageForm();

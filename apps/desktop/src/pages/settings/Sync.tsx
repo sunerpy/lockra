@@ -142,6 +142,7 @@ function CreateForm({
         failure={submit.error}
         form={storage}
         onChange={(patch) => setStorage((form) => ({ ...form, ...patch }))}
+        pickFolder={() => backend.pickSyncFolder()}
       />
       <div className="grid gap-3 sm:grid-cols-2">
         <Input
@@ -401,6 +402,7 @@ function StorageRow({ space }: { space: SyncSpaceView }) {
             failure={submit.error}
             form={form}
             onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+            pickFolder={() => backend.pickSyncFolder()}
           />
           <PasswordField
             label={t("sync.masterPassword")}

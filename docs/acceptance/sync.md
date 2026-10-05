@@ -86,6 +86,46 @@ To check on real devices:
    back to it syncs; an account added on the phone appears with "Synced from …".
 5. The provider forms against the real services below, AWS's China regions with a China account.
 
+## Cloud drive folders
+
+Automated:
+
+- `crates/lockra-remote/src/folder.rs`: only a space's paths are reached; the drive's own files
+  (conflicted copies, downloads in progress, `.tmp`) are no objects; an object over 16 MiB is
+  listed and never read; a write leaves neither `.prev` nor `.tmp`; a missing folder is reported
+  and never made again, and works again once back; a folder this user may not write is refused;
+  on Windows, a file the drive holds for a moment is replaced once it lets go.
+- `crates/lockra-remote/tests/folder.rs`: the sync step through real folders: two devices in one,
+  a drive that carries files late, cut short and beside conflicted copies, an older snapshot put
+  back (refused, then written again), a copied vault, a folder that went away.
+- `crates/lockra-sync`: a folder is an absolute path with no prefix; an invitation of a folder's
+  space holds the sync key alone, and one naming a folder is refused; an invitation with its
+  storage reads as in 0.7.
+- `crates/lockra-core/src/tests/sync.rs`: a space goes into the folder the dialog chose and never
+  where the interface says; the invitation holds the key alone, a phone given it is asked for its
+  storage before any password and joins over the same drive's WebDAV, another computer chooses
+  its own copy of the folder; a folder is looked at every 15 s in front and every minute behind
+  and after a failure, a missing one told as such; a space moves into the drive's folder that
+  holds it. `entry.rs`: a storage of a kind this version does not know (as 0.7.3 sees a folder)
+  leaves sync off and the vault whole.
+- `crates/lockra-bridge/tests/contract.rs`: a folder from the webview has no path, and one with a
+  path is refused through dispatch. Web: the folder kind on the desktop only, the dialog's folder
+  shown, a key-only invitation asking for this device's storage (the desktop's folder, the phone's
+  WebDAV), the invitation dialog saying it holds the key alone.
+
+To check on real devices:
+
+1. Windows with OneDrive, and a Mac with iCloud Drive, each with a space in the drive's folder:
+   a change on one shows on the other once the drive carried it; the folder holds one `.lks` file
+   per device under `lockra-sync-v1/`, and nothing else of Lockra's.
+2. Jianguoyun (or Nextcloud): the computer in the client's folder, the phone over WebDAV at the
+   same folder, joined by scanning the key-only invitation; an account added on the phone reaches
+   the computer.
+3. The drive's app stopped, the folder renamed: **Settings › Sync** says the folder is missing,
+   and nothing is made at the old place; choosing the folder again in **Change storage settings**
+   recovers.
+4. The same vault file opened with 0.7.3: the accounts are there and sync is off.
+
 ## Not verified here
 
 Real services: AWS S3, Cloudflare R2, Backblaze B2, Alibaba Cloud OSS, MinIO, Nextcloud,

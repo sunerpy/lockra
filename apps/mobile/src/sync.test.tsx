@@ -121,6 +121,30 @@ describe("sync on the phone", () => {
     expect(backend.calls.some((c) => c.command === "sync_join")).toBe(false);
   });
 
+  it("asks for this phone's own storage when the invitation holds the sync key alone", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-join-open"));
+    const form = within(await screen.findByTestId("sync-join"));
+    backend.setScan(`lockra-invite:1:${btoa("mock-key-only-invite:1")}`);
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "扫码加入" }));
+    // Asked how this phone reaches the computer's folder: the drive's WebDAV first, no folder here.
+    const storage = within(await form.findByTestId("sync-join-storage"));
+    expect(storage.getByRole("radio", { name: "WebDAV" })).toBeChecked();
+    expect(storage.queryByRole("radio", { name: "网盘文件夹" })).not.toBeInTheDocument();
+    expect(form.queryByRole("alert")).not.toBeInTheDocument();
+    expect(form.getByRole("button", { name: "扫码加入" })).toBeDisabled();
+    await user.type(storage.getByLabelText("WebDAV 地址"), "https://dav.example.com/dav/");
+    await user.type(storage.getByLabelText("用户名"), "me");
+    await user.type(storage.getByLabelText("密码"), MOCK_STORAGE_SECRET);
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "扫码加入" }));
+    expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(screen.getByTestId("sync-storage")).toHaveTextContent("WebDAV · dav.example.com");
+  });
+
   it("joins with a pasted invitation, or the storage and the sync key", async () => {
     // This phone's master password is not the one the space's devices use.
     const { user, backend } = renderApp({ mock: { password: "this phone's password" } });

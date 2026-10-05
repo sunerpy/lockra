@@ -231,8 +231,13 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
       }>
       <div className="flex flex-col gap-4" data-testid="sync-invite">
         <Banner tone="warn" marker="icon">
-          {t("sync.invite.warning")}
+          {t(answer.includes_storage ? "sync.invite.warning" : "sync.invite.warningKeyOnly")}
         </Banner>
+        {!answer.includes_storage && (
+          <p className="text-[13px] text-fg-muted" data-testid="invite-key-only">
+            {t("sync.invite.keyOnly")}
+          </p>
+        )}
         <div className="flex gap-5">
           <QrView svg={answer.svg} label={t("ui.a11y.qr")} size={220} />
           <div className="flex min-w-0 flex-1 flex-col gap-3">
