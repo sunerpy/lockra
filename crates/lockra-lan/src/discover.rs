@@ -30,7 +30,9 @@ pub async fn discover(kind: Kind, key: &Key, port: u16, known: &[IpAddr], broadc
     let deadline = Instant::now() + DISCOVERY_WAIT;
     let mut answer = [0u8; 64];
     loop {
-        let (length, from) = timeout_at(deadline, socket.recv_from(&mut answer)).await.ok()?.ok()?;
+        // A target that refused the probe (Windows reports the ICMP answer as an error on the
+        // next read) leaves the others to answer.
+        let Ok((length, from)) = timeout_at(deadline, socket.recv_from(&mut answer)).await.ok()? else { continue };
         if length == ANSWER_LEN && probe.answered_by(&answer[..length], key) {
             return Some(from.ip());
         }

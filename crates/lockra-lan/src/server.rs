@@ -107,10 +107,10 @@ pub struct HubServer {
 }
 
 impl HubServer {
-    /// Serve `store` on `port` (0: a free one), on every IPv4 interface. Discovery answers on the
-    /// same port when it is free for UDP too.
+    /// Serve `store` on `port` (0: one free for TCP and UDP alike), on every IPv4 interface.
+    /// Discovery answers on the same port, when it is free for UDP too.
     pub async fn start(store: FolderStore, port: u16, config: HubConfig, events: mpsc::UnboundedSender<HubEvent>) -> io::Result<Self> {
-        let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await?;
+        let (listener, probes) = bind(port).await?;
         let port = listener.local_addr()?.port();
         let shared = Arc::new(Shared {
             store,
@@ -121,9 +121,9 @@ impl HubServer {
             answer: Mutex::new(None),
         });
         let mut tasks = vec![tokio::spawn(accept(listener, Arc::clone(&shared)))];
-        match UdpSocket::bind((Ipv4Addr::UNSPECIFIED, port)).await {
-            Ok(socket) => tasks.push(tokio::spawn(answer_probes(socket, Arc::clone(&shared)))),
-            Err(error) => tracing::warn!(%error, port, "no discovery: devices reach the hub at the addresses they know"),
+        match probes {
+            Some(socket) => tasks.push(tokio::spawn(answer_probes(socket, Arc::clone(&shared)))),
+            None => tracing::warn!(port, "no discovery: devices reach the hub at the addresses they know"),
         }
         Ok(Self { shared, port, tasks })
     }
@@ -154,6 +154,26 @@ impl Drop for HubServer {
     fn drop(&mut self) {
         for task in &self.tasks {
             task.abort();
+        }
+    }
+}
+
+/// The listener on `port`, and the probes' socket on the same port when UDP has it free. A port
+/// the system picks may be free for TCP and not for UDP (Windows keeps ranges of UDP ports for
+/// itself): another is tried, a few times.
+async fn bind(port: u16) -> io::Result<(TcpListener, Option<UdpSocket>)> {
+    let mut attempts = if port == 0 { 8 } else { 1 };
+    loop {
+        attempts -= 1;
+        let listener = TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await?;
+        let bound = listener.local_addr()?.port();
+        match UdpSocket::bind((Ipv4Addr::UNSPECIFIED, bound)).await {
+            Ok(probes) => return Ok((listener, Some(probes))),
+            Err(error) if attempts == 0 => {
+                tracing::warn!(%error, port = bound, "UDP refused the port");
+                return Ok((listener, None));
+            }
+            Err(_) => {}
         }
     }
 }
