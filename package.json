@@ -1,6 +1,6 @@
 {
   "name": "lockra-workspace",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "private": true,
   "description": "Lockra web workspace: UI kit, IPC contract and the desktop webview.",
   "license": "Apache-2.0",

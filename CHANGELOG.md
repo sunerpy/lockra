@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.7.4](https://github.com/sunerpy/lockra/compare/v0.7.3...v0.7.4) (2026-10-05)
+
+
+### Features
+
+* **sync:** 同步空间可以放在网盘客户端同步的文件夹里 ([#70](https://github.com/sunerpy/lockra/issues/70)) ([bc50684](https://github.com/sunerpy/lockra/commit/bc50684709d71389e8de3825fc0f7a91b9be76bb))
+* **sync:** 电脑可以选择网盘文件夹作为同步存储 ([#72](https://github.com/sunerpy/lockra/issues/72)) ([baf240e](https://github.com/sunerpy/lockra/commit/baf240e40b5165231349dfc6299f7a285f90ad6b))
+* **sync:** 网盘文件夹有改动时立即同步 ([#73](https://github.com/sunerpy/lockra/issues/73)) ([f1edfcd](https://github.com/sunerpy/lockra/commit/f1edfcde11508d29db5cdd6c41c56303deb6df3a))
+
+
+### Bug Fixes
+
+* **sync:** 网盘文件夹本身被换成链接时也不跟随 ([#75](https://github.com/sunerpy/lockra/issues/75)) ([428f70a](https://github.com/sunerpy/lockra/commit/428f70a3125e6da400687ec01bf236de9bc8e0df))
+* **sync:** 网盘文件夹经目录句柄读写，路上的链接一律不跟随 ([#76](https://github.com/sunerpy/lockra/issues/76)) ([f93fd02](https://github.com/sunerpy/lockra/commit/f93fd02a3891908a6f1466bb20296705b5c0fe1a))
+* **sync:** 网盘文件夹里的链接一律不跟随 ([#74](https://github.com/sunerpy/lockra/issues/74)) ([7d1f704](https://github.com/sunerpy/lockra/commit/7d1f704ce692fd5880b48cf420c3a7ca199fa7c0))
+
+
+### Documentation
+
+* **acceptance:** 网盘文件夹同步随 0.7.4 发布 ([#77](https://github.com/sunerpy/lockra/issues/77)) ([6cf8026](https://github.com/sunerpy/lockra/commit/6cf802662e795fd3960c1c0a038ff05c5a9ae6fc))
+
 ## [0.7.3](https://github.com/sunerpy/lockra/compare/v0.7.2...v0.7.3) (2026-10-04)
 
 
