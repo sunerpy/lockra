@@ -25,6 +25,11 @@ impl FolderWatch {
     /// Watch `dir` itself (not what is below it): `changed` is called, from the watcher's own
     /// thread, whenever an object of the space in it appears, changes or goes.
     pub fn start(dir: &Path, changed: Box<dyn Fn() + Send + Sync>) -> Result<Self, SyncError> {
+        // Checked here: notify tells a missing path apart on some systems only (Windows calls it
+        // neither a file nor a directory).
+        if !dir.is_dir() {
+            return Err(SyncError::FolderMissing);
+        }
         let mut watcher = notify::recommended_watcher(move |event: notify::Result<Event>| {
             if event.is_ok_and(|event| concerns(&event)) {
                 changed();

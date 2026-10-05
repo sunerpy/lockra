@@ -133,11 +133,15 @@ fn two_computers_sync_through_a_cloud_drive_folder() {
     let source = json!({ "type": "invite", "text": invite["invite"], "storage": { "kind": "folder" } });
     mac.dispatch(json!({ "command": "sync_join", "source": source, "password": PASSWORD, "device_name": "MacBook" })).unwrap();
     until("the account on the Mac", || mac.state()["entries"].as_array().is_some_and(|e| e.iter().any(|x| x["issuer"] == "GitHub")));
-    // One snapshot per device in the drive's folder, and nothing else of Lockra's.
-    until("both snapshots", || snapshots(drive.path()).len() == 2);
+    // One snapshot per device in the drive's folder, and nothing else of Lockra's once the runs
+    // are done (a write in progress has its `.tmp` beside, renamed over the snapshot at its end).
+    let settled = || {
+        let files = snapshots(drive.path());
+        files.len() == 2 && files.iter().all(|path| path.extension().and_then(|e| e.to_str()) == Some("lks"))
+    };
+    until("both snapshots, no write in progress", settled);
     for path in snapshots(drive.path()) {
-        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("lks"), "{}", path.display());
-        let bytes = std::fs::read(&path).unwrap();
+        let Ok(bytes) = std::fs::read(&path) else { continue };
         assert!(!String::from_utf8_lossy(&bytes).contains("GitHub"), "ciphertext only");
     }
     // Back the other way, by itself: the Mac writes its new account three seconds later, and
