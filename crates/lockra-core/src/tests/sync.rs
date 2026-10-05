@@ -918,6 +918,24 @@ async fn a_space_goes_in_the_folder_the_dialog_chose_and_never_where_the_interfa
     assert_eq!(transport.store(&StorageConfig::Folder { path: folder }).paths().len(), 1);
 }
 
+/// A folder chosen through a link (`~/Dropbox` pointing at another disk) is kept as the folder it
+/// leads to: a link put in its place later is no longer the folder.
+#[cfg(unix)]
+#[tokio::test(start_paused = true)]
+async fn a_folder_chosen_through_a_link_is_kept_as_the_folder_it_leads_to() {
+    let transport = Arc::new(FakeTransport::default());
+    let h = device(&transport);
+    h.core.create_vault(pw(MASTER)).await.unwrap();
+    let disk = drive_folder(&h, "disk/Dropbox");
+    let link = h.dir.path().join("Dropbox");
+    std::os::unix::fs::symlink(&disk, &link).unwrap();
+    h.core.sync_choose_folder(&link).unwrap();
+    h.core.sync_create(chosen_folder(), pw(MASTER), "Linux".into()).await.unwrap();
+    settle().await;
+    let kept = std::fs::canonicalize(&disk).unwrap();
+    assert_eq!(space(&h).storage, StorageView::Folder { path: kept.display().to_string() });
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_folder_space_invites_with_its_key_alone_and_each_device_reaches_it_its_own_way() {
     let transport = Arc::new(FakeTransport::default());

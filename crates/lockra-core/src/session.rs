@@ -1890,7 +1890,17 @@ impl Core {
         if !folder.is_dir() {
             return Err(ErrorCode::SyncFolderMissing.into());
         }
-        self.lock().chosen_folder = Some(folder.to_path_buf());
+        // Chosen through a link (`~/Dropbox` on another disk): the folder it leads to is kept, and a
+        // link put in that folder's place later is not followed (lockra-remote).
+        let folder = if fs::symlink_metadata(folder).is_ok_and(|m| m.file_type().is_symlink()) {
+            plain_path(fs::canonicalize(folder).map_err(|_| ErrorCode::SyncFolderMissing)?)
+        } else {
+            folder.to_path_buf()
+        };
+        if folder.to_str().is_none() {
+            return Err(ErrorCode::SyncConfigInvalid.into());
+        }
+        self.lock().chosen_folder = Some(folder);
         Ok(())
     }
 
@@ -2692,6 +2702,14 @@ fn uri_error(error: &uri::UriError) -> CoreError {
     })
 }
 
+/// A canonical path as the user reads it: Windows' `\\?\C:\…` form without its prefix.
+fn plain_path(path: PathBuf) -> PathBuf {
+    match path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => path,
+    }
+}
+
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> CoreResult<T> + Send + 'static) -> CoreResult<T> {
     tokio::task::spawn_blocking(work).await.map_err(|_| CoreError::from(ErrorCode::Internal))?
 }
@@ -2747,3 +2765,16 @@ fn restrict_dir(dir: &Path) {
 
 #[cfg(not(unix))]
 fn restrict_dir(_dir: &Path) {}
+
+#[cfg(test)]
+mod path_tests {
+    use std::path::PathBuf;
+
+    #[test]
+    fn a_canonical_windows_path_reads_without_its_prefix() {
+        assert_eq!(super::plain_path(PathBuf::from(r"\\?\C:\Users\me\OneDrive\Lockra")), PathBuf::from(r"C:\Users\me\OneDrive\Lockra"));
+        // A share keeps its form: dropping the prefix would name another path.
+        assert_eq!(super::plain_path(PathBuf::from(r"\\?\UNC\nas\home\Lockra")), PathBuf::from(r"\\?\UNC\nas\home\Lockra"));
+        assert_eq!(super::plain_path(PathBuf::from("/home/me/Dropbox")), PathBuf::from("/home/me/Dropbox"));
+    }
+}

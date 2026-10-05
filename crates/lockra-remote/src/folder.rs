@@ -115,11 +115,12 @@ fn under(root: &Path, dirs: &[String]) -> PathBuf {
     dirs.iter().fold(root.to_path_buf(), |place, dir| place.join(dir))
 }
 
-/// The folder is there, and is one.
+/// The folder is there, and is one of its own: a link put in its place after it was chosen (the
+/// core keeps the folder a chosen link led to) is not followed.
 fn present(root: &Path) -> Result<(), SyncError> {
-    match fs::metadata(root) {
-        Ok(meta) if meta.is_dir() => Ok(()),
-        Ok(_) => Err(SyncError::Storage(format!("not a folder: {}", root.display()))),
+    match fs::symlink_metadata(root) {
+        Ok(meta) if meta.file_type().is_dir() => Ok(()),
+        Ok(_) => Err(SyncError::Storage(format!("not a folder (a link?): {}", root.display()))),
         Err(error) => Err(failed(&error)),
     }
 }
@@ -388,6 +389,24 @@ mod tests {
         store.put(&object(), b"three".to_vec(), PutCondition::Always).await.unwrap();
         assert_eq!(fs::read(&victim).unwrap(), b"keep");
         assert!(!fs::symlink_metadata(devices.join(format!("{TAG}{EXTENSION}"))).unwrap().file_type().is_symlink());
+    }
+
+    /// The chosen folder replaced by a link after it was chosen (by a sync peer, say): the store
+    /// goes nowhere through it, and writes nothing where it points.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_folder_replaced_by_a_link_is_not_followed() {
+        let parent = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let root = parent.path().join("Lockra");
+        fs::create_dir(&root).unwrap();
+        let store = FolderStore::new(&root);
+        store.put(&object(), b"one".to_vec(), PutCondition::Always).await.unwrap();
+        fs::remove_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), &root).unwrap();
+        assert!(matches!(store.put(&object(), b"two".to_vec(), PutCondition::Always).await, Err(SyncError::Storage(_))));
+        assert!(matches!(store.list(DIR).await, Err(SyncError::Storage(_))));
+        assert_eq!(names(elsewhere.path()), Vec::<String>::new(), "nothing written where the link points");
     }
 
     #[tokio::test]
