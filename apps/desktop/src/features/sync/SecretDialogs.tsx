@@ -1,22 +1,20 @@
-// The two sync views that show a secret: the new space's sync key, and an invitation for another
-// device. Both hide themselves after two minutes like a revealed secret, and however they close,
-// the shell lifts screen-capture protection (`secret_view_closed`).
-import { REVEAL_SECONDS, type SyncInvite, errorText } from "@lockra/shared";
+// The sync views that show a secret: the new space's sync key, an invitation for another device,
+// and a LAN hub's pairing code. They hide themselves after two minutes like a revealed secret, and
+// however they close, the shell lifts screen-capture protection (`secret_view_closed`).
+import { type LanOffer, REVEAL_SECONDS, type SyncInvite, errorText } from "@lockra/shared";
 import {
   Banner,
   Button,
   Dialog,
-  PasswordField,
   QrView,
-  unlockBiometric,
   useBackend,
   useClock,
   useSaveSyncKey,
   useT,
   useUiState,
 } from "@lockra/ui";
-import { type SubmitEvent, useCallback, useEffect, useId, useRef, useState } from "react";
-import { useSubmit } from "../../app/dispatch";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { PresenceDialog } from "./Presence";
 
 /** Seconds left of a secret shown at `at`, on the shared clock (it ticks on whole seconds, so it
  *  can read just before the moment the view opened). */
@@ -144,76 +142,26 @@ export function SyncKeyDialog({
 export function InviteDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const { backend } = useBackend();
-  const { platform, lock } = useUiState();
-  const biometric = unlockBiometric(lock);
-  const formId = useId();
+  const { platform } = useUiState();
   const now = useClock();
-  const [password, setPassword] = useState("");
   const [invite, setInvite] = useState<{ answer: SyncInvite; at: number } | undefined>(undefined);
-  const submit = useSubmit();
   const deliver = useSecretAnswer();
   const left = secondsLeft(now, invite?.at);
   useSecretView(invite !== undefined, left, onClose);
-  const ask = async (typed?: string) => {
-    const answer = await submit.run(() =>
-      backend.dispatch(
-        typed === undefined
-          ? { command: "sync_invite", reason: t("sync.invite.reason") }
-          : { command: "sync_invite", password: typed },
-      ),
-    );
-    setPassword("");
-    if (answer !== undefined) deliver(() => setInvite({ answer, at: Date.now() }));
-  };
-  const onSubmit = async (event: SubmitEvent) => {
-    event.preventDefault();
-    if (password === "") return;
-    await ask(password);
-  };
   if (invite === undefined) {
     return (
-      <Dialog
-        open
+      <PresenceDialog
         title={t("sync.invite.open")}
+        prompt={t("sync.invite.prompt")}
+        promptBiometric={t("sync.invite.promptBiometric")}
+        reason={t("sync.invite.reason")}
+        submitLabel={t("sync.invite.submit")}
+        onConfirm={async (presence) => {
+          const answer = await backend.dispatch({ command: "sync_invite", ...presence });
+          deliver(() => setInvite({ answer, at: Date.now() }));
+        }}
         onClose={onClose}
-        width={440}
-        actions={
-          <>
-            <Button variant="ghost" onClick={onClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              type="submit"
-              form={formId}
-              loading={submit.busy}
-              disabled={password === ""}>
-              {t("sync.invite.submit")}
-            </Button>
-          </>
-        }>
-        <form id={formId} onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-3">
-          <p>{t(biometric === null ? "sync.invite.prompt" : "sync.invite.promptBiometric")}</p>
-          {biometric !== null && (
-            <Button
-              variant="outline"
-              icon="fingerprint"
-              className="self-start"
-              loading={submit.busy}
-              onClick={() => void ask()}>
-              {t(`sync.invite.verifyWith.${biometric}`)}
-            </Button>
-          )}
-          <PasswordField
-            label={t("sync.masterPassword")}
-            value={password}
-            onChange={setPassword}
-            autoComplete="current-password"
-            error={submit.error === undefined ? undefined : errorText(t, submit.error)}
-            data-autofocus
-          />
-        </form>
-      </Dialog>
+      />
     );
   }
   const { answer } = invite;
@@ -258,6 +206,85 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
               <div className="text-[12px] text-fg-muted">{t("sync.created.key")}</div>
               <SyncKeyText value={answer.sync_key} />
             </div>
+            {platform === "linux" && (
+              <p className="text-[12px] text-fg-subtle">{t("entry.linuxCapture")}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/** A pairing code for a device to join this LAN hub, once the user proved to be here: the QR code
+ *  a phone scans and the text another computer pastes, until it lapses. A device asking with it
+ *  closes the dialog: the page then asks about the request. */
+export function LanOfferDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const { backend } = useBackend();
+  const { platform, sync } = useUiState();
+  const now = useClock();
+  const [offer, setOffer] = useState<LanOffer | undefined>(undefined);
+  const deliver = useSecretAnswer();
+  const left =
+    offer === undefined
+      ? REVEAL_SECONDS
+      : Math.max(0, Math.ceil((offer.expires_at_ms - now) / 1000));
+  useSecretView(offer !== undefined, left, onClose);
+  const lan = sync.space?.lan;
+  const asked = lan?.role === "hub" && lan.request !== null;
+  useEffect(() => {
+    if (offer !== undefined && asked) onClose();
+  }, [offer, asked, onClose]);
+  if (offer === undefined) {
+    return (
+      <PresenceDialog
+        title={t("sync.lan.offer.title")}
+        prompt={t("sync.lan.offer.prompt")}
+        promptBiometric={t("sync.lan.offer.promptBiometric")}
+        reason={t("sync.lan.offer.reason")}
+        submitLabel={t("sync.lan.offer.submit")}
+        onConfirm={async (presence) => {
+          const answer = await backend.dispatch({ command: "sync_lan_offer", ...presence });
+          deliver(() => setOffer(answer));
+        }}
+        onClose={onClose}
+      />
+    );
+  }
+  return (
+    <Dialog
+      open
+      title={t("sync.lan.offer.title")}
+      onClose={onClose}
+      width={640}
+      hint={
+        <span data-testid="lan-offer-countdown">{t("sync.lan.offer.hideIn", { s: left })}</span>
+      }
+      actions={
+        <Button variant="primary" onClick={onClose}>
+          {t("common.done")}
+        </Button>
+      }>
+      <div className="flex flex-col gap-4" data-testid="lan-offer">
+        <Banner tone="info" marker="icon">
+          {t("sync.lan.offer.warning")}
+        </Banner>
+        <div className="flex gap-5">
+          <QrView svg={offer.svg} label={t("ui.a11y.qr")} size={220} />
+          <div className="flex min-w-0 flex-1 flex-col gap-3">
+            <p className="text-[13px] text-fg">{t("sync.lan.offer.body")}</p>
+            <div>
+              <div className="text-[12px] text-fg-muted">{t("sync.lan.offer.text")}</div>
+              <div
+                className="mono max-h-28 overflow-auto text-[11px] break-all text-fg-muted select-all"
+                data-testid="lan-offer-text">
+                {offer.text}
+              </div>
+            </div>
+            {platform === "windows" && (
+              <p className="text-[12px] text-fg-subtle">{t("sync.lan.firewall")}</p>
+            )}
             {platform === "linux" && (
               <p className="text-[12px] text-fg-subtle">{t("entry.linuxCapture")}</p>
             )}

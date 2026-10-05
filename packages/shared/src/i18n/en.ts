@@ -194,7 +194,7 @@ export const en: Messages = {
     },
     join: {
       title: "Join from sync",
-      body: "Already syncing Lockra on other devices? Join with an invitation or the sync key, and this computer gets the same accounts.",
+      body: "Already syncing Lockra on other devices? Join with an invitation, the sync key, or the local network pairing code a computer shows, and this computer gets the same accounts.",
       open: "Join sync…",
     },
   },
@@ -612,6 +612,10 @@ export const en: Messages = {
       joinTitle: "Join an existing sync",
       joinBody:
         "Scan or paste another device's invitation; with no other device, recover with the storage settings and the sync key.",
+      lanTitle: "Sync over the local network",
+      lanBody:
+        "No storage needed: this computer becomes the hub, and the phones and computers on the same network sync once paired with it. A storage can be added later.",
+      lanSubmit: "Turn on local network sync",
     },
     storage: {
       kind: "Storage",
@@ -698,7 +702,10 @@ export const en: Messages = {
       fromInvite: "Invitation",
       fromKey: "Sync key",
       invite: "Invitation",
-      inviteHint: "From Settings › Sync › Invite another device, on a device of the space.",
+      inviteHint:
+        "From Settings › Sync › Invite another device, on a device of the space. To pair with a computer that syncs over the local network, paste the pairing code it shows.",
+      pairNewVault:
+        "There is no vault on this computer yet: pairing creates one under this master password.",
       syncKey: "Sync key",
       submit: "Join",
       newVault:
@@ -801,6 +808,93 @@ export const en: Messages = {
       title: "Turn off sync on this device?",
       body: "This device stops syncing and keeps its accounts. The sync space on the storage and the other devices are not affected, and you can join again later.",
       confirm: "Turn off sync",
+    },
+    lan: {
+      title: "Local network",
+      offBody:
+        "This computer becomes the hub: the devices on the same network pair with it and see each other's changes within seconds, with no storage needed.",
+      enable: "Turn on for this computer",
+      enablePrompt: "Enter the master password to sync over the local network.",
+      enablePromptBiometric: "Verify to sync over the local network, or enter the master password.",
+      enableReason: "sync over the local network",
+      enableSubmit: "Turn on",
+      connect: "Connect to another computer…",
+      connectBody:
+        "Paste the pairing code that computer shows under Pair a device, then enter this device's master password.",
+      connectSubmit: "Connect",
+      hubBody:
+        "This computer is the hub: the paired devices sync through it. While locked it still takes in their changes, and merges them at the unlock.",
+      clientBody: "Syncs through “{hub}” while on the same network.",
+      port: "Port {port}",
+      notServing:
+        "The local network service is not running, so the devices cannot reach this computer. The port may be taken or blocked by a firewall.",
+      firewall:
+        "The first time, Windows asks whether Lockra may use the network: allow private networks.",
+      peers: "Paired devices",
+      peersEmpty: "No device is paired yet.",
+      pair: "Pair a device…",
+      unpair: "Unpair",
+      unpairTitle: "Unpair “{name}”?",
+      unpairBody:
+        "It can no longer reach this computer, and its sync data here is deleted. The accounts it already has are not taken back.",
+      disable: "Stop syncing over the local network",
+      disableTitle: "Stop syncing over the local network?",
+      disableHub:
+        "This computer stops being the hub, and the paired devices have to pair again. Syncing through the storage goes on.",
+      disableHubOnly:
+        "This device stops syncing and keeps its accounts. The paired devices have to pair again.",
+      disableClient:
+        "This device stops syncing through “{hub}”. Syncing through the storage goes on.",
+      disableClientOnly:
+        "This device stops syncing and keeps its accounts. You can pair again later.",
+      offer: {
+        title: "Pair a device",
+        prompt: "Enter the master password to show the pairing code.",
+        promptBiometric: "Verify to show the pairing code, or enter the master password.",
+        reason: "show the pairing code",
+        submit: "Show pairing code",
+        body: "On a phone, scan the QR code with Lockra; on another computer, paste the pairing code below under Settings › Sync. When it asks to join, its check code shows here.",
+        text: "Pairing code",
+        warning:
+          "The pairing code works once. Until you allow the request, the device gets nothing of the sync space.",
+        hideIn: "The pairing code lapses in {s} s",
+      },
+      request: {
+        title: "“{name}” asks to join",
+        body: "Check that the other screen shows this same code:",
+        hint: "If the codes differ, refuse: another device may be using this pairing code.",
+        approve: "Allow",
+        refuse: "Refuse",
+      },
+      joining: {
+        title: "Waiting for “{hub}”",
+        body: "On that computer, check the code and allow this device:",
+      },
+      platform: {
+        windows: "Windows",
+        macos: "macOS",
+        linux: "Linux",
+        android: "Android",
+      },
+    },
+    transports: {
+      lan: "Local network",
+      cloud: "Storage",
+    },
+    addStorage: {
+      title: "Add a storage",
+      body: "Sync through your own S3-compatible bucket or WebDAV folder when away from this network.",
+      open: "Add a storage…",
+      fromStorage: "Storage settings",
+      fromInvite: "Invitation",
+      inviteHint: "When a device of the space already uses a storage, paste its invitation.",
+      submit: "Add",
+    },
+    removeStorage: {
+      open: "Remove storage",
+      title: "Remove the storage?",
+      body: "This device then syncs over the local network only. The sync space on the storage and the other devices are not affected.",
+      confirm: "Remove",
     },
     platformDevice: {
       windows: "Windows PC",

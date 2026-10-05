@@ -713,7 +713,11 @@ describe("MockBackend", () => {
     expect(
       await errorCode(backend.dispatch({ command: "sync_lan_enable", device_name: "Desk" })),
     ).toBe("biometric_unavailable");
-    await backend.dispatch({ command: "sync_lan_enable", password: MOCK_PASSWORD, device_name: "" });
+    await backend.dispatch({
+      command: "sync_lan_enable",
+      password: MOCK_PASSWORD,
+      device_name: "",
+    });
     let space = await spaceOf(backend);
     expect(space.transports.map((t) => t.kind)).toEqual(["lan", "cloud"]);
     expect(space.storage).not.toBeNull();

@@ -32,11 +32,14 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useDispatch, useSubmit } from "../../app/dispatch";
+import { AddStorageSection } from "../../features/sync/AddStorage";
 import { JoinForm } from "../../features/sync/JoinForm";
+import { LanCreateForm, LanSection } from "../../features/sync/Lan";
 import { InviteDialog, SyncKeyDialog, useSecretAnswer } from "../../features/sync/SecretDialogs";
 
-/** Settings › Sync: set up a space on storage of the user's own or join one; with a space, its
- *  status, storage, devices, invitations, and turning it off here. */
+/** Settings › Sync: set up a space on storage of the user's own or on the local network, or join
+ *  one; with a space, its status, storage, devices, the local network, invitations, and turning it
+ *  off here. */
 export function Sync() {
   const t = useT();
   const { sync } = useUiState();
@@ -65,7 +68,7 @@ export function Sync() {
 
 function SyncOff({ onCreated }: { onCreated: (syncKey: string, password: string) => void }) {
   const t = useT();
-  const [open, setOpen] = useState<"create" | "join" | null>(null);
+  const [open, setOpen] = useState<"create" | "lan" | "join" | null>(null);
   return (
     <>
       <SettingsSection
@@ -82,6 +85,22 @@ function SyncOff({ onCreated }: { onCreated: (syncKey: string, password: string)
             onClick={() => setOpen("create")}
             data-testid="sync-create-open">
             {t("sync.off.createSubmit")}
+          </Button>
+        )}
+      </SettingsSection>
+      <SettingsSection
+        title={t("sync.off.lanTitle")}
+        description={t("sync.off.lanBody")}
+        data-testid="sync-lan-section">
+        {open === "lan" ? (
+          <LanCreateForm onCancel={() => setOpen(null)} />
+        ) : (
+          <Button
+            icon="monitor"
+            className="self-start"
+            onClick={() => setOpen("lan")}
+            data-testid="sync-lan-open">
+            {t("sync.off.lanSubmit")}
           </Button>
         )}
       </SettingsSection>
@@ -177,6 +196,26 @@ function CreateForm({
   );
 }
 
+/** Each storage's own status (a space with more than one). */
+function TransportLines({ space, now }: { space: SyncSpaceView; now: number }) {
+  const t = useT();
+  return (
+    <ul className="flex flex-col gap-0.5">
+      {space.transports.map((transport) => {
+        const line = syncStatusLine(transport.status, t, now);
+        return (
+          <li key={transport.kind} className="flex items-center gap-2" data-testid="sync-transport">
+            <span>{t(`sync.transports.${transport.kind}`)}</span>
+            <LampText tone={line.tone} size="sm">
+              {line.text}
+            </LampText>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** A device's name, or the start of its tag when the space does not know it. */
 function deviceLabel(space: SyncSpaceView, tag: string): string {
   return space.devices.find((d) => d.tag === tag)?.name ?? `${tag.slice(0, 8)}…`;
@@ -199,6 +238,9 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
       <SettingsRows>
         <StatusRow
           label={t("sync.status.label")}
+          help={
+            space.transports.length > 1 ? <TransportLines space={space} now={now} /> : undefined
+          }
           data-testid="sync-status-row"
           note={
             space.keyring_pending ? (
@@ -220,7 +262,9 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
             </Button>
           </div>
         </StatusRow>
-        {space.storage !== null && <StorageRow storage={space.storage} />}
+        {space.storage !== null && (
+          <StorageRow storage={space.storage} removable={space.lan !== null} />
+        )}
         <DeviceNameRow space={space} />
       </SettingsRows>
       {space.rolled_back.length > 0 && (
@@ -288,10 +332,15 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
           ))}
         </ul>
       </SettingsSection>
+      <LanSection space={space} />
+      {space.storage === null && <AddStorageSection />}
       <div className="flex flex-wrap gap-2">
-        <Button icon="qr" onClick={() => setDialog("invite")} data-testid="sync-invite-open">
-          {t("sync.invite.open")}
-        </Button>
+        {/* An invitation carries the storage: a space on the LAN alone pairs instead. */}
+        {space.storage !== null && (
+          <Button icon="qr" onClick={() => setDialog("invite")} data-testid="sync-invite-open">
+            {t("sync.invite.open")}
+          </Button>
+        )}
         <Button
           variant="text-danger"
           onClick={() => setDialog("disable")}
@@ -352,9 +401,13 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
   );
 }
 
-function StorageRow({ storage }: { storage: StorageView }) {
+/** The storage of the user's own; beside the LAN, it can be taken off (the space goes on over the
+ *  LAN). */
+function StorageRow({ storage, removable }: { storage: StorageView; removable: boolean }) {
   const t = useT();
   const { backend } = useBackend();
+  const dispatch = useDispatch();
+  const [removing, setRemoving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(() => storageFormFrom(storage));
   const [password, setPassword] = useState("");
@@ -379,19 +432,55 @@ function StorageRow({ storage }: { storage: StorageView }) {
             data-testid="sync-storage">{`${t(`sync.storage.${storage.kind}`)} · ${storageSummary(storage)}`}</span>
         }>
         {!editing && (
-          <Button
-            size="sm"
-            variant="ghost"
-            icon="edit"
-            onClick={() => {
-              setForm(storageFormFrom(storage));
-              setEditing(true);
-            }}
-            data-testid="sync-storage-edit">
-            {t("sync.storageEdit")}
-          </Button>
+          <div className="flex flex-wrap justify-end gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              icon="edit"
+              onClick={() => {
+                setForm(storageFormFrom(storage));
+                setEditing(true);
+              }}
+              data-testid="sync-storage-edit">
+              {t("sync.storageEdit")}
+            </Button>
+            {removable && (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="trash"
+                onClick={() => setRemoving(true)}
+                data-testid="sync-storage-remove">
+                {t("sync.removeStorage.open")}
+              </Button>
+            )}
+          </div>
         )}
       </StatusRow>
+      {removing && (
+        <Dialog
+          open
+          title={t("sync.removeStorage.title")}
+          onClose={() => setRemoving(false)}
+          actions={
+            <>
+              <Button variant="ghost" onClick={() => setRemoving(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setRemoving(false);
+                  void dispatch({ command: "sync_remove_storage" });
+                }}
+                data-autofocus>
+                {t("sync.removeStorage.confirm")}
+              </Button>
+            </>
+          }>
+          <p>{t("sync.removeStorage.body")}</p>
+        </Dialog>
+      )}
       {editing && (
         <form
           onSubmit={(e) => void onSubmit(e)}
