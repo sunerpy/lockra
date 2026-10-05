@@ -45,6 +45,7 @@
       "hide_codes": false,
       "locale": "system",
       "reduce_motion": false,
+      "run_in_background": false,
       "sort": "name",
       "theme": "light"
     },
@@ -112,6 +113,7 @@
       "hide_codes": false,
       "locale": "system",
       "reduce_motion": false,
+      "run_in_background": false,
       "sort": "name",
       "theme": "light"
     },
@@ -172,6 +174,7 @@
       "hide_codes": false,
       "locale": "system",
       "reduce_motion": false,
+      "run_in_background": false,
       "sort": "name",
       "theme": "light"
     },
@@ -516,6 +519,7 @@
       "hide_codes": true,
       "locale": "zh-cn",
       "reduce_motion": true,
+      "run_in_background": true,
       "sort": "recent",
       "theme": "dark"
     },

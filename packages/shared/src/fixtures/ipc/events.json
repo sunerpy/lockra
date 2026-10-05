@@ -40,7 +40,8 @@
         },
         "auto_update": false,
         "default_unlock": "biometric",
-        "biometric_offer": true
+        "biometric_offer": true,
+        "run_in_background": false
       },
       "import": null,
       "backup": {

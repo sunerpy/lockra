@@ -8,7 +8,7 @@ import {
   sampleEntries,
 } from "@lockra/shared/mock";
 import type { CommandName, CommandOf, ResultOf } from "@lockra/shared";
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import { ready, renderApp } from "../../test/render";
 
 async function openSync(user: ReturnType<typeof renderApp>["user"]) {
@@ -407,6 +407,10 @@ describe("Settings › Sync", () => {
     expect(pane.queryByTestId("sync-invite-open")).not.toBeInTheDocument();
     expect(pane.getByTestId("sync-add-storage")).toBeInTheDocument();
     expect(pane.getByTestId("sync-key-reminder")).toBeInTheDocument();
+    // Linux has no tray: closing the window goes on quitting.
+    expect(pane.queryByTestId("sync-lan-background")).not.toBeInTheDocument();
+    expect((await backend.getState()).settings.run_in_background).toBe(false);
+    expect(backend.tray).toBeNull();
 
     // The pairing code, once the user proved to be here, as a secret view.
     await user.click(lan.getByTestId("sync-lan-pair"));
@@ -570,5 +574,33 @@ describe("Settings › Sync", () => {
     ).toBeInTheDocument();
     await user.click(stop.getByRole("button", { name: "停止局域网同步" }));
     expect(await pane.findByTestId("sync-lan-enable")).toBeInTheDocument();
+  });
+
+  it("a hub on Windows keeps running in the tray after the window closes, until switched off", async () => {
+    const { user, backend } = renderApp({ mock: { lan: true, platform: "windows" } });
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-lan-open"));
+    const form = within(pane.getByTestId("sync-lan-create"));
+    expect(
+      form.getByText("Windows 第一次开启时会询问是否允许 Lockra 访问网络，请允许专用网络。"),
+    ).toBeInTheDocument();
+    await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "开启局域网同步" }));
+    const background = within(await pane.findByTestId("sync-lan-background"));
+    const toggle = background.getByRole("switch", { name: "关闭窗口后在后台运行" });
+    // On with the hub, and the tray with it, in the app's language.
+    await waitFor(() => expect(toggle).toBeChecked());
+    await waitFor(() =>
+      expect(backend.tray).toEqual({
+        open: "打开 Lockra",
+        lock: "锁定",
+        quit: "退出 Lockra",
+        tooltip: "Lockra 正在后台运行",
+      }),
+    );
+    await user.click(toggle);
+    await waitFor(() => expect(backend.tray).toBeNull());
+    expect((await backend.getState()).settings.run_in_background).toBe(false);
   });
 });

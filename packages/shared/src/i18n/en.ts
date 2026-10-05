@@ -112,6 +112,12 @@ export const en: Messages = {
     },
     footer: { palette: "Commands", add: "Add", lock: "Lock", settings: "Settings" },
     notFound: "Page not found",
+    tray: {
+      open: "Open Lockra",
+      lock: "Lock",
+      quit: "Quit Lockra",
+      tooltip: "Lockra is running in the background",
+    },
   },
   mobile: {
     emptyBody:
@@ -842,6 +848,9 @@ export const en: Messages = {
         "The local network service is not running, so the devices cannot reach this computer. The port may be taken or blocked by a firewall.",
       firewall:
         "The first time, Windows asks whether Lockra may use the network: allow private networks.",
+      background: "Keep running after the window closes",
+      backgroundHint:
+        "Closing the window leaves Lockra in the system tray, still taking in the paired devices' changes. To quit, choose Quit Lockra in the tray icon's menu.",
       peers: "Paired devices",
       peersEmpty: "No device is paired yet.",
       pair: "Pair a device…",

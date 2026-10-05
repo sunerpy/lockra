@@ -73,6 +73,8 @@ export const settingsSchema = z.object({
   default_unlock: defaultUnlockSchema,
   /** Offer the phone's fingerprint once after a master-password unlock, until declined. */
   biometric_offer: z.boolean(),
+  /** Closing the window leaves Lockra in the system tray (Windows, macOS): a LAN hub goes on. */
+  run_in_background: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -95,6 +97,7 @@ export function defaultSettings(): Settings {
     auto_update: false,
     default_unlock: "biometric",
     biometric_offer: true,
+    run_in_background: false,
   };
 }
 
@@ -836,6 +839,7 @@ export const SHELL_COMMAND_NAMES = [
   "restore_pick",
   "export_otpauth_file",
   "sync_key_save",
+  "tray_set",
 ] as const;
 
 /** The phone shell's own Tauri commands (lockra-bridge `PHONE_COMMANDS`). */

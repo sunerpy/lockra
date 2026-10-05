@@ -179,6 +179,7 @@
         "hide_codes": true,
         "locale": "zh-cn",
         "reduce_motion": true,
+        "run_in_background": true,
         "sort": "recent",
         "theme": "dark"
       }
@@ -320,6 +321,7 @@
     "backup_pick_dir",
     "restore_pick",
     "export_otpauth_file",
-    "sync_key_save"
+    "sync_key_save",
+    "tray_set"
   ]
 }

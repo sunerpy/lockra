@@ -20,6 +20,7 @@ pub mod keychain_handoff;
 pub mod macos_keychain;
 pub mod per_build;
 pub mod sync;
+pub mod tray;
 pub mod updater;
 
 use std::path::PathBuf;
@@ -52,7 +53,7 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 9] = [
+pub const COMMANDS: [&str; 10] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -62,6 +63,7 @@ pub const COMMANDS: [&str; 9] = [
     "restore_pick",
     "export_otpauth_file",
     "sync_key_save",
+    "tray_set",
 ];
 
 /// `true` only when a debug build was explicitly asked for the in-memory keychain.
@@ -309,6 +311,31 @@ async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core) {
     }
 }
 
+/// Show the system tray with these words, or take it away (`labels` null): with it, closing the
+/// window hides it instead of quitting. `false` where this build has no tray (Linux).
+#[tauri::command]
+async fn tray_set<R: Runtime>(app: AppHandle<R>, labels: Option<tray::TrayLabels>) -> Result<bool, CoreError> {
+    tray::set(&app, labels).map_err(|error| {
+        tracing::warn!(%error, "the tray could not be set");
+        CoreError::from(ErrorCode::Internal)
+    })
+}
+
+/// With the tray there, closing the window hides it: Lockra goes on running (a LAN hub keeps
+/// taking its devices' changes) until the tray's menu quits.
+fn watch_close<R: Runtime>(window: &WebviewWindow<R>) {
+    let app = window.app_handle().clone();
+    let hidden = window.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event
+            && tray::holds(&app)
+        {
+            api.prevent_close();
+            let _ = hidden.hide();
+        }
+    });
+}
+
 /// Dropped files go straight to the import; the webview only hears that a drag is over it.
 fn watch_drops<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
     let app = window.app_handle().clone();
@@ -349,17 +376,7 @@ fn watch_focus<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
 
 /// The app with every command, the core and its wiring; `run` adds the real context.
 pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) -> tauri::Builder<R> {
-    let builder = if options.single_instance {
-        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }))
-    } else {
-        builder
-    };
+    let builder = if options.single_instance { builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| tray::show_main(app))) } else { builder };
     let builder = if options.plugin_updates { builder.plugin(tauri_plugin_updater::Builder::new().build()) } else { builder };
     builder
         .plugin(tauri_plugin_dialog::init())
@@ -372,7 +389,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             backup_pick_dir,
             restore_pick,
             export_otpauth_file,
-            sync_key_save
+            sync_key_save,
+            tray_set
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {
@@ -401,6 +419,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 watch_focus(&window, core.clone());
                 watch_drops(&window, core);
+                watch_close(&window);
                 // Declared invisible so it never flashes white before the theme is applied.
                 let _ = window.show();
                 let _ = window.set_focus();

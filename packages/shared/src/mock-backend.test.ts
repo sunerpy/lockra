@@ -795,6 +795,19 @@ describe("MockBackend", () => {
     });
   });
 
+  it("keeps a tray where the platform has one", async () => {
+    const labels = { open: "Open Lockra", lock: "Lock", quit: "Quit", tooltip: "Lockra" };
+    const windows = new MockBackend({ platform: "windows" });
+    expect(await windows.setTray(labels)).toBe(true);
+    expect(windows.tray).toEqual(labels);
+    expect(await windows.setTray(null)).toBe(true);
+    expect(windows.tray).toBeNull();
+    // Linux has no tray: closing the window quits there.
+    const linux = new MockBackend({ platform: "linux" });
+    expect(await linux.setTray(labels)).toBe(false);
+    expect(linux.tray).toBeNull();
+  });
+
   it("starts with a space when told to", async () => {
     const backend = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace() });
     expect((await backend.getState()).sync.space?.devices).toHaveLength(2);

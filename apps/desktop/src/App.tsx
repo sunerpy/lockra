@@ -1,5 +1,12 @@
 import { type Backend, resolveLocale } from "@lockra/shared";
-import { BackendProvider, I18nProvider, ToastViewport, useBackend, useToasts } from "@lockra/ui";
+import {
+  BackendProvider,
+  I18nProvider,
+  ToastViewport,
+  useBackend,
+  useT,
+  useToasts,
+} from "@lockra/ui";
 import { type ComponentType, Suspense, lazy, useEffect } from "react";
 import { useAppearance } from "./app/appearance";
 import { ToasterProvider, useToaster } from "./app/notices";
@@ -33,6 +40,7 @@ function Root() {
     <I18nProvider locale={locale} documentLang>
       <ToasterProvider store={toasts}>
         <NoticeBridge />
+        <TrayBridge />
         {showcase && Showcase ? (
           <Suspense fallback={null}>
             <Showcase />
@@ -44,6 +52,26 @@ function Root() {
       </ToasterProvider>
     </I18nProvider>
   );
+}
+
+/** The system tray while Lockra keeps running in the background (Windows, macOS), its menu in the
+ *  app's language; none otherwise, and closing the window quits. */
+function TrayBridge() {
+  const { backend, state } = useBackend();
+  const t = useT();
+  const ready = state !== undefined && state !== null;
+  const on = ready && state.settings.run_in_background && state.platform !== "linux";
+  const [open, lock, quit, tooltip] = [
+    t("shell.tray.open"),
+    t("shell.tray.lock"),
+    t("shell.tray.quit"),
+    t("shell.tray.tooltip"),
+  ];
+  useEffect(() => {
+    if (!ready) return;
+    void backend.setTray(on ? { open, lock, quit, tooltip } : null).catch(() => undefined);
+  }, [backend, ready, on, open, lock, quit, tooltip]);
+  return null;
 }
 
 /** Core notices become toasts (inside the i18n tree, so they are translated). */

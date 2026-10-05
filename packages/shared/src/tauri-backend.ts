@@ -14,6 +14,7 @@ import {
   type SaveSyncKey,
   type ScanJoin,
   type ScanPair,
+  type TrayLabels,
   type ScanTexts,
   type Unsubscribe,
 } from "./backend";
@@ -148,6 +149,10 @@ export class TauriBackend implements Backend {
         deviceName: pair.deviceName,
       }),
     );
+  }
+
+  async setTray(labels: TrayLabels | null): Promise<boolean> {
+    return z.boolean().parse(await this.call("tray_set", { labels }));
   }
 
   async saveSyncKey(args: SaveSyncKey): Promise<boolean> {

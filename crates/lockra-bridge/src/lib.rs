@@ -340,9 +340,9 @@ pub const COMMANDS: [&str; 53] = [
     "sync_remove_storage",
 ];
 
-/// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
-/// open a native file dialog first.
-pub const SHELL_COMMANDS: [&str; 9] = [
+/// The Tauri commands of the desktop shell: the dispatcher, the code stream, the actions that open
+/// a native file dialog first, and the system tray's words.
+pub const SHELL_COMMANDS: [&str; 10] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -352,6 +352,7 @@ pub const SHELL_COMMANDS: [&str; 9] = [
     "restore_pick",
     "export_otpauth_file",
     "sync_key_save",
+    "tray_set",
 ];
 
 /// The Tauri commands of the phone shell: the dispatcher, the code stream, and the actions that

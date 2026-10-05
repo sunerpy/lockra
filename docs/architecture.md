@@ -65,7 +65,8 @@ automatic update, the next sync run — sleeps until the earliest deadline, and 
 window gains or loses the focus (`Core::set_foreground`): in front, sync runs every minute
 rather than every five. A space may sync with two storages, the user's own and a LAN hub's copy
 (`SyncTransport::open_hub_store` on the hub, `open_lan_client` on its clients, and `lan()` for
-the hub's server and pairing; the desktop shell has them, the phone not yet): each has its own state in the vault and its own runtime (when it is due, its last
+the hub's server and pairing; the desktop shell has them all, the phone a hub's client and its
+pairing request): each has its own state in the vault and its own runtime (when it is due, its last
 result), a run takes the due ones in turn, the LAN first, and a write's number is above every
 number this device gave on any of them. Core tests run on tokio's paused clock with the fakes.
 
@@ -93,6 +94,10 @@ the main thread and freeze the window while Argon2 works):
   no variant carries a path.
 - `import_pick_files`, `backup_save`, `backup_pick_dir`, `restore_pick`, `export_otpauth_file` —
   the native dialogs, run by Rust; the webview gets a file name or `false`, never a path.
+- `tray_set { labels }` — the system tray on Windows and macOS, with its menu's words in the app's
+  language (Open, Lock, Quit), or none (`null`). The webview sets it while
+  `Settings.run_in_background` is on; with the tray there, closing the window hides it and a LAN
+  hub goes on (`src/tray.rs`). Linux has no tray: closing quits.
 - `codes_subscribe { onFrame }` / `codes_unsubscribe` — code frames through a `Channel` created by
   the webview. The core keeps one subscription; a new one replaces it. The first frame arrives at
   once (empty while locked); then one at each code window's end.

@@ -127,7 +127,7 @@ Until you allow it, the device gets nothing of the sync space. A paired device d
 
 ### When the hub is locked or away
 
-Lockra has to keep running on the hub. While locked, the hub still takes in the paired devices' changes and merges them at the unlock. When the hub is off or on another network, the paired devices show their local network sync as offline and try again later; those with a storage go on syncing through it.
+Lockra has to keep running on the hub. On Windows and macOS, once local network sync is on, closing the window leaves Lockra in the system tray (**Keep running after the window closes**, which **Local network** turns off); to quit, choose **Quit Lockra** in the tray icon's menu. On Linux, closing the window quits. While locked, the hub still takes in the paired devices' changes and merges them at the unlock. When the hub is off or on another network, the paired devices show their local network sync as offline and try again later; those with a storage go on syncing through it.
 
 ### Managing the pairing
 

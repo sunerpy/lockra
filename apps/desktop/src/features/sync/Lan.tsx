@@ -20,10 +20,13 @@ import {
   Input,
   PasswordField,
   SettingsSection,
+  StatusRow,
   Textarea,
+  Toggle,
   useBackend,
   useT,
   useUiState,
+  useUpdateSettings,
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useDispatch, useSubmit } from "../../app/dispatch";
@@ -31,6 +34,16 @@ import { PresenceDialog } from "./Presence";
 import { LanOfferDialog } from "./SecretDialogs";
 
 type HubView = Extract<LanView, { role: "hub" }>;
+
+/** Turning the hub on also keeps Lockra running when its window closes, where a tray can hold it:
+ *  the paired devices' changes go on arriving (the switch in the hub's section turns it off). */
+function useKeepRunning(): () => void {
+  const { platform } = useUiState();
+  const update = useUpdateSettings();
+  return () => {
+    if (platform !== "linux") update({ run_in_background: true });
+  };
+}
 
 /** The failures about the password typed; the others are about the pairing code or the hub. */
 export function passwordFailure(code: ErrorCode): boolean {
@@ -68,13 +81,15 @@ export function LanCreateForm({ onCancel }: { onCancel: () => void }) {
   const [deviceName, setDeviceName] = useState(() => t(`sync.platformDevice.${platform}`));
   const [password, setPassword] = useState("");
   const submit = useSubmit();
+  const keepRunning = useKeepRunning();
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (password === "") return;
-    await submit.run(() =>
+    const done = await submit.run(() =>
       backend.dispatch({ command: "sync_lan_enable", password, device_name: deviceName }),
     );
     setPassword("");
+    if (done !== undefined) keepRunning();
   };
   return (
     <form
@@ -269,7 +284,8 @@ function PairRequestDialog({
 function LanHub({ space, hub }: { space: SyncSpaceView; hub: HubView }) {
   const t = useT();
   const { backend } = useBackend();
-  const { platform } = useUiState();
+  const { platform, settings } = useUiState();
+  const update = useUpdateSettings();
   const dispatch = useDispatch();
   const answering = useSubmit();
   const [dialog, setDialog] = useState<"offer" | "disable" | { unpair: string } | null>(null);
@@ -325,6 +341,18 @@ function LanHub({ space, hub }: { space: SyncSpaceView; hub: HubView }) {
           </ul>
         )}
       </div>
+      {platform !== "linux" && (
+        <StatusRow
+          label={t("sync.lan.background")}
+          help={t("sync.lan.backgroundHint")}
+          data-testid="sync-lan-background">
+          <Toggle
+            checked={settings.run_in_background}
+            onChange={(run_in_background) => update({ run_in_background })}
+            ariaLabel={t("sync.lan.background")}
+          />
+        </StatusRow>
+      )}
       {platform === "windows" && (
         <p className="text-[12px] text-fg-subtle">{t("sync.lan.firewall")}</p>
       )}
@@ -406,6 +434,7 @@ function LanClient({ space, hubName }: { space: SyncSpaceView; hubName: string }
 function LanOff({ space }: { space: SyncSpaceView }) {
   const t = useT();
   const { backend } = useBackend();
+  const keepRunning = useKeepRunning();
   const [open, setOpen] = useState<"enable" | "connect" | null>(null);
   return (
     <SettingsSection
@@ -437,6 +466,7 @@ function LanOff({ space }: { space: SyncSpaceView }) {
           submitLabel={t("sync.lan.enableSubmit")}
           onConfirm={async (presence) => {
             await backend.dispatch({ command: "sync_lan_enable", ...presence });
+            keepRunning();
             setOpen(null);
           }}
           onClose={() => setOpen(null)}

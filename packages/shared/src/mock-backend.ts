@@ -12,6 +12,7 @@ import {
   type SaveSyncKey,
   type ScanJoin,
   type ScanPair,
+  type TrayLabels,
   type ScanTexts,
   type Unsubscribe,
 } from "./backend";
@@ -522,6 +523,15 @@ export class MockBackend implements Backend {
       join.deviceName,
       join.spacePassword,
     );
+    return true;
+  }
+
+  /** The tray's words while it shows (Windows and macOS have one), for tests. */
+  tray: TrayLabels | null = null;
+
+  async setTray(labels: TrayLabels | null): Promise<boolean> {
+    if (this.state.platform === "linux") return false;
+    this.tray = labels;
     return true;
   }
 

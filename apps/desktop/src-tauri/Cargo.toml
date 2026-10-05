@@ -65,6 +65,9 @@ tao = { version = "=0.35.3", default-features = false }
 # unsafe platform calls stay inside robius-authentication: the workspace still forbids unsafe code.
 [target.'cfg(any(target_os = "macos", windows))'.dependencies]
 robius-authentication = "=0.3.1"
+# The system tray, where closing the window can leave Lockra running (src/tray.rs). Not on Linux:
+# AppIndicator needs a library many systems lack.
+tauri = { version = "=2.11.6", features = ["tray-icon"] }
 
 # The keychain hand-over of a macOS update (src/handoff.rs): the verified update is expanded next
 # to the running build, as the updater itself does, with the same crates it uses.

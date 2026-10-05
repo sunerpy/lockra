@@ -125,6 +125,7 @@ describe("TauriBackend", () => {
       export_otpauth_file: "x.txt",
       sync_scan_join: true,
       sync_scan_pair: false,
+      tray_set: true,
       update_open_release: "https://github.com/sunerpy/lockra/releases/tag/v0.7.0",
     });
     const backend = new TauriBackend(f.transport);
@@ -141,6 +142,9 @@ describe("TauriBackend", () => {
     expect(await backend.scanPair({ prompt: "Point at the code", cancel: "Cancel" }, join)).toBe(
       false,
     );
+    const labels = { open: "Open Lockra", lock: "Lock", quit: "Quit", tooltip: "Lockra" };
+    expect(await backend.setTray(labels)).toBe(true);
+    expect(await backend.setTray(null)).toBe(true);
     expect(await backend.openRelease()).toBe(
       "https://github.com/sunerpy/lockra/releases/tag/v0.7.0",
     );
@@ -167,6 +171,8 @@ describe("TauriBackend", () => {
         "sync_scan_pair",
         { prompt: "Point at the code", cancel: "Cancel", password: "pw", deviceName: "Phone" },
       ],
+      ["tray_set", { labels }],
+      ["tray_set", { labels: null }],
       ["update_open_release", undefined],
     ]);
   });

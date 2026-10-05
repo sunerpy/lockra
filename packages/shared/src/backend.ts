@@ -59,6 +59,9 @@ export interface Backend {
   pickRestoreFile(): Promise<boolean>;
   /** Native save dialog → a plain otpauth list. The file name, or `null` when cancelled. */
   exportOtpauthFile(entryIds: readonly string[], password: string): Promise<string | null>;
+  /** The desktop's system tray, with these words, or none (`null`): with it, closing the window
+   *  leaves Lockra running there. `false` where the build has no tray (Linux). */
+  setTray(labels: TrayLabels | null): Promise<boolean>;
   /** The phone's browser → the page of the release an update check found (else the newest
    *  release's), the address named by the shell. `null` once it opened, else the address, to
    *  show (no browser opened it). */
@@ -81,6 +84,14 @@ export interface ScanJoin {
   deviceName: string;
   /** The master password of the space's devices, when it is not `password`. */
   spacePassword?: string;
+}
+
+/** The words of the system tray's menu, in the app's language. */
+export interface TrayLabels {
+  open: string;
+  lock: string;
+  quit: string;
+  tooltip: string;
 }
 
 /** What pairing from a scanned pairing code takes besides it, as `sync_lan_join`. */

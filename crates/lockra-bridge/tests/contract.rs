@@ -124,6 +124,7 @@ fn settings() -> Settings {
         auto_update: true,
         default_unlock: DefaultUnlock::Password,
         biometric_offer: false,
+        run_in_background: true,
     }
 }
 

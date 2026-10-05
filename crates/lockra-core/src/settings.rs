@@ -156,6 +156,10 @@ pub struct Settings {
     /// off on this device (the phone's fingerprint). 「暂不」, or the switch turned off when the
     /// vault was made, turns the offer off; the check stays in Settings › Security.
     pub biometric_offer: bool,
+    /// Closing the window leaves Lockra running in the system tray (Windows and macOS), so a LAN
+    /// hub goes on taking its devices' changes; the tray's menu quits. Off: closing quits, as
+    /// before the setting, so a file without it says no.
+    pub run_in_background: bool,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -188,6 +192,7 @@ impl Default for Settings {
             auto_update: false,
             default_unlock: DefaultUnlock::default(),
             biometric_offer: true,
+            run_in_background: false,
         }
     }
 }
@@ -376,6 +381,20 @@ mod tests {
         assert_eq!(json["auto_backup"]["keep"], 10);
         assert_eq!(json["auto_update"], false);
         assert!(json.get("auto_check_updates").is_none(), "written under its new name only");
+    }
+
+    #[test]
+    fn closing_the_window_quits_until_running_in_the_background_is_turned_on() {
+        assert!(!Settings::default().run_in_background);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        // A file from before the setting: closing goes on quitting.
+        fs::write(&path, r#"{"schema":2,"theme":"dark"}"#).unwrap();
+        let store = SettingsStore::new(dir.path());
+        assert!(!store.load().run_in_background);
+        store.save(&Settings { run_in_background: true, ..Settings::default() }).unwrap();
+        assert!(store.load().run_in_background);
+        assert!(fs::read_to_string(&path).unwrap().contains(r#""run_in_background": true"#));
     }
 
     #[test]

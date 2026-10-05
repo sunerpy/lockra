@@ -106,6 +106,12 @@ export const zhCN = {
     },
     footer: { palette: "命令", add: "添加", lock: "锁定", settings: "设置" },
     notFound: "页面不存在",
+    tray: {
+      open: "打开 Lockra",
+      lock: "锁定",
+      quit: "退出 Lockra",
+      tooltip: "Lockra 正在后台运行",
+    },
   },
   mobile: {
     emptyBody: "点按 + 添加：扫描二维码、读取截图、粘贴 otpauth 链接，或手动输入密钥。",
@@ -788,6 +794,9 @@ export const zhCN = {
       port: "端口 {port}",
       notServing: "局域网服务没有启动，设备暂时连不上这台电脑。端口可能被占用，或被防火墙阻止。",
       firewall: "Windows 第一次开启时会询问是否允许 Lockra 访问网络，请允许专用网络。",
+      background: "关闭窗口后在后台运行",
+      backgroundHint:
+        "关闭窗口后，Lockra 留在系统托盘中，继续接收配对设备的改动。要退出，请在托盘图标的菜单中选择「退出 Lockra」。",
       peers: "已配对的设备",
       peersEmpty: "还没有配对的设备。",
       pair: "配对新设备…",
