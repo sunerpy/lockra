@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.8.0](https://github.com/sunerpy/lockra/compare/v0.7.3...v0.8.0) (2026-10-05)
+
+
+### Features
+
+* **lan:** 新增 lockra-lan，局域网同步的主机副本、Noise 通道与配对 ([#62](https://github.com/sunerpy/lockra/issues/62)) ([43a8458](https://github.com/sunerpy/lockra/commit/43a8458d2b2dfe1a9682ff97ad6e75ab87baf46d))
+* **sync:** 局域网同步的 core 命令、状态与 IPC ([#64](https://github.com/sunerpy/lockra/issues/64)) ([b66d82c](https://github.com/sunerpy/lockra/commit/b66d82c743620e4483e3953ae92f4da12875a06a))
+* **sync:** 手机扫码与电脑配对，经局域网同步 ([#67](https://github.com/sunerpy/lockra/issues/67)) ([da2b3b2](https://github.com/sunerpy/lockra/commit/da2b3b2301ef3c6bba7c01c3e64a6a84e1b30564))
+* **sync:** 桌面壳用 lockra-lan 提供局域网主机与配对 ([#65](https://github.com/sunerpy/lockra/issues/65)) ([a706f6f](https://github.com/sunerpy/lockra/commit/a706f6fcceaa226488ca1fbc97e12ca10811a3cf))
+* **sync:** 桌面设置页的局域网同步：开启、配对与添加存储 ([#66](https://github.com/sunerpy/lockra/issues/66)) ([48f6022](https://github.com/sunerpy/lockra/commit/48f602246ec5f68ba79318cb35daa5e2a4ee3234))
+
 ## [0.7.3](https://github.com/sunerpy/lockra/compare/v0.7.2...v0.7.3) (2026-10-04)
 
 
