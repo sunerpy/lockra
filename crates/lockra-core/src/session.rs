@@ -2700,7 +2700,7 @@ fn uri_error(error: &uri::UriError) -> CoreError {
 }
 
 /// A canonical path as the user reads it: Windows' `\\?\C:\…` form without its prefix.
-fn plain_path(path: PathBuf) -> PathBuf {
+pub(crate) fn plain_path(path: PathBuf) -> PathBuf {
     match path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
         Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
         _ => path,

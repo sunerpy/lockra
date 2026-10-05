@@ -876,12 +876,12 @@ async fn an_accounts_colour_and_mark_reach_the_other_devices() {
 fn drive_folder(h: &Harness, name: &str) -> std::path::PathBuf {
     let folder = h.dir.path().join(name);
     std::fs::create_dir_all(&folder).unwrap();
-    std::fs::canonicalize(folder).unwrap()
+    kept(&folder)
 }
 
-/// `dir` as the core keeps a chosen folder.
+/// `dir` as the core keeps a chosen folder: every link resolved, Windows' `\\?\` left out.
 fn kept(dir: &std::path::Path) -> std::path::PathBuf {
-    std::fs::canonicalize(dir).unwrap()
+    crate::session::plain_path(std::fs::canonicalize(dir).unwrap())
 }
 
 /// What the interface sends for "the folder chosen": no path.
@@ -938,8 +938,7 @@ async fn a_folder_chosen_through_a_link_is_kept_as_the_folder_it_leads_to() {
     h.core.sync_choose_folder(&link).unwrap();
     h.core.sync_create(chosen_folder(), pw(MASTER), "Linux".into()).await.unwrap();
     settle().await;
-    let kept = std::fs::canonicalize(&disk).unwrap();
-    assert_eq!(space(&h).storage, StorageView::Folder { path: kept.display().to_string() });
+    assert_eq!(space(&h).storage, StorageView::Folder { path: kept(&disk).display().to_string() });
 }
 
 #[tokio::test(start_paused = true)]
