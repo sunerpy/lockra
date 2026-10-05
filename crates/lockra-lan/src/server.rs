@@ -14,7 +14,7 @@ use parking_lot::Mutex;
 use tokio::net::{TcpListener, TcpStream, UdpSocket};
 use tokio::sync::{Semaphore, mpsc, oneshot};
 use tokio::task::{JoinHandle, JoinSet};
-use tokio::time::timeout;
+use tokio::time::{Instant, timeout};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -43,8 +43,23 @@ pub struct HubConfig {
     pub peers: Vec<HubPeer>,
     /// The keys of devices the hub removed: they are told so.
     pub removed: Vec<Key>,
-    /// The key of the pairing offer that stands, if one does.
-    pub pairing: Option<Key>,
+    /// The pairing offer that stands, if one does.
+    pub pairing: Option<Pairing>,
+}
+
+/// A pairing offer the hub takes one handshake under, until it lapses.
+#[derive(Clone)]
+pub struct Pairing {
+    pub key: Key,
+    /// When it lapses, whether or not the core withdraws it.
+    pub until: Instant,
+}
+
+impl Pairing {
+    /// The offer stands and the hint was made with its key.
+    fn opens(&self, preamble: &Preamble) -> bool {
+        Instant::now() < self.until && preamble.made_with(&self.key)
+    }
 }
 
 /// What happened at the hub.
@@ -189,10 +204,10 @@ impl Shared {
                 .map(|peer| (peer.key.clone(), Who::Peer(peer.peer_id)))
                 .or_else(|| config.removed.iter().find(|key| preamble.made_with(key)).map(|key| (key.clone(), Who::Removed))),
             Kind::Pairing => {
-                if !config.pairing.as_ref().is_some_and(|key| preamble.made_with(key)) {
+                if !config.pairing.as_ref().is_some_and(|pairing| pairing.opens(preamble)) {
                     return None;
                 }
-                config.pairing.take().map(|key| (key, Who::Pairing))
+                config.pairing.take().map(|pairing| (pairing.key, Who::Pairing))
             }
         }
     }
@@ -354,7 +369,7 @@ fn probe_answer(shared: &Shared, bytes: &[u8], from: SocketAddr) -> Option<[u8; 
     let config = shared.config.lock();
     let key = match probe.kind {
         Kind::Session => config.peers.iter().take(MAX_PEERS).map(|peer| &peer.key).find(|key| probe.made_with(key)),
-        Kind::Pairing => config.pairing.as_ref().filter(|key| probe.made_with(key)),
+        Kind::Pairing => config.pairing.as_ref().filter(|pairing| pairing.opens(&probe)).map(|pairing| &pairing.key),
     }?;
     Some(probe.answer(key))
 }
@@ -392,7 +407,7 @@ mod tests {
             own_tag: "00".repeat(8),
             peers: vec![HubPeer { peer_id: Uuid::from_u128(3), key: Zeroizing::new([5; 32]), tag: None }],
             removed: vec![Zeroizing::new([6; 32])],
-            pairing: Some(Zeroizing::new([7; 32])),
+            pairing: Some(Pairing { key: Zeroizing::new([7; 32]), until: Instant::now() + PAIRING_TIMEOUT }),
         };
         let (sender, _events) = mpsc::unbounded_channel();
         let hub = HubServer::start(FolderStore::new(folder.path()), 0, config, sender).await.unwrap();

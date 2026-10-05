@@ -27,7 +27,7 @@ pub use client::{ClientConfig, HubClient, Joined, Joining, join};
 pub use discover::DISCOVERY_WAIT;
 pub use folder::FolderStore;
 pub use pair::{PAIR_PREFIX, PairOffer, PairTextError};
-pub use server::{HubConfig, HubEvent, HubPeer, HubServer};
+pub use server::{HubConfig, HubEvent, HubPeer, HubServer, Pairing};
 
 /// A device's key with a hub, or a pairing offer's.
 pub type Key = Zeroizing<[u8; 32]>;

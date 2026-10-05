@@ -6,7 +6,9 @@ use std::collections::BTreeSet;
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
-use lockra_lan::{ClientConfig, FolderStore, HubClient, HubConfig, HubEvent, HubPeer, HubServer, Joined, Key, MAX_CONNECTIONS, PairOffer, join};
+use lockra_lan::{
+    ClientConfig, FolderStore, HubClient, HubConfig, HubEvent, HubPeer, HubServer, Joined, Key, MAX_CONNECTIONS, PAIRING_TIMEOUT, PairOffer, Pairing, join,
+};
 use lockra_sync::{PutCondition, RemoteStore, Replica, Space, SpaceKeys, SyncError, SyncState, devices_dir, step};
 use tokio::sync::mpsc;
 use uuid::Uuid;
@@ -188,7 +190,12 @@ async fn a_key_the_hub_does_not_know_reaches_nothing_and_a_removed_device_is_tol
 #[tokio::test]
 async fn a_pairing_waits_for_the_user_and_the_offer_opens_one_handshake() {
     let mut hub = Hub::start(&[]).await;
-    hub.config.pairing = Some(key(7));
+    // An offer past its time opens nothing, whether or not it was withdrawn.
+    hub.config.pairing = Some(Pairing { key: key(7), until: tokio::time::Instant::now() });
+    hub.server.update(hub.config.clone());
+    let lapsed = PairOffer { hub_id: HUB_ID, hub_name: "Desktop".into(), addrs: vec![LOOPBACK], port: hub.server.port(), key: key(7), expires_at_ms: u64::MAX };
+    assert!(join(&lapsed, "Pixel 8", "android").await.is_err());
+    hub.config.pairing = Some(Pairing { key: key(7), until: tokio::time::Instant::now() + PAIRING_TIMEOUT });
     hub.server.update(hub.config.clone());
     let offer = PairOffer { hub_id: HUB_ID, hub_name: "Desktop".into(), addrs: vec![LOOPBACK], port: hub.server.port(), key: key(7), expires_at_ms: u64::MAX };
     let joining = join(&offer, "Pixel 8", "android").await.unwrap();
@@ -206,7 +213,7 @@ async fn a_pairing_waits_for_the_user_and_the_offer_opens_one_handshake() {
     assert_eq!(hub.events.recv().await.unwrap(), HubEvent::PairWelcomed);
 
     // Refused.
-    hub.config.pairing = Some(key(8));
+    hub.config.pairing = Some(Pairing { key: key(8), until: tokio::time::Instant::now() + PAIRING_TIMEOUT });
     hub.server.update(hub.config.clone());
     let offer = PairOffer { key: key(8), ..offer };
     let joining = join(&offer, "Laptop\u{7}", "linux; rm").await.unwrap();
