@@ -13,7 +13,6 @@ mod channel;
 mod client;
 mod discover;
 mod folder;
-mod pair;
 mod proto;
 mod server;
 mod wire;
@@ -26,7 +25,7 @@ pub use addr::local_address;
 pub use client::{ClientConfig, HubClient, Joined, Joining, join};
 pub use discover::DISCOVERY_WAIT;
 pub use folder::FolderStore;
-pub use pair::{PAIR_PREFIX, PairOffer, PairTextError};
+pub use lockra_sync::{PAIR_PREFIX, PairOffer, PairTextError};
 pub use server::{HubConfig, HubEvent, HubPeer, HubServer, Pairing};
 
 /// A device's key with a hub, or a pairing offer's.

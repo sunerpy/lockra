@@ -305,6 +305,15 @@ export const ERROR_CODES = [
   "sync_space_password_needed",
   "sync_data_corrupted",
   "sync_unsupported",
+  "sync_no_storage",
+  "sync_other_space",
+  "sync_lan_unavailable",
+  "sync_lan_unpaired",
+  "sync_lan_refused",
+  "sync_lan_full",
+  "sync_pairing_invalid",
+  "sync_pairing_expired",
+  "sync_pairing_refused",
   "internal",
 ] as const;
 export const errorCodeSchema = z.enum(ERROR_CODES);
@@ -421,11 +430,53 @@ export const syncStatusSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("syncing") }),
   z.object({ state: z.literal("synced"), at_ms: msSchema }),
   z.object({ state: z.literal("failed"), code: errorCodeSchema, at_ms: msSchema }),
+  /** Every storage out of reach: away from the LAN hub, which is no failure. */
+  z.object({ state: z.literal("offline"), at_ms: msSchema }),
 ]);
 export type SyncStatus = z.infer<typeof syncStatusSchema>;
 
+/** One storage of the space: the LAN hub's copy, or the storage of the user's own. */
+export const transportViewSchema = z.object({
+  kind: z.enum(["lan", "cloud"]),
+  status: syncStatusSchema,
+  last_ok_ms: msSchema.nullable(),
+});
+export type TransportView = z.infer<typeof transportViewSchema>;
+
+export const lanPeerViewSchema = z.object({
+  peer_id: idSchema,
+  name: z.string(),
+  platform: z.string(),
+  tag: z.string().nullable(),
+});
+export type LanPeerView = z.infer<typeof lanPeerViewSchema>;
+
+export const pairRequestViewSchema = z.object({
+  name: z.string(),
+  platform: z.string(),
+  code: z.string(),
+});
+export type PairRequestView = z.infer<typeof pairRequestViewSchema>;
+
+/** This device's part in a sync over the local network. */
+export const lanViewSchema = z.discriminatedUnion("role", [
+  z.object({
+    role: z.literal("hub"),
+    /** The server runs; it goes on taking the devices' writes while the vault is locked. */
+    serving: z.boolean(),
+    port: z.number().int(),
+    peers: z.array(lanPeerViewSchema),
+    /** A device asking to pair, waiting for the user's answer. */
+    request: pairRequestViewSchema.nullable(),
+    offer_until_ms: msSchema.nullable(),
+  }),
+  z.object({ role: z.literal("client"), hub_name: z.string() }),
+]);
+export type LanView = z.infer<typeof lanViewSchema>;
+
 export const syncSpaceViewSchema = z.object({
-  storage: storageViewSchema,
+  /** Absent when the space syncs over the LAN alone. */
+  storage: storageViewSchema.nullable(),
   device_name: z.string(),
   devices: z.array(syncDeviceViewSchema),
   status: syncStatusSchema,
@@ -435,12 +486,17 @@ export const syncSpaceViewSchema = z.object({
   keyring_pending: z.boolean(),
   /** The sync key was saved or written down; until then Settings › Sync reminds of it. */
   key_saved: z.boolean(),
+  /** Each storage and how its runs went, the LAN first. */
+  transports: z.array(transportViewSchema),
+  lan: lanViewSchema.nullable(),
 });
 export type SyncSpaceView = z.infer<typeof syncSpaceViewSchema>;
 
 export const syncViewSchema = z.object({
   /** The space this device belongs to; absent when sync is off and while locked. */
   space: syncSpaceViewSchema.nullable(),
+  /** This device asking a LAN hub to pair: the hub and the code to compare. */
+  joining: z.object({ hub_name: z.string(), code: z.string() }).nullable(),
 });
 export type SyncView = z.infer<typeof syncViewSchema>;
 
@@ -603,6 +659,21 @@ export const syncInviteSchema = z.object({
 });
 export type SyncInvite = z.infer<typeof syncInviteSchema>;
 
+/** The answer to `sync_lan_offer`: what a device scans or pastes to ask to pair (a secret). */
+export const lanOfferSchema = z.object({
+  text: z.string(),
+  svg: z.string(),
+  expires_at_ms: msSchema,
+});
+export type LanOffer = z.infer<typeof lanOfferSchema>;
+
+/** Where a storage added to a space on the LAN alone comes from. */
+export const storageSourceSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("storage"), storage: storageConfigSchema }),
+  z.object({ type: z.literal("invite"), text: z.string(), code: z.string().optional() }),
+]);
+export type StorageSource = z.infer<typeof storageSourceSchema>;
+
 export const coreErrorSchema = z.object({
   code: errorCodeSchema,
   retry_at_ms: msSchema.optional(),
@@ -718,6 +789,34 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("sync_remove_device"), tag: z.string() }),
   z.object({ command: z.literal("sync_now") }),
   z.object({ command: z.literal("sync_disable") }),
+  /** Without a space, a space on the LAN alone: the password is required then. */
+  z.object({
+    command: z.literal("sync_lan_enable"),
+    password: password.optional(),
+    reason: z.string().optional(),
+    device_name: z.string().optional(),
+  }),
+  z.object({
+    command: z.literal("sync_lan_offer"),
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
+  z.object({ command: z.literal("sync_lan_answer"), approve: z.boolean() }),
+  z.object({ command: z.literal("sync_lan_remove_peer"), peer_id: idSchema }),
+  z.object({ command: z.literal("sync_lan_disable") }),
+  z.object({
+    command: z.literal("sync_lan_join"),
+    text: z.string(),
+    password,
+    device_name: z.string(),
+  }),
+  z.object({
+    command: z.literal("sync_add_storage"),
+    source: storageSourceSchema,
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
+  z.object({ command: z.literal("sync_remove_storage") }),
 ]);
 export type UiCommand = z.infer<typeof uiCommandSchema>;
 export type CommandName = UiCommand["command"];
@@ -765,6 +864,7 @@ export interface CommandResults {
   export_page: ExportPage;
   sync_create: SyncCreated;
   sync_invite: SyncInvite;
+  sync_lan_offer: LanOffer;
 }
 export type ResultOf<C extends CommandName> = C extends keyof CommandResults
   ? CommandResults[C]
@@ -780,6 +880,7 @@ export const RESULT_SCHEMAS: { [C in keyof CommandResults]: z.ZodType<CommandRes
   export_page: exportPageSchema,
   sync_create: syncCreatedSchema,
   sync_invite: syncInviteSchema,
+  sync_lan_offer: lanOfferSchema,
 };
 
 export function hasResult(name: CommandName): name is keyof CommandResults {

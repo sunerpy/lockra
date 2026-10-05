@@ -1,4 +1,5 @@
 import {
+  type StorageView,
   type SyncSpaceView,
   emptyStorageForm,
   errorText,
@@ -219,7 +220,7 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
             </Button>
           </div>
         </StatusRow>
-        <StorageRow space={space} />
+        {space.storage !== null && <StorageRow storage={space.storage} />}
         <DeviceNameRow space={space} />
       </SettingsRows>
       {space.rolled_back.length > 0 && (
@@ -351,11 +352,11 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
   );
 }
 
-function StorageRow({ space }: { space: SyncSpaceView }) {
+function StorageRow({ storage }: { storage: StorageView }) {
   const t = useT();
   const { backend } = useBackend();
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState(() => storageFormFrom(space.storage));
+  const [form, setForm] = useState(() => storageFormFrom(storage));
   const [password, setPassword] = useState("");
   const submit = useSubmit();
   const ready = storageComplete(form) && password !== "";
@@ -375,7 +376,7 @@ function StorageRow({ space }: { space: SyncSpaceView }) {
         help={
           <span
             className="mono"
-            data-testid="sync-storage">{`${t(`sync.storage.${space.storage.kind}`)} · ${storageSummary(space.storage)}`}</span>
+            data-testid="sync-storage">{`${t(`sync.storage.${storage.kind}`)} · ${storageSummary(storage)}`}</span>
         }>
         {!editing && (
           <Button
@@ -383,7 +384,7 @@ function StorageRow({ space }: { space: SyncSpaceView }) {
             variant="ghost"
             icon="edit"
             onClick={() => {
-              setForm(storageFormFrom(space.storage));
+              setForm(storageFormFrom(storage));
               setEditing(true);
             }}
             data-testid="sync-storage-edit">

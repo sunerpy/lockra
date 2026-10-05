@@ -37,8 +37,8 @@ use crate::sync::{
 };
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
-    InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent,
-    UiState, UpdateStatus, UpdateView,
+    InstallMethod, JoinSource, LanPeerView, LanView, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView,
+    SyncStatus, SyncView, TransportKind, TransportView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
 
@@ -46,6 +46,10 @@ use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker,
 pub const VAULT_FILE: &str = "vault.lockra";
 /// This installation's id, beside the settings.
 const INSTALL_ID_FILE: &str = "install-id";
+
+mod lan;
+
+pub use lan::{LAN_OFFER_TIME, LAN_PORT, MAX_LAN_PEERS};
 /// The shortest master password accepted (characters).
 pub const MIN_PASSWORD_CHARS: usize = 8;
 /// The largest file an import or a restore reads.
@@ -142,6 +146,8 @@ struct State {
     sync: SyncRuntime,
     /// The app is in front (the desktop's window has the focus); a phone app is, while it runs.
     foreground: bool,
+    /// The LAN hub's server and pairing.
+    lan: lan::LanRuntime,
 }
 
 /// The sync as it runs; the vault keeps the space itself.
@@ -268,6 +274,7 @@ impl Core {
             update,
             sync: SyncRuntime::default(),
             foreground: true,
+            lan: lan::LanRuntime::default(),
         };
         let (events, _) = broadcast::channel(64);
         let shared = Arc::new(Shared { config, ports, settings_store, install_id, state: Mutex::new(state), events, wake: Notify::new() });
@@ -517,6 +524,7 @@ impl Core {
             sync_due(&mut st, Instant::now(), true);
         }
         self.changed();
+        self.lan_unlocked();
         Ok(())
     }
 
@@ -537,6 +545,7 @@ impl Core {
                 st.auto_backup_at = None;
                 // A run in progress finds the vault locked and keeps nothing.
                 st.sync.reset();
+                Self::lan_locking(&mut st, self.shared.ports.sync.lan());
             }
             was_unlocked
         };
@@ -1524,16 +1533,17 @@ impl Core {
             Ok((keys, sync_key, keyring))
         })
         .await?;
-        let mut space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
+        let mut space = SyncLocal::new(Some(storage), &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
         // The key is shown once now; Settings › Sync reminds of it until it is saved.
         space.key_saved = false;
-        let first =
-            Space { prefix: space.cloud.storage.prefix(), keys: &keys, device: number, device_name: &space.device_name, keyring: &keyring, seq_floor: 0 };
-        step(&*remote, &first, &mut space.cloud.sync.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
-        space.cloud.sync.keyring_written = true;
-        space.cloud.sync.last_ok_ms = Some(self.now_ms());
+        let name = space.device_name.clone();
+        let cloud = space.cloud.as_mut().ok_or(ErrorCode::Internal)?;
+        let first = Space { prefix: cloud.storage.prefix(), keys: &keys, device: number, device_name: &name, keyring: &keyring, seq_floor: 0 };
+        step(&*remote, &first, &mut cloud.sync.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
+        cloud.sync.keyring_written = true;
+        cloud.sync.last_ok_ms = Some(self.now_ms());
         let text = sync_key.to_text();
-        self.join_space(vault_id, space, remote)?;
+        self.join_space(vault_id, space, Some(remote))?;
         Ok(SyncCreated { sync_key: text.to_string() })
     }
 
@@ -1612,16 +1622,17 @@ impl Core {
             Ok((keys, sealed, sync_key, keyring))
         })
         .await?;
-        let space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
+        let space = SyncLocal::new(Some(storage), &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
         match (existing.as_ref().map(Sealed::vault_id), sealed) {
-            (Some(vault_id), _) => self.join_space(vault_id, space, remote),
-            (None, Some(sealed)) => self.create_joined(sealed, space, remote),
+            (Some(vault_id), _) => self.join_space(vault_id, space, Some(remote)),
+            (None, Some(sealed)) => self.create_joined(sealed, space, Some(remote)),
             (None, None) => Err(ErrorCode::Internal.into()),
         }
     }
 
-    /// Record `space` in the unlocked vault `vault_id`; the first run follows.
-    fn join_space(&self, vault_id: Uuid, space: SyncLocal, remote: Arc<dyn RemoteStore>) -> CoreResult<()> {
+    /// Record `space` in the unlocked vault `vault_id`, its cloud storage opened as `remote`; the
+    /// first run follows.
+    fn join_space(&self, vault_id: Uuid, space: SyncLocal, remote: Option<Arc<dyn RemoteStore>>) -> CoreResult<()> {
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
@@ -1631,10 +1642,10 @@ impl Core {
             if session.data.sync().is_some() {
                 return Err(ErrorCode::SyncAlreadyOn.into());
             }
-            let cache = (space.space_id, StoreKey::Cloud(space.cloud.storage.clone()), remote);
+            let cache = cloud_cache(&space, remote);
             session.data.local_mut().sync = Some(space);
             self.save(&mut st, false, |s| s.data.local_mut().sync = None)?;
-            st.sync.cloud.remote = Some(cache);
+            st.sync.cloud.remote = cache;
             sync_due(&mut st, Instant::now(), true);
         }
         self.changed();
@@ -1642,13 +1653,13 @@ impl Core {
     }
 
     /// A new vault, made by joining `space` where there was none.
-    fn create_joined(&self, sealed: Sealed, space: SyncLocal, remote: Arc<dyn RemoteStore>) -> CoreResult<()> {
+    fn create_joined(&self, sealed: Sealed, space: SyncLocal, remote: Option<Arc<dyn RemoteStore>>) -> CoreResult<()> {
         {
             let mut st = self.lock();
             if !matches!(st.phase, PhaseState::NoVault) {
                 return Err(ErrorCode::VaultExists.into());
             }
-            let cache = (space.space_id, StoreKey::Cloud(space.cloud.storage.clone()), remote);
+            let cache = cloud_cache(&space, remote);
             let mut data = VaultData::new();
             data.local_mut().sync = Some(space);
             let session = Session { sealed, data, import: None, exports: Vec::new() };
@@ -1657,7 +1668,7 @@ impl Core {
             st.device_slot = false;
             st.phase = PhaseState::Unlocked(Box::new(session));
             st.last_activity = Instant::now();
-            st.sync.cloud.remote = Some(cache);
+            st.sync.cloud.remote = cache;
             sync_due(&mut st, Instant::now(), true);
         }
         self.changed();
@@ -1673,7 +1684,7 @@ impl Core {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (sync.cloud.storage.clone(), sync.sync_key.clone())
+            (sync.cloud.as_ref().ok_or(ErrorCode::SyncNoStorage)?.storage.clone(), sync.sync_key.clone())
         };
         self.confirm_presence(password, reason).await?;
         let cost = self.shared.config.kdf;
@@ -1777,11 +1788,12 @@ impl Core {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
             let sync = session.data.sync_mut().filter(|s| s.space_id == space_id).ok_or(ErrorCode::SyncOff)?;
+            let cloud = sync.cloud.as_mut().ok_or(ErrorCode::SyncNoStorage)?;
             let cache = (space_id, StoreKey::Cloud(storage.clone()), remote);
-            let previous = std::mem::replace(&mut sync.cloud.storage, storage);
+            let previous = std::mem::replace(&mut cloud.storage, storage);
             self.save(&mut st, false, move |s| {
-                if let Some(sync) = s.data.sync_mut() {
-                    sync.cloud.storage = previous;
+                if let Some(cloud) = s.data.sync_mut().and_then(|sync| sync.cloud.as_mut()) {
+                    cloud.storage = previous;
                 }
             })?;
             let cloud = &mut st.sync.cloud;
@@ -1910,6 +1922,7 @@ impl Core {
             self.save(&mut st, false, move |s| s.data.local_mut().sync = Some(previous))?;
             st.sync.reset();
         }
+        self.serve_lan();
         self.changed();
         Ok(())
     }
@@ -2031,7 +2044,7 @@ impl Core {
             // written (the status says so already).
             Err(SyncError::Interrupted) => Some(SYNC_INTERVAL),
             Err(error) => {
-                runtime.status = SyncStatus::Failed { code: sync_error(error).code, at_ms: now_ms };
+                runtime.status = SyncStatus::Failed { code: store_error(store, error), at_ms: now_ms };
                 runtime.offline = store == Store::Lan && matches!(error, SyncError::Network(_));
                 match (store, error) {
                     (Store::Lan, SyncError::Network(_)) if foreground => Some(SYNC_INTERVAL_FOREGROUND),
@@ -2413,6 +2426,7 @@ impl Core {
             deadlines.extend(st.auto_backup_at);
             deadlines.extend(st.sync.lan.at);
             deadlines.extend(st.sync.cloud.at);
+            deadlines.extend(st.lan.offer.as_ref().map(|(_, until, _)| *until));
         }
         deadlines.extend(st.clipboard.as_ref().map(|(_, at)| *at));
         deadlines.extend(st.update.auto_at);
@@ -2473,6 +2487,7 @@ impl Core {
         if sync {
             self.start_sync();
         }
+        self.lan_offer_lapsed(now);
         if auto_update {
             // Installs at once only the version an earlier start downloaded. Skipped while the user
             // runs one, which answers the same question.
@@ -2642,6 +2657,11 @@ fn current_code(entry: &Entry, now_ms: u64) -> String {
     code_view(entry, now_ms).code
 }
 
+/// The cloud storage of `space` opened as `remote`, for the runtime to keep.
+fn cloud_cache(space: &SyncLocal, remote: Option<Arc<dyn RemoteStore>>) -> Option<(Uuid, StoreKey, Arc<dyn RemoteStore>)> {
+    Some((space.space_id, space.store_key(Store::Cloud)?, remote?))
+}
+
 /// The storages of the unlocked vault's space, in the order a run takes them.
 fn configured_stores(st: &State) -> Vec<Store> {
     match &st.phase {
@@ -2675,8 +2695,26 @@ fn schedule_sync(st: &mut State) {
     }
 }
 
+/// The code a storage's failure shows: the LAN hub's refusals are told apart from a storage's.
+fn store_error(store: Store, error: &SyncError) -> ErrorCode {
+    match (store, error) {
+        (Store::Lan, SyncError::WrongCredentials) => ErrorCode::SyncLanUnpaired,
+        (Store::Lan, SyncError::Denied) => ErrorCode::SyncLanRefused,
+        _ => sync_error(error).code,
+    }
+}
+
+/// A storage's status as its row shows it: out of reach of the LAN hub is offline, not failed.
+fn store_status(runtime: &StoreRuntime) -> SyncStatus {
+    match runtime.status {
+        SyncStatus::Failed { at_ms, .. } if runtime.offline => SyncStatus::Offline { at_ms },
+        ref status => status.clone(),
+    }
+}
+
 /// The space's status from its storages': a run in progress; else the latest failure (being
-/// away from the LAN hub is none); else the latest success; else nothing yet.
+/// away from the LAN hub is none); else the latest success; else offline when every storage is out
+/// of reach; else nothing yet.
 fn sync_status(st: &State, stores: &[Store]) -> SyncStatus {
     let runtimes: Vec<&StoreRuntime> = stores.iter().map(|store| st.sync.store(*store)).collect();
     if runtimes.iter().any(|r| r.status == SyncStatus::Syncing) {
@@ -2693,18 +2731,32 @@ fn sync_status(st: &State, stores: &[Store]) -> SyncStatus {
     if let Some((at_ms, code)) = failed {
         return SyncStatus::Failed { code, at_ms };
     }
-    runtimes
+    let synced = runtimes
         .iter()
         .filter_map(|r| match r.status {
             SyncStatus::Synced { at_ms } => Some(at_ms),
             _ => None,
         })
-        .max()
-        .map_or(SyncStatus::Idle, |at_ms| SyncStatus::Synced { at_ms })
+        .max();
+    if let Some(at_ms) = synced {
+        return SyncStatus::Synced { at_ms };
+    }
+    let offline = runtimes
+        .iter()
+        .map(|r| match (r.offline, &r.status) {
+            (true, SyncStatus::Failed { at_ms, .. }) => Some(*at_ms),
+            _ => None,
+        })
+        .collect::<Option<Vec<u64>>>();
+    match offline.and_then(|at| at.into_iter().max()) {
+        Some(at_ms) => SyncStatus::Offline { at_ms },
+        None => SyncStatus::Idle,
+    }
 }
 
 fn sync_view(st: &State) -> SyncView {
-    let PhaseState::Unlocked(session) = &st.phase else { return SyncView { space: None } };
+    let joining = st.lan.joining.clone();
+    let PhaseState::Unlocked(session) = &st.phase else { return SyncView { space: None, joining } };
     let space = session.data.sync().map(|sync| {
         let own_tag = sync.keys().map(|keys| keys.device_tag(session.data.device())).unwrap_or_default();
         let stores: Vec<Store> = sync.stores().collect();
@@ -2722,8 +2774,32 @@ fn sync_view(st: &State) -> SyncView {
                 }
             }
         }
+        let transports = stores
+            .iter()
+            .map(|store| TransportView {
+                kind: match store {
+                    Store::Lan => TransportKind::Lan,
+                    Store::Cloud => TransportKind::Cloud,
+                },
+                status: store_status(st.sync.store(*store)),
+                last_ok_ms: sync.transport(*store).and_then(|t| t.last_ok_ms),
+            })
+            .collect();
+        let lan = sync.lan.as_ref().map(|lan| match lan {
+            LanLocal::Hub { port, peers, .. } => LanView::Hub {
+                serving: st.lan.serving,
+                port: st.lan.served.as_ref().map_or(*port, |served| served.port),
+                peers: peers
+                    .iter()
+                    .map(|peer| LanPeerView { peer_id: peer.peer_id, name: peer.name.clone(), platform: peer.platform.clone(), tag: peer.tag.clone() })
+                    .collect(),
+                request: st.lan.request.clone(),
+                offer_until_ms: st.lan.offer.as_ref().map(|(_, _, at_ms)| *at_ms),
+            },
+            LanLocal::Client { hub_name, .. } => LanView::Client { hub_name: hub_name.clone() },
+        });
         SyncSpaceView {
-            storage: storage_view(&sync.cloud.storage),
+            storage: sync.cloud.as_ref().map(|cloud| storage_view(&cloud.storage)),
             device_name: sync.device_name.clone(),
             devices: sync.devices(own_tag),
             status: sync_status(st, &stores),
@@ -2732,9 +2808,11 @@ fn sync_view(st: &State) -> SyncView {
             unreadable,
             keyring_pending: sync.keyring_pending(),
             key_saved: sync.key_saved,
+            transports,
+            lan,
         }
     });
-    SyncView { space }
+    SyncView { space, joining }
 }
 
 /// This installation's id, kept beside the settings and nowhere in the vault or a backup: made
@@ -2767,19 +2845,6 @@ impl Core {
     /// This installation.
     pub(crate) fn install_id(&self) -> Uuid {
         self.shared.install_id
-    }
-
-    /// Give this device a LAN role, or take it away; its storages run at once.
-    pub(crate) fn set_lan(&self, lan: Option<LanLocal>) -> CoreResult<()> {
-        {
-            let mut st = self.lock();
-            let sync = unlocked_mut(&mut st)?.data.sync_mut().ok_or(ErrorCode::SyncOff)?;
-            sync.lan = lan;
-            self.save(&mut st, false, |_| {})?;
-            sync_due(&mut st, Instant::now(), true);
-        }
-        self.changed();
-        Ok(())
     }
 
     /// The space as the vault keeps it.

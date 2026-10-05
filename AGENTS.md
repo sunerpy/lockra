@@ -52,8 +52,8 @@ make help                        # everything else
   fixtures: `UPDATE_IPC_FIXTURES=1 cargo test -p lockra-bridge --test contract`. They are compared
   byte for byte, so formatters must not touch them (`.oxfmtignore`).
 - **No path and no secret to the webview**: files are opened in Rust after a native dialog or a
-  drop (on the phone, the photo picker or the camera); only `entry_reveal`, `export_page`, `sync_create` (the new sync key) and `sync_invite`
-  answer with secret material (docs/security.md). A new command needs its zod schema, its fixture
+  drop (on the phone, the photo picker or the camera); only `entry_reveal`, `export_page`, `sync_create` (the new sync key), `sync_invite`
+  and `sync_lan_offer` (a pairing offer) answer with secret material (docs/security.md). A new command needs its zod schema, its fixture
   and its i18n strings.
 - **Commands are `async`** in the shell; Argon2 and file I/O go through `spawn_blocking` in the core.
 - **Copy** lives in `packages/shared/src/i18n/zh-CN.ts` (the keys) and `en.ts` (same shape, tested).

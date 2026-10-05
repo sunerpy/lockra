@@ -15,7 +15,7 @@ use zeroize::Zeroizing;
 
 use crate::entry::{Entry, clean_name};
 use crate::error::{CoreError, ErrorCode};
-use crate::ports::LanClientConfig;
+use crate::ports::{LanClientConfig, LanKey};
 use crate::ui::{Notice, Platform, StorageView, SyncDeviceView};
 
 /// Delay between the last change and the sync run it causes.
@@ -80,6 +80,13 @@ pub(crate) enum LanLocal {
         hub_id: Uuid,
         /// The port it listens on.
         port: u16,
+        /// The devices paired with it.
+        #[serde(default)]
+        peers: Vec<LanPeer>,
+        /// The keys of devices removed from it (Base64), kept to tell them so; the latest
+        /// [`MAX_REMOVED_KEYS`].
+        #[serde(default)]
+        removed: Vec<Zeroizing<String>>,
         #[serde(default)]
         sync: TransportLocal,
     },
@@ -102,11 +109,45 @@ pub(crate) enum LanLocal {
     },
 }
 
+/// The removed devices' keys a hub keeps.
+pub(crate) const MAX_REMOVED_KEYS: usize = 32;
+
+/// A device paired with this hub.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct LanPeer {
+    pub peer_id: Uuid,
+    /// Its key with the hub (Base64 of 32 bytes).
+    pub psk: Zeroizing<String>,
+    /// The tag it writes under, once it said.
+    #[serde(default)]
+    pub tag: Option<String>,
+    /// Its name and platform as it asked to pair, for the list.
+    pub name: String,
+    pub platform: String,
+}
+
+impl fmt::Debug for LanPeer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("LanPeer").field("peer_id", &self.peer_id).field("tag", &self.tag).field("name", &self.name).finish_non_exhaustive()
+    }
+}
+
+/// A 32-byte key kept as Base64.
+pub(crate) fn lan_key(text: &str) -> Option<LanKey> {
+    let bytes = Zeroizing::new(BASE64.decode(text.as_bytes()).ok()?);
+    let mut key = Zeroizing::new([0u8; 32]);
+    if bytes.len() != key.len() {
+        return None;
+    }
+    key.copy_from_slice(&bytes);
+    Some(key)
+}
+
 impl fmt::Debug for LanLocal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Hub { hub_id, port, sync, .. } => {
-                f.debug_struct("Hub").field("hub_id", hub_id).field("port", port).field("sync", sync).finish_non_exhaustive()
+            Self::Hub { hub_id, port, peers, sync, .. } => {
+                f.debug_struct("Hub").field("hub_id", hub_id).field("port", port).field("peers", peers).field("sync", sync).finish_non_exhaustive()
             }
             Self::Client { hub_id, peer_id, port, addrs, sync, .. } => f
                 .debug_struct("Client")
@@ -150,12 +191,12 @@ impl LanLocal {
         }
     }
 
-    /// A role this version can use: a client's key is 32 bytes. Anything else is left out, the
-    /// space kept.
+    /// A role this version can use: every key is 32 bytes. Anything else is left out, the space
+    /// kept.
     fn usable(&self) -> bool {
         match self {
-            Self::Hub { .. } => true,
-            Self::Client { psk, .. } => BASE64.decode(psk.as_bytes()).is_ok_and(|key| key.len() == 32),
+            Self::Hub { peers, removed, .. } => peers.iter().all(|peer| lan_key(&peer.psk).is_some()) && removed.iter().all(|key| lan_key(key).is_some()),
+            Self::Client { psk, .. } => lan_key(psk).is_some(),
         }
     }
 }
@@ -189,11 +230,13 @@ impl StoreKey {
 
 /// This device's sync space, in the vault's local part. Kept in the shape earlier versions read
 /// for the cloud storage (`storage`, `state`, `keyring_written`, `last_sync_ms`), the LAN role
-/// beside it: an earlier version goes on syncing with the cloud storage and leaves the LAN out.
+/// beside it: an earlier version goes on syncing with the cloud storage and leaves the LAN out. A
+/// space on the LAN alone has `storage: null`, which an earlier version does not read: sync is off
+/// there (the vault opens).
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct SyncLocal {
-    /// The storage of the user's own.
-    pub cloud: CloudLocal,
+    /// The storage of the user's own, unless the space syncs over the LAN alone.
+    pub cloud: Option<CloudLocal>,
     /// The space.
     pub space_id: Uuid,
     /// The space's data key (Base64).
@@ -217,7 +260,7 @@ pub(crate) struct SyncLocal {
 /// [`SyncLocal`] as the vault file holds it.
 #[derive(Serialize)]
 struct SyncLocalOut<'a> {
-    storage: &'a StorageConfig,
+    storage: Option<&'a StorageConfig>,
     space_id: Uuid,
     data_key: &'a str,
     sync_key: &'a str,
@@ -233,7 +276,7 @@ struct SyncLocalOut<'a> {
 
 #[derive(Deserialize)]
 struct SyncLocalIn {
-    storage: StorageConfig,
+    storage: Option<StorageConfig>,
     space_id: Uuid,
     data_key: Zeroizing<String>,
     sync_key: Zeroizing<String>,
@@ -254,9 +297,10 @@ struct SyncLocalIn {
 
 impl Serialize for SyncLocal {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let CloudLocal { storage, sync } = &self.cloud;
+        let none = TransportLocal::default();
+        let sync = self.cloud.as_ref().map_or(&none, |cloud| &cloud.sync);
         SyncLocalOut {
-            storage,
+            storage: self.cloud.as_ref().map(|cloud| &cloud.storage),
             space_id: self.space_id,
             data_key: &self.data_key,
             sync_key: &self.sync_key,
@@ -275,18 +319,21 @@ impl Serialize for SyncLocal {
 impl<'de> Deserialize<'de> for SyncLocal {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let kept = SyncLocalIn::deserialize(deserializer)?;
+        let lan = kept.lan.filter(LanLocal::usable);
+        // Neither storage left: no space this version can sync.
+        if kept.storage.is_none() && lan.is_none() {
+            return Err(serde::de::Error::custom("a sync space without a storage"));
+        }
+        let transport = TransportLocal { state: kept.state, keyring_written: kept.keyring_written, last_ok_ms: kept.last_sync_ms };
         Ok(Self {
-            cloud: CloudLocal {
-                storage: kept.storage,
-                sync: TransportLocal { state: kept.state, keyring_written: kept.keyring_written, last_ok_ms: kept.last_sync_ms },
-            },
+            cloud: kept.storage.map(|storage| CloudLocal { storage, sync: transport }),
             space_id: kept.space_id,
             data_key: kept.data_key,
             sync_key: kept.sync_key,
             device_name: kept.device_name,
             keyring: kept.keyring,
             key_saved: kept.key_saved,
-            lan: kept.lan.filter(LanLocal::usable),
+            lan,
         })
     }
 }
@@ -298,8 +345,8 @@ fn saved() -> bool {
 impl fmt::Debug for SyncLocal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SyncLocal")
-            .field("storage", &self.cloud.storage)
-            .field("cloud", &self.cloud.sync)
+            .field("storage", &self.cloud.as_ref().map(|cloud| &cloud.storage))
+            .field("cloud", &self.cloud.as_ref().map(|cloud| &cloud.sync))
             .field("space_id", &self.space_id)
             .field("device_name", &self.device_name)
             .field("key_saved", &self.key_saved)
@@ -309,10 +356,11 @@ impl fmt::Debug for SyncLocal {
 }
 
 impl SyncLocal {
-    /// A space just created or joined, with this device's `keyring`.
-    pub fn new(storage: StorageConfig, keys: &SpaceKeys, sync_key: &SyncKey, device_name: String, keyring: &[u8]) -> Self {
+    /// A space just created or joined, with this device's `keyring`: on `storage`, or on the LAN
+    /// alone when there is none (the role set apart).
+    pub fn new(storage: Option<StorageConfig>, keys: &SpaceKeys, sync_key: &SyncKey, device_name: String, keyring: &[u8]) -> Self {
         Self {
-            cloud: CloudLocal { storage, sync: TransportLocal::default() },
+            cloud: storage.map(|storage| CloudLocal { storage, sync: TransportLocal::default() }),
             space_id: keys.space_id(),
             data_key: keys.data_key_text(),
             sync_key: sync_key.to_text(),
@@ -342,21 +390,21 @@ impl SyncLocal {
 
     pub fn transport(&self, store: Store) -> Option<&TransportLocal> {
         match store {
-            Store::Cloud => Some(&self.cloud.sync),
+            Store::Cloud => self.cloud.as_ref().map(|cloud| &cloud.sync),
             Store::Lan => self.lan.as_ref().map(LanLocal::sync),
         }
     }
 
     pub fn transport_mut(&mut self, store: Store) -> Option<&mut TransportLocal> {
         match store {
-            Store::Cloud => Some(&mut self.cloud.sync),
+            Store::Cloud => self.cloud.as_mut().map(|cloud| &mut cloud.sync),
             Store::Lan => self.lan.as_mut().map(LanLocal::sync_mut),
         }
     }
 
     pub fn store_key(&self, store: Store) -> Option<StoreKey> {
         match store {
-            Store::Cloud => Some(StoreKey::Cloud(self.cloud.storage.clone())),
+            Store::Cloud => self.cloud.as_ref().map(|cloud| StoreKey::Cloud(cloud.storage.clone())),
             Store::Lan => self.lan.as_ref().and_then(LanLocal::store_key),
         }
     }
@@ -676,7 +724,7 @@ mod tests {
             password: Zeroizing::new("x".into()),
         };
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
-        let whole = serde_json::to_value(SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")).unwrap();
+        let whole = serde_json::to_value(SyncLocal::new(Some(storage), &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")).unwrap();
         assert!(serde_json::from_value::<SyncLocal>(whole.clone()).is_ok());
         let mut missing = whole.clone();
         missing.as_object_mut().unwrap().remove("keyring");
@@ -698,7 +746,7 @@ mod tests {
             password: Zeroizing::new("pw".into()),
         };
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
-        let mut kept = SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring");
+        let mut kept = SyncLocal::new(Some(storage), &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring");
         kept.key_saved = false;
         let whole = serde_json::to_value(&kept).unwrap();
         assert!(!serde_json::from_value::<SyncLocal>(whole.clone()).unwrap().key_saved);
@@ -716,7 +764,7 @@ mod tests {
             password: Zeroizing::new("pw".into()),
         };
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
-        SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")
+        SyncLocal::new(Some(storage), &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")
     }
 
     fn client_role(key: &[u8]) -> LanLocal {
@@ -735,9 +783,9 @@ mod tests {
     #[test]
     fn a_space_keeps_the_cloud_where_earlier_versions_read_it_and_the_lan_beside() {
         let mut kept = laptop_space();
-        kept.cloud.sync.state.own_seq = 4;
-        kept.cloud.sync.keyring_written = true;
-        kept.cloud.sync.last_ok_ms = Some(1_000);
+        kept.cloud.as_mut().unwrap().sync.state.own_seq = 4;
+        kept.cloud.as_mut().unwrap().sync.keyring_written = true;
+        kept.cloud.as_mut().unwrap().sync.last_ok_ms = Some(1_000);
         // Without a LAN role: the fields earlier versions write, and nothing more.
         let whole = serde_json::to_value(&kept).unwrap();
         let mut names: Vec<&str> = whole.as_object().unwrap().keys().map(String::as_str).collect();
@@ -749,7 +797,14 @@ mod tests {
         );
         assert_eq!(serde_json::from_value::<SyncLocal>(whole).unwrap(), kept);
         // With one, beside them: an earlier version syncs on with the cloud storage alone.
-        kept.lan = Some(LanLocal::Hub { install_id: Uuid::new_v4(), hub_id: Uuid::new_v4(), port: 47_100, sync: TransportLocal::default() });
+        kept.lan = Some(LanLocal::Hub {
+            install_id: Uuid::new_v4(),
+            hub_id: Uuid::new_v4(),
+            port: 47_100,
+            peers: Vec::new(),
+            removed: Vec::new(),
+            sync: TransportLocal::default(),
+        });
         let whole = serde_json::to_value(&kept).unwrap();
         assert_eq!((&whole["lan"]["role"], &whole["state"]["own_seq"]), (&serde_json::json!("hub"), &serde_json::json!(4)));
         assert_eq!(serde_json::from_value::<SyncLocal>(whole).unwrap(), kept);
@@ -778,13 +833,13 @@ mod tests {
     fn the_numbers_a_device_gave_on_any_storage_set_its_floor() {
         let mut kept = laptop_space();
         assert_eq!(kept.seq_floor(), 0);
-        kept.cloud.sync.state.own_seq = 3;
+        kept.cloud.as_mut().unwrap().sync.state.own_seq = 3;
         let mut lan = client_role(&[7; 32]);
         lan.sync_mut().state.pending = Some(lockra_sync::PendingWrite { seq: 6, digest: "d".into() });
         kept.lan = Some(lan);
         assert_eq!(kept.seq_floor(), 6, "a write whose answer never came counts");
         // Every storage is to receive a new keyring.
-        kept.cloud.sync.keyring_written = true;
+        kept.cloud.as_mut().unwrap().sync.keyring_written = true;
         kept.keyring_sealed_again();
         assert!(kept.keyring_pending());
     }

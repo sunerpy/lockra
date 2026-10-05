@@ -6,7 +6,7 @@
 use std::net::IpAddr;
 use std::time::Duration;
 
-use lockra_sync::{ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SyncError};
+use lockra_sync::{ObjectMeta, PairOffer, PutCondition, RemoteFuture, RemoteStore, SyncError};
 use parking_lot::Mutex;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -15,7 +15,6 @@ use zeroize::Zeroizing;
 
 use crate::channel::{Channel, ChannelError};
 use crate::discover::discover;
-use crate::pair::PairOffer;
 use crate::proto::{Answer, Failure, Request};
 use crate::wire::Kind;
 use crate::{HANDSHAKE_TIMEOUT, IDLE_TIMEOUT, Key, PAIRING_TIMEOUT};

@@ -5,12 +5,14 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::future::Future;
+use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub use lockra_sync::{RemoteStore, StorageConfig, SyncError};
+pub use lockra_sync::{LanKey, PairOffer, RemoteStore, StorageConfig, SyncError};
 use parking_lot::Mutex;
+use tokio::time::Instant;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -203,6 +205,81 @@ pub trait SyncTransport: Send + Sync {
         let _ = config;
         Err(SyncError::Storage("LAN sync is not available in this build".into()))
     }
+
+    /// The LAN sync's server and pairing, in a build that has them.
+    fn lan(&self) -> Option<&dyn LanService> {
+        None
+    }
+}
+
+/// A device paired with this hub, as its server needs it.
+#[derive(Clone)]
+pub struct HubServePeer {
+    pub peer_id: Uuid,
+    pub key: LanKey,
+    /// The tag it writes under, once it said.
+    pub tag: Option<String>,
+}
+
+/// What the hub's server serves, and to whom.
+#[derive(Clone)]
+pub struct HubServe {
+    pub hub_id: Uuid,
+    pub space_id: Uuid,
+    /// The hub's own tag: no device writes under it.
+    pub own_tag: String,
+    /// The port to listen on; another when it is taken.
+    pub port: u16,
+    pub peers: Vec<HubServePeer>,
+    /// The keys of devices removed from the hub: they are told so.
+    pub removed: Vec<LanKey>,
+    /// The pairing offer that stands, and until when.
+    pub pairing: Option<(LanKey, Instant)>,
+}
+
+/// What happened at the hub's server.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LanEvent {
+    /// A device wrote or removed its object.
+    PeerWrote { peer_id: Uuid },
+    /// A device writes under `tag` from now on.
+    PeerTag { peer_id: Uuid, tag: String },
+    /// A device asks to pair; the user compares `code` with the one it shows.
+    PairRequest { name: String, platform: String, code: String },
+    /// The welcome reached the device.
+    PairWelcomed,
+    /// The pairing request ended without a welcome.
+    PairEnded,
+}
+
+/// Where the server's events go: the core, from any thread.
+pub type LanEvents = Arc<dyn Fn(LanEvent) + Send + Sync>;
+
+/// A LAN call in flight.
+pub type LanFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, SyncError>> + Send + 'a>>;
+
+/// This device asking a hub to pair: the code it shows, then the hub's answer.
+pub trait LanJoining: Send {
+    /// The six digits both sides show.
+    fn code(&self) -> String;
+    /// The welcome, or `None` when the user at the hub said no.
+    fn answer(self: Box<Self>) -> LanFuture<'static, Option<Zeroizing<Vec<u8>>>>;
+}
+
+/// The LAN sync's network side (lockra-lan in the shells): the hub's server, and pairing.
+pub trait LanService: Send + Sync {
+    /// Serve the hub's copy: start the server, or go on with new settings. The port it listens on.
+    fn serve(&self, config: HubServe, events: LanEvents) -> LanFuture<'_, u16>;
+    /// New devices, keys or offer for the server running.
+    fn update(&self, config: HubServe);
+    /// The user's answer to the pairing request: the welcome, or none to refuse.
+    fn answer(&self, welcome: Option<Zeroizing<Vec<u8>>>);
+    /// Stop the server.
+    fn stop(&self);
+    /// This computer's addresses on the local network, for an offer.
+    fn addresses(&self) -> Vec<IpAddr>;
+    /// Ask the hub of `offer` to pair this device as `name` on `platform`.
+    fn join<'a>(&'a self, offer: &'a PairOffer, name: &'a str, platform: &'a str) -> LanFuture<'a, Box<dyn LanJoining>>;
 }
 
 /// No sync storage (a build without it): every space fails to open.

@@ -123,6 +123,24 @@ pub enum ErrorCode {
     SyncDataCorrupted,
     /// The space was written by a newer Lockra.
     SyncUnsupported,
+    /// The space syncs over the LAN alone: there is no storage to invite to or move.
+    SyncNoStorage,
+    /// The invitation, offer or storage belongs to another sync space.
+    SyncOtherSpace,
+    /// This build cannot sync over the LAN.
+    SyncLanUnavailable,
+    /// The LAN hub no longer pairs with this device: pair again.
+    SyncLanUnpaired,
+    /// The LAN hub refused a request of this device.
+    SyncLanRefused,
+    /// The hub pairs with as many devices as it may.
+    SyncLanFull,
+    /// The text is not a Lockra pairing offer.
+    SyncPairingInvalid,
+    /// The pairing offer expired, or was taken, or the request ended.
+    SyncPairingExpired,
+    /// The user at the hub refused the pairing.
+    SyncPairingRefused,
     /// Anything else (a bug); details are in the log.
     Internal,
 }

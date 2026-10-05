@@ -166,7 +166,7 @@ function Pages() {
     case "syncInvite":
       return <SyncInvite />;
     case "syncStorage":
-      return sync.space ? <SyncStorage space={sync.space} /> : null;
+      return sync.space?.storage ? <SyncStorage storage={sync.space.storage} /> : null;
     case "account":
       return entry ? <Account entry={entry} /> : null;
     case "edit":

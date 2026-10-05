@@ -4,8 +4,10 @@ use lockra_sync::{MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteSt
 use tokio::sync::Notify;
 
 use super::*;
+use crate::fakes::FakeLan;
 use crate::settings::Settings;
-use crate::sync::{LanLocal, Store, TransportLocal};
+use crate::sync::{Store, TransportLocal};
+use crate::ui::LanView;
 use crate::ui::{JoinSource, StorageView, SyncStatus};
 use crate::{SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, SYNC_INTERVAL_LAN_FOREGROUND, StorageConfig};
 
@@ -490,14 +492,14 @@ async fn backups_and_the_webviews_state_carry_no_sync_secret() {
     let view = space(&desktop);
     assert_eq!(
         view.storage,
-        StorageView::S3 {
+        Some(StorageView::S3 {
             endpoint: "https://s3.example.com".into(),
             region: "us-east-1".into(),
             bucket: "lockra".into(),
             prefix: "sync/".into(),
             access_key_id: "AKIDLOCKRA".into(),
             path_style: false
-        }
+        })
     );
     // The vault file holds them, encrypted.
     let vault = fs::read(desktop.vault_path()).unwrap();
@@ -766,7 +768,7 @@ async fn new_storage_settings_must_hold_this_spaces_snapshots() {
     there.set_object(&relative, original.object(&snapshot).unwrap());
     desktop.core.sync_set_storage(moved, pw(MASTER)).await.unwrap();
     settle().await;
-    assert!(matches!(space(&desktop).storage, StorageView::Webdav { .. }));
+    assert!(matches!(space(&desktop).storage, Some(StorageView::Webdav { .. })));
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
 }
 
@@ -868,27 +870,28 @@ async fn an_accounts_colour_and_mark_reach_the_other_devices() {
 
 // ---- the LAN hub's copy beside the cloud storage ----------------------------------------------
 
-const HUB: Uuid = Uuid::from_u128(0x4c4b_4c4e_4855_4200_0000_0000_0000_0001);
-
-/// `h` keeps the space's copy for the LAN (the role the LAN commands give).
-fn hub(h: &Harness) {
-    let lan = LanLocal::Hub { install_id: h.core.install_id(), hub_id: HUB, port: 47_100, sync: TransportLocal::default() };
-    h.core.set_lan(Some(lan)).unwrap();
+/// The pairing request the hub `h` shows, if one waits.
+fn hub_request(h: &Harness) -> Option<crate::ui::PairRequestView> {
+    match space(h).lan {
+        Some(LanView::Hub { request, .. }) => request,
+        _ => None,
+    }
 }
 
-/// `h` is paired with the hub.
-fn client(h: &Harness) {
-    let lan = LanLocal::Client {
-        install_id: h.core.install_id(),
-        hub_id: HUB,
-        hub_name: "Desktop".into(),
-        peer_id: Uuid::new_v4(),
-        psk: Zeroizing::new(data_encoding::BASE64.encode(&[7u8; 32])),
-        port: 47_100,
-        addrs: vec!["192.168.1.20".into()],
-        sync: TransportLocal::default(),
-    };
-    h.core.set_lan(Some(lan)).unwrap();
+/// Pair `phone` with the hub `desktop` through an offer, as the users would: the phone asks, both
+/// show the same code, the user at the hub agrees.
+async fn pair(desktop: &Harness, phone: &Harness, name: &str) {
+    let offer = desktop.core.sync_lan_offer(Some(pw(MASTER)), None).await.unwrap();
+    let core = phone.core.clone();
+    let name = name.to_owned();
+    let joining = tokio::spawn(async move { core.sync_lan_join(pw(&offer.text), pw(MASTER), name).await });
+    // The phone's master password is checked off the runtime first.
+    until("the phone asks the hub", || phone.core.state().sync.joining.is_some()).await;
+    assert_eq!(phone.core.state().sync.joining.map(|j| j.code), Some(FakeLan::CODE.to_owned()));
+    assert_eq!(hub_request(desktop).map(|r| r.code), Some(FakeLan::CODE.to_owned()));
+    desktop.core.sync_lan_answer(true).unwrap();
+    joining.await.unwrap().unwrap();
+    settle().await;
 }
 
 /// What `h` keeps of its runs on `store`.
@@ -906,9 +909,9 @@ async fn hub_and_client(transport: &Arc<FakeTransport>) -> (Harness, Harness) {
     for h in [&desktop, &phone] {
         h.core.set_settings(Settings { auto_lock_minutes: 0, ..h.core.state().settings }).unwrap();
     }
-    hub(&desktop);
-    client(&phone);
+    desktop.core.sync_lan_enable(Some(pw(MASTER)), None, String::new()).await.unwrap();
     settle().await;
+    pair(&desktop, &phone, "Phone").await;
     (desktop, phone)
 }
 
@@ -980,7 +983,8 @@ async fn a_hub_that_no_longer_knows_this_device_is_left_until_the_user_asks() {
     transport.set_lan_failure(Some(SyncError::WrongCredentials));
     phone.core.sync_now().unwrap();
     settle().await;
-    assert!(matches!(space(&phone).status, SyncStatus::Failed { code: ErrorCode::SyncWrongCredentials, .. }), "{:?}", space(&phone).status);
+    // Told apart from a storage's refusal: the hub no longer pairs with this phone.
+    assert!(matches!(space(&phone).status, SyncStatus::Failed { code: ErrorCode::SyncLanUnpaired, .. }), "{:?}", space(&phone).status);
     // Neither the interval nor a change tries it again; the cloud runs on.
     let tried = transport.lan_attempts();
     let cloud = transport.store(&s3(STORAGE_SECRET));
@@ -1020,8 +1024,12 @@ async fn a_vault_put_back_clashes_on_the_lan_and_becomes_a_new_device_on_both_st
     let new_tag = space(&phone).devices[0].tag.clone();
     assert_ne!(new_tag, old_tag);
     assert!(matches!(space(&phone).status, SyncStatus::Synced { .. }), "{:?}", space(&phone).status);
+    let desktop_tag = space(&desktop).devices[0].tag.clone();
     for paths in [transport.lan().paths(), transport.store(&s3(STORAGE_SECRET)).paths()] {
-        assert!(paths.iter().any(|p| p.contains(&new_tag)) && paths.iter().any(|p| p.contains(&old_tag)), "{paths:?}");
+        assert!(
+            paths.iter().any(|p| p.contains(&new_tag)) && paths.iter().any(|p| p.contains(&old_tag)),
+            "new {new_tag} old {old_tag} desktop {desktop_tag}: {paths:?}"
+        );
     }
     // What the old name had comes back from it.
     assert_eq!(issuers(&phone), ["GitHub", "Mail"]);
@@ -1044,7 +1052,7 @@ async fn a_vault_opened_by_another_installation_leaves_its_lan_role() {
     settle().await;
     let kept_there = copy.sync_local().unwrap();
     assert!(kept_there.lan.is_none(), "the pairing is the phone's");
-    assert_eq!(kept_there.cloud.storage, s3(STORAGE_SECRET), "the space stays");
+    assert_eq!(kept_there.cloud.map(|cloud| cloud.storage), Some(s3(STORAGE_SECRET)), "the space stays");
     // Written so: the next start reads it without the role.
     copy.lock_vault();
     let again = other.restart();
@@ -1093,4 +1101,221 @@ async fn the_installation_keeps_its_id_beside_the_settings() {
     let again = h.restart().install_id();
     assert_ne!(again, id);
     assert_eq!(h.restart().install_id(), again);
+}
+
+// ---- the LAN commands ---------------------------------------------------------------------
+
+/// A desktop with an account and a space on the LAN alone, as its hub.
+async fn lan_hub(transport: &Arc<FakeTransport>) -> Harness {
+    let h = device(transport);
+    h.core.create_vault(pw(MASTER)).await.unwrap();
+    h.core.set_settings(Settings { auto_lock_minutes: 0, ..h.core.state().settings }).unwrap();
+    h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    h.core.sync_lan_enable(Some(pw(MASTER)), None, "Desktop".into()).await.unwrap();
+    settle().await;
+    h
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_new_phone_pairs_with_a_hub_that_syncs_over_the_lan_alone() {
+    let transport = Arc::new(FakeTransport::default());
+    let desktop = lan_hub(&transport).await;
+    let view = space(&desktop);
+    assert_eq!(view.storage, None, "no storage of the user's own");
+    assert!(!view.key_saved, "the sync key is to be saved");
+    assert!(
+        matches!(view.lan, Some(LanView::Hub { serving: true, port: 47_100, ref peers, request: None, offer_until_ms: None }) if peers.is_empty()),
+        "{:?}",
+        view.lan
+    );
+    assert_eq!(view.transports.iter().map(|t| t.kind).collect::<Vec<_>>(), [crate::ui::TransportKind::Lan]);
+
+    // A phone with no vault yet: the welcome makes its vault and space, under its own password.
+    let phone = device(&transport);
+    let offer = desktop.core.sync_lan_offer(None, None).await;
+    assert_eq!(code_err(offer), ErrorCode::BiometricUnavailable, "without the password, only the biometric check");
+    pair(&desktop, &phone, "Pixel 8").await;
+    assert_eq!(phone.core.state().phase, Phase::Unlocked);
+    assert_eq!(issuers(&phone), ["GitHub"]);
+    assert!(matches!(space(&phone).lan, Some(LanView::Client { ref hub_name }) if hub_name == "Desktop"));
+    assert_eq!(space(&phone).storage, None);
+    phone.core.lock_vault();
+    phone.core.unlock(pw(MASTER)).await.unwrap();
+    settle().await;
+
+    // The hub lists it under the name it gave, with the tag it writes under.
+    let peers = match space(&desktop).lan {
+        Some(LanView::Hub { peers, .. }) => peers,
+        other => panic!("{other:?}"),
+    };
+    assert_eq!(peers.iter().map(|p| (p.name.as_str(), p.platform.as_str())).collect::<Vec<_>>(), [("Pixel 8", "linux")]);
+    assert_eq!(peers[0].tag.as_deref(), Some(space(&phone).devices[0].tag.as_str()));
+    // A change on the phone reaches the desktop as soon as the phone writes it.
+    phone.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    assert_eq!(issuers(&desktop), ["GitHub", "Mail"]);
+    assert_eq!(device_names(&desktop), [("Desktop".to_owned(), true), ("Pixel 8".to_owned(), false)]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_hub_takes_writes_while_locked_and_takes_them_in_at_the_unlock() {
+    let transport = Arc::new(FakeTransport::default());
+    let desktop = lan_hub(&transport).await;
+    let phone = device(&transport);
+    pair(&desktop, &phone, "Phone").await;
+    desktop.core.lock_vault();
+    assert!(transport.hub.served().is_some(), "the server goes on serving");
+    phone.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    assert!(matches!(space(&phone).status, SyncStatus::Synced { .. }), "{:?}", space(&phone).status);
+    desktop.core.unlock(pw(MASTER)).await.unwrap();
+    settle().await;
+    assert_eq!(issuers(&desktop), ["GitHub", "Mail"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_user_at_the_hub_may_refuse_and_an_offer_lapses_or_opens_once() {
+    let transport = Arc::new(FakeTransport::default());
+    let desktop = lan_hub(&transport).await;
+    let phone = device(&transport);
+    phone.core.create_vault(pw(MASTER)).await.unwrap();
+    // Refused.
+    let offer = desktop.core.sync_lan_offer(Some(pw(MASTER)), None).await.unwrap();
+    assert!(offer.text.starts_with("lockra-pair:1:") && offer.svg.contains("<svg"));
+    let core = phone.core.clone();
+    let text = offer.text.clone();
+    let joining = tokio::spawn(async move { core.sync_lan_join(pw(&text), pw(MASTER), "Phone".into()).await });
+    until("the phone asks", || phone.core.state().sync.joining.is_some()).await;
+    desktop.core.sync_lan_answer(false).unwrap();
+    assert_eq!(code_err(joining.await.unwrap()), ErrorCode::SyncPairingRefused);
+    assert!(phone.core.state().sync.joining.is_none() && phone.core.state().sync.space.is_none());
+    assert_eq!(code_err(desktop.core.sync_lan_answer(true)), ErrorCode::SyncPairingExpired, "nothing to answer");
+    // The offer was spent by that handshake.
+    assert!(code_err(phone.core.sync_lan_join(pw(&offer.text), pw(MASTER), "Phone".into()).await) == ErrorCode::SyncNetwork);
+    // A new one lapses after two minutes.
+    let offer = desktop.core.sync_lan_offer(Some(pw(MASTER)), None).await.unwrap();
+    assert!(matches!(space(&desktop).lan, Some(LanView::Hub { offer_until_ms: Some(_), .. })));
+    advance(crate::LAN_OFFER_TIME + Duration::from_secs(1)).await;
+    assert!(matches!(space(&desktop).lan, Some(LanView::Hub { offer_until_ms: None, .. })));
+    assert!(transport.hub.served().is_some_and(|served| served.pairing.is_none()));
+    // The phone reads the time from the offer itself.
+    assert_eq!(code_err(phone.core.sync_lan_join(pw(&offer.text), pw(MASTER), "Phone".into()).await), ErrorCode::SyncPairingExpired);
+    // Not an offer.
+    assert_eq!(code_err(phone.core.sync_lan_join(pw("lockra-pair:1:nope"), pw(MASTER), "Phone".into()).await), ErrorCode::SyncPairingInvalid);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_device_of_one_space_does_not_pair_with_another_spaces_hub() {
+    let (one, two) = (Arc::new(FakeTransport::default()), Arc::new(FakeTransport::default()));
+    let desktop = lan_hub(&one).await;
+    let other = lan_hub(&two).await;
+    let theirs = other.core.sync_lan_offer(Some(pw(MASTER)), None).await.unwrap();
+    assert_eq!(code_err(desktop.core.sync_lan_join(pw(&theirs.text), pw(MASTER), "Desktop".into()).await), ErrorCode::SyncOtherSpace);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_device_taken_off_the_hub_is_told_so_and_waits_for_the_user() {
+    let transport = Arc::new(FakeTransport::default());
+    let desktop = lan_hub(&transport).await;
+    let phone = device(&transport);
+    pair(&desktop, &phone, "Phone").await;
+    let tag = space(&phone).devices[0].tag.clone();
+    let peer_id = match space(&desktop).lan {
+        Some(LanView::Hub { peers, .. }) => peers[0].peer_id,
+        other => panic!("{other:?}"),
+    };
+    desktop.core.sync_lan_remove_peer(peer_id).await.unwrap();
+    assert!(!transport.lan().paths().iter().any(|p| p.contains(&tag)), "its snapshot left the hub's copy");
+    assert!(matches!(space(&desktop).lan, Some(LanView::Hub { ref peers, .. }) if peers.is_empty()));
+    assert_eq!(device_names(&desktop), [("Desktop".to_owned(), true)]);
+    phone.core.sync_now().unwrap();
+    settle().await;
+    assert!(matches!(space(&phone).status, SyncStatus::Failed { code: ErrorCode::SyncLanUnpaired, .. }), "{:?}", space(&phone).status);
+    // Turned off on the phone, the space goes (it had no storage of the user's own).
+    phone.core.sync_lan_disable().unwrap();
+    assert!(phone.core.state().sync.space.is_none());
+    assert_eq!(issuers(&phone), ["GitHub"], "its accounts stay");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_space_on_the_lan_alone_takes_a_storage_of_the_users_own_and_gives_it_back() {
+    let transport = Arc::new(FakeTransport::default());
+    let desktop = lan_hub(&transport).await;
+    // Another space's invitation is no storage for this one.
+    let (_, other_key) = first_device(&transport, webdav()).await;
+    let elsewhere = crate::ui::StorageSource::Invite {
+        text: pw(&lockra_sync::Invite { storage: webdav(), sync_key: lockra_sync::SyncKey::from_text(&other_key).unwrap() }.to_text()),
+        code: None,
+    };
+    assert_eq!(code_err(desktop.core.sync_add_storage(elsewhere, Some(pw(MASTER)), None).await), ErrorCode::SyncOtherSpace);
+    // A place that holds another space's objects is refused.
+    let taken = transport.store(&s3(STORAGE_SECRET));
+    let dir = lockra_sync::devices_dir(s3(STORAGE_SECRET).prefix(), desktop.core.sync_local().unwrap().space_id);
+    taken.set_object(&format!("{dir}0123456789abcdef0123456789abcdef.lks"), b"not a snapshot".to_vec());
+    let added = desktop.core.sync_add_storage(crate::ui::StorageSource::Storage { storage: s3(STORAGE_SECRET) }, Some(pw(MASTER)), None).await;
+    assert_eq!(code_err(added), ErrorCode::SyncDataCorrupted);
+    taken.delete(&format!("{dir}0123456789abcdef0123456789abcdef.lks")).await.unwrap();
+    // An empty one is the space's from its first write.
+    desktop.core.sync_add_storage(crate::ui::StorageSource::Storage { storage: s3(STORAGE_SECRET) }, Some(pw(MASTER)), None).await.unwrap();
+    settle().await;
+    assert_eq!(space(&desktop).transports.len(), 2);
+    assert_eq!(taken.paths().len(), 1, "{:?}", taken.paths());
+    assert_eq!(
+        code_err(desktop.core.sync_add_storage(crate::ui::StorageSource::Storage { storage: webdav() }, Some(pw(MASTER)), None).await),
+        ErrorCode::SyncAlreadyOn
+    );
+    // Given back: the LAN goes on.
+    desktop.core.sync_remove_storage().unwrap();
+    assert_eq!(space(&desktop).storage, None);
+    assert_eq!(code_err(desktop.core.sync_remove_storage()), ErrorCode::SyncNoStorage);
+    assert_eq!(code_err(desktop.core.sync_invite(Some(pw(MASTER)), None).await), ErrorCode::SyncNoStorage);
+    // Without the LAN, giving the storage back turns sync off.
+    desktop.core.sync_add_storage(crate::ui::StorageSource::Storage { storage: s3(STORAGE_SECRET) }, Some(pw(MASTER)), None).await.unwrap();
+    desktop.core.sync_lan_disable().unwrap();
+    assert!(transport.hub.served().is_none(), "the hub stopped serving");
+    assert!(space(&desktop).lan.is_none() && space(&desktop).storage.is_some());
+    desktop.core.sync_remove_storage().unwrap();
+    assert!(desktop.core.state().sync.space.is_none());
+}
+
+#[tokio::test(start_paused = true)]
+async fn out_of_reach_of_its_hub_a_phone_is_offline_not_failing() {
+    let transport = Arc::new(FakeTransport::default());
+    let desktop = lan_hub(&transport).await;
+    let phone = device(&transport);
+    pair(&desktop, &phone, "Phone").await;
+    transport.set_lan_failure(Some(SyncError::Network("no route to the hub".into())));
+    phone.core.sync_now().unwrap();
+    settle().await;
+    let view = space(&phone);
+    assert!(matches!(view.status, SyncStatus::Offline { .. }), "{:?}", view.status);
+    assert!(matches!(view.transports[0].status, SyncStatus::Offline { .. }));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_hub_whose_port_is_taken_listens_on_another_and_keeps_it() {
+    let transport = Arc::new(FakeTransport::default());
+    *transport.hub.taken_port.lock() = Some(crate::LAN_PORT);
+    let desktop = lan_hub(&transport).await;
+    assert!(matches!(space(&desktop).lan, Some(LanView::Hub { port: 47_101, .. })), "{:?}", space(&desktop).lan);
+    let restarted = desktop.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    settle().await;
+    assert_eq!(transport.hub.served().map(|served| served.port), Some(47_101));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_build_without_the_lan_says_so_and_a_hub_needs_the_password_for_a_new_space() {
+    let h = harness_on(FakeUpdater::default(), Arc::new(GateTransport(Gate::new(true))));
+    h.core.create_vault(pw(MASTER)).await.unwrap();
+    assert_eq!(code_err(h.core.sync_lan_enable(Some(pw(MASTER)), None, String::new()).await), ErrorCode::SyncLanUnavailable);
+    assert_eq!(code_err(h.core.sync_lan_join(pw("lockra-pair:1:x"), pw(MASTER), String::new()).await), ErrorCode::SyncLanUnavailable);
+    let transport = Arc::new(FakeTransport::default());
+    let other = device(&transport);
+    other.core.create_vault(pw(MASTER)).await.unwrap();
+    assert_eq!(code_err(other.core.sync_lan_enable(None, None, String::new()).await), ErrorCode::WrongPassword);
+    assert_eq!(code_err(other.core.sync_lan_offer(Some(pw(MASTER)), None).await), ErrorCode::SyncOff);
+    assert_eq!(code_err(other.core.sync_lan_disable()), ErrorCode::SyncOff);
+    let desktop = lan_hub(&transport).await;
+    assert_eq!(code_err(desktop.core.sync_lan_enable(Some(pw(MASTER)), None, String::new()).await), ErrorCode::SyncAlreadyOn);
 }
