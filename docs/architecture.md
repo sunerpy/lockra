@@ -43,15 +43,15 @@ packages/ui        The design system (Voltip's tokens and components, plus Lockr
 `lockra-core` holds all behaviour and no platform code. `Core::start(config, ports)` returns a
 cheap handle; the shell injects the ports:
 
-| Port                        | Desktop adapter                                                                   | Test fake                           |
-| --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
-| `SecretStore` (device keys) | `keyring` (Credential Manager, Keychain, Secret Service), probed at start         | `FakeKeychain`, `MemorySecretStore` |
-| `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard)     | `FakeClipboard`                     |
-| `Clock`                     | `SystemClock`                                                                     | `FakeClock`                         |
-| `CodeSink` (code frames)    | a Tauri `Channel`                                                                 | `RecordingSink`                     |
-| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy        | `FakeUpdater`, `NoUpdater`          |
-| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS (`src-tauri/src/sync.rs`)                  | `FakeTransport`, `NoSync`           |
-| `Biometrics` (unlock check) | Touch ID, Windows Hello via robius-authentication (`src-tauri/src/biometrics.rs`) | `FakeBiometrics`, `NoBiometrics`    |
+| Port                        | Desktop adapter                                                                                  | Test fake                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `SecretStore` (device keys) | `keyring` (Credential Manager, Keychain, Secret Service), probed at start                        | `FakeKeychain`, `MemorySecretStore` |
+| `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard)                    | `FakeClipboard`                     |
+| `Clock`                     | `SystemClock`                                                                                    | `FakeClock`                         |
+| `CodeSink` (code frames)    | a Tauri `Channel`                                                                                | `RecordingSink`                     |
+| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy                       | `FakeUpdater`, `NoUpdater`          |
+| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS; on the desktop also lockra-lan (`src-tauri/src/sync.rs`) | `FakeTransport`, `NoSync`           |
+| `Biometrics` (unlock check) | Touch ID, Windows Hello via robius-authentication (`src-tauri/src/biometrics.rs`)                | `FakeBiometrics`, `NoBiometrics`    |
 
 State machine: **NoVault → Locked → Unlocked**. Create or restore leads from NoVault to Unlocked;
 unlock (password or device key) from Locked; lock, auto-lock and closing return to Locked; reset
@@ -64,8 +64,8 @@ automatic update, the next sync run — sleeps until the earliest deadline, and 
 `Notify` whenever the state changes, so nothing polls. The desktop shell tells the core when its
 window gains or loses the focus (`Core::set_foreground`): in front, sync runs every minute
 rather than every five. A space may sync with two storages, the user's own and a LAN hub's copy
-(`SyncTransport::open_hub_store` on the hub, `open_lan_client` on its clients; the shells have
-neither yet): each has its own state in the vault and its own runtime (when it is due, its last
+(`SyncTransport::open_hub_store` on the hub, `open_lan_client` on its clients, and `lan()` for
+the hub's server and pairing; the desktop shell has them, the phone not yet): each has its own state in the vault and its own runtime (when it is due, its last
 result), a run takes the due ones in turn, the LAN first, and a write's number is above every
 number this device gave on any of them. Core tests run on tokio's paused clock with the fakes.
 
