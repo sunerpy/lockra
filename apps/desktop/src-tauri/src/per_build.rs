@@ -107,24 +107,28 @@ impl<K: Keychain> PerBuildStore<K> {
     }
 
     /// What the next build should be handed: every entry this process read, wrote or removed, and
-    /// every other item of this build's, read quietly (never asking).
-    pub fn handoff_entries(&self) -> Entries {
-        let mut all: HashMap<String, Option<Zeroizing<String>>> = HashMap::new();
-        match self.keychain.items_of(&self.own_account()) {
-            Ok(items) => {
-                for item in items {
-                    let Some(entry) = item.service.strip_prefix(&self.prefix()) else { continue };
-                    if let Ok(Read::Found(value)) = self.keychain.read(&item.service, &item.account, Ask::Never) {
-                        all.insert(entry.to_owned(), Some(value));
-                    }
-                }
+    /// every other item of this build's, read quietly (never asking). An item of this build's that
+    /// cannot be listed or read so is an error: handing over without it would leave the next build
+    /// to ask for it.
+    pub fn handoff_entries(&self) -> Result<Entries, PortError> {
+        let mut all: HashMap<String, Option<Zeroizing<String>>> = self.known.lock().iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+        for item in self.keychain.items_of(&self.own_account())? {
+            let Some(entry) = item.service.strip_prefix(&self.prefix()) else { continue };
+            if all.contains_key(entry) {
+                continue;
             }
-            Err(error) => tracing::warn!(%error, "this build's keychain items could not be listed; handing over what was read"),
+            match self.keychain.read(&item.service, &item.account, Ask::Never)? {
+                Read::Found(value) => {
+                    all.insert(entry.to_owned(), Some(value));
+                }
+                // Removed since it was listed.
+                Read::Missing => {}
+                Read::WouldAsk => return Err(PortError(format!("the keychain item {entry} of this build cannot be read without asking"))),
+            }
         }
-        all.extend(self.known.lock().iter().map(|(k, v)| (k.clone(), v.clone())));
         let mut entries: Entries = all.into_iter().collect();
         entries.sort_by(|a, b| a.0.cmp(&b.0));
-        entries
+        Ok(entries)
     }
 
     /// Store an update's hand-over in this build's own items, leaving the running build's copies
@@ -437,7 +441,7 @@ pub(crate) mod tests {
         let login = Login::default();
         let old = store(&login, "aaaa");
         old.set(VAULT, "device key").unwrap();
-        let handed = old.handoff_entries();
+        let handed = old.handoff_entries().unwrap();
         assert_eq!(handed.len(), 1);
 
         // The staged new build, before installation: its own item, the old one still there.
@@ -457,7 +461,7 @@ pub(crate) mod tests {
         let login = Login::default();
         store(&login, "aaaa").set(VAULT, "device key").unwrap();
         // A later start of the same build that unlocked with the password: nothing read yet.
-        let entries = store(&login, "aaaa").handoff_entries();
+        let entries = store(&login, "aaaa").handoff_entries().unwrap();
         assert_eq!(entries.iter().map(|(e, v)| (e.as_str(), v.as_deref().map(String::as_str))).collect::<Vec<_>>(), [(VAULT, Some("device key"))]);
         assert_eq!(login.asked(), Vec::<String>::new());
     }
@@ -494,12 +498,44 @@ pub(crate) mod tests {
         let old = store(&login, "aaaa");
         old.set(VAULT, "key").unwrap();
         old.delete(VAULT).unwrap();
-        let handed = old.handoff_entries();
+        let handed = old.handoff_entries().unwrap();
         assert_eq!(handed.iter().map(|(e, v)| (e.as_str(), v.is_none())).collect::<Vec<_>>(), [(VAULT, true)]);
         store(&login, "bbbb").persist_handoff(&handed).unwrap();
         assert_eq!(get(&store(&login, "bbbb"), VAULT), None);
         assert_eq!(login.asked(), Vec::<String>::new());
         assert_eq!(login.accounts(SVC), Vec::<String>::new());
+    }
+
+    /// Regression (user report 2026-10-05): what the hand-over cannot collect must stop it, not
+    /// leave the entry out. A hand-over without it installs a version that asks for the keychain.
+    #[test]
+    fn regression_a_hand_over_that_cannot_list_this_build_s_items_fails() {
+        let login = Login::default();
+        store(&login, "aaaa").set(VAULT, "device key").unwrap();
+        let listing_fails = PerBuildStore::new(Fake { fail_list: true, ..login.as_build("aaaa") }, SVC, "mac", "aaaa");
+        assert!(listing_fails.handoff_entries().is_err());
+    }
+
+    #[test]
+    fn an_item_of_this_build_s_that_cannot_be_read_quietly_fails_the_hand_over() {
+        let login = Login::default();
+        // Under this build's account, but made by another build: reading it would ask.
+        login.as_build("intruder").write(&entry_service(), &own("aaaa"), "planted").unwrap();
+        assert!(store(&login, "aaaa").handoff_entries().is_err());
+        assert_eq!(login.asked(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn what_this_process_read_is_handed_over_even_when_the_item_no_longer_reads() {
+        let login = Login::default();
+        let s = store(&login, "aaaa");
+        s.set(VAULT, "device key").unwrap();
+        // The item can no longer be read quietly (as with a locked keychain): the value this
+        // process holds goes over.
+        login.as_build("aaaa").remove(&entry_service(), &own("aaaa")).unwrap();
+        login.as_build("intruder").write(&entry_service(), &own("aaaa"), "planted").unwrap();
+        let entries = s.handoff_entries().unwrap();
+        assert_eq!(entries.iter().map(|(e, v)| (e.as_str(), v.as_deref().map(String::as_str))).collect::<Vec<_>>(), [(VAULT, Some("device key"))]);
     }
 
     #[test]

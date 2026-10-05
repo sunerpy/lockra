@@ -281,12 +281,16 @@ that the app and the app inside the updater's `.app.tar.gz` carry exactly the pi
 requirement; `remove` deletes the job's keychain. Local and CI builds stay ad hoc, and an ad hoc
 build keeps the keyring store and hands nothing over.
 
-**In CI.** `macos-check` runs `.github/scripts/check-keychain-handoff.sh` on the runner's login
-keychain (a keychain made with `security create-keychain` skips the partition check): three builds
-of `examples/keychain_harness.rs` with different code, signed with certificates made for the run,
-show that a build cannot read another build's item without the dialog, that the hand-over before
-installation lets the new build read its own item without it, and that a build signed otherwise
-is handed nothing and gives nothing.
+**In CI.** `macos-keychain` runs on the login keychains of macOS 15 and 26 (a keychain made with
+`security create-keychain` skips the partition check). `.github/scripts/check-keychain-handoff.sh`:
+three builds of `examples/keychain_harness.rs` with different code, signed with certificates made
+for the run, show that a build cannot read another build's item without the dialog, that the
+hand-over before installation lets the new build read its own item without it, and that a build
+signed otherwise is handed nothing and gives nothing. `.github/scripts/check-keychain-preinstall.sh`
+does it as an update does: the real app, a debug build trusting the run's certificate
+(`LOCKRA_DEV_RELEASE_REQUIREMENT`), bundled and signed with the hardened runtime as the release is,
+packed as the updater's `Lockra.app.tar.gz`, staged by the updater's own `prepare_update` and
+installed at another path, reads its entry without asking; an ad hoc package is handed nothing.
 
 - **Lost:** sign the next release with a new certificate (below); every Mac user allows the
   keychain once more after that update.
@@ -327,7 +331,8 @@ What the automated gates cannot cover, before announcing a release:
    from 0.7 or earlier to the first release with the hand-over asks once for the keychain item (the
    old build has no hand-over to give); from there on, _Update now_ and the restart that follows
    open Lockra without the system's keychain dialog, and Touch ID still unlocks. A dmg installed by
-   hand asks once.
+   hand asks once. When an update ends with "could not take over the device key", nothing was
+   installed: `~/Library/Logs/dev.lockra.desktop/lockra.log` says why.
 10. **Android** (an arm64 phone): install the release's APK and go through
     `docs/acceptance/android.md`; an APK from a pull request (signed with that run's key) has to be
     uninstalled first.

@@ -871,6 +871,8 @@ export const en: Messages = {
     update_signature: "The package is not signed with Lockra's key and was not installed",
     update_install_failed: "Installing the update failed",
     update_cancelled: "The administrator prompt was cancelled; nothing was installed",
+    update_keychain:
+      "The new version could not take over the device key in the Keychain; nothing was installed",
     sync_off: "Sync is not set up on this device",
     sync_already_on: "Sync is already on for this device; turn it off first",
     sync_config_invalid:

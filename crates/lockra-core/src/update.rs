@@ -138,6 +138,7 @@ pub(crate) fn failure_code(failure: UpdateFailure) -> ErrorCode {
         UpdateFailure::Signature => ErrorCode::UpdateSignature,
         UpdateFailure::Install => ErrorCode::UpdateInstallFailed,
         UpdateFailure::Cancelled => ErrorCode::UpdateCancelled,
+        UpdateFailure::Keychain => ErrorCode::UpdateKeychain,
     }
 }
 
@@ -172,6 +173,7 @@ mod tests {
             (UpdateFailure::Signature, ErrorCode::UpdateSignature),
             (UpdateFailure::Install, ErrorCode::UpdateInstallFailed),
             (UpdateFailure::Cancelled, ErrorCode::UpdateCancelled),
+            (UpdateFailure::Keychain, ErrorCode::UpdateKeychain),
         ];
         for (failure, code) in cases {
             assert_eq!(failure_code(failure), code);

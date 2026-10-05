@@ -77,5 +77,13 @@
       "code": "update_signature",
       "at_ms": 1789999995000
     }
+  },
+  {
+    "method": "appimage",
+    "status": {
+      "state": "failed",
+      "code": "update_keychain",
+      "at_ms": 1789999996000
+    }
   }
 ]

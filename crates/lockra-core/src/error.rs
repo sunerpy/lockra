@@ -92,6 +92,9 @@ pub enum ErrorCode {
     UpdateInstallFailed,
     /// The administrator password prompt was cancelled.
     UpdateCancelled,
+    /// macOS: the new version could not take over the keychain's device key, so the update was
+    /// not installed.
+    UpdateKeychain,
     /// Sync is not set up on this device.
     SyncOff,
     /// Sync is already set up on this device (turn it off first).

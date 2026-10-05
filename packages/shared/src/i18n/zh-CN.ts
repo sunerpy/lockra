@@ -820,6 +820,7 @@ export const zhCN = {
     update_signature: "安装包未使用 Lockra 的密钥签名，已拒绝安装",
     update_install_failed: "安装更新失败",
     update_cancelled: "已取消管理员授权，未安装更新",
+    update_keychain: "新版本无法接管钥匙串中的设备密钥，未安装更新",
     sync_off: "这台设备没有开启同步",
     sync_already_on: "这台设备已开启同步，请先关闭",
     sync_config_invalid: "存储地址无效（地址中不能包含用户名或密码），或有必填项未填",

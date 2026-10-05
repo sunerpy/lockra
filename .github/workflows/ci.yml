@@ -22,6 +22,9 @@
 # - `windows-check` is the template's optional early warning, enabled: the shell and the
 #   clipboard adapter carry Windows-only code.
 # - `macos-check` is the same warning for macOS: the shell's Touch ID check is macOS-only code.
+# - `macos-keychain` hands the keychain over across builds on the runners' login keychains, on
+#   macOS 15 and 26: between two harness builds, then with the real app signed with the hardened
+#   runtime and staged from an updater-shaped package (.github/scripts/check-keychain-*.sh).
 # - `android` builds the phone app (apps/mobile) for arm64, signs it with a key made for the run and
 #   checks the packages; `android-device` runs that APK on an emulator: it creates a vault, locks on
 #   leaving and unlocks.
@@ -428,8 +431,7 @@ jobs:
 
   # The same early warning for macOS-only code (the shell's Touch ID check, the keychain store of
   # the releases), on the runner the release bundles macOS on; the crates that write files, tested
-  # here; then the keychain hand-over of an update on this Mac's login keychain, with its real
-  # partitions (docs/security.md, "Keychain items across updates").
+  # here.
   macos-check:
     name: macOS cargo check and tests
     runs-on: macos-15
@@ -456,9 +458,41 @@ jobs:
       # The crates that write files, tested on macOS itself (as on Windows, above).
       - name: Crate tests (vault, core, remote)
         run: cargo test --locked -p lockra-vault -p lockra-core -p lockra-remote
+
+  # The keychain hand-over of a macOS update on the runner's login keychain, with its real
+  # partitions (docs/security.md, "Keychain items across updates"): between two harness builds,
+  # then end to end with the real app as an update installs it. On the macOS the releases are built
+  # on and on the one users run.
+  macos-keychain:
+    name: macOS keychain hand-over (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.0
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: tauri-ci-macos-keychain-${{ matrix.os }}
+      - name: Create an empty frontendDist so generate_context! compiles
+        run: mkdir -p apps/desktop/dist
       - name: Keychain hand-over across builds (login keychain)
         timeout-minutes: 25
         run: .github/scripts/check-keychain-handoff.sh
+      - name: Keychain hand-over before an install, with the real app (login keychain)
+        timeout-minutes: 25
+        run: .github/scripts/check-keychain-preinstall.sh
 
   # The phone app (apps/mobile): clippy for aarch64-linux-android over every workspace crate it
   # links, then the release APK and AAB built unsigned, signed in a step of their own with a key
@@ -611,6 +645,7 @@ jobs:
         sync-it,
         windows-check,
         macos-check,
+        macos-keychain,
         android,
         android-device,
       ]

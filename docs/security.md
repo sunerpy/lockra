@@ -73,17 +73,36 @@ The method is Voltip's, measured on GitHub's Macs and users' keychains in 2026-0
 - **The hand-over before installation.** Once the updater has verified a package's minisign
   signature, the running build expands it into a temporary directory, starts the staged executable
   with `--lockra-keychain-handoff` and one end of a socket pair as its stdin, and sends the entries
-  its store holds (every item of its own, read quietly, and what this process wrote or deleted).
-  Each side first checks the other process against the requirement (`SecCodeCopyGuestWithAttributes`
-  by pid), so the values only ever go from one release to the next; nothing goes through the disk,
-  the command line or the environment. The staged build writes items of its own, reads them back
-  and only then acknowledges; on any failure it rolls its items back and the update installs
-  without a hand-over. The installed build reads its own item and removes the older copies, which
-  needs no permission (removing goes by reference and never reads the value).
-- **Without a hand-over** (a dmg installed by hand, an update from 0.7 or earlier, a hand-over
-  that failed) the build reads the newest older copy once, with the dialog, and moves it into its
-  own item; the item of 0.7 (service `dev.lockra.desktop`, account the vault id) is the oldest.
-- **Not signed so** (local and CI builds, ad hoc): the keyring store as before, and no hand-over.
+  its store holds (every item of its own, read quietly, and what this process wrote or deleted; an
+  item of its own that cannot be listed or read quietly, as in a locked keychain, stops the
+  hand-over instead of being left out). Each side first checks the other process against the
+  requirement (`SecCodeCopyGuestWithAttributes` by pid), so the values only ever go from one
+  release to the next; nothing goes through the disk, the command line or the environment. The
+  staged build writes items of its own, reads them back and only then acknowledges; on any failure
+  it rolls its items back and does not acknowledge.
+- **Installed only after the hand-over** (the releases after 0.7.4; `updater::prepare_then_install`): when it
+  fails, nothing is installed, the running version keeps its items, and the update ends with
+  `update_keychain` ("the new version could not take over the device key"); a version that would
+  ask for the keychain on its first start is never installed. Up to 0.7.4 the update installed
+  anyway and the new version asked once. The installed build reads its own item and removes the
+  older copies, which needs no permission (removing goes by reference and never reads the value).
+- **The log**: an app started from the Finder has no stderr anyone reads, so the Mac app also logs
+  to `~/Library/Logs/dev.lockra.desktop/lockra.log` (owner-only, restarted past 1 MiB with the
+  previous one kept as `lockra.log.1`; `logging.rs`). The staged build logs there too: a hand-over
+  that failed says why. Nothing secret is logged.
+- **Without a hand-over** (a dmg installed by hand, an update from 0.7 or earlier, an update 0.7.4
+  or earlier installed after its hand-over failed) the build reads the newest older copy once, with
+  the dialog, and moves it into its own item; the item of 0.7 (service `dev.lockra.desktop`,
+  account the vault id) is the oldest. A build that has not done so yet (the vault was unlocked
+  with the master password since) has nothing of its own to hand over, so the next version asks
+  that once instead.
+- **Not signed so** (local and CI builds, ad hoc): the keyring store as before, and no hand-over. A
+  debug build compiled with `LOCKRA_DEV_RELEASE_REQUIREMENT` trusts that requirement instead of the
+  release's, which is how CI checks the real app end to end; a release build never reads it.
+- **Checked in CI** on the login keychains of macOS 15 and 26 (`macos-keychain`):
+  `check-keychain-handoff.sh` between harness builds, and `check-keychain-preinstall.sh` with the
+  real app, signed with the hardened runtime as the release is, staged from an updater-shaped
+  `Lockra.app.tar.gz` and installed at another path; a package signed otherwise is handed nothing.
 
 All of it is security-framework's safe calls: the workspace keeps forbidding unsafe code.
 

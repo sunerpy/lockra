@@ -25,6 +25,12 @@
 
 Mac 版改为使用 Lockra 固定的签名证书，应用内更新在安装新版本之前，会把本机记住的密钥交给新版本保存。更新并重新打开后，macOS 不再询问是否允许 Lockra 使用钥匙串，Touch ID 照常解锁。从 0.7.0 或更早的版本升级到 0.7.1 的那一次，以及手动安装 dmg 之后，macOS 仍会询问一次。
 
+### 新版本无法接管密钥时
+
+<StatusTag status="building" />
+
+如果新版本无法接管本机记住的密钥，更新不会安装。Lockra 继续运行当前版本，提示「新版本无法接管钥匙串中的设备密钥，未安装更新」，并把原因写入 `~/Library/Logs/dev.lockra.desktop/lockra.log`。0.7.4 及更早的版本遇到这种情况仍会安装更新，重新打开后 macOS 会询问一次。
+
 ## Linux
 
 - **安装包**：.deb、.rpm 和 AppImage，适用于 x64 与 ARM64。Lockra 需要 WebKitGTK 4.1；X11 和 Wayland 均可使用。
