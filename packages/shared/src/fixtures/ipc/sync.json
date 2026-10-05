@@ -34,20 +34,8 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
-      "key_saved": false,
-      "transports": [
-        {
-          "kind": "cloud",
-          "status": {
-            "state": "synced",
-            "at_ms": 1789999940000
-          },
-          "last_ok_ms": 1789999940000
-        }
-      ],
-      "lan": null
-    },
-    "joining": null
+      "key_saved": false
+    }
   },
   {
     "space": {
@@ -84,20 +72,8 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
-      "key_saved": false,
-      "transports": [
-        {
-          "kind": "cloud",
-          "status": {
-            "state": "synced",
-            "at_ms": 1789999940000
-          },
-          "last_ok_ms": 1789999940000
-        }
-      ],
-      "lan": null
-    },
-    "joining": null
+      "key_saved": false
+    }
   },
   {
     "space": {
@@ -135,20 +111,8 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
-      "key_saved": false,
-      "transports": [
-        {
-          "kind": "cloud",
-          "status": {
-            "state": "synced",
-            "at_ms": 1789999940000
-          },
-          "last_ok_ms": 1789999940000
-        }
-      ],
-      "lan": null
-    },
-    "joining": null
+      "key_saved": false
+    }
   },
   {
     "space": {
@@ -187,71 +151,8 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
-      "key_saved": false,
-      "transports": [
-        {
-          "kind": "cloud",
-          "status": {
-            "state": "synced",
-            "at_ms": 1789999940000
-          },
-          "last_ok_ms": 1789999940000
-        }
-      ],
-      "lan": null
-    },
-    "joining": null
-  },
-  {
-    "space": {
-      "storage": {
-        "kind": "s3",
-        "endpoint": "https://s3.eu-central-1.amazonaws.com",
-        "region": "eu-central-1",
-        "bucket": "my-lockra",
-        "prefix": "lockra/",
-        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
-        "path_style": false
-      },
-      "device_name": "Desktop",
-      "devices": [
-        {
-          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
-          "name": "Desktop",
-          "written_at_ms": 1789999940000,
-          "this_device": true
-        },
-        {
-          "tag": "0a9b8c7d6e5f40312233445566778899",
-          "name": "Pixel 8",
-          "written_at_ms": 1789996400000,
-          "this_device": false
-        }
-      ],
-      "status": {
-        "state": "offline",
-        "at_ms": 1789999980000
-      },
-      "last_sync_ms": 1789999940000,
-      "rolled_back": [],
-      "unreadable": [
-        "ffeeddccbbaa99887766554433221100"
-      ],
-      "keyring_pending": false,
-      "key_saved": false,
-      "transports": [
-        {
-          "kind": "cloud",
-          "status": {
-            "state": "synced",
-            "at_ms": 1789999940000
-          },
-          "last_ok_ms": 1789999940000
-        }
-      ],
-      "lan": null
-    },
-    "joining": null
+      "key_saved": false
+    }
   },
   {
     "space": {
@@ -279,153 +180,10 @@
       ],
       "unreadable": [],
       "keyring_pending": true,
-      "key_saved": false,
-      "transports": [
-        {
-          "kind": "cloud",
-          "status": {
-            "state": "synced",
-            "at_ms": 1789999940000
-          },
-          "last_ok_ms": 1789999940000
-        }
-      ],
-      "lan": null
-    },
-    "joining": null
-  },
-  {
-    "space": {
-      "storage": null,
-      "device_name": "Desktop",
-      "devices": [
-        {
-          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
-          "name": "Desktop",
-          "written_at_ms": 1789999940000,
-          "this_device": true
-        },
-        {
-          "tag": "0a9b8c7d6e5f40312233445566778899",
-          "name": "Pixel 8",
-          "written_at_ms": 1789996400000,
-          "this_device": false
-        }
-      ],
-      "status": {
-        "state": "synced",
-        "at_ms": 1789999990000
-      },
-      "last_sync_ms": 1789999940000,
-      "rolled_back": [],
-      "unreadable": [
-        "ffeeddccbbaa99887766554433221100"
-      ],
-      "keyring_pending": false,
-      "key_saved": false,
-      "transports": [
-        {
-          "kind": "lan",
-          "status": {
-            "state": "synced",
-            "at_ms": 1789999990000
-          },
-          "last_ok_ms": 1789999990000
-        }
-      ],
-      "lan": {
-        "role": "hub",
-        "serving": true,
-        "port": 47100,
-        "peers": [
-          {
-            "peer_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000007",
-            "name": "Pixel 8",
-            "platform": "android",
-            "tag": "0a9b8c7d6e5f40312233445566778899"
-          }
-        ],
-        "request": {
-          "name": "Laptop",
-          "platform": "linux",
-          "code": "246813"
-        },
-        "offer_until_ms": 1790000090000
-      }
-    },
-    "joining": null
-  },
-  {
-    "space": {
-      "storage": {
-        "kind": "s3",
-        "endpoint": "https://s3.eu-central-1.amazonaws.com",
-        "region": "eu-central-1",
-        "bucket": "my-lockra",
-        "prefix": "lockra/",
-        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
-        "path_style": false
-      },
-      "device_name": "Desktop",
-      "devices": [
-        {
-          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
-          "name": "Desktop",
-          "written_at_ms": 1789999940000,
-          "this_device": true
-        },
-        {
-          "tag": "0a9b8c7d6e5f40312233445566778899",
-          "name": "Pixel 8",
-          "written_at_ms": 1789996400000,
-          "this_device": false
-        }
-      ],
-      "status": {
-        "state": "synced",
-        "at_ms": 1789999940000
-      },
-      "last_sync_ms": 1789999940000,
-      "rolled_back": [],
-      "unreadable": [
-        "ffeeddccbbaa99887766554433221100"
-      ],
-      "keyring_pending": false,
-      "key_saved": false,
-      "transports": [
-        {
-          "kind": "lan",
-          "status": {
-            "state": "offline",
-            "at_ms": 1789999980000
-          },
-          "last_ok_ms": 1789996400000
-        },
-        {
-          "kind": "cloud",
-          "status": {
-            "state": "synced",
-            "at_ms": 1789999940000
-          },
-          "last_ok_ms": 1789999940000
-        }
-      ],
-      "lan": {
-        "role": "client",
-        "hub_name": "Desktop"
-      }
-    },
-    "joining": null
-  },
-  {
-    "space": null,
-    "joining": {
-      "hub_name": "Desktop",
-      "code": "246813"
+      "key_saved": false
     }
   },
   {
-    "space": null,
-    "joining": null
+    "space": null
   }
 ]

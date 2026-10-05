@@ -1,7 +1,5 @@
 import { isLockraError } from "./backend";
 import {
-  MOCK_INVITE_CODE,
-  MOCK_PAIR_CODE,
   MOCK_PASSWORD,
   MOCK_STORAGE_SECRET,
   MOCK_SYNC_KEY,
@@ -11,15 +9,7 @@ import {
   mockSyncSpace,
   sampleEntries,
 } from "./mock-backend";
-import type {
-  CodesFrame,
-  JoinSource,
-  LanView,
-  Notice,
-  StorageConfig,
-  SyncSpaceView,
-  UiEvent,
-} from "./schema";
+import type { CodesFrame, JoinSource, Notice, StorageConfig, UiEvent } from "./schema";
 
 async function errorCode(promise: Promise<unknown>): Promise<string | undefined> {
   const error = await promise.then(
@@ -27,18 +17,6 @@ async function errorCode(promise: Promise<unknown>): Promise<string | undefined>
     (e: unknown) => e,
   );
   return isLockraError(error) ? error.code : undefined;
-}
-
-async function hubOf(backend: MockBackend): Promise<Extract<LanView, { role: "hub" }>> {
-  const lan = (await backend.getState()).sync.space?.lan;
-  if (lan?.role !== "hub") throw new Error("not a hub");
-  return lan;
-}
-
-async function spaceOf(backend: MockBackend): Promise<SyncSpaceView> {
-  const space = (await backend.getState()).sync.space;
-  if (space === null) throw new Error("no space");
-  return space;
 }
 
 function recorder(backend: MockBackend): { events: UiEvent[]; notices: () => Notice[] } {
@@ -614,185 +592,6 @@ describe("MockBackend", () => {
     expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
       "locked",
     );
-  });
-
-  it("serves a LAN hub: offers, requests, paired devices and a storage beside it", async () => {
-    const plain = new MockBackend({ entries: sampleEntries() });
-    expect(
-      await errorCode(
-        plain.dispatch({ command: "sync_lan_enable", password: MOCK_PASSWORD, device_name: "" }),
-      ),
-    ).toBe("sync_lan_unavailable");
-
-    const at = Date.UTC(2026, 9, 5);
-    const backend = new MockBackend({ entries: sampleEntries(), lan: true, now: () => at });
-    const enable = (password?: string) =>
-      backend.dispatch({ command: "sync_lan_enable", password, device_name: " Desk " });
-    // A new space on the LAN alone is sealed under the master password: no biometric check.
-    expect(await errorCode(enable())).toBe("wrong_password");
-    expect(await errorCode(enable("a wrong password"))).toBe("wrong_password");
-    await enable(MOCK_PASSWORD);
-    let space = await spaceOf(backend);
-    expect(space.storage).toBeNull();
-    expect(space.key_saved).toBe(false);
-    expect(space.transports.map((t) => [t.kind, t.status.state])).toEqual([["lan", "synced"]]);
-    expect(await hubOf(backend)).toMatchObject({ serving: true, peers: [], request: null });
-    expect(await errorCode(enable(MOCK_PASSWORD))).toBe("sync_already_on");
-
-    const offer = await backend.dispatch({ command: "sync_lan_offer", password: MOCK_PASSWORD });
-    expect(offer.text).toMatch(/^lockra-pair:1:/);
-    expect(offer.expires_at_ms).toBe(at + 120_000);
-    expect((await hubOf(backend)).offer_until_ms).toBe(offer.expires_at_ms);
-
-    const answer = (approve: boolean) => backend.dispatch({ command: "sync_lan_answer", approve });
-    expect(await errorCode(answer(true))).toBe("sync_pairing_expired");
-    backend.lanAsk("Pixel 8", "android");
-    expect((await hubOf(backend)).request).toEqual({
-      name: "Pixel 8",
-      platform: "android",
-      code: MOCK_PAIR_CODE,
-    });
-    await answer(false);
-    expect((await hubOf(backend)).request).toBeNull();
-    backend.lanAsk("Pixel 8", "android");
-    await answer(true);
-    let hub = await hubOf(backend);
-    expect(hub.peers.map((p) => [p.name, p.platform])).toEqual([["Pixel 8", "android"]]);
-    expect(hub).toMatchObject({ request: null, offer_until_ms: null });
-    expect((await spaceOf(backend)).devices.map((d) => d.name)).toEqual(["Desk", "Pixel 8"]);
-
-    // A storage of the user's own beside the LAN: another device's invitation, with its code.
-    const add = (code: string) =>
-      backend.dispatch({
-        command: "sync_add_storage",
-        source: { type: "invite", text: "lockra-invite:2:abc", code },
-        password: MOCK_PASSWORD,
-      });
-    expect(await errorCode(add("WRONG"))).toBe("sync_invite_code_wrong");
-    await add(MOCK_INVITE_CODE);
-    space = await spaceOf(backend);
-    expect(space.storage?.kind).toBe("webdav");
-    expect(space.transports.map((t) => t.kind)).toEqual(["lan", "cloud"]);
-    expect(await errorCode(add(MOCK_INVITE_CODE))).toBe("sync_already_on");
-    await backend.dispatch({ command: "sync_remove_storage" });
-    space = await spaceOf(backend);
-    expect(space.storage).toBeNull();
-    expect(space.transports.map((t) => t.kind)).toEqual(["lan"]);
-    expect(await errorCode(backend.dispatch({ command: "sync_remove_storage" }))).toBe(
-      "sync_no_storage",
-    );
-
-    const remove = (peer_id: string) =>
-      backend.dispatch({ command: "sync_lan_remove_peer", peer_id });
-    await remove(hub.peers[0]?.peer_id ?? "");
-    expect((await hubOf(backend)).peers).toEqual([]);
-    expect((await spaceOf(backend)).devices.map((d) => d.name)).toEqual(["Desk"]);
-    expect(await errorCode(remove("00000000-0000-4000-8000-000000000000"))).toBe("internal");
-
-    // A full hub turns the next device away.
-    for (let n = 0; n < 32; n++) {
-      backend.lanAsk(`Phone ${n}`, "android");
-      await answer(true);
-    }
-    backend.lanAsk("One too many", "android");
-    expect(await errorCode(answer(true))).toBe("sync_lan_full");
-    hub = await hubOf(backend);
-    expect(hub.peers).toHaveLength(32);
-    expect(hub.request).toBeNull();
-
-    // A space on the LAN alone goes with it.
-    await backend.dispatch({ command: "sync_lan_disable" });
-    expect((await backend.getState()).sync.space).toBeNull();
-    expect(await errorCode(backend.dispatch({ command: "sync_lan_disable" }))).toBe("sync_off");
-    expect(await errorCode(backend.dispatch({ command: "sync_lan_offer" }))).toBe("sync_off");
-  });
-
-  it("puts the LAN beside a space on storage, and takes it off again", async () => {
-    const backend = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace(), lan: true });
-    // An existing space needs the user here: without biometrics, the password.
-    expect(
-      await errorCode(backend.dispatch({ command: "sync_lan_enable", device_name: "Desk" })),
-    ).toBe("biometric_unavailable");
-    await backend.dispatch({
-      command: "sync_lan_enable",
-      password: MOCK_PASSWORD,
-      device_name: "",
-    });
-    let space = await spaceOf(backend);
-    expect(space.transports.map((t) => t.kind)).toEqual(["lan", "cloud"]);
-    expect(space.storage).not.toBeNull();
-    await backend.dispatch({ command: "sync_lan_disable" });
-    space = await spaceOf(backend);
-    expect(space.lan).toBeNull();
-    expect(space.transports.map((t) => t.kind)).toEqual(["cloud"]);
-    await backend.dispatch({ command: "sync_remove_storage" });
-    expect((await backend.getState()).sync.space).toBeNull();
-  });
-
-  it("pairs with a LAN hub, making a vault where there was none", async () => {
-    const join = (backend: MockBackend, password = MOCK_PASSWORD, text = "lockra-pair:1:abc") =>
-      backend.dispatch({ command: "sync_lan_join", text, password, device_name: "Phone" });
-    const fresh = new MockBackend({ lan: true });
-    expect(await errorCode(join(fresh, MOCK_PASSWORD, "lockra-invite:1:abc"))).toBe(
-      "sync_pairing_invalid",
-    );
-    expect(await errorCode(join(fresh, "short"))).toBe("password_too_short");
-
-    // The code shows while the user at the hub decides; a refusal leaves nothing behind.
-    const refused = join(fresh);
-    expect((await fresh.getState()).sync.joining).toEqual({
-      hub_name: "Desktop",
-      code: MOCK_PAIR_CODE,
-    });
-    fresh.lanWelcome(false);
-    expect(await errorCode(refused)).toBe("sync_pairing_refused");
-    let state = await fresh.getState();
-    expect(state.sync.joining).toBeNull();
-    expect(state.phase).toBe("no_vault");
-
-    const welcomed = join(fresh);
-    fresh.lanWelcome(true);
-    await welcomed;
-    state = await fresh.getState();
-    expect(state.phase).toBe("unlocked");
-    expect(state.entries.length).toBeGreaterThan(0);
-    expect(state.sync.space?.lan).toEqual({ role: "client", hub_name: "Desktop" });
-    expect(state.sync.space?.storage).toBeNull();
-    expect(state.sync.space?.devices.map((d) => [d.name, d.this_device])).toEqual([
-      ["Phone", true],
-      ["Desktop", false],
-    ]);
-    expect(await errorCode(join(fresh))).toBe("sync_already_on");
-
-    // A device of the space gets the LAN beside its storage; this vault's password is checked.
-    const member = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace(), lan: true });
-    expect(await errorCode(join(member, "a wrong password"))).toBe("wrong_password");
-    const beside = join(member);
-    member.lanWelcome(true);
-    await beside;
-    expect((await spaceOf(member)).transports.map((t) => t.kind)).toEqual(["lan", "cloud"]);
-    await member.dispatch({ command: "vault_lock" });
-    expect(await errorCode(join(member))).toBe("locked");
-    expect(await errorCode(join(new MockBackend(), MOCK_PASSWORD))).toBe("sync_lan_unavailable");
-  });
-
-  it("pairs with the hub whose pairing code the camera reads, or says why it could not", async () => {
-    const texts = { prompt: "Point at the code", cancel: "Cancel" };
-    const pair = { password: MOCK_PASSWORD, deviceName: "Phone" };
-    expect(await new MockBackend({ lan: true }).scanPair(texts, pair)).toBe(false);
-    const denied = new MockBackend({ lan: true, scan: { error: "camera_denied" } });
-    expect(await errorCode(denied.scanPair(texts, pair))).toBe("camera_denied");
-    const invite = new MockBackend({ lan: true, scan: "lockra-invite:1:abc" });
-    expect(await errorCode(invite.scanPair(texts, pair))).toBe("sync_pairing_invalid");
-    const fresh = new MockBackend({ lan: true, scan: "lockra-pair:1:abc" });
-    const paired = fresh.scanPair(texts, pair);
-    expect((await fresh.getState()).sync.joining?.code).toBe(MOCK_PAIR_CODE);
-    fresh.lanWelcome(true);
-    expect(await paired).toBe(true);
-    expect((await fresh.getState()).sync.space?.lan).toEqual({
-      role: "client",
-      hub_name: "Desktop",
-    });
   });
 
   it("starts with a space when told to", async () => {

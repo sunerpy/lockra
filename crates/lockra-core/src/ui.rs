@@ -97,24 +97,13 @@ pub struct SyncView {
     /// The space this device belongs to; absent when sync is off, and while locked (the vault
     /// holds the space).
     pub space: Option<SyncSpaceView>,
-    /// This device asking a LAN hub to pair (`sync_lan_join` under way): the code to compare.
-    pub joining: Option<LanJoiningView>,
-}
-
-/// A pairing under way on this device.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct LanJoiningView {
-    /// The hub's name, from its offer.
-    pub hub_name: String,
-    /// The six digits the hub shows too.
-    pub code: String,
 }
 
 /// The sync space this device belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SyncSpaceView {
-    /// Where it is stored, without the secret; absent when the space syncs over the LAN alone.
-    pub storage: Option<StorageView>,
+    /// Where it is stored, without the secret.
+    pub storage: StorageView,
     /// This device's name in the space.
     pub device_name: String,
     /// The devices of the space, this one first.
@@ -133,100 +122,6 @@ pub struct SyncSpaceView {
     /// The sync key was saved or written down (set on the device that made the space once the
     /// user says so); until then Settings › Sync reminds of it.
     pub key_saved: bool,
-    /// Each storage of the space and how its runs went, the LAN first.
-    pub transports: Vec<TransportView>,
-    /// This device's part in a sync over the local network.
-    pub lan: Option<LanView>,
-}
-
-/// One storage of the space.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct TransportView {
-    pub kind: TransportKind,
-    /// What its runs are doing.
-    pub status: SyncStatus,
-    /// When a run there last finished without error, Unix milliseconds.
-    pub last_ok_ms: Option<u64>,
-}
-
-/// Which storage.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TransportKind {
-    /// The hub's copy, over the local network.
-    Lan,
-    /// The storage of the user's own.
-    Cloud,
-}
-
-/// This device's part in a LAN sync.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(tag = "role", rename_all = "snake_case")]
-pub enum LanView {
-    /// This computer keeps the space's copy for the devices paired with it.
-    Hub {
-        /// Its server runs (it goes on taking the devices' writes while the vault is locked).
-        serving: bool,
-        /// The port it listens on.
-        port: u16,
-        /// The devices paired with it.
-        peers: Vec<LanPeerView>,
-        /// A device asking to pair, waiting for the user's answer.
-        request: Option<PairRequestView>,
-        /// Until when the pairing offer shown stands, Unix milliseconds.
-        offer_until_ms: Option<u64>,
-    },
-    /// Paired with a hub.
-    Client {
-        /// The hub's name.
-        hub_name: String,
-    },
-}
-
-/// A device paired with this hub.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct LanPeerView {
-    /// For `sync_lan_remove_peer`.
-    pub peer_id: Uuid,
-    /// Its name and platform as it asked to pair.
-    pub name: String,
-    pub platform: String,
-    /// The tag it writes under (its row in the devices), once it wrote.
-    pub tag: Option<String>,
-}
-
-/// A device asking to pair with this hub.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct PairRequestView {
-    pub name: String,
-    pub platform: String,
-    /// The six digits the device shows too.
-    pub code: String,
-}
-
-/// The answer to `sync_lan_offer`: what a device scans or pastes to ask to pair.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct LanOffer {
-    /// The offer's text (`lockra-pair:1:…`): a secret for two minutes.
-    pub text: String,
-    /// The offer as a QR code (SVG).
-    pub svg: String,
-    /// Until when it stands, Unix milliseconds.
-    pub expires_at_ms: u64,
-}
-
-/// Where a storage added to a space comes from (`sync_add_storage`).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum StorageSource {
-    /// The settings, typed in.
-    Storage { storage: lockra_sync::StorageConfig },
-    /// An invitation of this space from another device (its storage).
-    Invite {
-        text: zeroize::Zeroizing<String>,
-        #[serde(default)]
-        code: Option<zeroize::Zeroizing<String>>,
-    },
 }
 
 /// A sync storage as the interface shows it: everything but the secret.
@@ -291,11 +186,6 @@ pub enum SyncStatus {
         /// Why.
         code: ErrorCode,
         /// When, Unix milliseconds.
-        at_ms: u64,
-    },
-    /// Every storage is out of reach: away from the LAN hub (no failure; the runs go on trying).
-    Offline {
-        /// When it was last tried, Unix milliseconds.
         at_ms: u64,
     },
 }

@@ -1,7 +1,6 @@
 // No vault yet: create one with a master password, restore a backup made elsewhere (the desktop,
-// another phone), whose password becomes the master password, pair with a computer that syncs over
-// the local network (under a new master password), or join a sync space, whose master password
-// does.
+// another phone), whose password becomes the master password, or join a sync space, whose master
+// password does.
 import { errorText, formatDateTime, passwordLongEnough } from "@lockra/shared";
 import {
   Button,
@@ -19,7 +18,6 @@ import { type SubmitEvent, useState } from "react";
 import { overPhoneScreen } from "../app/phone-screen";
 import { fingerprintOffered, useNewVaultFingerprint } from "../components/FingerprintOnboarding";
 import { JoinSync } from "../components/JoinSync";
-import { PairSync } from "../components/PairSync";
 import { SwitchRow } from "../components/Rows";
 
 export function Welcome() {
@@ -77,7 +75,6 @@ export function Welcome() {
         </Button>
       </form>
       <RestoreBackup />
-      <PairFromComputer />
       <JoinFromSync />
     </main>
   );
@@ -164,28 +161,6 @@ function RestoreBackup() {
             {t("common.cancel")}
           </Button>
         </form>
-      )}
-    </section>
-  );
-}
-
-function PairFromComputer() {
-  const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  return (
-    <section className="flex flex-col gap-4" data-testid="welcome-pair">
-      <h2 className="text-[16px] font-medium text-fg">{t("mobile.sync.pairTitle")}</h2>
-      <p className="text-[14px] text-fg-muted">{t("mobile.sync.pairBody")}</p>
-      {open ? (
-        <PairSync newVault />
-      ) : (
-        <Button
-          size="lg"
-          icon="monitor"
-          onClick={() => setOpen(true)}
-          data-testid="welcome-pair-open">
-          {t("mobile.sync.pairTitle")}
-        </Button>
       )}
     </section>
   );

@@ -20,9 +20,6 @@ crates/
   lockra-sync      End-to-end encrypted sync, without I/O: the device snapshots and the keyrings
                    they carry, hybrid logical clocks, the last-writer-wins merge, one sync step.
   lockra-remote    The sync's storage over HTTP (S3-compatible or WebDAV, through OpenDAL).
-  lockra-lan       Sync over the local network: the hub's folder of a space, the hub's server and
-                   its clients over Noise NNpsk0, pairing offers and discovery (not in the shells
-                   yet).
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
                    screen-capture protection, single instance).
@@ -43,15 +40,15 @@ packages/ui        The design system (Voltip's tokens and components, plus Lockr
 `lockra-core` holds all behaviour and no platform code. `Core::start(config, ports)` returns a
 cheap handle; the shell injects the ports:
 
-| Port                        | Desktop adapter                                                                                                                 | Test fake                           |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `SecretStore` (device keys) | `keyring` (Credential Manager, Keychain, Secret Service), probed at start                                                       | `FakeKeychain`, `MemorySecretStore` |
-| `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard)                                                   | `FakeClipboard`                     |
-| `Clock`                     | `SystemClock`                                                                                                                   | `FakeClock`                         |
-| `CodeSink` (code frames)    | a Tauri `Channel`                                                                                                               | `RecordingSink`                     |
-| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy                                                      | `FakeUpdater`, `NoUpdater`          |
-| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS; lockra-lan, the hub on the desktop and a hub's client on both (`src-tauri/src/sync.rs`) | `FakeTransport`, `NoSync`           |
-| `Biometrics` (unlock check) | Touch ID, Windows Hello via robius-authentication (`src-tauri/src/biometrics.rs`)                                               | `FakeBiometrics`, `NoBiometrics`    |
+| Port                        | Desktop adapter                                                                   | Test fake                           |
+| --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
+| `SecretStore` (device keys) | `keyring` (Credential Manager, Keychain, Secret Service), probed at start         | `FakeKeychain`, `MemorySecretStore` |
+| `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard)     | `FakeClipboard`                     |
+| `Clock`                     | `SystemClock`                                                                     | `FakeClock`                         |
+| `CodeSink` (code frames)    | a Tauri `Channel`                                                                 | `RecordingSink`                     |
+| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy        | `FakeUpdater`, `NoUpdater`          |
+| `SyncTransport` (sync)      | lockra-remote, S3 or WebDAV over HTTPS (`src-tauri/src/sync.rs`)                  | `FakeTransport`, `NoSync`           |
+| `Biometrics` (unlock check) | Touch ID, Windows Hello via robius-authentication (`src-tauri/src/biometrics.rs`) | `FakeBiometrics`, `NoBiometrics`    |
 
 State machine: **NoVault → Locked → Unlocked**. Create or restore leads from NoVault to Unlocked;
 unlock (password or device key) from Locked; lock, auto-lock and closing return to Locked; reset
@@ -63,11 +60,7 @@ code window, auto-lock, clipboard clearing, the automatic backup debounce, expor
 automatic update, the next sync run — sleeps until the earliest deadline, and is woken through a
 `Notify` whenever the state changes, so nothing polls. The desktop shell tells the core when its
 window gains or loses the focus (`Core::set_foreground`): in front, sync runs every minute
-rather than every five. A space may sync with two storages, the user's own and a LAN hub's copy
-(`SyncTransport::open_hub_store` on the hub, `open_lan_client` on its clients, and `lan()` for
-the hub's server and pairing; the desktop shell has them, the phone not yet): each has its own state in the vault and its own runtime (when it is due, its last
-result), a run takes the due ones in turn, the LAN first, and a write's number is above every
-number this device gave on any of them. Core tests run on tokio's paused clock with the fakes.
+rather than every five. Core tests run on tokio's paused clock with the fakes.
 
 The in-app update follows Voltip's design. It is a run in the background, one at a time:
 `update_check` asks the `Updater` afresh (`UiState.update` goes `checking` → `up_to_date` /
@@ -115,7 +108,7 @@ representative states, events, commands and answers into `packages/shared/src/fi
 `cdylib` and `rlib`, Tauri without its desktop features) starts the same core with the phone's ports
 and registers lockra-bridge's `PHONE_COMMANDS`: `lockra_dispatch`, `codes_subscribe`,
 `codes_unsubscribe`, `import_pick_files` (images with the photo picker, any other file with the
-system's file picker), `import_scan`, `sync_scan_join` and `sync_scan_pair` (the camera), `backup_save`,
+system's file picker), `import_scan` and `sync_scan_join` (the camera), `backup_save`,
 `restore_pick` and `export_otpauth_file` (the system's file picker), and `update_open_release` (the
 browser, for a newer release's page). Each native capability is a
 small Tauri plugin whose Kotlin class lives in `gen/android` (generated by `tauri android init`,
@@ -128,8 +121,7 @@ a blocking thread; its answers stay in Rust:
 - The camera: `ScannerPlugin.kt` opens `ScannerActivity.kt` (CameraX with ZXing's QR reader, no
   Play services, `FLAG_SECURE`), which answers the call itself, once, in this process: the first
   code read goes to `Core::import_scanned` (the preview's source `camera`) or, for
-  `sync_scan_join`, as the invitation to `Core::sync_join`, and for `sync_scan_pair` as a LAN
-  hub's pairing code to `Core::sync_lan_join` (`src/sync.rs`); `left`, `denied` and
+  `sync_scan_join`, as the invitation to `Core::sync_join` (`src/sync.rs`); `left`, `denied` and
   `noCamera` end the scan, and `away` (the app left while the camera was open) locks the vault
   in Rust at once (`src/scanner.rs`).
 - The photo picker and the file picker: `FilesPlugin.kt` hands over what was picked as names and

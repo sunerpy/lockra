@@ -2,7 +2,6 @@
 //! bridge's and the desktop shell's.
 
 use std::collections::BTreeMap;
-use std::net::IpAddr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -12,12 +11,10 @@ use tokio::time::Instant;
 use zeroize::Zeroizing;
 
 use crate::ports::{
-    BiometricError, Biometrics, Clipboard, ClipboardImage, Clock, CodeSink, HubServe, KeychainStatus, LanClientConfig, LanEvent, LanEvents, LanFuture,
-    LanJoining, LanKey, LanService, MemorySecretStore, PairOffer, PortError, Release, SecretStore, SyncTransport, UpdateFailure, UpdateFuture, UpdateProgress,
-    Updater,
+    BiometricError, Biometrics, Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, MemorySecretStore, PortError, Release, SecretStore, SyncTransport,
+    UpdateFailure, UpdateFuture, UpdateProgress, Updater,
 };
 use crate::ui::{BiometricKind, CodesFrame, InstallMethod};
-use uuid::Uuid;
 
 /// Wall-clock time that moves with tokio's clock, so `tokio::time::advance` under
 /// `start_paused` moves both the timers and the codes.
@@ -302,22 +299,12 @@ impl Updater for FakeUpdater {
 
 /// Sync storage in memory, shared by the cores of one test: a configuration names one
 /// [`MemoryRemote`] by its address (S3: endpoint and bucket, with conditional writes; WebDAV: the
-/// URL, without), and any secret but [`FakeTransport::SECRET`] is refused on every request. The
-/// LAN is one hub ([`FakeLan`]): its copy of the space and its server, for the hub and its clients
-/// alike.
-#[derive(Default)]
+/// URL, without), and any secret but [`FakeTransport::SECRET`] is refused on every request.
+#[derive(Debug, Default)]
 pub struct FakeTransport {
     stores: Mutex<BTreeMap<String, Arc<MemoryRemote>>>,
-    /// The LAN.
-    pub hub: Arc<FakeLan>,
     /// How many times a storage was opened.
     pub opened: AtomicUsize,
-}
-
-impl std::fmt::Debug for FakeTransport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FakeTransport").finish_non_exhaustive()
-    }
 }
 
 impl FakeTransport {
@@ -332,22 +319,6 @@ impl FakeTransport {
         };
         Arc::clone(self.stores.lock().entry(address).or_insert_with(|| Arc::new(MemoryRemote::new(conditional))))
     }
-
-    /// The hub's copy of the space, created empty on first use.
-    pub fn lan(&self) -> Arc<MemoryRemote> {
-        self.hub.copy()
-    }
-
-    /// From now on the hub answers its clients' requests with `failure` (away from it:
-    /// `Network`), or as it should.
-    pub fn set_lan_failure(&self, failure: Option<SyncError>) {
-        *self.hub.failure.lock() = failure;
-    }
-
-    /// The requests the hub's clients made, reaching it or not.
-    pub fn lan_attempts(&self) -> usize {
-        self.hub.attempts.load(Ordering::SeqCst)
-    }
 }
 
 impl SyncTransport for FakeTransport {
@@ -358,246 +329,33 @@ impl SyncTransport for FakeTransport {
             StorageConfig::Webdav { password, .. } => password,
         };
         if secret.as_str() != Self::SECRET {
-            return Ok(Arc::new(Failing(SyncError::Denied)));
+            return Ok(Arc::new(Refusing));
         }
         Ok(self.store(config))
     }
-
-    fn open_hub_store(&self, _space_id: Uuid) -> Result<Arc<dyn RemoteStore>, SyncError> {
-        self.opened.fetch_add(1, Ordering::SeqCst);
-        Ok(self.lan())
-    }
-
-    fn open_lan_client(&self, config: &LanClientConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
-        self.opened.fetch_add(1, Ordering::SeqCst);
-        let mut key = Zeroizing::new([0u8; 32]);
-        if config.psk.len() != key.len() {
-            return Err(SyncError::WrongCredentials);
-        }
-        key.copy_from_slice(&config.psk);
-        Ok(Arc::new(LanClient { lan: Arc::clone(&self.hub), key }))
-    }
-
-    fn lan(&self) -> Option<&dyn LanService> {
-        Some(&*self.hub)
-    }
 }
 
-/// What the hub answers a pairing request: the welcome, or none.
-type Welcome = Option<Zeroizing<Vec<u8>>>;
+/// A storage that refuses the credentials.
+struct Refusing;
 
-/// A hub's server in memory: what it serves, and where its events go; a pairing request waits
-/// for its answer. The code both sides show is [`FakeLan::CODE`].
-#[derive(Default)]
-pub struct FakeLan {
-    copy: Mutex<Option<Arc<MemoryRemote>>>,
-    server: Mutex<Option<(HubServe, LanEvents)>>,
-    waiting: Mutex<Option<tokio::sync::oneshot::Sender<Welcome>>>,
-    failure: Mutex<Option<SyncError>>,
-    attempts: AtomicUsize,
-    /// A port another program holds: a server asked for it listens on the next one.
-    pub taken_port: Mutex<Option<u16>>,
-    /// How many times a server was started.
-    pub started: AtomicUsize,
-}
-
-impl FakeLan {
-    /// The check code of every pairing.
-    pub const CODE: &'static str = "246813";
-
-    fn copy(&self) -> Arc<MemoryRemote> {
-        Arc::clone(self.copy.lock().get_or_insert_with(|| Arc::new(MemoryRemote::new(true))))
-    }
-
-    /// What the server serves now.
-    pub fn served(&self) -> Option<HubServe> {
-        self.server.lock().as_ref().map(|(config, _)| config.clone())
-    }
-
-    /// Tell the hub's core `event`, outside the server's lock (the core answers with updates).
-    fn tell(&self, event: LanEvent) {
-        let events = self.server.lock().as_ref().map(|(_, events)| Arc::clone(events));
-        if let Some(events) = events {
-            events(event);
-        }
-    }
-
-    /// Which paired device `key` is, or how the hub turns it away.
-    fn device(&self, key: &LanKey) -> Result<(Uuid, Option<String>), SyncError> {
-        self.attempts.fetch_add(1, Ordering::SeqCst);
-        if let Some(failure) = self.failure.lock().clone() {
-            return Err(failure);
-        }
-        let server = self.server.lock();
-        let Some((config, _)) = server.as_ref() else { return Err(SyncError::Network("the hub is not serving".into())) };
-        if let Some(peer) = config.peers.iter().find(|peer| *peer.key == **key) {
-            return Ok((peer.peer_id, peer.tag.clone()));
-        }
-        if config.removed.iter().any(|removed| **removed == **key) {
-            return Err(SyncError::WrongCredentials);
-        }
-        Err(SyncError::Network("the hub dropped the connection".into()))
-    }
-
-    /// A paired device wrote under `tag`: the server binds it (once) and says so.
-    fn wrote(&self, peer_id: Uuid, bound: Option<String>, tag: &str) {
-        if bound.as_deref() != Some(tag) {
-            if let Some((config, _)) = self.server.lock().as_mut()
-                && let Some(peer) = config.peers.iter_mut().find(|peer| peer.peer_id == peer_id)
-            {
-                peer.tag = Some(tag.to_owned());
-            }
-            self.tell(LanEvent::PeerTag { peer_id, tag: tag.to_owned() });
-        }
-        self.tell(LanEvent::PeerWrote { peer_id });
-    }
-}
-
-impl LanService for FakeLan {
-    fn serve(&self, config: HubServe, events: LanEvents) -> LanFuture<'_, u16> {
-        Box::pin(async move {
-            self.started.fetch_add(1, Ordering::SeqCst);
-            let mut config = config;
-            if *self.taken_port.lock() == Some(config.port) {
-                config.port += 1;
-            }
-            let port = config.port;
-            *self.server.lock() = Some((config, events));
-            Ok(port)
-        })
-    }
-
-    fn update(&self, config: HubServe) {
-        if let Some((served, _)) = self.server.lock().as_mut() {
-            let port = served.port;
-            *served = HubServe { port, ..config };
-        }
-    }
-
-    fn answer(&self, welcome: Option<Zeroizing<Vec<u8>>>) {
-        let welcomed = welcome.is_some();
-        if let Some(waiting) = self.waiting.lock().take() {
-            let _ = waiting.send(welcome);
-        }
-        self.tell(if welcomed { LanEvent::PairWelcomed } else { LanEvent::PairEnded });
-    }
-
-    fn stop(&self) {
-        *self.server.lock() = None;
-    }
-
-    fn addresses(&self) -> Vec<IpAddr> {
-        vec![IpAddr::from([192, 168, 1, 20])]
-    }
-
-    fn join<'a>(&'a self, offer: &'a PairOffer, name: &'a str, platform: &'a str) -> LanFuture<'a, Box<dyn LanJoining>> {
-        Box::pin(async move {
-            // The offer's key opens one handshake, while it stands.
-            let taken = {
-                let mut server = self.server.lock();
-                let Some((config, _)) = server.as_mut() else { return Err(SyncError::Network("the hub was not found".into())) };
-                match &config.pairing {
-                    Some((key, until)) if **key == *offer.key && Instant::now() < *until => {
-                        config.pairing = None;
-                        true
-                    }
-                    _ => false,
-                }
-            };
-            if !taken {
-                return Err(SyncError::Network("the hub was not found, or its offer was taken".into()));
-            }
-            let (answered, answer) = tokio::sync::oneshot::channel();
-            *self.waiting.lock() = Some(answered);
-            self.tell(LanEvent::PairRequest { name: name.to_owned(), platform: platform.to_owned(), code: Self::CODE.to_owned() });
-            Ok(Box::new(FakeJoining(answer)) as Box<dyn LanJoining>)
-        })
-    }
-}
-
-struct FakeJoining(tokio::sync::oneshot::Receiver<Welcome>);
-
-impl LanJoining for FakeJoining {
-    fn code(&self) -> String {
-        FakeLan::CODE.to_owned()
-    }
-
-    fn answer(self: Box<Self>) -> LanFuture<'static, Option<Zeroizing<Vec<u8>>>> {
-        Box::pin(async move { self.0.await.map_err(|_| SyncError::Network("the hub left".into())) })
-    }
-}
-
-/// A client's way to its hub: each request is checked against what the hub serves (a device it
-/// no longer pairs with is told so), or fails as the test said.
-struct LanClient {
-    lan: Arc<FakeLan>,
-    key: LanKey,
-}
-
-/// The tag of the object at `path`.
-fn tag_of(path: &str) -> &str {
-    path.rsplit('/').next().unwrap_or_default().trim_end_matches(".lks")
-}
-
-impl RemoteStore for LanClient {
-    fn conditional_puts(&self) -> bool {
-        true
-    }
-
-    fn list<'a>(&'a self, dir: &'a str) -> RemoteFuture<'a, Vec<ObjectMeta>> {
-        Box::pin(async move {
-            self.lan.device(&self.key)?;
-            self.lan.copy().list(dir).await
-        })
-    }
-
-    fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
-        Box::pin(async move {
-            self.lan.device(&self.key)?;
-            self.lan.copy().get(path).await
-        })
-    }
-
-    fn put<'a>(&'a self, path: &'a str, bytes: Vec<u8>, condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
-        Box::pin(async move {
-            let (peer_id, bound) = self.lan.device(&self.key)?;
-            let written = self.lan.copy().put(path, bytes, condition).await?;
-            self.lan.wrote(peer_id, bound, tag_of(path));
-            Ok(written)
-        })
-    }
-
-    fn delete<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, ()> {
-        Box::pin(async move {
-            let (peer_id, bound) = self.lan.device(&self.key)?;
-            self.lan.copy().delete(path).await?;
-            self.lan.wrote(peer_id, bound, tag_of(path));
-            Ok(())
-        })
-    }
-}
-
-/// A storage that answers every request with one error.
-struct Failing(SyncError);
-
-impl RemoteStore for Failing {
+impl RemoteStore for Refusing {
     fn conditional_puts(&self) -> bool {
         true
     }
 
     fn list<'a>(&'a self, _dir: &'a str) -> RemoteFuture<'a, Vec<ObjectMeta>> {
-        Box::pin(async { Err(self.0.clone()) })
+        Box::pin(async { Err(SyncError::Denied) })
     }
 
     fn get<'a>(&'a self, _path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
-        Box::pin(async { Err(self.0.clone()) })
+        Box::pin(async { Err(SyncError::Denied) })
     }
 
     fn put<'a>(&'a self, _path: &'a str, _bytes: Vec<u8>, _condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
-        Box::pin(async { Err(self.0.clone()) })
+        Box::pin(async { Err(SyncError::Denied) })
     }
 
     fn delete<'a>(&'a self, _path: &'a str) -> RemoteFuture<'a, ()> {
-        Box::pin(async { Err(self.0.clone()) })
+        Box::pin(async { Err(SyncError::Denied) })
     }
 }

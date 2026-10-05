@@ -392,7 +392,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 None if options.plugin_updates => Arc::new(updater::PluginUpdater::new(app.handle().clone(), updater::install_method())),
                 None => Arc::new(NoUpdater),
             };
-            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::DesktopSync::new(&config.data_dir)));
+            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
             let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics: biometric_check() };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });

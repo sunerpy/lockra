@@ -92,16 +92,9 @@ backup, no sync): `clock` (its device number and the latest stamp), `view` (the 
 the code list, `{collapsed_groups}`, "" for the accounts in no group: group names stay inside the
 encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and
 credentials, the space id, its data key, the sync key, this device's name, its keyring and what
-the runs on the storage remember: `state`, `keyring_written`, `last_sync_ms`). A device in a sync
-over the local network also has `sync.lan`, its role there with what the runs on the LAN copy
-remember: `{role: "hub", install_id, hub_id, port, sync}` on the computer that keeps the copy,
-`{role: "client", install_id, hub_id, hub_name, peer_id, psk, port, addrs, sync}` on a device paired
-with it. The storage's fields stay where earlier versions read them, so a version without the LAN
-syncs on with the storage alone (and drops `lan` when it saves). A `lan` this version cannot use
-(a client's key that is not 32 bytes) is left out and the space kept; a `lan` taken by another
-installation (its `install_id` is not this one's) is dropped when the vault is unlocked or
-restored. A `sync` this version cannot read (one kept by an earlier build) is left out and the
-vault opens without it: sync is off on that device until it is set up again.
+the runs remember). A `sync` this version cannot read (one kept by an earlier
+build) is left out and the vault opens without it: sync is off on that device until it is set up
+again.
 
 Duplicates: the same secret and parameters is **the same account** (an import skips it); the same
 issuer and account with a different secret is a **conflict** (both are kept by default, or the
@@ -119,10 +112,6 @@ codes, code order (`name`, `added`, `recent`), automatic backup `{enabled, dir, 
 3–50, default 10) and automatic updates (`auto_update`, default off). From 0.3.2 the file also carries `schema: 2`;
 a file without it (0.2.0 to 0.3.1) has `auto_update` read as off, because 0.3.0 could have carried
 0.2.0's check-only `auto_check_updates` over into it, and 0.2.0's field itself is not read. Unknown or missing fields take their defaults.
-
-`install-id` in the app config directory, beside `settings.json`: this installation's random id,
-made on the first start and never in the vault or a backup. A vault copied to another installation
-leaves its LAN role there.
 
 `update-ready.json` in the data directory, next to the vault: `{"version": "0.3.0"}`, the release
 the automatic update downloaded and has not installed yet; the next start installs that version
@@ -281,42 +270,3 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   cost, with the usual bounds on the parameters. The code is ten characters of Crockford's Base32
   (50 bits, shown as `ABCDE-FGHJK`); case, spaces and dashes do not matter, and O reads as 0, I
   and L as 1.
-
-## 10. LAN sync
-
-`crates/lockra-lan`. One computer of a space, the hub, keeps a copy of it in a folder of its own
-(the layout of §9 without a prefix) and serves it to the devices paired with it; for them it is one
-more storage of the space. The shells do not offer it yet.
-
-- **Preamble.** Every connection and every discovery probe opens with 38 bytes in the clear:
-  `LKLN`, version 1, the kind (0 a paired device's session, 1 a pairing), a random 16-byte nonce
-  and a 16-byte hint, the first half of HMAC-SHA256(key, `lockra-lan-hint` ‖ nonce). The hub finds
-  the key a connection uses by its hint (at most 32 devices' keys and one offer's); none matching,
-  it drops the connection unanswered. A fresh nonce makes every hint new.
-- **Handshake.** `Noise_NNpsk0_25519_ChaChaPoly_SHA256` under that 32-byte key, the preamble and
-  the hub's id as the prologue. Noise messages travel after their 16-bit length.
-- **Messages.** A 32-bit length (at most 17 MiB), a 32-bit header length, a JSON header and a body
-  of raw bytes, split into Noise transport messages of at most 65 535 bytes. Requests:
-  `{op: "list", dir}`, `{op: "get", path}`, `{op: "put", path, condition}` (the object in the body),
-  `{op: "delete", path}`, `{op: "register", tag}`, `{op: "join", name, platform}` (pairing).
-  Answers: `listed`, `got`, `put`, `done`, `welcome`, `refused`, `failed` with `denied`,
-  `conflict`, `corrupted`, `storage`, `removed`, `busy` or `unsupported`.
-- **What a device may do.** List and read the space's devices directory only; write and delete
-  its own object only, under the tag it registered. A tag the hub or another device has is
-  refused; a device that became a new one (§9, "clash") registers its new tag. A removed device's
-  key is kept to answer it `removed`. Eight connections at once, five seconds for a handshake,
-  thirty without a request.
-- **Pairing offer.** `lockra-pair:1:` and Base64url (no padding) of
-  `{hub_id, name, space_id, addrs, port, key, expires_at_ms}`, good for two minutes and for one
-  handshake. The device sends `join`; both ends show six digits from the handshake's hash, and the
-  user at the hub compares them before answering with the welcome or a refusal. The welcome is
-  JSON: `{peer_id, key, hub_id, hub_name, port, addrs, space_id, data_key, sync_key, cloud?}`, the
-  device's own key with the hub, where the hub is, and the space: its keys, and its storage of the
-  user's own with the credentials when it has one. The device seals its keyring under its own
-  master password, as when it joins through a storage.
-- **Discovery.** A device tries the address its hub answered at last and the ones it knows, then
-  sends a probe (the preamble under its key) there and as a broadcast on the hub's port, UDP. Only
-  a hub that holds the key answers: `LKLN`, version, kind 2 and the first half of
-  HMAC-SHA256(key, `lockra-lan-answer` ‖ the probe's nonce).
-- **Addresses.** The hub answers connections and probes from loopback, private (10/8, 172.16/12,
-  192.168/16, fc00::/7) and link-local (169.254/16, fe80::/10) addresses only.

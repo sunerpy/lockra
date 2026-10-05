@@ -42,11 +42,6 @@ export interface Backend {
    *  and the sync key) goes to the core in Rust, never here, and joins as `sync_join` does with
    *  `join`. `false` when the scan was left without one. */
   scanJoin(texts: ScanTexts, join: ScanJoin): Promise<boolean>;
-  /** The phone's camera → pairing with a computer's LAN hub: the pairing code it reads goes to
-   *  the core in Rust, never here, and pairs as `sync_lan_join` does with `pair`. It resolves once
-   *  the hub's user answered (meanwhile `sync.joining` shows the code to compare); `false` when
-   *  the scan was left without one. */
-  scanPair(texts: ScanTexts, pair: ScanPair): Promise<boolean>;
   /** Native save dialog → backup. The file name, or `null` when cancelled. */
   saveBackup(separatePassword?: string): Promise<string | null>;
   /** Native save dialog (the phone's file picker) → the sync key in a file: the core checks the
@@ -81,14 +76,6 @@ export interface ScanJoin {
   deviceName: string;
   /** The master password of the space's devices, when it is not `password`. */
   spacePassword?: string;
-}
-
-/** What pairing from a scanned pairing code takes besides it, as `sync_lan_join`. */
-export interface ScanPair {
-  /** This device's master password (with no vault yet, the new vault's). */
-  password: string;
-  /** This device's name in the space. */
-  deviceName: string;
 }
 
 /** A failed command: the core's error code, and when a rate-limited unlock may be retried. */

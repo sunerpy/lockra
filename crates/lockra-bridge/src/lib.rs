@@ -10,7 +10,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 use lockra_core::settings::Settings;
-use lockra_core::ui::{ExportTarget, JoinSource, StorageSource};
+use lockra_core::ui::{ExportTarget, JoinSource};
 use lockra_core::{Choice, Core, CoreError, EntryDraft, EntryPatch, RestoreMode, StorageConfig};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -242,49 +242,11 @@ pub enum UiCommand {
     SyncNow,
     /// Turn sync off on this device.
     SyncDisable,
-    /// Make this computer the space's LAN hub; without a space, one on the LAN alone (the
-    /// password required then). With a space, the biometric check may stand for the password.
-    SyncLanEnable {
-        #[serde(default)]
-        password: Option<Zeroizing<String>>,
-        /// The words of the biometric prompt.
-        #[serde(default)]
-        reason: Option<String>,
-        /// This device's name in a new space.
-        #[serde(default)]
-        device_name: String,
-    },
-    /// An offer for a device to pair with this hub; answers with it (a secret for two minutes).
-    SyncLanOffer {
-        #[serde(default)]
-        password: Option<Zeroizing<String>>,
-        #[serde(default)]
-        reason: Option<String>,
-    },
-    /// The user's answer to the device asking to pair.
-    SyncLanAnswer { approve: bool },
-    /// Take a paired device off this hub.
-    SyncLanRemovePeer { peer_id: Uuid },
-    /// Stop syncing over the LAN on this device.
-    SyncLanDisable,
-    /// Pair this device with the hub whose offer is `text` (pasted); the state shows the code to
-    /// compare meanwhile. With no vault yet, the password becomes the new vault's master password.
-    SyncLanJoin { text: Zeroizing<String>, password: Zeroizing<String>, device_name: String },
-    /// Give a space on the LAN alone a storage of the user's own.
-    SyncAddStorage {
-        source: StorageSource,
-        #[serde(default)]
-        password: Option<Zeroizing<String>>,
-        #[serde(default)]
-        reason: Option<String>,
-    },
-    /// Take the storage of the user's own off the space; the LAN goes on.
-    SyncRemoveStorage,
 }
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 53] = [
+pub const COMMANDS: [&str; 45] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -330,14 +292,6 @@ pub const COMMANDS: [&str; 53] = [
     "sync_remove_device",
     "sync_now",
     "sync_disable",
-    "sync_lan_enable",
-    "sync_lan_offer",
-    "sync_lan_answer",
-    "sync_lan_remove_peer",
-    "sync_lan_disable",
-    "sync_lan_join",
-    "sync_add_storage",
-    "sync_remove_storage",
 ];
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
@@ -356,7 +310,7 @@ pub const SHELL_COMMANDS: [&str; 9] = [
 
 /// The Tauri commands of the phone shell: the dispatcher, the code stream, and the actions that
 /// open the photo picker, the file picker or the camera first; what they read stays in Rust.
-pub const PHONE_COMMANDS: [&str; 12] = [
+pub const PHONE_COMMANDS: [&str; 11] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -366,7 +320,6 @@ pub const PHONE_COMMANDS: [&str; 12] = [
     "restore_pick",
     "export_otpauth_file",
     "sync_scan_join",
-    "sync_scan_pair",
     "sync_key_save",
     "update_open_release",
 ];
@@ -374,7 +327,7 @@ pub const PHONE_COMMANDS: [&str; 12] = [
 impl UiCommand {
     /// Whether the answer carries a secret (the shell turns screen-capture protection on).
     pub fn shows_secret(&self) -> bool {
-        matches!(self, Self::EntryReveal { .. } | Self::ExportStart { .. } | Self::SyncCreate { .. } | Self::SyncInvite { .. } | Self::SyncLanOffer { .. })
+        matches!(self, Self::EntryReveal { .. } | Self::ExportStart { .. } | Self::SyncCreate { .. } | Self::SyncInvite { .. })
     }
 
     /// Whether the command ends every secret view (the shell turns the protection off).
@@ -446,14 +399,6 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::SyncRemoveDevice { tag } => unit(core.sync_remove_device(&tag).await)?,
         UiCommand::SyncNow => unit(core.sync_now())?,
         UiCommand::SyncDisable => unit(core.sync_disable())?,
-        UiCommand::SyncLanEnable { password, reason, device_name } => unit(core.sync_lan_enable(password, reason, device_name).await)?,
-        UiCommand::SyncLanOffer { password, reason } => json!(core.sync_lan_offer(password, reason).await?),
-        UiCommand::SyncLanAnswer { approve } => unit(core.sync_lan_answer(approve))?,
-        UiCommand::SyncLanRemovePeer { peer_id } => unit(core.sync_lan_remove_peer(peer_id).await)?,
-        UiCommand::SyncLanDisable => unit(core.sync_lan_disable())?,
-        UiCommand::SyncLanJoin { text, password, device_name } => unit(core.sync_lan_join(text, password, device_name).await)?,
-        UiCommand::SyncAddStorage { source, password, reason } => unit(core.sync_add_storage(source, password, reason).await)?,
-        UiCommand::SyncRemoveStorage => unit(core.sync_remove_storage())?,
     })
 }
 
