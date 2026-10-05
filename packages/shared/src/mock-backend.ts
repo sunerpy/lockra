@@ -33,6 +33,8 @@ import {
   type Incompatible,
   type InstallMethod,
   type JoinSource,
+  type LanOffer,
+  type LanView,
   MARK_CHARS,
   type Notice,
   type OtpKind,
@@ -41,9 +43,11 @@ import {
   type Revealed,
   type Settings,
   type StorageConfig,
+  type StorageSource,
   type StorageView,
   type SyncInvite,
   type SyncSpaceView,
+  type TransportView,
   type UiCommand,
   type UiState,
   MAX_DEVICE_NAME_CHARS,
@@ -89,6 +93,8 @@ export interface MockOptions {
   releasePageOpens?: boolean;
   /** The sync space this device belongs to (shown once unlocked). */
   sync?: SyncSpaceView | null;
+  /** The build syncs over the LAN (a desktop): the hub's server and pairing, in memory. */
+  lan?: boolean;
   /** The groups folded in the code list (shown once unlocked). */
   collapsedGroups?: string[];
 }
@@ -107,6 +113,8 @@ export const MOCK_PASSWORD = "correct horse battery";
 export const MOCK_STORAGE_SECRET = "storage secret";
 /** The one-time code of the mock's sealed invitation. */
 export const MOCK_INVITE_CODE = "7K2QM-XW4FD";
+/** The check code of every pairing the mock makes. */
+export const MOCK_PAIR_CODE = "246813";
 /** The sync key of the mock's spaces. */
 export const MOCK_SYNC_KEY =
   "LKS1-MFRG-GZDF-MZTW-Q2LK-NNWG-23TP-OBYX-E43U-OR3W-C6DZ-PI2D-AMBR-GQ2D-ARQA";
@@ -341,6 +349,15 @@ function checkStorage(storage: StorageConfig): void {
   if (secret !== MOCK_STORAGE_SECRET) throw new LockraError("sync_denied");
 }
 
+/** An invitation the mock reads: v1 as it is, v2 with the mock's code. */
+function checkInvite(text: string, code: string | undefined): void {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("lockra-invite:2:")) {
+    const typed = (code ?? "").toUpperCase().replace(/[\s-]/g, "");
+    if (typed !== MOCK_INVITE_CODE.replace("-", "")) throw new LockraError("sync_invite_code_wrong");
+  } else if (!trimmed.startsWith("lockra-invite:1:")) throw new LockraError("sync_invite_invalid");
+}
+
 function storageView(storage: StorageConfig): StorageView {
   return storage.kind === "s3"
     ? {
@@ -403,6 +420,11 @@ export class MockBackend implements Backend {
   private pending: { release: MockRelease; downloaded: boolean } | null = null;
   /** The sync space, kept here while locked (the core keeps it in the vault). */
   private space: SyncSpaceView | null;
+  /** The build syncs over the LAN (`MockOptions.lan`). */
+  private readonly lanEnabled: boolean;
+  /** This device asking a hub to pair, until the test answers for the hub (`lanWelcome`). */
+  private joining: { hub_name: string; code: string; finish: (welcomed: boolean) => void } | null =
+    null;
   /** The folded groups, kept here while locked (the core keeps them in the vault). */
   private collapsed: string[];
   private biometricAnswer: ErrorCode | null;
@@ -418,6 +440,7 @@ export class MockBackend implements Backend {
     this.updateFailure = options.updateFailure;
     this.releasePageOpens = options.releasePageOpens ?? true;
     this.space = options.sync ?? null;
+    this.lanEnabled = options.lan ?? false;
     this.collapsed = options.collapsedGroups ?? [];
     this.biometricAnswer = options.biometricAnswer ?? null;
     const entries = options.entries ?? [];
@@ -946,23 +969,22 @@ export class MockBackend implements Backend {
         this.requireSpace();
         this.setSpace(null);
         return null;
-      // The mock is a build without the LAN: its spaces are on storage of the user's own.
       case "sync_lan_enable":
+        return this.lanEnable(command.password, command.reason, command.device_name);
       case "sync_lan_offer":
+        return this.lanOffer(command.password, command.reason);
       case "sync_lan_answer":
+        return this.lanAnswer(command.approve);
       case "sync_lan_remove_peer":
-      case "sync_lan_join":
-        throw new LockraError("sync_lan_unavailable");
+        return this.lanRemovePeer(command.peer_id);
       case "sync_lan_disable":
-        this.requireSpace();
-        throw new LockraError("sync_off");
+        return this.lanDisable();
+      case "sync_lan_join":
+        return this.lanJoin(command.text, command.password, command.device_name);
       case "sync_add_storage":
-        this.requireSpace();
-        throw new LockraError("sync_already_on");
+        return this.addStorage(command.source, command.password, command.reason);
       case "sync_remove_storage":
-        this.requireSpace();
-        this.setSpace(null);
-        return null;
+        return this.removeStorage();
     }
   }
 
@@ -974,8 +996,204 @@ export class MockBackend implements Backend {
 
   private setSpace(space: SyncSpaceView | null): void {
     this.space = space;
-    this.state.sync = { space, joining: null };
+    this.state.sync = { space, joining: this.joiningView() };
     this.publish();
+  }
+
+  private joiningView(): { hub_name: string; code: string } | null {
+    return this.joining === null ? null : { hub_name: this.joining.hub_name, code: this.joining.code };
+  }
+
+  private requireLan(): void {
+    if (!this.lanEnabled) throw new LockraError("sync_lan_unavailable");
+  }
+
+  private hubOf(space: SyncSpaceView): Extract<LanView, { role: "hub" }> {
+    if (space.lan?.role !== "hub") throw new LockraError("sync_off");
+    return space.lan;
+  }
+
+  /** The hub with the space's devices: a new space on the LAN alone, or the LAN beside it. */
+  private lanEnable(password: string | undefined, reason: string | undefined, deviceName: string | undefined): null {
+    this.requireLan();
+    this.requireUnlocked();
+    const lan: LanView = { role: "hub", serving: true, port: 47_100, peers: [], request: null, offer_until_ms: null };
+    const row: TransportView = { kind: "lan", status: { state: "idle" }, last_ok_ms: null };
+    if (this.space === null) {
+      if (password === undefined) throw new LockraError("wrong_password");
+      this.checkPassword(password);
+      const name = this.deviceName(deviceName ?? "");
+      this.syncRun({
+        storage: null,
+        device_name: name,
+        devices: [{ tag: mockTag(name), name, written_at_ms: null, this_device: true }],
+        status: { state: "idle" },
+        last_sync_ms: null,
+        rolled_back: [],
+        unreadable: [],
+        keyring_pending: false,
+        key_saved: false,
+        transports: [row],
+        lan,
+      });
+      return null;
+    }
+    if (this.space.lan !== null) throw new LockraError("sync_already_on");
+    this.confirmPresence(password, reason);
+    this.syncRun({ ...this.space, lan, transports: [row, ...this.space.transports] });
+    return null;
+  }
+
+  private lanOffer(password: string | undefined, reason: string | undefined): LanOffer {
+    this.requireLan();
+    const space = this.requireSpace();
+    this.hubOf(space);
+    this.confirmPresence(password, reason);
+    const expires_at_ms = this.now() + 120_000;
+    this.setSpace({ ...space, lan: { ...this.hubOf(space), offer_until_ms: expires_at_ms } });
+    return {
+      text: `lockra-pair:1:${btoa(`mock-offer:${this.now()}`)}`,
+      svg: placeholderSvg("pair"),
+      expires_at_ms,
+    };
+  }
+
+  /** A device asks to pair with this hub (a test's, or the showcase's). */
+  lanAsk(name: string, platform: string): void {
+    const space = this.requireSpace();
+    this.setSpace({ ...space, lan: { ...this.hubOf(space), request: { name, platform, code: MOCK_PAIR_CODE } } });
+  }
+
+  private lanAnswer(approve: boolean): null {
+    this.requireLan();
+    const space = this.requireSpace();
+    const hub = this.hubOf(space);
+    if (hub.request === null) throw new LockraError("sync_pairing_expired");
+    const { name, platform } = hub.request;
+    if (!approve) {
+      this.setSpace({ ...space, lan: { ...hub, request: null } });
+      return null;
+    }
+    if (hub.peers.length >= 32) {
+      this.setSpace({ ...space, lan: { ...hub, request: null } });
+      throw new LockraError("sync_lan_full");
+    }
+    const tag = mockTag(`${name}:${this.now()}`);
+    this.syncRun({
+      ...space,
+      lan: { ...hub, request: null, offer_until_ms: null, peers: [...hub.peers, { peer_id: nextId(), name, platform, tag }] },
+      devices: [...space.devices, { tag, name, written_at_ms: this.now(), this_device: false }],
+    });
+    return null;
+  }
+
+  private lanRemovePeer(peerId: string): null {
+    this.requireLan();
+    const space = this.requireSpace();
+    const hub = this.hubOf(space);
+    const peer = hub.peers.find((p) => p.peer_id === peerId);
+    if (peer === undefined) throw new LockraError("internal");
+    this.setSpace({
+      ...space,
+      lan: { ...hub, peers: hub.peers.filter((p) => p.peer_id !== peerId) },
+      devices: space.devices.filter((d) => d.tag !== peer.tag),
+    });
+    return null;
+  }
+
+  private lanDisable(): null {
+    const space = this.requireSpace();
+    if (space.lan === null) throw new LockraError("sync_off");
+    if (space.storage === null) {
+      this.setSpace(null);
+      return null;
+    }
+    this.setSpace({ ...space, lan: null, transports: space.transports.filter((t) => t.kind !== "lan") });
+    return null;
+  }
+
+  /** Pairing with a hub: the code shows until the test answers for the hub (`lanWelcome`). */
+  private async lanJoin(text: string, password: string, deviceName: string): Promise<null> {
+    this.requireLan();
+    if (!text.trim().startsWith("lockra-pair:1:")) throw new LockraError("sync_pairing_invalid");
+    if (this.state.phase === "locked") throw new LockraError("locked");
+    if (this.state.phase === "unlocked" && this.space?.lan) throw new LockraError("sync_already_on");
+    if (this.state.phase === "no_vault") this.checkLength(password);
+    else this.checkPassword(password);
+    const welcomed = await new Promise<boolean>((finish) => {
+      this.joining = { hub_name: "Desktop", code: MOCK_PAIR_CODE, finish };
+      this.state.sync = { ...this.state.sync, joining: this.joiningView() };
+      this.publish();
+    });
+    this.joining = null;
+    this.state.sync = { ...this.state.sync, joining: null };
+    this.publish();
+    if (!welcomed) throw new LockraError("sync_pairing_refused");
+    if (this.state.phase === "no_vault") {
+      // A new device: the vault comes from the space.
+      this.password = password;
+      const entries = sampleEntries();
+      for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
+      this.enterUnlocked(entries.map((e) => e.view));
+    }
+    const name = this.deviceName(deviceName);
+    const lan: LanView = { role: "client", hub_name: "Desktop" };
+    const row: TransportView = { kind: "lan", status: { state: "idle" }, last_ok_ms: null };
+    if (this.space !== null) {
+      this.syncRun({ ...this.space, lan, transports: [row, ...this.space.transports] });
+      return null;
+    }
+    this.syncRun({
+      storage: null,
+      device_name: name,
+      devices: [
+        { tag: mockTag(`${name}:${this.now()}`), name, written_at_ms: null, this_device: true },
+        { tag: mockTag("Desktop"), name: "Desktop", written_at_ms: this.now(), this_device: false },
+      ],
+      status: { state: "idle" },
+      last_sync_ms: null,
+      rolled_back: [],
+      unreadable: [],
+      keyring_pending: false,
+      key_saved: true,
+      transports: [row],
+      lan,
+    });
+    return null;
+  }
+
+  /** The hub's answer to this device's pairing request (a test's). */
+  lanWelcome(approve: boolean): void {
+    this.joining?.finish(approve);
+  }
+
+  private addStorage(source: StorageSource, password: string | undefined, reason: string | undefined): null {
+    const space = this.requireSpace();
+    if (space.storage !== null) throw new LockraError("sync_already_on");
+    if (source.type === "invite") checkInvite(source.text, source.code);
+    const storage: StorageConfig =
+      source.type === "storage"
+        ? source.storage
+        : { kind: "webdav", url: "https://dav.example.com/dav/", prefix: "lockra", username: "me@example.com", password: MOCK_STORAGE_SECRET };
+    checkStorage(storage);
+    this.confirmPresence(password, reason);
+    this.syncRun({
+      ...space,
+      storage: storageView(storage),
+      transports: [...space.transports, { kind: "cloud", status: { state: "idle" }, last_ok_ms: null }],
+    });
+    return null;
+  }
+
+  private removeStorage(): null {
+    const space = this.requireSpace();
+    if (space.storage === null) throw new LockraError("sync_no_storage");
+    if (space.lan === null) {
+      this.setSpace(null);
+      return null;
+    }
+    this.setSpace({ ...space, storage: null, transports: space.transports.filter((t) => t.kind !== "cloud") });
+    return null;
   }
 
   private deviceName(name: string): string {
@@ -1053,13 +1271,7 @@ export class MockBackend implements Backend {
     deviceName: string,
     spacePassword?: string,
   ): null {
-    const text = source.type === "invite" ? source.text.trim() : "";
-    if (source.type === "invite" && text.startsWith("lockra-invite:2:")) {
-      const typed = (source.code ?? "").toUpperCase().replace(/[\s-]/g, "");
-      if (typed !== MOCK_INVITE_CODE.replace("-", ""))
-        throw new LockraError("sync_invite_code_wrong");
-    } else if (source.type === "invite" && !text.startsWith("lockra-invite:1:"))
-      throw new LockraError("sync_invite_invalid");
+    if (source.type === "invite") checkInvite(source.text, source.code);
     if (
       source.type === "manual" &&
       !/^LKS1(-?[A-Z2-7]{4}){14}$/i.test(source.sync_key.replace(/\s/g, ""))
