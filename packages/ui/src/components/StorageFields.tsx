@@ -1,16 +1,20 @@
 // A sync storage's fields, S3-compatible or WebDAV (the desktop's Settings › Sync and the phone's
-// sync pages); the form's logic is @lockra/shared's storage-form and storage-presets.
+// sync pages), or on the desktop a folder a cloud drive keeps in sync; the form's logic is
+// @lockra/shared's storage-form and storage-presets.
 import {
   type ErrorCode,
   PRESETS,
   type PresetId,
   type StorageForm,
+  errorText,
+  isLockraError,
   presetProblem,
   presetsOf,
   withPreset,
 } from "@lockra/shared";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { useT } from "../i18n/I18nProvider";
+import { Button } from "./Button";
 import { Input } from "./Input";
 import { PasswordField } from "./PasswordField";
 import { Segmented } from "./Segmented";
@@ -32,20 +36,26 @@ function failureHint(preset: PresetId, failure: ErrorCode | undefined): FailureH
 }
 
 /** The storage's fields: S3-compatible or WebDAV, by provider. `lg` is the phone's: taller
- *  fields. `failure` is the error the last attempt with these settings ended in. */
+ *  fields. `failure` is the error the last attempt with these settings ended in. With
+ *  `pickFolder` (the desktop's folder dialog), a folder a cloud drive keeps in sync is offered
+ *  too: the dialog chooses it, and the form only shows it. */
 export function StorageFields({
   form,
   onChange,
   size = "md",
   failure,
+  pickFolder,
 }: {
   form: StorageForm;
   onChange: (patch: Partial<StorageForm>) => void;
   size?: "md" | "lg";
   failure?: ErrorCode;
+  pickFolder?: () => Promise<string | null>;
 }) {
   const t = useT();
   const regionsId = useId();
+  const [picking, setPicking] = useState(false);
+  const [pickError, setPickError] = useState<ErrorCode | undefined>(undefined);
   const preset = PRESETS[form.preset].kind === form.kind ? PRESETS[form.preset] : null;
   const fields =
     preset?.fields ?? (form.kind === "s3" ? ["endpoint", "region", "pathStyle"] : ["url"]);
@@ -65,24 +75,84 @@ export function StorageFields({
     problem === "awsChinaRegion" || problem === "awsGlobalRegion" || problem === "regionFormat"
       ? t(`sync.storage.problems.${problem}`)
       : undefined;
+  const pick = async () => {
+    if (!pickFolder) return;
+    setPicking(true);
+    setPickError(undefined);
+    try {
+      const folder = await pickFolder();
+      if (folder !== null) change({ folder });
+    } catch (error: unknown) {
+      setPickError(isLockraError(error) ? error.code : "internal");
+    } finally {
+      setPicking(false);
+    }
+  };
+  const kinds = [
+    { value: "s3" as const, label: t("sync.storage.s3") },
+    { value: "webdav" as const, label: t("sync.storage.webdav") },
+    ...(pickFolder !== undefined || form.kind === "folder"
+      ? [{ value: "folder" as const, label: t("sync.storage.folder") }]
+      : []),
+  ];
+  const kindHint = {
+    s3: t("sync.storage.s3Hint"),
+    webdav: t("sync.storage.webdavHint"),
+    folder: t("sync.storage.folderHint"),
+  }[form.kind];
+  const kindSwitch = (
+    <div className="flex flex-col gap-1">
+      <Segmented
+        size={size}
+        label={t("sync.storage.kind")}
+        value={form.kind}
+        onChange={(kind) => change({ kind })}
+        options={kinds}
+        className="self-start"
+      />
+      <p className="text-[12px] text-fg-subtle">{kindHint}</p>
+    </div>
+  );
+  if (form.kind === "folder") {
+    return (
+      <div className="flex flex-col gap-3" data-testid="storage-fields">
+        {kindSwitch}
+        <p className="text-[12px] text-fg-subtle">{t("sync.storage.presetHints.folder")}</p>
+        <div className="flex min-w-0 flex-col gap-1" data-testid="storage-folder">
+          <div className="text-[12px] text-fg-muted">{t("sync.storage.folderLabel")}</div>
+          {form.folder === "" ? (
+            <div className="text-[13px] text-fg-subtle">{t("sync.storage.folderNone")}</div>
+          ) : (
+            <div
+              className="min-w-0 font-mono text-[12px] break-all text-fg"
+              data-testid="storage-folder-path">
+              {form.folder}
+            </div>
+          )}
+        </div>
+        {pickFolder && (
+          <Button
+            variant="outline"
+            icon="folder"
+            size={size}
+            loading={picking}
+            onClick={() => void pick()}
+            className="self-start"
+            data-testid="storage-folder-pick">
+            {t(form.folder === "" ? "sync.storage.folderChoose" : "sync.storage.folderChange")}
+          </Button>
+        )}
+        {pickError !== undefined && (
+          <p className="text-[12px] text-danger" role="alert">
+            {errorText(t, pickError)}
+          </p>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-3" data-testid="storage-fields">
-      <div className="flex flex-col gap-1">
-        <Segmented
-          size={size}
-          label={t("sync.storage.kind")}
-          value={form.kind}
-          onChange={(kind) => change({ kind })}
-          options={[
-            { value: "s3", label: t("sync.storage.s3") },
-            { value: "webdav", label: t("sync.storage.webdav") },
-          ]}
-          className="self-start"
-        />
-        <p className="text-[12px] text-fg-subtle">
-          {form.kind === "s3" ? t("sync.storage.s3Hint") : t("sync.storage.webdavHint")}
-        </p>
-      </div>
+      {kindSwitch}
       <div className="flex flex-col gap-1">
         <Select
           size={size}

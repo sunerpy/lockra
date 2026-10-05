@@ -9,21 +9,21 @@ use std::sync::Arc;
 use lockra_bridge::SHELL_COMMANDS;
 use lockra_core::KdfCost;
 use lockra_core::fakes::{FakeClipboard, FakeTransport, FakeUpdater};
-use lockra_core::ports::{MemorySecretStore, Updater};
+use lockra_core::ports::{MemorySecretStore, SyncTransport, Updater};
 use lockra_core::ui::{BiometricKind, InstallMethod};
 use lockra_desktop_lib::{COMMANDS, ShellOptions, build_app, dev_biometric_requested, dev_memory_store_requested};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets};
 use tauri::webview::InvokeRequest;
-use tauri::{App, WebviewWindow, WebviewWindowBuilder};
+use tauri::{App, Manager as _, WebviewWindow, WebviewWindowBuilder};
 use tempfile::TempDir;
 
 const PASSWORD: &str = "correct horse battery";
 
 struct Shell {
     _dir: TempDir,
-    _app: App<MockRuntime>,
+    app: App<MockRuntime>,
     webview: WebviewWindow<MockRuntime>,
 }
 
@@ -33,6 +33,11 @@ fn shell() -> Shell {
 
 /// The shell with `updater` as its update source (none: this copy cannot update itself).
 fn shell_with(updater: Option<Arc<dyn Updater>>) -> Shell {
+    shell_on(updater, Some(Arc::new(FakeTransport::default())))
+}
+
+/// The shell with `updater`, and `sync` as its sync storage (none: the shell's own, lockra-remote).
+fn shell_on(updater: Option<Arc<dyn Updater>>, sync: Option<Arc<dyn SyncTransport>>) -> Shell {
     let dir = tempfile::tempdir().unwrap();
     let options = ShellOptions {
         secrets: Some(Arc::new(MemorySecretStore::default())),
@@ -43,7 +48,7 @@ fn shell_with(updater: Option<Arc<dyn Updater>>) -> Shell {
         single_instance: false,
         updater,
         plugin_updates: false,
-        sync: Some(Arc::new(FakeTransport::default())),
+        sync,
     };
     let mut app = build_app(mock_builder(), options).build(mock_context(noop_assets())).unwrap();
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
@@ -51,7 +56,7 @@ fn shell_with(updater: Option<Arc<dyn Updater>>) -> Shell {
     // the event loop; the mock runtime's turn returns at once.
     #[allow(deprecated)]
     app.run_iteration(|_, _| {});
-    Shell { _dir: dir, _app: app, webview }
+    Shell { _dir: dir, app, webview }
 }
 
 impl Shell {
@@ -71,6 +76,76 @@ impl Shell {
     fn dispatch(&self, command: Value) -> Result<Value, Value> {
         self.invoke("lockra_dispatch", json!({ "command": command }))
     }
+
+    fn core(&self) -> lockra_core::Core {
+        self.app.state::<lockra_core::Core>().inner().clone()
+    }
+
+    fn state(&self) -> Value {
+        self.dispatch(json!({ "command": "app_state" })).unwrap()
+    }
+}
+
+/// Wait until `check` holds, for the core's background runs; fails after ten seconds.
+fn until(what: &str, check: impl Fn() -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !check() {
+        assert!(std::time::Instant::now() < deadline, "timed out waiting for {what}");
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
+/// The `.lks` files under `root`, wherever they are.
+fn snapshots(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut found = Vec::new();
+    let mut dirs = vec![root.to_path_buf()];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else {
+                found.push(path);
+            }
+        }
+    }
+    found
+}
+
+/// Two computers whose cloud drive keeps one folder in sync (here, the same folder), on the
+/// shell's own storage: the folder chosen as the dialog does, an invitation with the key alone.
+#[test]
+fn two_computers_sync_through_a_cloud_drive_folder() {
+    let drive = tempfile::tempdir().unwrap();
+    let create = json!({ "command": "sync_create", "storage": { "kind": "folder" }, "password": PASSWORD, "device_name": "Windows" });
+    let windows = shell_on(None, None);
+    windows.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    windows.dispatch(json!({ "command": "entry_add_uri", "uri": "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub" })).unwrap();
+    assert_eq!(windows.dispatch(create.clone()).unwrap_err(), json!({ "code": "sync_folder_not_chosen" }));
+    windows.core().sync_choose_folder(drive.path()).unwrap();
+    windows.dispatch(create).unwrap();
+    assert_eq!(windows.state()["sync"]["space"]["storage"], json!({ "kind": "folder", "path": drive.path().display().to_string() }));
+    let invite = windows.dispatch(json!({ "command": "sync_invite", "password": PASSWORD })).unwrap();
+    assert_eq!(invite["includes_storage"], false);
+
+    let mac = shell_on(None, None);
+    mac.core().sync_choose_folder(drive.path()).unwrap();
+    let source = json!({ "type": "invite", "text": invite["invite"], "storage": { "kind": "folder" } });
+    mac.dispatch(json!({ "command": "sync_join", "source": source, "password": PASSWORD, "device_name": "MacBook" })).unwrap();
+    until("the account on the Mac", || mac.state()["entries"].as_array().is_some_and(|e| e.iter().any(|x| x["issuer"] == "GitHub")));
+    // One snapshot per device in the drive's folder, and nothing else of Lockra's.
+    until("both snapshots", || snapshots(drive.path()).len() == 2);
+    for path in snapshots(drive.path()) {
+        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("lks"), "{}", path.display());
+        let bytes = std::fs::read(&path).unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains("GitHub"), "ciphertext only");
+    }
+    // Back the other way: the Mac's account reaches Windows on its next run.
+    mac.dispatch(json!({ "command": "entry_add_uri", "uri": "otpauth://totp/Mail:me?secret=GEZDGNBVGY3TQOJQ&issuer=Mail" })).unwrap();
+    mac.dispatch(json!({ "command": "sync_now" })).unwrap();
+    until("the Mac's account written", || mac.state()["sync"]["space"]["status"]["state"] == "synced");
+    windows.dispatch(json!({ "command": "sync_now" })).unwrap();
+    until("the account on Windows", || windows.state()["entries"].as_array().is_some_and(|e| e.iter().any(|x| x["issuer"] == "Mail")));
 }
 
 #[test]

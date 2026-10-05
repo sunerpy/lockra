@@ -100,6 +100,44 @@ sync › Scan to join**, or **Join from sync** on the welcome screen of a new in
 The invitation goes from the camera to Lockra and is not shown on the phone. Pasting the
 invitation, or typing the storage settings and the sync key, works as on a computer.
 
+## Through a cloud drive folder
+
+<StatusTag status="building" /> In development, not released yet.
+
+On a computer, sync needs no storage credentials at all: choose a folder that a cloud drive's app
+keeps in sync, such as a folder of OneDrive, iCloud Drive, Dropbox, Jianguoyun, Nextcloud,
+Synology Drive or Syncthing. Lockra only writes encrypted files into it, and the drive's app
+carries them to your other devices.
+
+1. In the drive's synced folder, make a folder, for example `Lockra`.
+2. On the computer, open **Settings › Sync**, choose **Start syncing**, choose **Cloud drive
+   folder** as the storage, then **Choose folder…** and pick that folder.
+3. Check **This device's name**, enter the master password, and choose **Start syncing**.
+
+The invitation of such a space holds the sync key alone, not the folder on this computer. Once a
+new device has pasted or scanned it, Lockra asks how that device reaches the same folder:
+
+- **Another computer**: choose **Cloud drive folder** and pick the same drive's folder on that
+  computer.
+- **A phone**: choose **WebDAV**, enter the drive's WebDAV address and, in **Folder (optional)**,
+  the folder's path in the drive, then scan the invitation again. For example, the folder
+  `我的坚果云/Lockra` that Jianguoyun's app syncs is the WebDAV address
+  `https://dav.jianguoyun.com/dav/` with the folder `我的坚果云/Lockra`.
+
+OneDrive, iCloud Drive and Dropbox offer no official WebDAV: with them, only computers can join.
+For a phone as well, use Jianguoyun, Nextcloud or Synology, or an S3-compatible bucket or WebDAV
+instead.
+
+Reading a folder on this computer needs no network, so Lockra looks at the folder every 15
+seconds while it is in front, and every minute behind other windows and after a failed run. When
+another device's changes reach the folder is up to the drive's app. When the drive's app is not
+running, or the folder was moved or deleted, **Settings › Sync** says the sync folder is missing,
+and Lockra does not make it again; if the folder moved, choose it again in **Change storage
+settings**.
+
+Versions up to 0.7.3 do not know cloud drive folders: opening the same vault file with one of them
+keeps the accounts, and shows sync as off.
+
 ## When devices sync
 
 While the vault is unlocked, a device syncs when you unlock it, three seconds after a change, at
@@ -163,12 +201,13 @@ the other devices go on. You can join again later with an invitation or the sync
 
 ## When something goes wrong
 
-| Message                                                                                               | What to do                                                                                                                                     |
-| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| The storage refused access; check the access key or password                                          | Check the access key or the password, and that it may list, read, write and delete in the bucket or folder.                                    |
-| The storage could not be reached                                                                      | Check the network and the address. A proxy configured in the system is used.                                                                   |
-| The storage answered with an error; check that the bucket or folder exists                            | Check the bucket, the region and **Path-style access**.                                                                                        |
-| There is no sync space for this sync key on that storage                                              | Check the address, the bucket and **Folder (optional)**: they must be the same as on the other devices.                                        |
-| The master password or the sync key is wrong                                                          | Enter the master password of a device in the space (above) and check the sync key.                                                             |
-| The storage must be reached over HTTPS (plain HTTP only to this computer)                             | Use the service's `https://` address.                                                                                                          |
-| The sync data of a device is older than before and was refused. The storage may have been rolled back | The storage served an older file of that device. The device writes its file again on its next change; if the message stays, remove the device. |
+| Message                                                                                                  | What to do                                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| The storage refused access; check the access key or password                                             | Check the access key or the password, and that it may list, read, write and delete in the bucket or folder.                                    |
+| The storage could not be reached                                                                         | Check the network and the address. A proxy configured in the system is used.                                                                   |
+| The storage answered with an error; check that the bucket or folder exists                               | Check the bucket, the region and **Path-style access**.                                                                                        |
+| There is no sync space for this sync key on that storage                                                 | Check the address, the bucket and **Folder (optional)**: they must be the same as on the other devices.                                        |
+| The master password or the sync key is wrong                                                             | Enter the master password of a device in the space (above) and check the sync key.                                                             |
+| The storage must be reached over HTTPS (plain HTTP only to this computer)                                | Use the service's `https://` address.                                                                                                          |
+| The sync data of a device is older than before and was refused. The storage may have been rolled back    | The storage served an older file of that device. The device writes its file again on its next change; if the message stays, remove the device. |
+| The sync folder is missing: the cloud drive's app may not be running, or the folder was moved or deleted | Start the drive's app and check the folder is where it was; if it moved, choose it again in **Change storage settings**.                       |

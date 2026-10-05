@@ -2,6 +2,7 @@ import {
   MOCK_INVITE_CODE,
   MOCK_PASSWORD,
   MOCK_STORAGE_SECRET,
+  MOCK_SYNC_FOLDER,
   MOCK_SYNC_KEY,
   MockBackend,
   mockSyncSpace,
@@ -361,6 +362,59 @@ describe("Settings › Sync", () => {
       command: "sync_invite",
       reason: "显示同步邀请码",
     });
+  });
+
+  it("keeps a space in a cloud drive's folder and invites with the sync key alone", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-create-open"));
+    const form = within(pane.getByTestId("sync-create"));
+    await user.click(form.getByRole("radio", { name: "网盘文件夹" }));
+    await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
+    const submit = form.getByRole("button", { name: "开始同步" });
+    expect(submit).toBeDisabled();
+    await user.click(form.getByRole("button", { name: "选择文件夹…" }));
+    expect(form.getByTestId("storage-folder-path")).toHaveTextContent(MOCK_SYNC_FOLDER);
+    await user.click(submit);
+    await screen.findByTestId("sync-created");
+    // No path from the webview: the core takes the folder its dialog chose.
+    expect(backend.calls.find((c) => c.command === "sync_create")).toMatchObject({
+      storage: { kind: "folder" },
+    });
+    await user.click(screen.getByRole("button", { name: "我已保存" }));
+    expect(pane.getByTestId("sync-storage")).toHaveTextContent(`网盘文件夹 · ${MOCK_SYNC_FOLDER}`);
+    await user.click(pane.getByTestId("sync-invite-open"));
+    const prompt = await screen.findByRole("dialog", { name: "邀请其他设备" });
+    await user.type(within(prompt).getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
+    const invite = await screen.findByTestId("sync-invite");
+    expect(within(invite).getByTestId("invite-key-only")).toHaveTextContent("邀请只带同步密钥");
+    expect(invite).toHaveTextContent("邀请码包含同步密钥，只能在你自己的设备上使用。");
+  });
+
+  it("joins from an invitation with the sync key alone through this computer's folder", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-join-open"));
+    const form = within(pane.getByTestId("sync-join"));
+    const text = `lockra-invite:1:${btoa("mock-key-only-invite:1")}`;
+    await user.type(form.getByLabelText("邀请码"), text);
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "加入" }));
+    // Asked how this computer reaches the space: the same drive's folder first.
+    const storage = within(await form.findByTestId("sync-join-storage"));
+    expect(storage.getByRole("radio", { name: "网盘文件夹" })).toBeChecked();
+    expect(form.getByRole("button", { name: "加入" })).toBeDisabled();
+    await user.click(storage.getByRole("button", { name: "选择文件夹…" }));
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await pane.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(backend.calls.filter((c) => c.command === "sync_join").at(-1)).toMatchObject({
+      source: { type: "invite", text, storage: { kind: "folder" } },
+    });
+    expect(pane.getByTestId("sync-storage")).toHaveTextContent(MOCK_SYNC_FOLDER);
   });
 
   it("joins with a sealed invitation once its code is right", async () => {

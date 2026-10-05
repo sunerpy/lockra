@@ -3,7 +3,8 @@
 // its code), or the storage and the sync key typed in. On the welcome screen (`newVault`) the
 // master password of the space's devices becomes this phone's; with a vault, its own master
 // password is checked and opens the space, and only when the space's devices use another one does
-// the form ask for that too.
+// the form ask for that too. An invitation with the sync key alone (a space in a computer's cloud
+// drive folder) asks for the storage this phone reaches the same folder at, such as its WebDAV.
 import {
   type JoinSource,
   emptyStorageForm,
@@ -12,6 +13,7 @@ import {
   isSealedInvite,
   storageComplete,
   storageConfig,
+  withPreset,
 } from "@lockra/shared";
 import {
   Button,
@@ -43,6 +45,8 @@ export function JoinSync({
   const [code, setCode] = useState("");
   // The core said this vault's password opens nothing in the space: the space's is asked for.
   const [askSpace, setAskSpace] = useState(false);
+  // The invitation holds the sync key alone: this phone's way to the space is asked for.
+  const [askStorage, setAskStorage] = useState(false);
   const [storage, setStorage] = useState(emptyStorageForm);
   const [syncKey, setSyncKey] = useState("");
   const [password, setPassword] = useState("");
@@ -50,11 +54,14 @@ export function JoinSync({
   const [deviceName, setDeviceName] = useState(() => t("sync.platformDevice.android"));
   const submit = useSubmit();
   const sealed = mode === "invite" && isSealedInvite(invite);
+  const withStorage = mode === "key" || askStorage;
   const sourceReady =
-    mode === "scan" ||
-    (mode === "invite"
-      ? invite.trim() !== "" && (!sealed || code.trim() !== "")
-      : storageComplete(storage) && syncKey.trim() !== "");
+    (mode === "scan" ||
+      (mode === "invite"
+        ? invite.trim() !== "" && (!sealed || code.trim() !== "")
+        : syncKey.trim() !== "")) &&
+    (!withStorage || storageComplete(storage));
+  const ownStorage = askStorage ? storageConfig(storage) : undefined;
   const ready = sourceReady && password !== "";
   const space_password = newVault || spacePassword === "" ? undefined : spacePassword;
   const forget = () => {
@@ -68,6 +75,13 @@ export function JoinSync({
     } catch (failure: unknown) {
       if (isLockraError(failure) && failure.code === "sync_space_password_needed")
         setAskSpace(true);
+      if (isLockraError(failure) && failure.code === "sync_invite_needs_storage" && !askStorage) {
+        setAskStorage(true);
+        // Most likely the drive's WebDAV.
+        setStorage((form) =>
+          form.kind === "webdav" ? form : withPreset(form, { kind: "webdav" }),
+        );
+      }
       throw failure;
     }
   };
@@ -77,7 +91,7 @@ export function JoinSync({
         overPhoneScreen(() =>
           backend.scanJoin(
             { prompt: t("mobile.sync.scanPrompt"), cancel: t("common.cancel") },
-            { password, deviceName, spacePassword: space_password },
+            { password, deviceName, spacePassword: space_password, storage: ownStorage },
           ),
         ),
       ),
@@ -96,7 +110,12 @@ export function JoinSync({
     }
     const source: JoinSource =
       mode === "invite"
-        ? { type: "invite", text: invite.trim(), code: sealed ? code.trim() : undefined }
+        ? {
+            type: "invite",
+            text: invite.trim(),
+            code: sealed ? code.trim() : undefined,
+            storage: ownStorage,
+          }
         : { type: "manual", storage: storageConfig(storage), sync_key: syncKey.trim() };
     const done = await submit.run(() =>
       watch(() =>
@@ -177,6 +196,17 @@ export function JoinSync({
           />
         </>
       )}
+      {mode !== "key" && askStorage && (
+        <div className="flex flex-col gap-3" data-testid="sync-join-storage">
+          <p className="text-[13px] text-fg-muted">{t("mobile.sync.needsStorage")}</p>
+          <StorageFields
+            failure={submit.error}
+            size="lg"
+            form={storage}
+            onChange={(patch) => setStorage((form) => ({ ...form, ...patch }))}
+          />
+        </div>
+      )}
       <Input
         size="lg"
         label={t("sync.deviceName")}
@@ -204,7 +234,7 @@ export function JoinSync({
           autoComplete="off"
         />
       )}
-      {submit.error !== undefined && (
+      {submit.error !== undefined && submit.error !== "sync_invite_needs_storage" && (
         <p role="alert" className="text-[13px] text-danger">
           {errorText(t, submit.error)}
         </p>
