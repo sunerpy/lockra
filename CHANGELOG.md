@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.5](https://github.com/sunerpy/lockra/compare/v0.7.4...v0.7.5) (2026-10-05)
+
+
+### Bug Fixes
+
+* **desktop:** 钥匙串交接失败时不安装更新 ([#79](https://github.com/sunerpy/lockra/issues/79)) ([4a42638](https://github.com/sunerpy/lockra/commit/4a426386a3438e2577322c035f0ea826641fbe56))
+
 ## [0.7.4](https://github.com/sunerpy/lockra/compare/v0.7.3...v0.7.4) (2026-10-05)
 
 
