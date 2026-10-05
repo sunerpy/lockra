@@ -386,4 +386,189 @@ describe("Settings › Sync", () => {
       source: { type: "invite", text: "lockra-invite:2:TEtTSU5WVDI", code: "7k2qm-xw4fd" },
     });
   });
+
+  it("a computer on the LAN alone: turns on, pairs a phone once the codes match, unpairs it, stops", async () => {
+    const { user, backend } = renderApp({ mock: { lan: true } });
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-lan-open"));
+    const form = within(pane.getByTestId("sync-lan-create"));
+    expect(form.getByLabelText("这台设备的名称")).toHaveValue("Linux 电脑");
+    await user.type(form.getByLabelText("主密码"), "a wrong password");
+    await user.click(form.getByRole("button", { name: "开启局域网同步" }));
+    expect(await form.findByText("密码错误")).toBeInTheDocument();
+    await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "开启局域网同步" }));
+    const lan = within(await pane.findByTestId("sync-lan"));
+    expect(lan.getByText("端口 47100")).toBeInTheDocument();
+    expect(lan.getByText("还没有配对的设备。")).toBeInTheDocument();
+    // On the LAN alone: no storage row, no invitation (it carries a storage), the key reminder.
+    expect(pane.queryByTestId("sync-storage")).not.toBeInTheDocument();
+    expect(pane.queryByTestId("sync-invite-open")).not.toBeInTheDocument();
+    expect(pane.getByTestId("sync-add-storage")).toBeInTheDocument();
+    expect(pane.getByTestId("sync-key-reminder")).toBeInTheDocument();
+
+    // The pairing code, once the user proved to be here, as a secret view.
+    await user.click(lan.getByTestId("sync-lan-pair"));
+    const presence = within(await screen.findByRole("dialog", { name: "配对新设备" }));
+    await user.type(presence.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(presence.getByRole("button", { name: "显示配对码" }));
+    const offer = await screen.findByTestId("lan-offer");
+    expect(within(offer).getByTestId("lan-offer-text")).toHaveTextContent(/^lockra-pair:1:/);
+    expect(screen.getByTestId("lan-offer-countdown")).toHaveTextContent(
+      /配对码将在 1[12]\d 秒后失效/,
+    );
+    expect(backend.calls).toContainEqual({ command: "sync_lan_offer", password: MOCK_PASSWORD });
+
+    // A device asks: the code shows instead of the pairing code, the safe answer focused.
+    act(() => backend.lanAsk("Pixel 8", "android"));
+    expect(screen.queryByTestId("lan-offer")).not.toBeInTheDocument();
+    expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
+    let request = within(await screen.findByRole("dialog", { name: "「Pixel 8」请求加入" }));
+    expect(request.getByTestId("lan-request-code")).toHaveTextContent("246 813");
+    expect(request.getByText(/^Android · /)).toBeInTheDocument();
+    expect(request.getByRole("button", { name: "拒绝" })).toHaveFocus();
+    await user.click(request.getByRole("button", { name: "拒绝" }));
+    expect(backend.calls).toContainEqual({ command: "sync_lan_answer", approve: false });
+    expect(screen.queryByTestId("lan-request")).not.toBeInTheDocument();
+    act(() => backend.lanAsk("Pixel 8", "android"));
+    request = within(await screen.findByRole("dialog", { name: "「Pixel 8」请求加入" }));
+    await user.click(request.getByRole("button", { name: "允许加入" }));
+    expect(await lan.findByTestId("sync-lan-peer")).toHaveTextContent("Pixel 8Android");
+    expect(screen.queryByTestId("lan-request")).not.toBeInTheDocument();
+
+    await user.click(lan.getByRole("button", { name: "取消配对" }));
+    const unpair = within(await screen.findByRole("dialog", { name: "取消与「Pixel 8」的配对？" }));
+    await user.click(unpair.getByRole("button", { name: "取消配对" }));
+    expect(await lan.findByText("还没有配对的设备。")).toBeInTheDocument();
+
+    await user.click(lan.getByTestId("sync-lan-disable"));
+    const stop = within(await screen.findByRole("dialog", { name: "停止局域网同步？" }));
+    expect(
+      stop.getByText("这台设备不再同步，账号保留在本机。已配对的设备需要重新配对。"),
+    ).toBeInTheDocument();
+    await user.click(stop.getByRole("button", { name: "停止局域网同步" }));
+    expect(await pane.findByTestId("sync-create-section")).toBeInTheDocument();
+  });
+
+  it("a full hub says so when the next device is allowed", async () => {
+    const { user, backend } = renderApp({ mock: { lan: true } });
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-lan-open"));
+    const form = within(pane.getByTestId("sync-lan-create"));
+    await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "开启局域网同步" }));
+    await pane.findByTestId("sync-lan");
+    await act(async () => {
+      for (let n = 0; n < 32; n++) {
+        backend.lanAsk(`Phone ${n}`, "android");
+        await backend.dispatch({ command: "sync_lan_answer", approve: true });
+      }
+    });
+    act(() => backend.lanAsk("One too many", "android"));
+    const request = within(await screen.findByRole("dialog", { name: "「One too many」请求加入" }));
+    await user.click(request.getByRole("button", { name: "允许加入" }));
+    expect(
+      await pane.findByText("这台电脑已配对 32 台设备，请先移除不用的设备"),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("lan-request")).not.toBeInTheDocument();
+  });
+
+  it("puts the LAN beside a storage, then takes the storage off and adds it back", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace(),
+      lan: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openSync(user);
+    await user.click(within(pane.getByTestId("sync-lan")).getByTestId("sync-lan-enable"));
+    const presence = within(await screen.findByRole("dialog", { name: "局域网同步" }));
+    await user.type(presence.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(presence.getByRole("button", { name: "开启" }));
+    expect(await pane.findByText("端口 47100")).toBeInTheDocument();
+    // Two storages: each one's status under the space's.
+    expect(pane.getAllByTestId("sync-transport").map((row) => row.textContent)).toEqual([
+      expect.stringMatching(/^局域网已同步/),
+      expect.stringMatching(/^存储已同步/),
+    ]);
+
+    await user.click(pane.getByTestId("sync-storage-remove"));
+    const remove = within(await screen.findByRole("dialog", { name: "移除存储？" }));
+    await user.click(remove.getByRole("button", { name: "移除" }));
+    expect(await pane.findByTestId("sync-add-storage")).toBeInTheDocument();
+    expect(pane.queryByTestId("sync-storage")).not.toBeInTheDocument();
+    expect(pane.queryByTestId("sync-invite-open")).not.toBeInTheDocument();
+    expect(pane.queryAllByTestId("sync-transport")).toHaveLength(0);
+
+    await user.click(pane.getByTestId("sync-add-storage-open"));
+    const add = within(pane.getByTestId("sync-add-storage-form"));
+    await user.click(add.getByRole("radio", { name: "邀请码" }));
+    await user.type(add.getByLabelText("邀请码"), "lockra-invite:2:abc");
+    await user.type(add.getByLabelText("口令"), "WRONG");
+    await user.type(add.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(add.getByRole("button", { name: "添加" }));
+    expect(await add.findByText("口令不正确，请核对邀请码旁显示的口令")).toBeInTheDocument();
+    await user.clear(add.getByLabelText("口令"));
+    await user.type(add.getByLabelText("口令"), MOCK_INVITE_CODE);
+    await user.type(add.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(add.getByRole("button", { name: "添加" }));
+    expect(await pane.findByTestId("sync-storage")).toHaveTextContent("WebDAV");
+    expect(backend.calls).toContainEqual({
+      command: "sync_add_storage",
+      source: { type: "invite", text: "lockra-invite:2:abc", code: MOCK_INVITE_CODE },
+      password: MOCK_PASSWORD,
+    });
+  });
+
+  it("connects a space to another computer, showing the code to compare there", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace(),
+      lan: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-lan-connect"));
+    const form = within(pane.getByTestId("sync-lan-connect-form"));
+    const connect = form.getByRole("button", { name: "连接" });
+    await user.type(form.getByLabelText("配对码"), "lockra-invite:1:abc");
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    // Not a pairing code: nothing to send.
+    expect(connect).toBeDisabled();
+    await user.clear(form.getByLabelText("配对码"));
+    await user.type(form.getByLabelText("配对码"), "lockra-pair:1:abc");
+    await user.click(connect);
+    expect(await form.findByTestId("sync-lan-joining")).toHaveTextContent("等待「Desktop」确认");
+    expect(form.getByTestId("sync-lan-joining-code")).toHaveTextContent("246 813");
+    act(() => backend.lanWelcome(false));
+    expect(await form.findByText("电脑上的用户拒绝了配对")).toBeInTheDocument();
+    expect(form.queryByTestId("sync-lan-joining")).not.toBeInTheDocument();
+
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(connect);
+    await form.findByTestId("sync-lan-joining");
+    act(() => backend.lanWelcome(true));
+    // The section turns into the client's: found again once it has.
+    expect(await pane.findByText("在同一网络里时经「Desktop」同步。")).toBeInTheDocument();
+    const lan = within(pane.getByTestId("sync-lan"));
+    expect(backend.calls).toContainEqual({
+      command: "sync_lan_join",
+      text: "lockra-pair:1:abc",
+      password: MOCK_PASSWORD,
+      device_name: "Desktop",
+    });
+    await user.click(lan.getByTestId("sync-lan-disable"));
+    const stop = within(await screen.findByRole("dialog", { name: "停止局域网同步？" }));
+    expect(
+      stop.getByText("这台设备不再经「Desktop」同步。经存储的同步不受影响。"),
+    ).toBeInTheDocument();
+    await user.click(stop.getByRole("button", { name: "停止局域网同步" }));
+    expect(await pane.findByTestId("sync-lan-enable")).toBeInTheDocument();
+  });
 });

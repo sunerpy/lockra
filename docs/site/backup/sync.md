@@ -100,6 +100,41 @@ sync › Scan to join**, or **Join from sync** on the welcome screen of a new in
 The invitation goes from the camera to Lockra and is not shown on the phone. Pasting the
 invitation, or typing the storage settings and the sync key, works as on a computer.
 
+## Over the local network
+
+<StatusTag status="building" /> In development, not released yet.
+
+On the same network, devices can sync directly through one computer, with no storage. That computer is the hub: the devices paired with it exchange encrypted data through it, and a change shows on the others within seconds. With a storage as well, both are used: away from the network, the devices sync through the storage as before.
+
+### Turning it on
+
+On the computer that is to be the hub, open **Settings › Sync**:
+
+- **Not syncing yet**: under **Sync over the local network**, choose **Turn on local network sync**, check the device name and enter the master password. Lockra starts a sync space over the local network only, and reminds you to keep its sync key.
+- **Already syncing through a storage**: under **Local network**, choose **Turn on for this computer**, then verify or enter the master password.
+
+The first time, Windows asks whether Lockra may use the network: allow private networks.
+
+### Pairing a device
+
+1. On the hub, choose **Pair a device…** and verify or enter the master password. Lockra shows a QR code and a pairing code, which work once and for 2 minutes.
+2. On the other computer, open **Settings › Sync**. Not syncing yet, paste the pairing code under **Join an existing sync**; already syncing, choose **Connect to another computer…** under **Local network** and paste it there. Then enter this device's master password; on a computer with no vault yet, choose a new master password.
+3. Both screens show the same 6-digit code. Once it matches on the hub, choose **Allow**; if the codes differ, choose **Refuse**.
+
+Until you allow it, the device gets nothing of the sync space. A paired device does not need the hub's master password: it keeps the sync space's key encrypted under its own.
+
+### When the hub is locked or away
+
+Lockra has to keep running on the hub. While locked, the hub still takes in the paired devices' changes and merges them at the unlock. When the hub is off or on another network, the paired devices show their local network sync as offline and try again later; those with a storage go on syncing through it.
+
+### Managing the pairing
+
+- **Paired devices** lists the devices paired with the hub. **Unpair** stops one from reaching the hub and deletes its sync data there; the accounts it already has are not taken back.
+- A sync space over the local network only can take a storage under **Add a storage**: its settings, or another device's invitation of the same space. With both, **Remove storage** on the storage's row keeps the local network only.
+- **Stop syncing over the local network** ends this computer's part as the hub, and the paired devices have to pair again. In a space without a storage, this device's sync is turned off with it, and its accounts stay.
+
+The hub accepts connections from this computer's and the local network's addresses only, and every paired device connects with a key of its own over an encrypted channel. On public Wi-Fi, stop syncing over the local network.
+
 ## When devices sync
 
 While the vault is unlocked, a device syncs when you unlock it, three seconds after a change, at

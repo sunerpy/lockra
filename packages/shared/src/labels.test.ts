@@ -11,6 +11,7 @@ import {
   noticeText,
   originText,
   parametersText,
+  platformLabel,
   rejectText,
   downloadProgress,
   relativeTime,
@@ -102,6 +103,12 @@ describe("labels", () => {
     expect(noticeText(zh, failed)).toBe("已同步来自其他设备的更改：删除 3 个");
     expect(noticeText(en, failed)).toBe("Synced changes from other devices: 3 removed");
     expect(noticeIsProblem(brought)).toBe(false);
+  });
+
+  it("a paired device's platform, in words when it is one Lockra knows", () => {
+    expect(platformLabel(zh, "android")).toBe("Android");
+    expect(platformLabel(en, "macos")).toBe("macOS");
+    expect(platformLabel(zh, "haiku")).toBe("haiku");
   });
 
   it("statuses, parameters and times", () => {

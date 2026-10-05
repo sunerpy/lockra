@@ -1,5 +1,6 @@
 import {
   emptyStorageForm,
+  isPairOffer,
   isSealedInvite,
   storageComplete,
   storageConfig,
@@ -86,5 +87,11 @@ describe("the sync storage form", () => {
     expect(isSealedInvite("  lockra-invite:2:TEtTSU5WVDI\n")).toBe(true);
     expect(isSealedInvite("lockra-invite:1:eyJzdG9yYWdlIjp7fX0")).toBe(false);
     expect(isSealedInvite("")).toBe(false);
+  });
+
+  it("tells a LAN pairing code from an invitation", () => {
+    expect(isPairOffer(" lockra-pair:1:eyJodWJfaWQiOiIifQ\n")).toBe(true);
+    expect(isPairOffer("lockra-invite:1:eyJzdG9yYWdlIjp7fX0")).toBe(false);
+    expect(isPairOffer("lockra-pair:2:abc")).toBe(false);
   });
 });

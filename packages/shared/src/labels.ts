@@ -150,6 +150,15 @@ export function noticeIsProblem(notice: Notice): boolean {
   );
 }
 
+const PLATFORMS = ["windows", "macos", "linux", "android"] as const;
+
+/** A paired device's platform as the device said it; one this version does not know shows as it
+ *  came. */
+export function platformLabel(t: TFunction, platform: string): string {
+  const known = PLATFORMS.find((p) => p === platform);
+  return known === undefined ? platform : t(`sync.lan.platform.${known}`);
+}
+
 /** `3 分钟前` / `3 minutes ago`; the label for a moment in the past. */
 export function relativeTime(t: TFunction, thenMs: number, nowMs: number): string {
   const seconds = Math.max(0, Math.floor((nowMs - thenMs) / 1000));

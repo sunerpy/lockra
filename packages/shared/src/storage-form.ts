@@ -130,3 +130,8 @@ export function storageSummary(view: StorageView): string {
 export function isSealedInvite(text: string): boolean {
   return text.trim().startsWith("lockra-invite:2:");
 }
+
+/** A LAN hub's pairing code (`lockra-pair:1:…`): it pairs with the computer that shows it. */
+export function isPairOffer(text: string): boolean {
+  return text.trim().startsWith("lockra-pair:1:");
+}
