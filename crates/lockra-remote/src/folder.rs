@@ -76,7 +76,7 @@ fn plain(name: &str) -> bool {
 
 /// An object's name in a listing: a plain name and the extension. The drive's own files (its
 /// conflicted copies, the files it is downloading) are not.
-fn object_name(name: &str) -> bool {
+pub(crate) fn object_name(name: &str) -> bool {
     name.strip_suffix(EXTENSION).is_some_and(plain)
 }
 

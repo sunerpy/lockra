@@ -54,6 +54,7 @@ keyring = "=4.2.0"
 # The sync storage (crates/lockra-remote): S3-compatible and WebDAV through one client. No default
 # features: only the two services, reqwest on rustls without its own crypto provider (ring, as the
 # update check installs it), tokio, retries and timeouts.
+notify = "=8.2.0"
 opendal = { version = "=0.59.3", default-features = false, features = [
   "services-s3",
   "services-webdav",

@@ -29,6 +29,8 @@ pub const SYNC_FOCUS_MIN: Duration = Duration::from_secs(30);
 pub const SYNC_INTERVAL_FOLDER_FOREGROUND: Duration = Duration::from_secs(15);
 /// A folder on this computer, behind other windows and after a failed run.
 pub const SYNC_INTERVAL_FOLDER: Duration = Duration::from_secs(60);
+/// How long a change the drive brings into the folder settles (a burst of files becomes one run).
+pub const SYNC_FOLDER_SETTLE: Duration = Duration::from_secs(1);
 /// The longest device name kept (characters), as a snapshot carries it.
 pub const MAX_DEVICE_NAME_CHARS: usize = 64;
 /// The format of the payload inside a snapshot: the accounts and the deletions.

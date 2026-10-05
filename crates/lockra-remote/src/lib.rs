@@ -11,6 +11,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 mod folder;
+mod watch;
 
 use std::fmt;
 use std::sync::Arc;
@@ -24,6 +25,7 @@ use lockra_sync::{MAX_OBJECT_BYTES, ObjectMeta, PutCondition, RemoteFuture, Remo
 use opendal::layers::{RetryLayer, TimeoutLayer};
 use opendal::{ErrorKind, Operator};
 use url::Url;
+pub use watch::{FolderWatch, watch};
 
 /// How long opening a connection may take.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);

@@ -157,12 +157,26 @@ pub trait Updater: Send + Sync {
     fn install(&self) -> UpdateFuture<'_, ()>;
 }
 
+/// A watch on a sync storage ([`SyncTransport::watch`]); dropping it stops the watch.
+pub type StorageWatch = Box<dyn Send + Sync>;
+
+/// What a storage watch calls when something changed: from the watcher's own thread, and it must
+/// not block.
+pub type StorageChanged = Box<dyn Fn() + Send + Sync>;
+
 /// Opens the storage of a sync space: lockra-remote over HTTPS in the shells. Opening contacts
 /// nothing; the requests go out when the core runs the sync, which it does only for a space the
 /// user set up on storage of their own.
 pub trait SyncTransport: Send + Sync {
     /// The storage `config` names, ready for requests.
     fn open(&self, config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError>;
+
+    /// Hear, where the storage can tell (a folder of this computer), when objects in `dir` (a
+    /// directory of `config`'s, ending in `/`) appear, change or go: `changed` is called then.
+    /// `None` where it cannot, or could not start: the runs then look at their intervals only.
+    fn watch(&self, _config: &StorageConfig, _dir: &str, _changed: StorageChanged) -> Option<StorageWatch> {
+        None
+    }
 }
 
 /// No sync storage (a build without it): every space fails to open.

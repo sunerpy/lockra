@@ -8,13 +8,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use data_encoding::BASE64;
 use lockra_otp::{OtpKind, base32, hotp, totp_window, uri};
 use lockra_sync::{
-    Invite, Outcome as SyncOutcome, RemoteStore, Space, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, find_space, open_keyring, open_space,
-    remove_device, seal_keyring, step, step_with,
+    Invite, Outcome as SyncOutcome, RemoteStore, Space, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, devices_dir, find_space, open_keyring,
+    open_space, remove_device, seal_keyring, step, step_with,
 };
 use lockra_transfer::{Item, Origin, detect, microsoft, qr, text};
 use lockra_vault::{DeviceCheck, DeviceKey, DeviceSlot, FileKind, KdfCost, Opened, Sealed, read_header, write_atomic};
@@ -29,11 +30,11 @@ use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_mark, clean_n
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
-use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, SyncTransport, Updater};
+use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, StorageWatch, SyncTransport, Updater};
 use crate::settings::{Settings, SettingsStore};
 use crate::sync::{
-    Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND, SyncLocal, Working,
-    config_error, device_name, merge_entries, storage_view, sync_error,
+    Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_FOLDER_SETTLE, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND,
+    SyncLocal, Working, config_error, device_name, merge_entries, storage_view, sync_error,
 };
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
@@ -109,6 +110,9 @@ struct Shared {
     state: Mutex<State>,
     events: broadcast::Sender<UiEvent>,
     wake: Notify,
+    /// The watch on the space's folder heard a change (set from the watcher's thread, without the
+    /// state's lock; the scheduler takes it).
+    folder_changed: AtomicBool,
 }
 
 struct State {
@@ -141,6 +145,15 @@ struct State {
     /// The folder the shell's dialog chose last for a sync space: the interface names it as "the
     /// folder chosen", never by its path.
     chosen_folder: Option<PathBuf>,
+    /// The watch on the folder the unlocked space is kept in.
+    folder_watch: Option<FolderWatch>,
+}
+
+/// A watch on a space's folder, for that space and storage.
+struct FolderWatch {
+    space_id: Uuid,
+    storage: StorageConfig,
+    _watch: StorageWatch,
 }
 
 /// The sync as it runs; the vault keeps the space itself.
@@ -232,9 +245,11 @@ impl Core {
             sync: SyncRuntime::default(),
             foreground: true,
             chosen_folder: None,
+            folder_watch: None,
         };
         let (events, _) = broadcast::channel(64);
-        let shared = Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new() });
+        let shared =
+            Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new(), folder_changed: AtomicBool::new(false) });
         tokio::spawn(scheduler(Arc::clone(&shared)));
         let core = Self { shared };
         core.refresh_biometrics();
@@ -499,6 +514,7 @@ impl Core {
             was_unlocked
         };
         if locked {
+            self.follow_folder();
             self.changed();
             self.refresh_biometrics();
         }
@@ -1858,6 +1874,7 @@ impl Core {
             self.save(&mut st, false, move |s| s.data.local_mut().sync = Some(previous))?;
             st.sync = SyncRuntime { busy: st.sync.busy, ..SyncRuntime::default() };
         }
+        self.follow_folder();
         self.changed();
         Ok(())
     }
@@ -1976,6 +1993,63 @@ impl Core {
             if !again {
                 break;
             }
+        }
+        // Set up, joined, unlocked or moved: the space's folder is watched from its first run on.
+        self.follow_folder();
+    }
+
+    /// Watch the folder the unlocked space is kept in, and nothing else: started for a space in a
+    /// folder of this computer, stopped when the vault locks, the space goes or moves. A watch
+    /// that cannot start (the space's folder not made yet) is tried again after the next run.
+    fn follow_folder(&self) {
+        let wanted = {
+            let st = self.lock();
+            match &st.phase {
+                PhaseState::Unlocked(session) => session.data.sync().filter(|s| s.storage.is_folder()).map(|s| (s.space_id, s.storage.clone())),
+                _ => None,
+            }
+        };
+        let stale = {
+            let mut st = self.lock();
+            let current = st.folder_watch.as_ref().map(|w| (w.space_id, &w.storage));
+            if current == wanted.as_ref().map(|(id, storage)| (*id, storage)) {
+                return;
+            }
+            st.folder_watch.take()
+        };
+        // Stopped outside the lock: a watcher's thread may be on its way in.
+        drop(stale);
+        let Some((space_id, storage)) = wanted else { return };
+        let weak = Arc::downgrade(&self.shared);
+        let changed = Box::new(move || {
+            if let Some(shared) = weak.upgrade() {
+                shared.folder_changed.store(true, Ordering::SeqCst);
+                shared.wake.notify_one();
+            }
+        });
+        let Some(watch) = self.shared.ports.sync.watch(&storage, &devices_dir(storage.prefix(), space_id), changed) else { return };
+        let mut st = self.lock();
+        let still = matches!(&st.phase, PhaseState::Unlocked(session)
+            if session.data.sync().is_some_and(|s| s.space_id == space_id && s.storage == storage));
+        if still && st.folder_watch.is_none() {
+            st.folder_watch = Some(FolderWatch { space_id, storage, _watch: watch });
+        }
+    }
+
+    /// The drive brought a change into the space's folder: a run once it settled, or right after
+    /// the run in progress (which may have looked before it came).
+    fn on_folder_changed(&self) {
+        let mut st = self.lock();
+        if !matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some_and(|s| s.storage.is_folder())) {
+            return;
+        }
+        if st.sync.busy {
+            st.sync.again = true;
+            return;
+        }
+        let due = Instant::now() + SYNC_FOLDER_SETTLE;
+        if st.sync.at.is_none_or(|at| at > due) {
+            st.sync.at = Some(due);
         }
     }
 
@@ -2394,6 +2468,9 @@ impl Core {
 async fn scheduler(shared: Arc<Shared>) {
     let core = Core { shared };
     loop {
+        if core.shared.folder_changed.swap(false, Ordering::SeqCst) {
+            core.on_folder_changed();
+        }
         let notified = core.shared.wake.notified();
         tokio::pin!(notified);
         notified.as_mut().enable();
