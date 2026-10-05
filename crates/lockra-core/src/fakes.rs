@@ -11,10 +11,11 @@ use tokio::time::Instant;
 use zeroize::Zeroizing;
 
 use crate::ports::{
-    BiometricError, Biometrics, Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, MemorySecretStore, PortError, Release, SecretStore, SyncTransport,
-    UpdateFailure, UpdateFuture, UpdateProgress, Updater,
+    BiometricError, Biometrics, Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, LanClientConfig, MemorySecretStore, PortError, Release,
+    SecretStore, SyncTransport, UpdateFailure, UpdateFuture, UpdateProgress, Updater,
 };
 use crate::ui::{BiometricKind, CodesFrame, InstallMethod};
+use uuid::Uuid;
 
 /// Wall-clock time that moves with tokio's clock, so `tokio::time::advance` under
 /// `start_paused` moves both the timers and the codes.
@@ -299,10 +300,14 @@ impl Updater for FakeUpdater {
 
 /// Sync storage in memory, shared by the cores of one test: a configuration names one
 /// [`MemoryRemote`] by its address (S3: endpoint and bucket, with conditional writes; WebDAV: the
-/// URL, without), and any secret but [`FakeTransport::SECRET`] is refused on every request.
+/// URL, without), and any secret but [`FakeTransport::SECRET`] is refused on every request. The
+/// LAN is one hub's copy, [`FakeTransport::lan`], for the hub and its clients alike.
 #[derive(Debug, Default)]
 pub struct FakeTransport {
     stores: Mutex<BTreeMap<String, Arc<MemoryRemote>>>,
+    lan: Mutex<Option<Arc<MemoryRemote>>>,
+    lan_failure: Arc<Mutex<Option<SyncError>>>,
+    lan_attempts: Arc<AtomicUsize>,
     /// How many times a storage was opened.
     pub opened: AtomicUsize,
 }
@@ -319,6 +324,22 @@ impl FakeTransport {
         };
         Arc::clone(self.stores.lock().entry(address).or_insert_with(|| Arc::new(MemoryRemote::new(conditional))))
     }
+
+    /// The hub's copy of the space, created empty on first use.
+    pub fn lan(&self) -> Arc<MemoryRemote> {
+        Arc::clone(self.lan.lock().get_or_insert_with(|| Arc::new(MemoryRemote::new(true))))
+    }
+
+    /// From now on the hub answers its clients' requests with `failure` (away from it:
+    /// `Network`; a pairing it dropped: `WrongCredentials`), or as it should.
+    pub fn set_lan_failure(&self, failure: Option<SyncError>) {
+        *self.lan_failure.lock() = failure;
+    }
+
+    /// The requests the hub's clients made, reaching it or not.
+    pub fn lan_attempts(&self) -> usize {
+        self.lan_attempts.load(Ordering::SeqCst)
+    }
 }
 
 impl SyncTransport for FakeTransport {
@@ -329,33 +350,91 @@ impl SyncTransport for FakeTransport {
             StorageConfig::Webdav { password, .. } => password,
         };
         if secret.as_str() != Self::SECRET {
-            return Ok(Arc::new(Refusing));
+            return Ok(Arc::new(Failing(SyncError::Denied)));
         }
         Ok(self.store(config))
     }
+
+    fn open_hub_store(&self, _space_id: Uuid) -> Result<Arc<dyn RemoteStore>, SyncError> {
+        self.opened.fetch_add(1, Ordering::SeqCst);
+        Ok(self.lan())
+    }
+
+    fn open_lan_client(&self, _config: &LanClientConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+        self.opened.fetch_add(1, Ordering::SeqCst);
+        Ok(Arc::new(LanClient { hub: self.lan(), failure: Arc::clone(&self.lan_failure), attempts: Arc::clone(&self.lan_attempts) }))
+    }
 }
 
-/// A storage that refuses the credentials.
-struct Refusing;
+/// A client's way to its hub: each request reaches it, or fails as the test said.
+struct LanClient {
+    hub: Arc<MemoryRemote>,
+    failure: Arc<Mutex<Option<SyncError>>>,
+    attempts: Arc<AtomicUsize>,
+}
 
-impl RemoteStore for Refusing {
+impl LanClient {
+    fn failure(&self) -> Result<(), SyncError> {
+        self.attempts.fetch_add(1, Ordering::SeqCst);
+        self.failure.lock().clone().map_or(Ok(()), Err)
+    }
+}
+
+impl RemoteStore for LanClient {
+    fn conditional_puts(&self) -> bool {
+        self.hub.conditional_puts()
+    }
+
+    fn list<'a>(&'a self, dir: &'a str) -> RemoteFuture<'a, Vec<ObjectMeta>> {
+        Box::pin(async move {
+            self.failure()?;
+            self.hub.list(dir).await
+        })
+    }
+
+    fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
+        Box::pin(async move {
+            self.failure()?;
+            self.hub.get(path).await
+        })
+    }
+
+    fn put<'a>(&'a self, path: &'a str, bytes: Vec<u8>, condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
+        Box::pin(async move {
+            self.failure()?;
+            self.hub.put(path, bytes, condition).await
+        })
+    }
+
+    fn delete<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, ()> {
+        Box::pin(async move {
+            self.failure()?;
+            self.hub.delete(path).await
+        })
+    }
+}
+
+/// A storage that answers every request with one error.
+struct Failing(SyncError);
+
+impl RemoteStore for Failing {
     fn conditional_puts(&self) -> bool {
         true
     }
 
     fn list<'a>(&'a self, _dir: &'a str) -> RemoteFuture<'a, Vec<ObjectMeta>> {
-        Box::pin(async { Err(SyncError::Denied) })
+        Box::pin(async { Err(self.0.clone()) })
     }
 
     fn get<'a>(&'a self, _path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
-        Box::pin(async { Err(SyncError::Denied) })
+        Box::pin(async { Err(self.0.clone()) })
     }
 
     fn put<'a>(&'a self, _path: &'a str, _bytes: Vec<u8>, _condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
-        Box::pin(async { Err(SyncError::Denied) })
+        Box::pin(async { Err(self.0.clone()) })
     }
 
     fn delete<'a>(&'a self, _path: &'a str) -> RemoteFuture<'a, ()> {
-        Box::pin(async { Err(SyncError::Denied) })
+        Box::pin(async { Err(self.0.clone()) })
     }
 }
