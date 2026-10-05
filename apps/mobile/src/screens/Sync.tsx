@@ -135,20 +135,22 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
           </Banner>
         </div>
       )}
-      <Section title={t("sync.storageRow")}>
-        <p className="mono px-4 py-3 text-[13px] break-all text-fg" data-testid="sync-storage">
-          {`${t(`sync.storage.${space.storage.kind}`)} · ${storageSummary(space.storage)}`}
-        </p>
-        <div className="p-1">
-          <ActionRow
-            icon="edit"
-            label={t("sync.storageEdit")}
-            opensPage
-            onClick={() => nav.open({ name: "syncStorage" })}
-            testId="sync-storage-edit"
-          />
-        </div>
-      </Section>
+      {space.storage !== null && (
+        <Section title={t("sync.storageRow")}>
+          <p className="mono px-4 py-3 text-[13px] break-all text-fg" data-testid="sync-storage">
+            {`${t(`sync.storage.${space.storage.kind}`)} · ${storageSummary(space.storage)}`}
+          </p>
+          <div className="p-1">
+            <ActionRow
+              icon="edit"
+              label={t("sync.storageEdit")}
+              opensPage
+              onClick={() => nav.open({ name: "syncStorage" })}
+              testId="sync-storage-edit"
+            />
+          </div>
+        </Section>
+      )}
       <Section title={t("sync.device.label")}>
         <p className="px-4 py-3 text-[15px] text-fg" data-testid="sync-device-name">
           {space.device_name}

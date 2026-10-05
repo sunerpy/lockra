@@ -193,11 +193,27 @@ async fn a_pairing_waits_for_the_user_and_the_offer_opens_one_handshake() {
     // An offer past its time opens nothing, whether or not it was withdrawn.
     hub.config.pairing = Some(Pairing { key: key(7), until: tokio::time::Instant::now() });
     hub.server.update(hub.config.clone());
-    let lapsed = PairOffer { hub_id: HUB_ID, hub_name: "Desktop".into(), space_id: hub.keys.space_id(), addrs: vec![LOOPBACK], port: hub.server.port(), key: key(7), expires_at_ms: u64::MAX };
+    let lapsed = PairOffer {
+        hub_id: HUB_ID,
+        hub_name: "Desktop".into(),
+        space_id: hub.keys.space_id(),
+        addrs: vec![LOOPBACK],
+        port: hub.server.port(),
+        key: key(7),
+        expires_at_ms: u64::MAX,
+    };
     assert!(join(&lapsed, "Pixel 8", "android").await.is_err());
     hub.config.pairing = Some(Pairing { key: key(7), until: tokio::time::Instant::now() + PAIRING_TIMEOUT });
     hub.server.update(hub.config.clone());
-    let offer = PairOffer { hub_id: HUB_ID, hub_name: "Desktop".into(), space_id: hub.keys.space_id(), addrs: vec![LOOPBACK], port: hub.server.port(), key: key(7), expires_at_ms: u64::MAX };
+    let offer = PairOffer {
+        hub_id: HUB_ID,
+        hub_name: "Desktop".into(),
+        space_id: hub.keys.space_id(),
+        addrs: vec![LOOPBACK],
+        port: hub.server.port(),
+        key: key(7),
+        expires_at_ms: u64::MAX,
+    };
     let joining = join(&offer, "Pixel 8", "android").await.unwrap();
     assert_eq!(joining.code.len(), 6);
     let request = hub.events.recv().await.unwrap();

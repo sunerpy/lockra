@@ -307,10 +307,13 @@ more storage of the space. The shells do not offer it yet.
   key is kept to answer it `removed`. Eight connections at once, five seconds for a handshake,
   thirty without a request.
 - **Pairing offer.** `lockra-pair:1:` and Base64url (no padding) of
-  `{hub_id, name, addrs, port, key, expires_at_ms}`, good for two minutes and for one handshake.
-  The device sends `join`; both ends show six digits from the handshake's hash, and the user at
-  the hub compares them before answering with the welcome (the device's own key, and what it needs
-  of the space) or a refusal.
+  `{hub_id, name, space_id, addrs, port, key, expires_at_ms}`, good for two minutes and for one
+  handshake. The device sends `join`; both ends show six digits from the handshake's hash, and the
+  user at the hub compares them before answering with the welcome or a refusal. The welcome is
+  JSON: `{peer_id, key, hub_id, hub_name, port, addrs, space_id, data_key, sync_key, cloud?}`, the
+  device's own key with the hub, where the hub is, and the space: its keys, and its storage of the
+  user's own with the credentials when it has one. The device seals its keyring under its own
+  master password, as when it joins through a storage.
 - **Discovery.** A device tries the address its hub answered at last and the ones it knows, then
   sends a probe (the preamble under its key) there and as a broadcast on the hub's port, UDP. Only
   a hub that holds the key answers: `LKLN`, version, kind 2 and the first half of

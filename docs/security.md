@@ -268,7 +268,13 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   tag the hub binds to it; the snapshots inside are sealed under the space's keys as on any
   storage. A pairing offer is a secret for two minutes and one handshake, and joining also needs
   the user at the hub to compare a six-digit code drawn from the handshake and say yes: an
-  attacker in the middle with the offer would see a different code. Removing a device revokes its
+  attacker in the middle with the offer would see a different code. This is a second way into a
+  space beside "any device's master password and the sync key": the user at the unlocked hub,
+  having seen the offer, lets a device in, and the welcome gives it the space's keys (and the
+  storage's credentials) inside the encrypted channel; no other device's master password is asked.
+  The device's own keyring is still sealed under its own master password. The offer is shown only
+  after the master password or the biometric check that unlocks the vault, and is one of the
+  answers that carry a secret (`sync_lan_offer`). Removing a device revokes its
   key with the hub (it is kept only to answer `removed`); as on any storage, the space's keys the
   device already holds are not taken back. Limits: eight connections, five seconds per handshake,
   thirty without a request, 17 MiB per message.

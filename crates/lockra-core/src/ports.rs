@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::net::IpAddr;
 use std::future::Future;
+use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};

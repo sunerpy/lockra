@@ -2752,6 +2752,7 @@ name = "lockra-core"
 version = "0.0.0"
 dependencies = [
  "data-encoding",
+ "getrandom 0.3.4",
  "image",
  "lockra-otp",
  "lockra-sync",

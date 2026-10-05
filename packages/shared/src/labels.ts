@@ -182,6 +182,8 @@ export function syncStatusLine(
         tone: "danger",
         text: t("sync.status.failed", { error: errorText(t, status.code) }),
       };
+    case "offline":
+      return { tone: "idle", text: t("sync.status.offline") };
   }
 }
 

@@ -724,7 +724,7 @@ mod tests {
             password: Zeroizing::new("x".into()),
         };
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
-        let whole = serde_json::to_value(SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")).unwrap();
+        let whole = serde_json::to_value(SyncLocal::new(Some(storage), &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")).unwrap();
         assert!(serde_json::from_value::<SyncLocal>(whole.clone()).is_ok());
         let mut missing = whole.clone();
         missing.as_object_mut().unwrap().remove("keyring");
@@ -746,7 +746,7 @@ mod tests {
             password: Zeroizing::new("pw".into()),
         };
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
-        let mut kept = SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring");
+        let mut kept = SyncLocal::new(Some(storage), &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring");
         kept.key_saved = false;
         let whole = serde_json::to_value(&kept).unwrap();
         assert!(!serde_json::from_value::<SyncLocal>(whole.clone()).unwrap().key_saved);
@@ -764,7 +764,7 @@ mod tests {
             password: Zeroizing::new("pw".into()),
         };
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
-        SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")
+        SyncLocal::new(Some(storage), &keys, &SyncKey::generate().unwrap(), "Laptop".into(), b"keyring")
     }
 
     fn client_role(key: &[u8]) -> LanLocal {
@@ -783,9 +783,9 @@ mod tests {
     #[test]
     fn a_space_keeps_the_cloud_where_earlier_versions_read_it_and_the_lan_beside() {
         let mut kept = laptop_space();
-        kept.cloud.sync.state.own_seq = 4;
-        kept.cloud.sync.keyring_written = true;
-        kept.cloud.sync.last_ok_ms = Some(1_000);
+        kept.cloud.as_mut().unwrap().sync.state.own_seq = 4;
+        kept.cloud.as_mut().unwrap().sync.keyring_written = true;
+        kept.cloud.as_mut().unwrap().sync.last_ok_ms = Some(1_000);
         // Without a LAN role: the fields earlier versions write, and nothing more.
         let whole = serde_json::to_value(&kept).unwrap();
         let mut names: Vec<&str> = whole.as_object().unwrap().keys().map(String::as_str).collect();
@@ -797,7 +797,14 @@ mod tests {
         );
         assert_eq!(serde_json::from_value::<SyncLocal>(whole).unwrap(), kept);
         // With one, beside them: an earlier version syncs on with the cloud storage alone.
-        kept.lan = Some(LanLocal::Hub { install_id: Uuid::new_v4(), hub_id: Uuid::new_v4(), port: 47_100, sync: TransportLocal::default() });
+        kept.lan = Some(LanLocal::Hub {
+            install_id: Uuid::new_v4(),
+            hub_id: Uuid::new_v4(),
+            port: 47_100,
+            peers: Vec::new(),
+            removed: Vec::new(),
+            sync: TransportLocal::default(),
+        });
         let whole = serde_json::to_value(&kept).unwrap();
         assert_eq!((&whole["lan"]["role"], &whole["state"]["own_seq"]), (&serde_json::json!("hub"), &serde_json::json!(4)));
         assert_eq!(serde_json::from_value::<SyncLocal>(whole).unwrap(), kept);
@@ -826,13 +833,13 @@ mod tests {
     fn the_numbers_a_device_gave_on_any_storage_set_its_floor() {
         let mut kept = laptop_space();
         assert_eq!(kept.seq_floor(), 0);
-        kept.cloud.sync.state.own_seq = 3;
+        kept.cloud.as_mut().unwrap().sync.state.own_seq = 3;
         let mut lan = client_role(&[7; 32]);
         lan.sync_mut().state.pending = Some(lockra_sync::PendingWrite { seq: 6, digest: "d".into() });
         kept.lan = Some(lan);
         assert_eq!(kept.seq_floor(), 6, "a write whose answer never came counts");
         // Every storage is to receive a new keyring.
-        kept.cloud.sync.keyring_written = true;
+        kept.cloud.as_mut().unwrap().sync.keyring_written = true;
         kept.keyring_sealed_again();
         assert!(kept.keyring_pending());
     }

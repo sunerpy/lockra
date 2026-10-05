@@ -305,6 +305,14 @@ export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpace
     unreadable: [],
     keyring_pending: false,
     key_saved: true,
+    transports: [
+      {
+        kind: "cloud",
+        status: { state: "synced", at_ms: Date.UTC(2026, 9, 2, 8) },
+        last_ok_ms: Date.UTC(2026, 9, 2, 8),
+      },
+    ],
+    lan: null,
     ...overrides,
   };
 }
@@ -437,7 +445,7 @@ export class MockBackend implements Backend {
       restore: null,
       auto_lock_at_ms: null,
       update: { method: options.updateMethod ?? null, status: { state: "idle" } },
-      sync: { space: phase === "unlocked" ? this.space : null },
+      sync: { space: phase === "unlocked" ? this.space : null, joining: null },
     };
     this.lockedEntries = phase === "unlocked" ? [] : entries.map((e) => e.view);
     this.refreshAutoLock();
@@ -938,6 +946,23 @@ export class MockBackend implements Backend {
         this.requireSpace();
         this.setSpace(null);
         return null;
+      // The mock is a build without the LAN: its spaces are on storage of the user's own.
+      case "sync_lan_enable":
+      case "sync_lan_offer":
+      case "sync_lan_answer":
+      case "sync_lan_remove_peer":
+      case "sync_lan_join":
+        throw new LockraError("sync_lan_unavailable");
+      case "sync_lan_disable":
+        this.requireSpace();
+        throw new LockraError("sync_off");
+      case "sync_add_storage":
+        this.requireSpace();
+        throw new LockraError("sync_already_on");
+      case "sync_remove_storage":
+        this.requireSpace();
+        this.setSpace(null);
+        return null;
     }
   }
 
@@ -949,7 +974,7 @@ export class MockBackend implements Backend {
 
   private setSpace(space: SyncSpaceView | null): void {
     this.space = space;
-    this.state.sync = { space };
+    this.state.sync = { space, joining: null };
     this.publish();
   }
 
@@ -974,6 +999,11 @@ export class MockBackend implements Backend {
       status: { state: "synced", at_ms },
       last_sync_ms: at_ms,
       keyring_pending: false,
+      transports: space.transports.map((t) => ({
+        ...t,
+        status: { state: "synced", at_ms },
+        last_ok_ms: at_ms,
+      })),
       devices: space.devices.map((d) => (d.this_device ? { ...d, written_at_ms: at_ms } : d)),
     });
   }
@@ -997,6 +1027,8 @@ export class MockBackend implements Backend {
       unreadable: [],
       keyring_pending: false,
       key_saved: true,
+      transports: [{ kind: "cloud", status: { state: "idle" }, last_ok_ms: null }],
+      lan: null,
     });
   }
 
@@ -1206,7 +1238,7 @@ export class MockBackend implements Backend {
     this.state.phase = "unlocked";
     this.state.entries = entries;
     this.state.collapsed_groups = [...this.collapsed];
-    this.state.sync = { space: this.space };
+    this.state.sync = { space: this.space, joining: null };
     this.lockedEntries = [];
     this.state.lock = { ...this.state.lock, failed_attempts: 0, retry_at_ms: null };
     this.refreshAutoLock();
@@ -1220,7 +1252,7 @@ export class MockBackend implements Backend {
     this.state.entries = [];
     this.state.collapsed_groups = [];
     this.state.phase = "locked";
-    this.state.sync = { space: null };
+    this.state.sync = { space: null, joining: null };
     this.exports.clear();
     this.clearImport();
     this.state.auto_lock_at_ms = null;

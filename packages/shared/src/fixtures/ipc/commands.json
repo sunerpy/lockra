@@ -249,6 +249,52 @@
     },
     {
       "command": "sync_disable"
+    },
+    {
+      "command": "sync_lan_enable",
+      "device_name": "Desktop",
+      "password": "a new password"
+    },
+    {
+      "command": "sync_lan_offer",
+      "reason": "show the pairing offer"
+    },
+    {
+      "approve": true,
+      "command": "sync_lan_answer"
+    },
+    {
+      "command": "sync_lan_remove_peer",
+      "peer_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000007"
+    },
+    {
+      "command": "sync_lan_disable"
+    },
+    {
+      "command": "sync_lan_join",
+      "device_name": "Pixel 8",
+      "password": "a new password",
+      "text": "lockra-pair:1:eyJodWJfaWQiOiIifQ"
+    },
+    {
+      "command": "sync_add_storage",
+      "password": "a new password",
+      "source": {
+        "storage": {
+          "access_key_id": "AKIAIOSFODNN7EXAMPLE",
+          "bucket": "my-lockra",
+          "endpoint": "https://s3.eu-central-1.amazonaws.com",
+          "kind": "s3",
+          "path_style": false,
+          "prefix": "lockra/",
+          "region": "eu-central-1",
+          "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        },
+        "type": "storage"
+      }
+    },
+    {
+      "command": "sync_remove_storage"
     }
   ],
   "phone_commands": [

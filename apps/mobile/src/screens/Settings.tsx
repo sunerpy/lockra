@@ -232,7 +232,9 @@ function SyncRow() {
       hint={
         space === null
           ? t("mobile.sync.settingsHint")
-          : `${t(`sync.storage.${space.storage.kind}`)} · ${storageSummary(space.storage)}`
+          : space.storage === null
+            ? t("sync.lanOnly")
+            : `${t(`sync.storage.${space.storage.kind}`)} · ${storageSummary(space.storage)}`
       }
       opensPage
       onClick={() => nav.open({ name: "sync" })}

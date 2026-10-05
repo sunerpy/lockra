@@ -220,9 +220,7 @@ pub struct LanOffer {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum StorageSource {
     /// The settings, typed in.
-    Storage {
-        storage: lockra_sync::StorageConfig,
-    },
+    Storage { storage: lockra_sync::StorageConfig },
     /// An invitation of this space from another device (its storage).
     Invite {
         text: zeroize::Zeroizing<String>,

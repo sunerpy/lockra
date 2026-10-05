@@ -104,7 +104,15 @@ impl PairOffer {
         if now_ms >= wire.expires_at_ms {
             return Err(PairTextError::Expired);
         }
-        Ok(Self { hub_id: wire.hub_id, hub_name: wire.name, space_id: wire.space_id, addrs: wire.addrs, port: wire.port, key, expires_at_ms: wire.expires_at_ms })
+        Ok(Self {
+            hub_id: wire.hub_id,
+            hub_name: wire.name,
+            space_id: wire.space_id,
+            addrs: wire.addrs,
+            port: wire.port,
+            key,
+            expires_at_ms: wire.expires_at_ms,
+        })
     }
 }
 
