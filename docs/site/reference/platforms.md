@@ -36,7 +36,7 @@ longer asks whether Lockra may use the Keychain, and Touch ID unlocks as before.
 
 ### When the new version cannot take the key over
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.5.
 
 If the new version cannot take over the remembered key, the update is not installed. Lockra keeps
 running the version you have, shows "The new version could not take over the device key in the
