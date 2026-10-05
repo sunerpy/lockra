@@ -158,7 +158,7 @@ async fn two_devices_sync(storage: &dyn RemoteStore, prefix: &str) {
 
     let mut laptop = (SyncState::default(), Vault::default());
     laptop.1.accounts.push(account("GitHub", 10, 1));
-    let space = Space { prefix, keys: &keys, device: 1, device_name: "Laptop", keyring: &laptop_keyring };
+    let space = Space { prefix, keys: &keys, device: 1, device_name: "Laptop", keyring: &laptop_keyring, seq_floor: 0 };
     assert!(step(storage, &space, &mut laptop.0, &mut laptop.1, 100).await.unwrap().wrote);
 
     // The phone has the storage, the sync key and the laptop's master password.
@@ -166,7 +166,7 @@ async fn two_devices_sync(storage: &dyn RemoteStore, prefix: &str) {
     assert_eq!(join(storage, prefix, &sync_key, b"a guess").await.err(), Some(SyncError::WrongCredentials));
     let phone_keyring = seal_keyring(&joined, &sync_key, b"phone password", KdfCost::FAST_INSECURE).unwrap();
     let mut phone = (SyncState::default(), Vault::default());
-    let phone_space = Space { prefix, keys: &joined, device: 2, device_name: "Phone", keyring: &phone_keyring };
+    let phone_space = Space { prefix, keys: &joined, device: 2, device_name: "Phone", keyring: &phone_keyring, seq_floor: 0 };
     let outcome = step(storage, &phone_space, &mut phone.0, &mut phone.1, 200).await.unwrap();
     assert!(outcome.changed);
     assert_eq!(phone.1.accounts[0].issuer, "GitHub");

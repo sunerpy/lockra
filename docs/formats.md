@@ -92,9 +92,16 @@ backup, no sync): `clock` (its device number and the latest stamp), `view` (the 
 the code list, `{collapsed_groups}`, "" for the accounts in no group: group names stay inside the
 encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and
 credentials, the space id, its data key, the sync key, this device's name, its keyring and what
-the runs remember). A `sync` this version cannot read (one kept by an earlier
-build) is left out and the vault opens without it: sync is off on that device until it is set up
-again.
+the runs on the storage remember: `state`, `keyring_written`, `last_sync_ms`). A device in a sync
+over the local network also has `sync.lan`, its role there with what the runs on the LAN copy
+remember: `{role: "hub", install_id, hub_id, port, sync}` on the computer that keeps the copy,
+`{role: "client", install_id, hub_id, hub_name, peer_id, psk, port, addrs, sync}` on a device paired
+with it. The storage's fields stay where earlier versions read them, so a version without the LAN
+syncs on with the storage alone (and drops `lan` when it saves). A `lan` this version cannot use
+(a client's key that is not 32 bytes) is left out and the space kept; a `lan` taken by another
+installation (its `install_id` is not this one's) is dropped when the vault is unlocked or
+restored. A `sync` this version cannot read (one kept by an earlier build) is left out and the
+vault opens without it: sync is off on that device until it is set up again.
 
 Duplicates: the same secret and parameters is **the same account** (an import skips it); the same
 issuer and account with a different secret is a **conflict** (both are kept by default, or the
@@ -112,6 +119,10 @@ codes, code order (`name`, `added`, `recent`), automatic backup `{enabled, dir, 
 3–50, default 10) and automatic updates (`auto_update`, default off). From 0.3.2 the file also carries `schema: 2`;
 a file without it (0.2.0 to 0.3.1) has `auto_update` read as off, because 0.3.0 could have carried
 0.2.0's check-only `auto_check_updates` over into it, and 0.2.0's field itself is not read. Unknown or missing fields take their defaults.
+
+`install-id` in the app config directory, beside `settings.json`: this installation's random id,
+made on the first start and never in the vault or a backup. A vault copied to another installation
+leaves its LAN role there.
 
 `update-ready.json` in the data directory, next to the vault: `{"version": "0.3.0"}`, the release
 the automatic update downloaded and has not installed yet; the next start installs that version

@@ -5,8 +5,9 @@ use tokio::sync::Notify;
 
 use super::*;
 use crate::settings::Settings;
+use crate::sync::{LanLocal, Store, TransportLocal};
 use crate::ui::{JoinSource, StorageView, SyncStatus};
-use crate::{SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, StorageConfig};
+use crate::{SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, SYNC_INTERVAL_LAN_FOREGROUND, StorageConfig};
 
 const STORAGE_SECRET: &str = FakeTransport::SECRET;
 
@@ -863,4 +864,233 @@ async fn an_accounts_colour_and_mark_reach_the_other_devices() {
     settle().await;
     let seen = phone.core.state().entries[0].clone();
     assert_eq!((seen.color, seen.mark.as_deref()), (crate::AccountColor::Teal, Some("GH")));
+}
+
+// ---- the LAN hub's copy beside the cloud storage ----------------------------------------------
+
+const HUB: Uuid = Uuid::from_u128(0x4c4b_4c4e_4855_4200_0000_0000_0000_0001);
+
+/// `h` keeps the space's copy for the LAN (the role the LAN commands give).
+fn hub(h: &Harness) {
+    let lan = LanLocal::Hub { install_id: h.core.install_id(), hub_id: HUB, port: 47_100, sync: TransportLocal::default() };
+    h.core.set_lan(Some(lan)).unwrap();
+}
+
+/// `h` is paired with the hub.
+fn client(h: &Harness) {
+    let lan = LanLocal::Client {
+        install_id: h.core.install_id(),
+        hub_id: HUB,
+        hub_name: "Desktop".into(),
+        peer_id: Uuid::new_v4(),
+        psk: Zeroizing::new(data_encoding::BASE64.encode(&[7u8; 32])),
+        port: 47_100,
+        addrs: vec!["192.168.1.20".into()],
+        sync: TransportLocal::default(),
+    };
+    h.core.set_lan(Some(lan)).unwrap();
+}
+
+/// What `h` keeps of its runs on `store`.
+fn kept(h: &Harness, store: Store) -> TransportLocal {
+    h.core.sync_local().unwrap().transport(store).unwrap().clone()
+}
+
+/// A desktop keeping the LAN copy and a phone paired with it, both on the cloud storage too,
+/// neither locking itself meanwhile.
+async fn hub_and_client(transport: &Arc<FakeTransport>) -> (Harness, Harness) {
+    let (desktop, sync_key) = first_device(transport, s3(STORAGE_SECRET)).await;
+    let phone = device(transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
+    for h in [&desktop, &phone] {
+        h.core.set_settings(Settings { auto_lock_minutes: 0, ..h.core.state().settings }).unwrap();
+    }
+    hub(&desktop);
+    client(&phone);
+    settle().await;
+    (desktop, phone)
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_lan_and_the_cloud_both_carry_changes_and_a_number_names_one_snapshot() {
+    let transport = Arc::new(FakeTransport::default());
+    let (mut desktop, phone) = hub_and_client(&transport).await;
+    assert_eq!(transport.lan().paths().len(), 2, "both devices on the hub's copy: {:?}", transport.lan().paths());
+    desktop.notices();
+
+    // The cloud refuses the phone's write: the LAN carries the new account alone.
+    phone.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    transport.store(&s3(STORAGE_SECRET)).fail_next_put(SyncError::Network("offline".into()), false);
+    advance(SYNC_DEBOUNCE).await;
+    assert!(matches!(space(&phone).status, SyncStatus::Failed { code: ErrorCode::SyncNetwork, .. }), "{:?}", space(&phone).status);
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert_eq!(issuers(&desktop), ["GitHub", "Mail"]);
+    assert_eq!(brought(&mut desktop), [Notice::SyncBrought { added: 1, updated: 0, removed: 0, devices: vec!["Phone".into()] }]);
+
+    // Its numbers: 1 on the cloud when it joined, 2 and 3 on the LAN, 4 lost on the cloud, 5 there
+    // after it. Never one number for two snapshots, wherever they are.
+    phone.core.sync_now().unwrap();
+    settle().await;
+    assert_eq!((kept(&phone, Store::Lan).state.own_seq, kept(&phone, Store::Cloud).state.own_seq), (3, 5));
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    // Read on both storages at their own numbers: no rollback, one device in the list.
+    assert!(space(&desktop).rolled_back.is_empty(), "{:?}", space(&desktop).rolled_back);
+    assert_eq!(device_names(&desktop), [("Desktop".to_owned(), true), ("Phone".to_owned(), false)]);
+    assert!(matches!(space(&phone).status, SyncStatus::Synced { .. }));
+}
+
+#[tokio::test(start_paused = true)]
+async fn away_from_the_hub_the_cloud_carries_on_and_the_lan_is_tried_again_sooner() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, phone) = hub_and_client(&transport).await;
+    transport.set_lan_failure(Some(SyncError::Network("no route to the hub".into())));
+    phone.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    // Away from the hub is no failure: the status is the cloud's.
+    assert!(matches!(space(&phone).status, SyncStatus::Synced { .. }), "{:?}", space(&phone).status);
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert_eq!(issuers(&desktop), ["GitHub", "Mail"]);
+
+    // In front, the hub is tried again a minute later; back in reach, every twenty seconds.
+    let tried = transport.lan_attempts();
+    advance(SYNC_INTERVAL_FOREGROUND - Duration::from_secs(1)).await;
+    assert_eq!(transport.lan_attempts(), tried);
+    transport.set_lan_failure(None);
+    advance(Duration::from_secs(2)).await;
+    assert!(transport.lan_attempts() > tried, "tried again");
+    let reached = transport.lan_attempts();
+    advance(SYNC_INTERVAL_LAN_FOREGROUND + Duration::from_secs(1)).await;
+    assert!(transport.lan_attempts() > reached, "the next run on the LAN");
+    // Behind other windows, five minutes.
+    phone.core.set_foreground(false);
+    advance(SYNC_INTERVAL_LAN_FOREGROUND + Duration::from_secs(1)).await;
+    let behind = transport.lan_attempts();
+    advance(SYNC_INTERVAL - Duration::from_secs(2)).await;
+    assert_eq!(transport.lan_attempts(), behind);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_hub_that_no_longer_knows_this_device_is_left_until_the_user_asks() {
+    let transport = Arc::new(FakeTransport::default());
+    let (_desktop, phone) = hub_and_client(&transport).await;
+    transport.set_lan_failure(Some(SyncError::WrongCredentials));
+    phone.core.sync_now().unwrap();
+    settle().await;
+    assert!(matches!(space(&phone).status, SyncStatus::Failed { code: ErrorCode::SyncWrongCredentials, .. }), "{:?}", space(&phone).status);
+    // Neither the interval nor a change tries it again; the cloud runs on.
+    let tried = transport.lan_attempts();
+    let cloud = transport.store(&s3(STORAGE_SECRET));
+    let cloud_calls = cloud.calls().len();
+    advance(SYNC_INTERVAL * 2).await;
+    phone.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    assert_eq!(transport.lan_attempts(), tried, "held");
+    assert!(cloud.calls().len() > cloud_calls, "the cloud ran");
+    // Sync now does.
+    transport.set_lan_failure(None);
+    phone.core.sync_now().unwrap();
+    settle().await;
+    assert!(transport.lan_attempts() > tried);
+    assert!(matches!(space(&phone).status, SyncStatus::Synced { .. }), "{:?}", space(&phone).status);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_vault_put_back_clashes_on_the_lan_and_becomes_a_new_device_on_both_storages() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, phone) = hub_and_client(&transport).await;
+    let old_tag = space(&phone).devices[0].tag.clone();
+    // The phone's vault file as it is now, put back after it wrote more.
+    phone.core.lock_vault();
+    let earlier = fs::read(phone.vault_path()).unwrap();
+    phone.core.unlock(pw(MASTER)).await.unwrap();
+    settle().await;
+    phone.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    phone.core.lock_vault();
+    fs::write(phone.vault_path(), &earlier).unwrap();
+    phone.core.unlock(pw(MASTER)).await.unwrap();
+    settle().await;
+
+    // Its own name holds a later snapshot (the LAN, read first): it becomes a new device, once,
+    // on every storage; the old name stays, as another device's.
+    let new_tag = space(&phone).devices[0].tag.clone();
+    assert_ne!(new_tag, old_tag);
+    assert!(matches!(space(&phone).status, SyncStatus::Synced { .. }), "{:?}", space(&phone).status);
+    for paths in [transport.lan().paths(), transport.store(&s3(STORAGE_SECRET)).paths()] {
+        assert!(paths.iter().any(|p| p.contains(&new_tag)) && paths.iter().any(|p| p.contains(&old_tag)), "{paths:?}");
+    }
+    // What the old name had comes back from it.
+    assert_eq!(issuers(&phone), ["GitHub", "Mail"]);
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert_eq!(space(&desktop).devices.len(), 3);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_vault_opened_by_another_installation_leaves_its_lan_role() {
+    let transport = Arc::new(FakeTransport::default());
+    let (_desktop, phone) = hub_and_client(&transport).await;
+    phone.core.lock_vault();
+    let other = device(&transport);
+    assert_ne!(other.core.install_id(), phone.core.install_id());
+    fs::create_dir_all(other.data_dir()).unwrap();
+    fs::copy(phone.vault_path(), other.vault_path()).unwrap();
+    let copy = other.restart();
+    copy.unlock(pw(MASTER)).await.unwrap();
+    settle().await;
+    let kept_there = copy.sync_local().unwrap();
+    assert!(kept_there.lan.is_none(), "the pairing is the phone's");
+    assert_eq!(kept_there.cloud.storage, s3(STORAGE_SECRET), "the space stays");
+    // Written so: the next start reads it without the role.
+    copy.lock_vault();
+    let again = other.restart();
+    again.unlock(pw(MASTER)).await.unwrap();
+    assert!(again.sync_local().unwrap().lan.is_none());
+    // The phone, on its own installation, keeps it.
+    phone.core.unlock(pw(MASTER)).await.unwrap();
+    assert!(phone.core.sync_local().unwrap().lan.is_some());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_new_master_password_is_pending_until_every_storage_has_its_keyring() {
+    let transport = Arc::new(FakeTransport::default());
+    let (_desktop, phone) = hub_and_client(&transport).await;
+    transport.set_lan_failure(Some(SyncError::Network("no route to the hub".into())));
+    phone.core.change_password(pw(MASTER), pw("a new master password")).await.unwrap();
+    settle().await;
+    assert!(kept(&phone, Store::Cloud).keyring_written);
+    assert!(space(&phone).keyring_pending, "the hub still holds the keyring before");
+    transport.set_lan_failure(None);
+    phone.core.sync_now().unwrap();
+    settle().await;
+    assert!(!space(&phone).keyring_pending);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_hub_removes_a_device_from_its_copy_too() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, phone) = hub_and_client(&transport).await;
+    let tag = space(&phone).devices[0].tag.clone();
+    desktop.core.sync_remove_device(&tag).await.unwrap();
+    settle().await;
+    for paths in [transport.lan().paths(), transport.store(&s3(STORAGE_SECRET)).paths()] {
+        assert!(!paths.iter().any(|p| p.contains(&tag)), "{paths:?}");
+    }
+    assert_eq!(device_names(&desktop), [("Desktop".to_owned(), true)]);
+}
+
+#[tokio::test]
+async fn the_installation_keeps_its_id_beside_the_settings() {
+    let h = harness();
+    let id = h.core.install_id();
+    assert_eq!(h.restart().install_id(), id);
+    // Unreadable: a new one, kept from then on.
+    fs::write(h.dir.path().join("config").join("install-id"), "not an id").unwrap();
+    let again = h.restart().install_id();
+    assert_ne!(again, id);
+    assert_eq!(h.restart().install_id(), again);
 }
