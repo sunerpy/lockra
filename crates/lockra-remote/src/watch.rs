@@ -103,11 +103,12 @@ mod tests {
     #[tokio::test]
     async fn a_snapshot_written_into_the_folder_is_heard() {
         let folder = tempfile::tempdir().unwrap();
+        let folder_path = std::fs::canonicalize(folder.path()).unwrap();
         let dir = "lockra-sync-v1/7d1f3c2e-0b4a-4c55-9a43-1e2f3a4b5c6d/devices/";
-        let store = FolderStore::new(folder.path());
+        let store = FolderStore::new(&folder_path);
         store.put(&format!("{dir}{TAG}.lks"), b"one".to_vec(), PutCondition::Always).await.unwrap();
         let (sender, heard) = mpsc::channel();
-        let config = StorageConfig::Folder { path: folder.path().to_path_buf() };
+        let config = StorageConfig::Folder { path: folder_path.clone() };
         let _watch = watch(
             &config,
             dir,

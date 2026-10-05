@@ -12,7 +12,7 @@ mod b64;
 mod container;
 mod kdf;
 
-pub use atomic::{replace_atomic, write_atomic};
+pub use atomic::write_atomic;
 pub use container::{
     BACKUP_MAGIC, DeviceCheck, DeviceKey, DeviceSlot, FileKind, HeaderInfo, MAX_HEADER_LEN, Opened, Sealed, VAULT_MAGIC, VaultError, read_header,
 };

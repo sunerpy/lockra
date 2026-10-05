@@ -1890,13 +1890,10 @@ impl Core {
         if !folder.is_dir() {
             return Err(ErrorCode::SyncFolderMissing.into());
         }
-        // Chosen through a link (`~/Dropbox` on another disk): the folder it leads to is kept, and a
-        // link put in that folder's place later is not followed (lockra-remote).
-        let folder = if fs::symlink_metadata(folder).is_ok_and(|m| m.file_type().is_symlink()) {
-            plain_path(fs::canonicalize(folder).map_err(|_| ErrorCode::SyncFolderMissing)?)
-        } else {
-            folder.to_path_buf()
-        };
+        // Kept with every link on its way resolved (`~/Dropbox` on another disk): lockra-remote
+        // opens it one folder at a time and follows no link, so one put in the place of the
+        // folder, or of any folder above it, later is refused.
+        let folder = plain_path(fs::canonicalize(folder).map_err(|_| ErrorCode::SyncFolderMissing)?);
         if folder.to_str().is_none() {
             return Err(ErrorCode::SyncConfigInvalid.into());
         }

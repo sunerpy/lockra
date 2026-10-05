@@ -19,19 +19,13 @@ pub(crate) enum Step {
 /// included), then flush the directory entry on Unix. On any failure before the rename the old
 /// file is untouched and the temporary files are removed. New files are readable by the owner only.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    write_with(path, bytes, true, &mut |_| Ok(()))
+    write_with(path, bytes, &mut |_| Ok(()))
 }
 
-/// Replace `path` with `bytes` the same way, keeping no `.prev` copy: for a file another program
-/// carries elsewhere (a cloud drive's folder), where the copy would travel too.
-pub fn replace_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    write_with(path, bytes, false, &mut |_| Ok(()))
-}
-
-pub(crate) fn write_with(path: &Path, bytes: &[u8], keep_previous: bool, hook: &mut dyn FnMut(Step) -> io::Result<()>) -> io::Result<()> {
+pub(crate) fn write_with(path: &Path, bytes: &[u8], hook: &mut dyn FnMut(Step) -> io::Result<()>) -> io::Result<()> {
     let tmp = sibling(path, ".tmp");
     let prev_tmp = sibling(path, ".prev.tmp");
-    let result = replace(path, &tmp, &prev_tmp, bytes, keep_previous, hook);
+    let result = replace(path, &tmp, &prev_tmp, bytes, hook);
     if result.is_err() {
         // Best effort: the error that stopped the write is the one the caller gets.
         let _ = fs::remove_file(&tmp);
@@ -40,13 +34,13 @@ pub(crate) fn write_with(path: &Path, bytes: &[u8], keep_previous: bool, hook: &
     result
 }
 
-fn replace(path: &Path, tmp: &Path, prev_tmp: &Path, bytes: &[u8], keep_previous: bool, hook: &mut dyn FnMut(Step) -> io::Result<()>) -> io::Result<()> {
+fn replace(path: &Path, tmp: &Path, prev_tmp: &Path, bytes: &[u8], hook: &mut dyn FnMut(Step) -> io::Result<()>) -> io::Result<()> {
     let mut file = create_private(tmp)?;
     file.write_all(bytes)?;
     hook(Step::Written)?;
     file.sync_all()?;
     drop(file);
-    if keep_previous && path.exists() {
+    if path.exists() {
         // Written and flushed through the handle that created the copy: Windows refuses to flush
         // a handle opened for reading only (FlushFileBuffers: "Access is denied", os error 5).
         let mut copy = create_private(prev_tmp)?;
@@ -126,7 +120,7 @@ mod tests {
             let dir = tempfile::tempdir().unwrap();
             let path = dir.path().join("vault.lockra");
             write_atomic(&path, b"old").unwrap();
-            let err = write_with(&path, b"new", true, &mut fail_at(step)).unwrap_err();
+            let err = write_with(&path, b"new", &mut fail_at(step)).unwrap_err();
             assert_eq!(err.to_string(), "injected");
             assert_eq!(fs::read(&path).unwrap(), b"old", "{step:?}");
             assert!(!dir.path().join("vault.lockra.tmp").exists(), "{step:?}");
@@ -148,31 +142,8 @@ mod tests {
         assert!(!dir.path().join("vault.lockra.prev.tmp").exists());
     }
 
-    #[test]
-    fn replacing_keeps_no_previous_copy() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("snapshot.lks");
-        replace_atomic(&path, b"one").unwrap();
-        replace_atomic(&path, b"two").unwrap();
-        assert_eq!(fs::read(&path).unwrap(), b"two");
-        let names: Vec<_> = fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
-        assert_eq!(names, ["snapshot.lks"], "no .prev, no .tmp");
-    }
-
-    #[test]
-    fn a_failed_replace_leaves_the_old_file_and_nothing_else() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("snapshot.lks");
-        replace_atomic(&path, b"old").unwrap();
-        let err = write_with(&path, b"new", false, &mut fail_at(Step::Written)).unwrap_err();
-        assert_eq!(err.to_string(), "injected");
-        assert_eq!(fs::read(&path).unwrap(), b"old");
-        assert!(!dir.path().join("snapshot.lks.tmp").exists());
-        assert!(!dir.path().join("snapshot.lks.prev").exists());
-    }
-
-    /// A link where the temporary file goes (left there by whoever else writes the folder, a cloud
-    /// drive's peer) is replaced, never written through.
+    /// A link where a temporary file goes (left there by another program) is replaced, never
+    /// written through.
     #[cfg(unix)]
     #[test]
     fn a_link_where_the_temporary_file_goes_is_not_written_through() {
@@ -180,14 +151,14 @@ mod tests {
         let elsewhere = tempfile::tempdir().unwrap();
         let victim = elsewhere.path().join("victim");
         fs::write(&victim, b"keep").unwrap();
-        let path = dir.path().join("snapshot.lks");
-        std::os::unix::fs::symlink(&victim, dir.path().join("snapshot.lks.tmp")).unwrap();
-        replace_atomic(&path, b"new").unwrap();
+        let path = dir.path().join("vault.lockra");
+        std::os::unix::fs::symlink(&victim, dir.path().join("vault.lockra.tmp")).unwrap();
+        write_atomic(&path, b"new").unwrap();
         assert_eq!(fs::read(&victim).unwrap(), b"keep");
         assert_eq!(fs::read(&path).unwrap(), b"new");
         assert!(!fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
         let names: Vec<_> = fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
-        assert_eq!(names, ["snapshot.lks"]);
+        assert_eq!(names, ["vault.lockra"]);
     }
 
     #[test]

@@ -871,11 +871,17 @@ async fn an_accounts_colour_and_mark_reach_the_other_devices() {
     assert_eq!((seen.color, seen.mark.as_deref()), (crate::AccountColor::Teal, Some("GH")));
 }
 
-/// A folder a cloud drive keeps in sync, made under `h`'s directory.
+/// A folder a cloud drive keeps in sync, made under `h`'s directory, named as the core keeps a
+/// chosen one (every link resolved: macOS keeps temporary folders under a link).
 fn drive_folder(h: &Harness, name: &str) -> std::path::PathBuf {
     let folder = h.dir.path().join(name);
     std::fs::create_dir_all(&folder).unwrap();
-    folder
+    std::fs::canonicalize(folder).unwrap()
+}
+
+/// `dir` as the core keeps a chosen folder.
+fn kept(dir: &std::path::Path) -> std::path::PathBuf {
+    std::fs::canonicalize(dir).unwrap()
 }
 
 /// What the interface sends for "the folder chosen": no path.
@@ -942,6 +948,7 @@ async fn a_folder_space_invites_with_its_key_alone_and_each_device_reaches_it_it
     let shared = tempfile::tempdir().unwrap();
     let folder = shared.path().join("Jianguoyun");
     std::fs::create_dir(&folder).unwrap();
+    let folder = kept(&folder);
     let (windows, sync_key) = folder_device(&transport, &folder).await;
     let invite = windows.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
     assert!(!invite.includes_storage);
@@ -984,7 +991,7 @@ async fn a_folder_is_looked_at_every_fifteen_seconds_in_front_and_every_minute_b
     let parent = tempfile::tempdir().unwrap();
     let (windows, _) = folder_device(&transport, parent.path()).await;
     windows.core.set_settings(Settings { auto_lock_minutes: 0, ..windows.core.state().settings }).unwrap();
-    let store = transport.store(&StorageConfig::Folder { path: parent.path().to_path_buf() });
+    let store = transport.store(&StorageConfig::Folder { path: kept(parent.path()) });
     let calls = || store.calls().len();
     let quiet = calls();
     advance(SYNC_INTERVAL_FOLDER_FOREGROUND - Duration::from_secs(1)).await;
@@ -1038,7 +1045,7 @@ fn runs_of(store: &MemoryRemote) -> usize {
 async fn a_change_the_drive_brings_into_the_folder_runs_a_sync_within_a_second() {
     let transport = Arc::new(FakeTransport::default());
     let parent = tempfile::tempdir().unwrap();
-    let folder = StorageConfig::Folder { path: parent.path().to_path_buf() };
+    let folder = StorageConfig::Folder { path: kept(parent.path()) };
     let (windows, _) = folder_device(&transport, parent.path()).await;
     windows.core.set_settings(Settings { auto_lock_minutes: 0, ..windows.core.state().settings }).unwrap();
     windows.core.set_foreground(false);
@@ -1062,7 +1069,7 @@ async fn a_change_the_drive_brings_into_the_folder_runs_a_sync_within_a_second()
 async fn the_folder_is_watched_only_while_its_space_is_open_here() {
     let transport = Arc::new(FakeTransport::default());
     let parent = tempfile::tempdir().unwrap();
-    let folder = StorageConfig::Folder { path: parent.path().to_path_buf() };
+    let folder = StorageConfig::Folder { path: kept(parent.path()) };
     let (windows, _) = folder_device(&transport, parent.path()).await;
     windows.core.set_settings(Settings { auto_lock_minutes: 0, ..windows.core.state().settings }).unwrap();
     assert_eq!(transport.watching(&folder), 1, "watched once the space is set up");
