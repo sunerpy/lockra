@@ -6,8 +6,8 @@ how a new device joins, and how Lockra keeps that storage from reading your acco
 <StatusTag status="available" /> Sync is available from version 0.4.0.
 
 Sync is off until you set it up. Lockra runs no server and has no account: your devices meet in an
-S3-compatible bucket or a WebDAV folder that you choose, and everything they put there is encrypted
-before it leaves the device.
+S3-compatible bucket or a WebDAV folder that you choose, or, on a computer, in a folder your cloud
+drive keeps in sync, and everything they put there is encrypted before it leaves the device.
 
 ## What you need
 
@@ -17,6 +17,8 @@ before it leaves the device.
   service, with a user name and password (an app password where the service offers one).
 - An address that starts with `https://`. Lockra refuses plain `http://`, except for an address
   on the same computer.
+- Or, on a computer, a folder that a cloud drive's app keeps in sync, with no credentials at all
+  (below, [Through a cloud drive folder](#through-a-cloud-drive-folder)).
 
 ### By provider
 
@@ -102,7 +104,7 @@ invitation, or typing the storage settings and the sync key, works as on a compu
 
 ## Through a cloud drive folder
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.7.4.
 
 On a computer, sync needs no storage credentials at all: choose a folder that a cloud drive's app
 keeps in sync, such as a folder of OneDrive, iCloud Drive, Dropbox, Jianguoyun, Nextcloud,
