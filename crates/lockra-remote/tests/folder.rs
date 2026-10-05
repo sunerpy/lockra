@@ -12,6 +12,25 @@ use lockra_sync::{Outcome, RemoteStore, Replica, Space, SpaceKeys, SyncError, Sy
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
+/// A temporary folder named as the core keeps a chosen one, every link resolved (macOS keeps its
+/// temporary folders under `/var`, a link to `/private/var`).
+struct Temp {
+    _dir: tempfile::TempDir,
+    path: std::path::PathBuf,
+}
+
+impl Temp {
+    fn path(&self) -> &std::path::Path {
+        &self.path
+    }
+}
+
+fn tempdir() -> Temp {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = std::fs::canonicalize(dir.path()).unwrap();
+    Temp { _dir: dir, path }
+}
+
 /// A replica of a set of names: what a device has, merged by union.
 #[derive(Default)]
 struct Names(BTreeSet<String>);
@@ -75,7 +94,7 @@ fn files(dir: &Path) -> Vec<String> {
 
 #[tokio::test]
 async fn two_devices_meet_in_one_folder() {
-    let folder = tempfile::tempdir().unwrap();
+    let folder = tempdir();
     let store = FolderStore::new(folder.path());
     let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
     let mut laptop = Device::new(1, "Laptop", &["GitHub"]);
@@ -95,7 +114,7 @@ async fn two_devices_meet_in_one_folder() {
 
 #[tokio::test]
 async fn a_drive_that_carries_files_late_and_in_pieces_loses_nothing() {
-    let (pc, mac) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+    let (pc, mac) = (tempdir(), tempdir());
     let (pc_store, mac_store) = (FolderStore::new(pc.path()), FolderStore::new(mac.path()));
     let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
     let mut windows = Device::new(1, "Windows", &["GitHub"]);
@@ -130,7 +149,7 @@ async fn a_drive_that_carries_files_late_and_in_pieces_loses_nothing() {
 
 #[tokio::test]
 async fn a_drive_that_brings_an_older_snapshot_back_is_found_out() {
-    let folder = tempfile::tempdir().unwrap();
+    let folder = tempdir();
     let store = FolderStore::new(folder.path());
     let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
     let mut laptop = Device::new(1, "Laptop", &["GitHub"]);
@@ -153,7 +172,7 @@ async fn a_drive_that_brings_an_older_snapshot_back_is_found_out() {
 
 #[tokio::test]
 async fn a_copied_vault_writing_under_the_same_name_is_found() {
-    let folder = tempfile::tempdir().unwrap();
+    let folder = tempdir();
     let store = FolderStore::new(folder.path());
     let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
     let mut original = Device::new(1, "Laptop", &["GitHub"]);
@@ -167,7 +186,7 @@ async fn a_copied_vault_writing_under_the_same_name_is_found() {
 
 #[tokio::test]
 async fn a_folder_that_went_away_stops_the_run_and_is_not_made_again() {
-    let parent = tempfile::tempdir().unwrap();
+    let parent = tempdir();
     let root = parent.path().join("Dropbox");
     fs::create_dir(&root).unwrap();
     let store = FolderStore::new(&root);

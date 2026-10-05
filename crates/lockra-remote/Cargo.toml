@@ -12,10 +12,11 @@ publish = false
 workspace = true
 
 [dependencies]
+cap-fs-ext.workspace = true
+cap-std.workspace = true
 data-encoding.workspace = true
 futures-util.workspace = true
 lockra-sync.workspace = true
-lockra-vault.workspace = true
 notify.workspace = true
 opendal.workspace = true
 opendal-http-transport-reqwest.workspace = true

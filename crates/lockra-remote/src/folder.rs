@@ -8,11 +8,14 @@
 //! space; and it may deliver a snapshot in pieces, which then does not open this round and is read
 //! again the next (docs/security.md, "Sync").
 
-use std::fs::{self, File};
-use std::io::{self, Read as _};
-use std::path::{Path, PathBuf};
+use std::ffi::OsStr;
+use std::io::{self, Read as _, Write as _};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
+use cap_fs_ext::{DirExt as _, FollowSymlinks, OpenOptionsFollowExt as _, OpenOptionsMaybeDirExt as _};
+use cap_std::ambient_authority;
+use cap_std::fs::{Dir, OpenOptions};
 use data_encoding::HEXLOWER;
 use lockra_sync::{MAX_OBJECT_BYTES, ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SyncError};
 use parking_lot::RwLock;
@@ -22,13 +25,17 @@ use sha2::{Digest as _, Sha256};
 const EXTENSION: &str = ".lks";
 
 /// A sync space's storage in a folder. Paths are those of a space (lowercase letters, digits and
-/// dashes, an object's name ending in `.lks`); anything else is refused, `..` included. A link
-/// below the folder (a drive or a sync peer may bring one) is never followed: a linked directory
-/// of the space is refused, a linked object is no object, so nothing outside the folder is read or
-/// written. A write replaces its file atomically and keeps no copy beside it (the drive would carry
-/// that too). The folder itself is never made: while it is missing (moved, deleted, a drive not
-/// connected) every call is [`SyncError::FolderMissing`]. An object's etag is the SHA-256 of its
-/// bytes.
+/// dashes, an object's name ending in `.lks`); anything else is refused, `..` included.
+///
+/// Every operation goes through directory handles opened one folder at a time from the top of the
+/// file system, none of them through a link (the core keeps the folder's path with every link
+/// resolved when it was chosen), and acts on names inside the last one only. So nothing outside
+/// the folder is reached, even while another program swaps a folder on the way for a link (a
+/// drive or a sync peer may bring one): a linked folder is refused, a linked object is no object,
+/// and a write that started goes on in the folder it opened. A write replaces its file atomically
+/// and keeps no copy beside it (the drive would carry that too). The folder itself is never made:
+/// while it is missing (moved, deleted, a drive not connected) every call is
+/// [`SyncError::FolderMissing`]. An object's etag is the SHA-256 of its bytes.
 #[derive(Debug, Clone)]
 pub struct FolderStore {
     root: PathBuf,
@@ -56,15 +63,10 @@ impl FolderStore {
         Ok(segments)
     }
 
-    /// Run `work` off the async runtime, the folder checked first: file I/O blocks.
-    async fn blocking<T: Send + 'static>(&self, work: impl FnOnce(&Path, &RwLock<()>) -> Result<T, SyncError> + Send + 'static) -> Result<T, SyncError> {
+    /// Run `work` off the async runtime on the folder, opened first: file I/O blocks.
+    async fn blocking<T: Send + 'static>(&self, work: impl FnOnce(&Dir, &RwLock<()>) -> Result<T, SyncError> + Send + 'static) -> Result<T, SyncError> {
         let (root, lock) = (self.root.clone(), Arc::clone(&self.lock));
-        tokio::task::spawn_blocking(move || {
-            present(&root)?;
-            work(&root, &lock)
-        })
-        .await
-        .map_err(|_| SyncError::Interrupted)?
+        tokio::task::spawn_blocking(move || work(&open_root(&root)?, &lock)).await.map_err(|_| SyncError::Interrupted)?
     }
 }
 
@@ -83,25 +85,62 @@ fn etag(bytes: &[u8]) -> String {
     HEXLOWER.encode(&Sha256::digest(bytes))
 }
 
-/// The space's directories `dirs` below `root`, each one there as a directory of its own, not a
-/// link. `make` makes the missing ones (a write); otherwise a missing one answers `false`.
-fn walk(root: &Path, dirs: &[String], make: bool) -> Result<bool, SyncError> {
-    let mut place = root.to_path_buf();
-    for dir in dirs {
-        place.push(dir);
-        match fs::symlink_metadata(&place) {
-            Ok(meta) if meta.file_type().is_dir() => {}
-            Ok(_) => return Err(SyncError::Storage(format!("not a folder of the space (a link?): {}", place.display()))),
-            Err(error) if error.kind() == io::ErrorKind::NotFound && make => match fs::create_dir(&place) {
-                Ok(()) => {}
-                Err(error) if error.kind() == io::ErrorKind::AlreadyExists && fs::symlink_metadata(&place).is_ok_and(|m| m.file_type().is_dir()) => {}
-                Err(error) => return Err(failed(&error)),
-            },
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+/// The folder `root` as a handle: the top of its file system (`/`, `C:\`), then each folder on the
+/// way opened without following a link. A link anywhere on the way is refused; a folder missing
+/// on the way is [`SyncError::FolderMissing`].
+fn open_root(root: &Path) -> Result<Dir, SyncError> {
+    let parts: Vec<Component<'_>> = root.components().collect();
+    let first = parts.iter().position(|part| matches!(part, Component::Normal(_))).unwrap_or(parts.len());
+    let top: PathBuf = parts[..first].iter().collect();
+    if !root.is_absolute() || top.as_os_str().is_empty() {
+        return Err(SyncError::Storage(format!("not a folder named in full: {}", root.display())));
+    }
+    let mut dir = Dir::open_ambient_dir(&top, ambient_authority()).map_err(|e| failed(&e))?;
+    for part in &parts[first..] {
+        let Component::Normal(name) = part else {
+            return Err(SyncError::Storage(format!("not a folder named in full: {}", root.display())));
+        };
+        dir = step(&dir, name, false)?.ok_or(SyncError::FolderMissing)?;
+    }
+    Ok(dir)
+}
+
+/// The folder `name` in `dir`, opened without following a link; `None` when it is not there, or
+/// made first with `make`. Anything else at `name` (a link, a file) is refused.
+fn step(dir: &Dir, name: &OsStr, make: bool) -> Result<Option<Dir>, SyncError> {
+    let refused = || SyncError::Storage(format!("not a folder (a link?): {}", Path::new(name).display()));
+    match dir.symlink_metadata(name) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return Err(refused()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound && make => match dir.create_dir(name) {
+            // Made meanwhile by another program: opened below, where a link is refused.
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
             Err(error) => return Err(failed(&error)),
+        },
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(failed(&error)),
+    }
+    match dir.open_dir_nofollow(name) {
+        Ok(opened) => Ok(Some(opened)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => Err(SyncError::Denied),
+        // Swapped for a link (or a file) since it was looked at.
+        Err(_) => Err(refused()),
+    }
+}
+
+/// The space's directories `dirs` in the folder, opened one by one (made with `make`); `None`
+/// when one is not there yet.
+fn walk(root: &Dir, dirs: &[String], make: bool) -> Result<Option<Dir>, SyncError> {
+    let mut dir = root.try_clone().map_err(|e| failed(&e))?;
+    for name in dirs {
+        match step(&dir, OsStr::new(name), make)? {
+            Some(next) => dir = next,
+            None => return Ok(None),
         }
     }
-    Ok(true)
+    Ok(Some(dir))
 }
 
 /// `path`'s directories and, for an object, its name.
@@ -109,20 +148,6 @@ fn split(path: &str) -> Result<(Vec<String>, Option<String>), SyncError> {
     let mut segments: Vec<String> = FolderStore::segments(path)?.into_iter().map(str::to_owned).collect();
     let name = if path.ends_with('/') { None } else { segments.pop() };
     Ok((segments, name))
-}
-
-fn under(root: &Path, dirs: &[String]) -> PathBuf {
-    dirs.iter().fold(root.to_path_buf(), |place, dir| place.join(dir))
-}
-
-/// The folder is there, and is one of its own: a link put in its place after it was chosen (the
-/// core keeps the folder a chosen link led to) is not followed.
-fn present(root: &Path) -> Result<(), SyncError> {
-    match fs::symlink_metadata(root) {
-        Ok(meta) if meta.file_type().is_dir() => Ok(()),
-        Ok(_) => Err(SyncError::Storage(format!("not a folder (a link?): {}", root.display()))),
-        Err(error) => Err(failed(&error)),
-    }
 }
 
 /// An I/O error as the sync engine tells them apart: a folder gone, a refusal, anything else.
@@ -154,22 +179,27 @@ fn patiently<T>(mut work: impl FnMut() -> io::Result<T>) -> io::Result<T> {
     }
 }
 
-/// The object at `place` and its etag when there is one; one larger than an object may be is not
-/// read, even when it grows while being read, and a link or a directory where it goes is no
+/// The object `name` in `dir` and its etag when there is one; one larger than an object may be is
+/// not read, even when it grows while being read, and a link or a directory where it goes is no
 /// object (reported as a damaged one, which the next write replaces).
-fn read(place: &Path) -> Result<Option<(Vec<u8>, String)>, SyncError> {
-    match fs::symlink_metadata(place) {
-        Ok(meta) if !meta.file_type().is_file() => return Err(SyncError::Corrupted),
+fn read(dir: &Dir, name: &str) -> Result<Option<(Vec<u8>, String)>, SyncError> {
+    match dir.symlink_metadata(name) {
+        Ok(meta) if !meta.is_file() => return Err(SyncError::Corrupted),
         Ok(_) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(failed(&error)),
     }
-    let file = match patiently(|| File::open(place)) {
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let file = match patiently(|| dir.open_with(name, &options)) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(failed(&error)),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => return Err(SyncError::Denied),
+        // Swapped for a link since it was looked at: no object.
+        Err(_) => return Err(SyncError::Corrupted),
     };
-    if file.metadata().map_err(|e| failed(&e))?.len() > MAX_OBJECT_BYTES {
+    let meta = file.metadata().map_err(|e| failed(&e))?;
+    if !meta.is_file() || meta.len() > MAX_OBJECT_BYTES {
         return Err(SyncError::Corrupted);
     }
     let mut bytes = Vec::new();
@@ -179,6 +209,44 @@ fn read(place: &Path) -> Result<Option<(Vec<u8>, String)>, SyncError> {
     }
     let etag = etag(&bytes);
     Ok(Some((bytes, etag)))
+}
+
+/// Replace the object `name` in `dir` with `bytes`: written to `<name>.tmp` made anew (whatever was
+/// at that name goes first, a link itself rather than what it points to), flushed, and renamed over
+/// the object, which replaces a link there rather than writing through it. On any failure before
+/// the rename the old object is untouched and the temporary file goes.
+fn replace(dir: &Dir, name: &str, bytes: &[u8]) -> io::Result<()> {
+    let tmp = format!("{name}.tmp");
+    match dir.remove_file(&tmp) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true).follow(FollowSymlinks::No);
+    #[cfg(unix)]
+    cap_std::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let written = (|| {
+        let mut file = dir.open_with(&tmp, &options)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        drop(file);
+        dir.rename(&tmp, dir, name)
+    })();
+    if written.is_err() {
+        // Best effort: the error that stopped the write is the one the caller gets.
+        let _ = dir.remove_file(&tmp);
+    }
+    written?;
+    // The new directory entry, flushed on Unix (Windows offers no handle to flush it through),
+    // through the directory opened for reading: the handle the walk holds may not be flushed.
+    #[cfg(unix)]
+    {
+        let mut readable = OpenOptions::new();
+        readable.read(true).maybe_dir(true).follow(FollowSymlinks::No);
+        dir.open_with(".", &readable)?.sync_all()?;
+    }
+    Ok(())
 }
 
 impl RemoteStore for FolderStore {
@@ -195,17 +263,9 @@ impl RemoteStore for FolderStore {
             self.blocking(move |root, lock| {
                 let _reading = lock.read();
                 // No space here yet (the folder itself is there).
-                if !walk(root, &dirs, false)? {
-                    return Ok(Vec::new());
-                }
-                let entries = match fs::read_dir(under(root, &dirs)) {
-                    Ok(entries) => entries,
-                    // No space here yet (the folder itself is there).
-                    Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-                    Err(error) => return Err(failed(&error)),
-                };
+                let Some(devices) = walk(root, &dirs, false)? else { return Ok(Vec::new()) };
                 let mut listing = Vec::new();
-                for entry in entries {
+                for entry in devices.entries().map_err(|e| failed(&e))? {
                     let entry = entry.map_err(|e| failed(&e))?;
                     let Ok(name) = entry.file_name().into_string() else { continue };
                     if !object_name(&name) || !entry.file_type().map_err(|e| failed(&e))?.is_file() {
@@ -216,9 +276,10 @@ impl RemoteStore for FolderStore {
                     let etag = if size > MAX_OBJECT_BYTES {
                         None
                     } else {
-                        match read(&entry.path()) {
+                        match read(&devices, &name) {
                             Ok(found) => found.map(|(_, etag)| etag),
-                            // Grown past the limit meanwhile: the engine refuses it by its size.
+                            // Grown past the limit, or swapped for a link, meanwhile: the engine
+                            // reads it again, and finds what it is.
                             Err(SyncError::Corrupted) => None,
                             Err(other) => return Err(other),
                         }
@@ -239,10 +300,8 @@ impl RemoteStore for FolderStore {
             };
             self.blocking(move |root, lock| {
                 let _reading = lock.read();
-                if !walk(root, &dirs, false)? {
-                    return Ok(None);
-                }
-                Ok(read(&under(root, &dirs).join(name))?.map(|(bytes, etag)| (bytes, Some(etag))))
+                let Some(devices) = walk(root, &dirs, false)? else { return Ok(None) };
+                Ok(read(&devices, &name)?.map(|(bytes, etag)| (bytes, Some(etag))))
             })
             .await
         })
@@ -260,11 +319,8 @@ impl RemoteStore for FolderStore {
                 let _writing = lock.write();
                 // The space's folders, one by one under the folder (which is never made here: a
                 // drive that went away would otherwise get a new, empty copy of it), none a link.
-                walk(root, &dirs, true)?;
-                let place = under(root, &dirs).join(name);
-                // The temporary file is made anew and renamed over the object: a link at either
-                // name is replaced, never written through.
-                patiently(|| lockra_vault::replace_atomic(&place, &bytes)).map_err(|e| failed(&e))?;
+                let devices = walk(root, &dirs, true)?.ok_or_else(|| SyncError::Storage("the space's folders were not made".into()))?;
+                patiently(|| replace(&devices, &name, &bytes)).map_err(|e| failed(&e))?;
                 Ok(Some(etag(&bytes)))
             })
             .await
@@ -278,12 +334,9 @@ impl RemoteStore for FolderStore {
             };
             self.blocking(move |root, lock| {
                 let _writing = lock.write();
-                if !walk(root, &dirs, false)? {
-                    return Ok(());
-                }
+                let Some(devices) = walk(root, &dirs, false)? else { return Ok(()) };
                 // A link where the object goes is removed itself, not what it points to.
-                let place = under(root, &dirs).join(name);
-                match patiently(|| fs::remove_file(&place)) {
+                match patiently(|| devices.remove_file(&name)) {
                     Ok(()) => Ok(()),
                     Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
                     Err(error) => Err(failed(&error)),
@@ -296,7 +349,27 @@ impl RemoteStore for FolderStore {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::{self, File};
+
     use super::*;
+    /// A temporary folder named as the core keeps a chosen one, every link resolved (macOS keeps its
+    /// temporary folders under `/var`, a link to `/private/var`).
+    struct Temp {
+        _dir: tempfile::TempDir,
+        path: std::path::PathBuf,
+    }
+
+    impl Temp {
+        fn path(&self) -> &std::path::Path {
+            &self.path
+        }
+    }
+
+    fn tempdir() -> Temp {
+        let dir = tempfile::TempDir::new().unwrap();
+        let path = std::fs::canonicalize(dir.path()).unwrap();
+        Temp { _dir: dir, path }
+    }
 
     const DIR: &str = "lockra-sync-v1/7d1f3c2e-0b4a-4c55-9a43-1e2f3a4b5c6d/devices/";
     const TAG: &str = "0123456789abcdef0123456789abcdef";
@@ -313,7 +386,7 @@ mod tests {
 
     #[tokio::test]
     async fn objects_are_written_read_listed_and_deleted_with_their_hash_as_etag() {
-        let folder = tempfile::tempdir().unwrap();
+        let folder = tempdir();
         let store = FolderStore::new(folder.path());
         assert!(!store.conditional_puts(), "a cloud drive has no conditions, like WebDAV");
         assert_eq!(store.list(DIR).await.unwrap(), Vec::new(), "no space yet: nothing listed");
@@ -334,7 +407,7 @@ mod tests {
 
     #[tokio::test]
     async fn only_paths_of_a_space_are_reached() {
-        let folder = tempfile::tempdir().unwrap();
+        let folder = tempdir();
         let store = FolderStore::new(folder.path().join("space"));
         fs::create_dir(folder.path().join("space")).unwrap();
         for bad in [
@@ -361,8 +434,8 @@ mod tests {
     #[tokio::test]
     async fn links_inside_the_folder_are_never_followed() {
         use std::os::unix::fs::symlink;
-        let folder = tempfile::tempdir().unwrap();
-        let elsewhere = tempfile::tempdir().unwrap();
+        let folder = tempdir();
+        let elsewhere = tempdir();
         let store = FolderStore::new(folder.path());
         // A folder of the space that is a link to another place.
         symlink(elsewhere.path(), folder.path().join("lockra-sync-v1")).unwrap();
@@ -396,8 +469,8 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn a_folder_replaced_by_a_link_is_not_followed() {
-        let parent = tempfile::tempdir().unwrap();
-        let elsewhere = tempfile::tempdir().unwrap();
+        let parent = tempdir();
+        let elsewhere = tempdir();
         let root = parent.path().join("Lockra");
         fs::create_dir(&root).unwrap();
         let store = FolderStore::new(&root);
@@ -409,9 +482,37 @@ mod tests {
         assert_eq!(names(elsewhere.path()), Vec::<String>::new(), "nothing written where the link points");
     }
 
+    /// The folders swapped for links after they were checked and opened (by a sync peer, while a
+    /// write runs): the write goes on in the folder it opened, nothing lands where the links point,
+    /// and the next call refuses them.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn folders_swapped_for_links_while_a_write_runs_keep_the_write_inside() {
+        use std::os::unix::fs::symlink;
+        let parent = tempdir();
+        let elsewhere = tempdir();
+        let root = parent.path().join("Lockra");
+        fs::create_dir(&root).unwrap();
+        let (dirs, name) = split(&object()).unwrap();
+        let name = name.unwrap();
+        let devices = walk(&open_root(&root).unwrap(), &dirs, true).unwrap().unwrap();
+        // Checked and opened; now the space's folder and the chosen folder itself become links.
+        fs::rename(root.join("lockra-sync-v1"), parent.path().join("space-moved")).unwrap();
+        symlink(elsewhere.path(), root.join("lockra-sync-v1")).unwrap();
+        fs::rename(&root, parent.path().join("Lockra-moved")).unwrap();
+        symlink(elsewhere.path(), &root).unwrap();
+        replace(&devices, &name, b"inside").unwrap();
+        assert_eq!(names(elsewhere.path()), Vec::<String>::new(), "nothing where the links point");
+        let inside = parent.path().join("space-moved").join(dirs[1..].join("/")).join(&name);
+        assert_eq!(fs::read(inside).unwrap(), b"inside", "the write stayed in the folder it opened");
+        let store = FolderStore::new(&root);
+        assert!(matches!(store.put(&object(), b"next".to_vec(), PutCondition::Always).await, Err(SyncError::Storage(_))));
+        assert_eq!(names(elsewhere.path()), Vec::<String>::new());
+    }
+
     #[tokio::test]
     async fn the_drives_own_files_are_no_objects() {
-        let folder = tempfile::tempdir().unwrap();
+        let folder = tempdir();
         let store = FolderStore::new(folder.path());
         store.put(&object(), b"mine".to_vec(), PutCondition::Always).await.unwrap();
         let devices = folder.path().join(DIR.trim_end_matches('/'));
@@ -432,7 +533,7 @@ mod tests {
 
     #[tokio::test]
     async fn an_object_larger_than_any_snapshot_is_listed_and_never_read() {
-        let folder = tempfile::tempdir().unwrap();
+        let folder = tempdir();
         let store = FolderStore::new(folder.path());
         store.put(&object(), b"small".to_vec(), PutCondition::Always).await.unwrap();
         let file = File::options().write(true).open(folder.path().join(object())).unwrap();
@@ -447,7 +548,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_missing_folder_is_reported_and_never_made_again() {
-        let parent = tempfile::tempdir().unwrap();
+        let parent = tempdir();
         let root = parent.path().join("OneDrive").join("Lockra");
         let store = FolderStore::new(&root);
         assert_eq!(store.list(DIR).await, Err(SyncError::FolderMissing));
@@ -469,7 +570,7 @@ mod tests {
     #[tokio::test]
     async fn a_folder_this_user_may_not_write_is_refused_as_denied() {
         use std::os::unix::fs::PermissionsExt as _;
-        let folder = tempfile::tempdir().unwrap();
+        let folder = tempdir();
         fs::set_permissions(folder.path(), fs::Permissions::from_mode(0o500)).unwrap();
         let store = FolderStore::new(folder.path());
         let result = store.put(&object(), b"x".to_vec(), PutCondition::Always).await;
@@ -486,7 +587,7 @@ mod tests {
     #[tokio::test]
     async fn a_file_the_drive_holds_for_a_moment_is_replaced_once_it_lets_go() {
         use std::os::windows::fs::OpenOptionsExt as _;
-        let folder = tempfile::tempdir().unwrap();
+        let folder = tempdir();
         let store = FolderStore::new(folder.path());
         store.put(&object(), b"one".to_vec(), PutCondition::Always).await.unwrap();
         let held = File::options().read(true).share_mode(0).open(folder.path().join(object())).unwrap();

@@ -201,7 +201,10 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   setting up and joining seal this device's keyring under its master password.
 - **The storage sees ciphertext.** A space is one snapshot per device under
   `lockra-sync-v1/<space id>/devices/` (`docs/formats.md` §9), and nothing else; in a cloud drive's
-  folder, the drive carries those same files. A snapshot is the
+  folder, the drive carries those same files. There Lockra reaches nothing outside the folder: its
+  path is kept with every link resolved when it is chosen, and every read and write goes through
+  folders opened one at a time without following a link, so a link a drive or a sync peer brings,
+  before or during a run, sends nothing elsewhere. A snapshot is the
   device's whole replica, secrets included, encrypted under a key derived from the space's random
   data key, its header (format, space, device tag, nonce, the device's keyring) bound as
   associated data, padded to 4 KiB so that its size says little about the number of accounts. The

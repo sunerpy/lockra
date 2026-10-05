@@ -90,9 +90,10 @@ To check on real devices:
 
 Automated:
 
-- `crates/lockra-remote/src/folder.rs`: only a space's paths are reached, and a link inside the
-  folder is never followed (a linked directory refused, a linked object no object, a link at the
-  temporary name replaced, the folder itself replaced by a link refused); the drive's own files
+- `crates/lockra-remote/src/folder.rs`: only a space's paths are reached, through folders opened
+  one at a time without following a link: a linked directory refused, a linked object no object, a
+  link at the temporary name replaced, the folder itself replaced by a link refused, and folders
+  swapped for links while a write runs leaving it in the folder it opened; the drive's own files
   (conflicted copies, downloads in progress, `.tmp`) are no objects; an object over 16 MiB is
   listed and never read; a write leaves neither `.prev` nor `.tmp`; a missing folder is reported
   and never made again, and works again once back; a folder this user may not write is refused;
