@@ -618,6 +618,17 @@ mod tests {
         // The same for an empty keyring, as a build that defaulted it saved it.
         kept["local"]["sync"]["keyring"] = serde_json::json!("");
         assert!(VaultData::open(&serde_json::to_vec(&kept).unwrap()).unwrap().sync().is_none());
+        // And for a storage of a kind this version does not know, as Lockra up to 0.7.3 sees a
+        // cloud drive's folder.
+        let mut later: serde_json::Value = serde_json::from_slice(&data.to_bytes()).unwrap();
+        later["local"]["sync"]["storage"] = serde_json::json!({ "kind": "a later kind", "path": "/x" });
+        let opened = VaultData::open(&serde_json::to_vec(&later).unwrap()).unwrap();
+        assert!(opened.sync().is_none());
+        assert_eq!(opened.entries, whole.entries);
+        // A folder this version knows stays, with its path.
+        let folder = lockra_sync::StorageConfig::Folder { path: std::env::temp_dir().join("Dropbox") };
+        data.local_mut().sync = Some(SyncLocal::new(folder.clone(), &keys, &sync_key, "Laptop".into(), b"keyring"));
+        assert_eq!(VaultData::open(&data.to_bytes()).unwrap().sync().map(|s| s.storage.clone()), Some(folder));
         // Anything else damaged is still a damaged vault.
         kept["entries"] = serde_json::json!("not a list");
         assert_eq!(VaultData::open(&serde_json::to_vec(&kept).unwrap()).unwrap_err().code, ErrorCode::VaultCorrupted);

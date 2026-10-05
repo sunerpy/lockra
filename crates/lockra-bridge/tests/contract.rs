@@ -337,13 +337,16 @@ fn commands() -> Vec<Value> {
         json!({"command": "update_check"}),
         json!({"command": "update_install"}),
         json!({"command": "sync_create", "storage": s3_storage(), "password": "a new password", "device_name": "Desktop"}),
+        // With this device's own way to the space (needed when the invitation holds the sync key
+        // alone: a space in another computer's folder).
         json!({
-            "command": "sync_join", "source": {"type": "invite", "text": "lockra-invite:2:TEtTSU5WVDI", "code": "7K2QM-XW4FD"},
+            "command": "sync_join", "source": {"type": "invite", "text": "lockra-invite:2:TEtTSU5WVDI", "code": "7K2QM-XW4FD", "storage": webdav_storage()},
             "password": "a new password", "device_name": "Pixel 8", "space_password": "another device's password"
         }),
         json!({"command": "sync_invite", "password": "a new password"}),
         json!({"command": "sync_key_acknowledge"}),
-        json!({"command": "sync_set_storage", "storage": webdav_storage(), "password": "a new password"}),
+        // A cloud drive's folder, as the interface names it: "the folder chosen", no path.
+        json!({"command": "sync_set_storage", "storage": {"kind": "folder"}, "password": "a new password"}),
         json!({"command": "sync_rename_device", "name": "Work desktop"}),
         json!({"command": "sync_remove_device", "tag": PHONE_TAG}),
         json!({"command": "sync_now"}),
@@ -399,6 +402,9 @@ fn sync_fixtures() {
     webdav.unreadable = Vec::new();
     webdav.keyring_pending = true;
     views.push(SyncView { space: Some(webdav) });
+    let mut folder = sync_space(SyncStatus::Failed { code: ErrorCode::SyncFolderMissing, at_ms: T0 });
+    folder.storage = StorageView::Folder { path: "C:\\Users\\me\\OneDrive\\Lockra".into() };
+    views.push(SyncView { space: Some(folder) });
     views.push(SyncView { space: None });
     check("sync.json", &views);
 }
@@ -430,6 +436,7 @@ fn response_fixtures() {
         CoreError { code: ErrorCode::RateLimited, retry_at_ms: Some(T0 + 4000) },
         ErrorCode::ExportExpired.into(),
         ErrorCode::SyncWrongCredentials.into(),
+        ErrorCode::SyncInviteNeedsStorage.into(),
         ErrorCode::Internal.into(),
     ];
     check(
@@ -457,6 +464,7 @@ fn response_fixtures() {
                 shared_text: "lockra-invite:2:TEtTSU5WVDI".into(),
                 code: "7K2QM-XW4FD".into(),
                 sync_key: SYNC_KEY.into(),
+                includes_storage: true,
             },
             "codes_frame": codes,
             "codes_frame_locked": CodesFrame { at_ms: T0, codes: Vec::new() },
@@ -606,6 +614,16 @@ async fn dispatch_answers_and_leaks_nothing() {
     ok(run(json!({"command": "sync_now"})).await, &mut answers);
     ok(run(json!({"command": "sync_rename_device", "name": "Work desktop"})).await, &mut answers);
     ok(run(json!({"command": "sync_set_storage", "storage": storage, "password": "correct horse battery"})).await, &mut answers);
+    // A folder only as the dialog chose it: none chosen yet, and never a path the webview names.
+    let folder = dir.path().join("Dropbox");
+    std::fs::create_dir(&folder).unwrap();
+    let named = json!({"kind": "folder", "path": folder});
+    assert_eq!(
+        run(json!({"command": "sync_set_storage", "storage": {"kind": "folder"}, "password": "correct horse battery"})).await.unwrap_err().code,
+        ErrorCode::SyncFolderNotChosen
+    );
+    core.sync_choose_folder(&folder).unwrap();
+    assert_eq!(run(json!({"command": "sync_set_storage", "storage": named, "password": "correct horse battery"})).await.unwrap_err().code, ErrorCode::Internal);
     let own_tag = run(json!({"command": "app_state"})).await.unwrap()["sync"]["space"]["devices"][0]["tag"].clone();
     assert_eq!(run(json!({"command": "sync_remove_device", "tag": own_tag})).await.unwrap_err().code, ErrorCode::Internal);
     ok(run(json!({"command": "sync_disable"})).await, &mut answers);

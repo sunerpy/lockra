@@ -24,7 +24,7 @@ use std::sync::Arc;
 use lockra_bridge::{UiCommand, dispatch};
 use lockra_core::ports::{Biometrics, Clipboard, CodeSink, PortError, SecretStore, SyncTransport, SystemClock, Updater};
 use lockra_core::ui::{CodesFrame, Platform, UI_EVENT_NAME, UiEvent};
-use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports};
+use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports, StorageConfig};
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
@@ -190,9 +190,11 @@ async fn import_scan<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>, promp
 
 /// Join a sync space from the invitation another device shows, read with the camera; `false` when
 /// left without one. The invitation goes from the camera to the core, not through the webview.
-/// `password`, `device_name` and `space_password` as for `sync_join`; `prompt` and `cancel` as
-/// for `import_scan`.
+/// `password`, `device_name` and `space_password` as for `sync_join`, `storage` as its invitation's
+/// (this phone's way to a space in a computer's folder); `prompt` and `cancel` as for
+/// `import_scan`.
 #[tauri::command]
+#[allow(clippy::too_many_arguments, reason = "a command's arguments are the webview's named fields, as for sync_join")]
 async fn sync_scan_join<R: Runtime>(
     app: AppHandle<R>,
     core: State<'_, Core>,
@@ -201,11 +203,12 @@ async fn sync_scan_join<R: Runtime>(
     password: Zeroizing<String>,
     device_name: String,
     space_password: Option<Zeroizing<String>>,
+    storage: Option<StorageConfig>,
 ) -> Result<bool, CoreError> {
     let camera = scanner::Scanner::new(app);
     let texts = scanner::ScanTexts { prompt, cancel };
     let scan = tauri::async_runtime::spawn_blocking(move || camera.scan(&texts)).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
-    sync::join(&core, scan, password, device_name, space_password).await
+    sync::join(&core, scan, password, device_name, space_password, storage).await
 }
 
 /// Open the page of the release a check found (else the newest release's) in the phone's browser;
@@ -282,7 +285,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let biometrics: Arc<dyn Biometrics> = options.biometrics.clone().unwrap_or_else(|| Arc::new(fingerprint));
             let config =
                 CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
-            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
+            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::Storages));
             let updater: Arc<dyn Updater> =
                 options.updater.clone().unwrap_or_else(|| Arc::new(updater::PhoneUpdater::new(&app.package_info().version.to_string())));
             let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics };

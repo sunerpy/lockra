@@ -121,6 +121,7 @@ describe("TauriBackend", () => {
       import_scan: false,
       backup_save: "b.lockrabackup",
       backup_pick_dir: null,
+      sync_pick_folder: "C:\\Users\\me\\OneDrive\\Lockra",
       restore_pick: false,
       export_otpauth_file: "x.txt",
       sync_scan_join: true,
@@ -133,10 +134,24 @@ describe("TauriBackend", () => {
     expect(await backend.saveBackup("separate password")).toBe("b.lockrabackup");
     expect(await backend.saveBackup()).toBe("b.lockrabackup");
     expect(await backend.pickBackupDir()).toBeNull();
+    expect(await backend.pickSyncFolder()).toBe("C:\\Users\\me\\OneDrive\\Lockra");
     expect(await backend.pickRestoreFile()).toBe(false);
     expect(await backend.exportOtpauthFile(["a"], "pw")).toBe("x.txt");
     const join = { password: "pw", deviceName: "Phone" };
     expect(await backend.scanJoin({ prompt: "Point at it", cancel: "Cancel" }, join)).toBe(true);
+    const dav = {
+      kind: "webdav",
+      url: "https://dav.jianguoyun.com/dav/",
+      prefix: "我的坚果云/Lockra",
+      username: "me@example.com",
+      password: "app password",
+    } as const;
+    expect(
+      await backend.scanJoin(
+        { prompt: "Point at it", cancel: "Cancel" },
+        { ...join, storage: dav },
+      ),
+    ).toBe(true);
     expect(await backend.openRelease()).toBe(
       "https://github.com/sunerpy/lockra/releases/tag/v0.7.0",
     );
@@ -147,6 +162,7 @@ describe("TauriBackend", () => {
       ["backup_save", { separatePassword: "separate password" }],
       ["backup_save", { separatePassword: null }],
       ["backup_pick_dir", undefined],
+      ["sync_pick_folder", undefined],
       ["restore_pick", undefined],
       ["export_otpauth_file", { entryIds: ["a"], password: "pw" }],
       [
@@ -157,6 +173,18 @@ describe("TauriBackend", () => {
           password: "pw",
           deviceName: "Phone",
           spacePassword: null,
+          storage: null,
+        },
+      ],
+      [
+        "sync_scan_join",
+        {
+          prompt: "Point at it",
+          cancel: "Cancel",
+          password: "pw",
+          deviceName: "Phone",
+          spacePassword: null,
+          storage: dav,
         },
       ],
       ["update_open_release", undefined],

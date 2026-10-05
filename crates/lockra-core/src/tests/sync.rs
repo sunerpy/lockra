@@ -6,7 +6,7 @@ use tokio::sync::Notify;
 use super::*;
 use crate::settings::Settings;
 use crate::ui::{JoinSource, StorageView, SyncStatus};
-use crate::{SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, StorageConfig};
+use crate::{SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND, StorageConfig};
 
 const STORAGE_SECRET: &str = FakeTransport::SECRET;
 
@@ -117,7 +117,7 @@ async fn an_invitation_joins_an_unlocked_vault_and_its_accounts_join_the_space()
     let laptop = device(&transport);
     laptop.core.create_vault(pw("another password")).await.unwrap();
     laptop.core.add_uri(&otpauth("Bank", "card", "MZXW6YTBOI")).unwrap();
-    let invited = || JoinSource::Invite { text: pw(&invite.invite), code: None };
+    let invited = || JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None };
     // This vault's own master password is checked; alone, it opens nothing of the space.
     assert_eq!(code_err(laptop.core.sync_join(invited(), pw(MASTER), "Laptop".into(), None).await), ErrorCode::WrongPassword);
     // Its own password is right but opens nothing in the space: the join asks for the space's.
@@ -159,7 +159,7 @@ async fn a_shared_invitation_joins_with_its_code_and_the_biometric_check_can_sho
     desktop.biometrics.answer(Err(crate::ports::BiometricError::Cancelled));
     assert_eq!(code_err(desktop.core.sync_invite(None, None).await), ErrorCode::BiometricCancelled);
 
-    let sealed = |code: Option<&str>| JoinSource::Invite { text: pw(&invite.shared_text), code: code.map(pw) };
+    let sealed = |code: Option<&str>| JoinSource::Invite { text: pw(&invite.shared_text), code: code.map(pw), storage: None };
     let phone = device(&transport);
     for wrong in [None, Some("ABCDE-FGHJK")] {
         assert_eq!(code_err(phone.core.sync_join(sealed(wrong), pw(MASTER), "Phone".into(), None).await), ErrorCode::SyncInviteCodeWrong);
@@ -237,7 +237,10 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     assert_eq!(code_err(join(manual(plain, &sync_key), MASTER).await), ErrorCode::SyncInsecure);
     let no_user = StorageConfig::Webdav { url: "https://dav.example.com".into(), prefix: String::new(), username: " ".into(), password: pw(STORAGE_SECRET) };
     assert_eq!(code_err(join(manual(no_user, &sync_key), MASTER).await), ErrorCode::SyncConfigInvalid);
-    assert_eq!(code_err(join(JoinSource::Invite { text: pw("otpauth://totp/x?secret=GEZDGNBV"), code: None }, MASTER).await), ErrorCode::SyncInviteInvalid);
+    assert_eq!(
+        code_err(join(JoinSource::Invite { text: pw("otpauth://totp/x?secret=GEZDGNBV"), code: None, storage: None }, MASTER).await),
+        ErrorCode::SyncInviteInvalid
+    );
     assert_eq!(code_err(join(manual(s3(STORAGE_SECRET), &sync_key), "short").await), ErrorCode::PasswordTooShort);
 
     // Setting up: once, with the master password, on an unlocked vault.
@@ -863,4 +866,144 @@ async fn an_accounts_colour_and_mark_reach_the_other_devices() {
     settle().await;
     let seen = phone.core.state().entries[0].clone();
     assert_eq!((seen.color, seen.mark.as_deref()), (crate::AccountColor::Teal, Some("GH")));
+}
+
+/// A folder a cloud drive keeps in sync, made under `h`'s directory.
+fn drive_folder(h: &Harness, name: &str) -> std::path::PathBuf {
+    let folder = h.dir.path().join(name);
+    std::fs::create_dir_all(&folder).unwrap();
+    folder
+}
+
+/// What the interface sends for "the folder chosen": no path.
+fn chosen_folder() -> StorageConfig {
+    StorageConfig::Folder { path: std::path::PathBuf::new() }
+}
+
+/// A device with an account that set up a space in the folder `folder`, chosen through the
+/// dialog; the sync key.
+async fn folder_device(transport: &Arc<FakeTransport>, folder: &std::path::Path) -> (Harness, String) {
+    let h = device(transport);
+    h.core.create_vault(pw(MASTER)).await.unwrap();
+    h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    h.core.sync_choose_folder(folder).unwrap();
+    let created = h.core.sync_create(chosen_folder(), pw(MASTER), "Windows".into()).await.unwrap();
+    settle().await;
+    (h, created.sync_key)
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_space_goes_in_the_folder_the_dialog_chose_and_never_where_the_interface_says() {
+    let transport = Arc::new(FakeTransport::default());
+    let h = device(&transport);
+    h.core.create_vault(pw(MASTER)).await.unwrap();
+    // Nothing chosen yet.
+    assert_eq!(code_err(h.core.sync_create(chosen_folder(), pw(MASTER), "Windows".into()).await), ErrorCode::SyncFolderNotChosen);
+    // A path the interface names is never taken, chosen folder or not.
+    let folder = drive_folder(&h, "OneDrive/Lockra");
+    let named = StorageConfig::Folder { path: folder.clone() };
+    assert_eq!(code_err(h.core.sync_create(named.clone(), pw(MASTER), "Windows".into()).await), ErrorCode::Internal);
+    // Only a folder that is there, named in full.
+    assert_eq!(code_err(h.core.sync_choose_folder(std::path::Path::new("OneDrive/Lockra"))), ErrorCode::SyncConfigInvalid);
+    assert_eq!(code_err(h.core.sync_choose_folder(&h.dir.path().join("missing"))), ErrorCode::SyncFolderMissing);
+    h.core.sync_choose_folder(&folder).unwrap();
+    assert_eq!(code_err(h.core.sync_create(named, pw(MASTER), "Windows".into()).await), ErrorCode::Internal);
+    h.core.sync_create(chosen_folder(), pw(MASTER), "Windows".into()).await.unwrap();
+    settle().await;
+    assert_eq!(space(&h).storage, StorageView::Folder { path: folder.display().to_string() });
+    assert!(matches!(space(&h).status, SyncStatus::Synced { .. }), "{:?}", space(&h).status);
+    assert_eq!(transport.store(&StorageConfig::Folder { path: folder }).paths().len(), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_folder_space_invites_with_its_key_alone_and_each_device_reaches_it_its_own_way() {
+    let transport = Arc::new(FakeTransport::default());
+    let shared = tempfile::tempdir().unwrap();
+    let folder = shared.path().join("Jianguoyun");
+    std::fs::create_dir(&folder).unwrap();
+    let (windows, sync_key) = folder_device(&transport, &folder).await;
+    let invite = windows.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    assert!(!invite.includes_storage);
+    assert_eq!(lockra_sync::Invite::from_text(&invite.invite).unwrap().storage, None, "no path and no storage in the text");
+    assert_eq!(invite.sync_key, sync_key);
+
+    // A phone given the invitation alone is asked how it reaches the space, before any password
+    // is checked; then it joins over the drive's WebDAV, which shows the same folder.
+    let phone = device(&transport);
+    let invited = |storage: Option<StorageConfig>| JoinSource::Invite { text: pw(&invite.invite), code: None, storage };
+    assert_eq!(code_err(phone.core.sync_join(invited(None), pw("any password"), "Phone".into(), None).await), ErrorCode::SyncInviteNeedsStorage);
+    assert_eq!(phone.core.state().phase, Phase::NoVault);
+    transport.share(&webdav(), &StorageConfig::Folder { path: folder.clone() });
+    phone.core.sync_join(invited(Some(webdav())), pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
+    assert_eq!(issuers(&phone), ["GitHub"]);
+
+    // Another computer with the same drive chooses its own copy of the folder.
+    let mac = device(&transport);
+    mac.core.create_vault(pw(MASTER)).await.unwrap();
+    mac.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    mac.core.sync_choose_folder(&folder).unwrap();
+    mac.core.sync_join(invited(Some(chosen_folder())), pw(MASTER), "MacBook".into(), None).await.unwrap();
+    settle().await;
+    assert_eq!(issuers(&mac), ["GitHub", "Mail"]);
+    phone.core.sync_now().unwrap();
+    settle().await;
+    assert_eq!(issuers(&phone), ["GitHub", "Mail"]);
+
+    // A space on a storage of its own still invites with it.
+    let (desktop, _) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    let full = desktop.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    assert!(full.includes_storage);
+    assert_eq!(lockra_sync::Invite::from_text(&full.invite).unwrap().storage, Some(s3(STORAGE_SECRET)));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_folder_is_looked_at_every_fifteen_seconds_in_front_and_every_minute_behind() {
+    let transport = Arc::new(FakeTransport::default());
+    let parent = tempfile::tempdir().unwrap();
+    let (windows, _) = folder_device(&transport, parent.path()).await;
+    windows.core.set_settings(Settings { auto_lock_minutes: 0, ..windows.core.state().settings }).unwrap();
+    let store = transport.store(&StorageConfig::Folder { path: parent.path().to_path_buf() });
+    let calls = || store.calls().len();
+    let quiet = calls();
+    advance(SYNC_INTERVAL_FOLDER_FOREGROUND - Duration::from_secs(1)).await;
+    assert_eq!(calls(), quiet, "nothing before fifteen seconds");
+    advance(Duration::from_secs(2)).await;
+    assert!(calls() > quiet, "in front: every fifteen seconds");
+    windows.core.set_foreground(false);
+    advance(SYNC_INTERVAL_FOLDER_FOREGROUND).await;
+    let behind = calls();
+    advance(SYNC_INTERVAL_FOLDER - Duration::from_secs(1)).await;
+    assert_eq!(calls(), behind, "behind: a minute");
+    advance(Duration::from_secs(2)).await;
+    assert!(calls() > behind);
+    // Back in front (the run that brings comes half a minute after the last), a folder gone
+    // missing is told as such, and looked at again a minute later, in front too.
+    windows.core.set_foreground(true);
+    advance(SYNC_FOCUS_MIN + Duration::from_secs(1)).await;
+    store.fail_next(SyncError::FolderMissing);
+    windows.core.sync_now().unwrap();
+    settle().await;
+    assert!(matches!(space(&windows).status, SyncStatus::Failed { code: ErrorCode::SyncFolderMissing, .. }), "{:?}", space(&windows).status);
+    let failed = calls();
+    advance(SYNC_INTERVAL_FOLDER - Duration::from_secs(1)).await;
+    assert_eq!(calls(), failed, "a failed run waits a minute, in front too");
+    advance(Duration::from_secs(2)).await;
+    assert!(matches!(space(&windows).status, SyncStatus::Synced { .. }), "{:?}", space(&windows).status);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_space_moves_into_the_drives_folder_that_holds_it() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, _) = first_device(&transport, webdav()).await;
+    let folder = drive_folder(&desktop, "Nextcloud");
+    // The folder holds nothing of the space yet: refused.
+    desktop.core.sync_choose_folder(&folder).unwrap();
+    assert_eq!(code_err(desktop.core.sync_set_storage(chosen_folder(), pw(MASTER)).await), ErrorCode::SyncSpaceNotFound);
+    // The drive's client brought it down: taken.
+    transport.share(&StorageConfig::Folder { path: folder.clone() }, &webdav());
+    desktop.core.sync_set_storage(chosen_folder(), pw(MASTER)).await.unwrap();
+    settle().await;
+    assert_eq!(space(&desktop).storage, StorageView::Folder { path: folder.display().to_string() });
+    assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
 }

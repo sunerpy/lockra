@@ -32,8 +32,8 @@ use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
 use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, SyncTransport, Updater};
 use crate::settings::{Settings, SettingsStore};
 use crate::sync::{
-    Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOREGROUND, SyncLocal, Working, config_error, device_name, merge_entries,
-    storage_view, sync_error,
+    Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND, SyncLocal, Working,
+    config_error, device_name, merge_entries, storage_view, sync_error,
 };
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
@@ -138,6 +138,9 @@ struct State {
     sync: SyncRuntime,
     /// The app is in front (the desktop's window has the focus); a phone app is, while it runs.
     foreground: bool,
+    /// The folder the shell's dialog chose last for a sync space: the interface names it as "the
+    /// folder chosen", never by its path.
+    chosen_folder: Option<PathBuf>,
 }
 
 /// The sync as it runs; the vault keeps the space itself.
@@ -228,6 +231,7 @@ impl Core {
             update,
             sync: SyncRuntime::default(),
             foreground: true,
+            chosen_folder: None,
         };
         let (events, _) = broadcast::channel(64);
         let shared = Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new() });
@@ -1456,6 +1460,7 @@ impl Core {
     /// device's keyring under the master password. The first run happens here, so a storage that
     /// refuses the snapshot fails the setup with its reason.
     pub async fn sync_create(&self, storage: StorageConfig, password: Zeroizing<String>, device: String) -> CoreResult<SyncCreated> {
+        let storage = self.resolve_storage(storage)?;
         storage.validate().map_err(config_error)?;
         let (sealed, mut working, number) = {
             let st = self.lock();
@@ -1502,12 +1507,19 @@ impl Core {
         space_password: Option<Zeroizing<String>>,
     ) -> CoreResult<()> {
         let (storage, sync_key) = match source {
-            JoinSource::Invite { text, code } => {
+            JoinSource::Invite { text, code, storage } => {
                 // A sealed text costs an Argon2id derivation to open.
                 let invite = blocking(move || Invite::from_any_text(&text, code.as_ref().map(|c| c.as_str())).map_err(|e| sync_error(&e))).await?;
-                (invite.storage, invite.sync_key)
+                // This device's own way to the space first; an invitation with the sync key alone
+                // (a space in the other computer's folder) needs one.
+                let storage = match (storage, invite.storage) {
+                    (Some(own), _) => self.resolve_storage(own)?,
+                    (None, Some(theirs)) => theirs,
+                    (None, None) => return Err(ErrorCode::SyncInviteNeedsStorage.into()),
+                };
+                (storage, invite.sync_key)
             }
-            JoinSource::Manual { storage, sync_key } => (storage, SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?),
+            JoinSource::Manual { storage, sync_key } => (self.resolve_storage(storage)?, SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?),
         };
         storage.validate().map_err(config_error)?;
         let existing = {
@@ -1631,7 +1643,9 @@ impl Core {
         let cost = self.shared.config.kdf;
         blocking(move || {
             let sync_key = SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?;
-            let invite = Invite { storage, sync_key: sync_key.clone() };
+            // A folder of this computer is of no use elsewhere: the sync key goes alone.
+            let includes_storage = !storage.is_folder();
+            let invite = Invite { storage: includes_storage.then_some(storage), sync_key: sync_key.clone() };
             let text = invite.to_text();
             let svg = qr::svg(&text).map_err(|_| ErrorCode::Internal)?;
             let (shared, code) = invite.to_shared_text(cost).map_err(|e| sync_error(&e))?;
@@ -1641,6 +1655,7 @@ impl Core {
                 shared_text: shared.to_string(),
                 code: code.to_string(),
                 sync_key: sync_key.to_text().to_string(),
+                includes_storage,
             })
         })
         .await
@@ -1713,6 +1728,7 @@ impl Core {
     /// Move the space's storage settings on (a new address or new credentials), after the master
     /// password was entered again; the space must be found there.
     pub async fn sync_set_storage(&self, storage: StorageConfig, password: Zeroizing<String>) -> CoreResult<()> {
+        let storage = self.resolve_storage(storage)?;
         storage.validate().map_err(config_error)?;
         let (sealed, keys, device) = {
             let st = self.lock();
@@ -1846,6 +1862,37 @@ impl Core {
         Ok(())
     }
 
+    /// The folder for a sync space, as the shell's dialog chose it (Settings › Sync, the welcome
+    /// page): kept for the next `sync_create`, `sync_join` or `sync_set_storage` that asks for "the
+    /// folder chosen". It must be there.
+    pub fn sync_choose_folder(&self, folder: &Path) -> CoreResult<()> {
+        // The vault keeps it as text.
+        if !folder.is_absolute() || folder.to_str().is_none() {
+            return Err(ErrorCode::SyncConfigInvalid.into());
+        }
+        if !folder.is_dir() {
+            return Err(ErrorCode::SyncFolderMissing.into());
+        }
+        self.lock().chosen_folder = Some(folder.to_path_buf());
+        Ok(())
+    }
+
+    /// The storage the interface asked for: a folder only as "the folder chosen" (no path), which
+    /// the dialog's choice fills in. A path from the interface is never taken (docs/security.md).
+    fn resolve_storage(&self, storage: StorageConfig) -> CoreResult<StorageConfig> {
+        match storage {
+            StorageConfig::Folder { path } if path.as_os_str().is_empty() => {
+                let path = self.lock().chosen_folder.clone().ok_or(ErrorCode::SyncFolderNotChosen)?;
+                Ok(StorageConfig::Folder { path })
+            }
+            StorageConfig::Folder { .. } => {
+                tracing::warn!("the interface named a folder; only the dialog does");
+                Err(ErrorCode::Internal.into())
+            }
+            other => Ok(other),
+        }
+    }
+
     fn open_storage(&self, storage: &StorageConfig) -> CoreResult<Arc<dyn RemoteStore>> {
         self.shared.ports.sync.open(storage).map_err(|e| sync_error(&e))
     }
@@ -1910,9 +1957,16 @@ impl Core {
                     st.sync.busy = false;
                     st.sync.last_run = Some(Instant::now());
                     if configured && st.sync.at.is_none() {
-                        // A failed run waits the long interval, in front too.
+                        // A failed run waits the long interval, in front too. A folder on this
+                        // computer costs nothing to look at: its intervals are shorter.
                         let synced = matches!(st.sync.status, SyncStatus::Synced { .. });
-                        let interval = if synced && st.foreground { SYNC_INTERVAL_FOREGROUND } else { SYNC_INTERVAL };
+                        let folder = matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some_and(|s| s.storage.is_folder()));
+                        let interval = match (synced && st.foreground, folder) {
+                            (true, true) => SYNC_INTERVAL_FOLDER_FOREGROUND,
+                            (true, false) => SYNC_INTERVAL_FOREGROUND,
+                            (false, true) => SYNC_INTERVAL_FOLDER,
+                            (false, false) => SYNC_INTERVAL,
+                        };
                         st.sync.at = Some(Instant::now() + interval);
                     }
                 }

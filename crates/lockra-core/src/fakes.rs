@@ -299,7 +299,8 @@ impl Updater for FakeUpdater {
 
 /// Sync storage in memory, shared by the cores of one test: a configuration names one
 /// [`MemoryRemote`] by its address (S3: endpoint and bucket, with conditional writes; WebDAV: the
-/// URL, without), and any secret but [`FakeTransport::SECRET`] is refused on every request.
+/// URL, and a folder its path, without), and any secret but [`FakeTransport::SECRET`] is refused
+/// on every request.
 #[derive(Debug, Default)]
 pub struct FakeTransport {
     stores: Mutex<BTreeMap<String, Arc<MemoryRemote>>>,
@@ -313,11 +314,23 @@ impl FakeTransport {
 
     /// The store `config` names, created empty on first use.
     pub fn store(&self, config: &StorageConfig) -> Arc<MemoryRemote> {
-        let (address, conditional) = match config {
+        let (address, conditional) = Self::address(config);
+        Arc::clone(self.stores.lock().entry(address).or_insert_with(|| Arc::new(MemoryRemote::new(conditional))))
+    }
+
+    /// `config` reaches what `other` holds from now on: a cloud drive's folder on a computer and
+    /// the same drive's WebDAV on a phone.
+    pub fn share(&self, config: &StorageConfig, other: &StorageConfig) {
+        let store = self.store(other);
+        self.stores.lock().insert(Self::address(config).0, store);
+    }
+
+    fn address(config: &StorageConfig) -> (String, bool) {
+        match config {
             StorageConfig::S3 { endpoint, bucket, .. } => (format!("s3:{endpoint}/{bucket}"), true),
             StorageConfig::Webdav { url, .. } => (format!("dav:{url}"), false),
-        };
-        Arc::clone(self.stores.lock().entry(address).or_insert_with(|| Arc::new(MemoryRemote::new(conditional))))
+            StorageConfig::Folder { path } => (format!("folder:{}", path.display()), false),
+        }
     }
 }
 
@@ -325,10 +338,11 @@ impl SyncTransport for FakeTransport {
     fn open(&self, config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
         self.opened.fetch_add(1, Ordering::SeqCst);
         let secret = match config {
-            StorageConfig::S3 { secret_access_key, .. } => secret_access_key,
-            StorageConfig::Webdav { password, .. } => password,
+            StorageConfig::S3 { secret_access_key, .. } => Some(secret_access_key),
+            StorageConfig::Webdav { password, .. } => Some(password),
+            StorageConfig::Folder { .. } => None,
         };
-        if secret.as_str() != Self::SECRET {
+        if secret.is_some_and(|secret| secret.as_str() != Self::SECRET) {
             return Ok(Arc::new(Refusing));
         }
         Ok(self.store(config))

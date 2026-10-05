@@ -91,7 +91,8 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 
 - **The webview holds no paths and no secrets.** Every file is opened by Rust after a native dialog
   or a drop on the window (the webview only hears that a drag is over it); no command carries a
-  path, and the capability file grants the webview no `fs`, `dialog`, `shell` or `http`
+  path (a sync folder neither: the webview asks for "the folder chosen" through the folder dialog,
+  and a path in its place is refused), and the capability file grants the webview no `fs`, `dialog`, `shell` or `http`
   permission — only Lockra's own commands and the title bar's window buttons
   (`apps/desktop/src-tauri/tests/ipc.rs`, `apps/desktop/src/window-config.test.ts`).
 - What the webview receives is entry metadata and current codes. Four answers carry a secret, all
@@ -186,17 +187,19 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 ## Sync
 
 - **Off unless set up, on storage of the user's own.** Sync stays off until the user sets up a
-  space on an S3-compatible bucket or a WebDAV folder of their own; Lockra runs no server. With a
-  space, Lockra contacts that storage only while the vault is unlocked: at unlock, 3 s after a
-  change, every minute while the app is in front (every 5 minutes behind other windows and after
-  a failed run), when the desktop window comes back to the front once the last run is 30 s old,
-  and on **Sync now**. Setting up, joining and moving the storage
+  space on an S3-compatible bucket or a WebDAV folder of their own, or, on a computer, in a folder
+  their cloud drive's client keeps in sync; Lockra runs no server. With a space, Lockra contacts
+  that storage only while the vault is unlocked: at unlock, 3 s after a change, every minute while
+  the app is in front (every 5 minutes behind other windows and after a failed run), when the
+  desktop window comes back to the front once the last run is 30 s old, and on **Sync now**. A
+  folder costs no request: it is looked at every 15 s in front and every minute otherwise. Setting up, joining and moving the storage
   settings ask for the master password again. Showing an invitation and saving the sync key to a
   file accept instead the biometric check that unlocks this vault (Touch ID, Windows Hello, the
   fingerprint): it proves the user is at the device, and nothing is sealed under it, whereas
   setting up and joining seal this device's keyring under its master password.
 - **The storage sees ciphertext.** A space is one snapshot per device under
-  `lockra-sync-v1/<space id>/devices/` (`docs/formats.md` §9), and nothing else. A snapshot is the
+  `lockra-sync-v1/<space id>/devices/` (`docs/formats.md` §9), and nothing else; in a cloud drive's
+  folder, the drive carries those same files. A snapshot is the
   device's whole replica, secrets included, encrypted under a key derived from the space's random
   data key, its header (format, space, device tag, nonce, the device's keyring) bound as
   associated data, padded to 4 KiB so that its size says little about the number of accounts. The
@@ -221,6 +224,10 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   devices only. The text to send is sealed under a one-time code shown only beside it (50 bits,
   stretched with Argon2id; `docs/formats.md`): sent through a chat or a mail, it is of no use
   without the code, which is to travel another way.
+  A space in a cloud drive's folder invites with the sync key alone: the folder is of no use on
+  another device, and no path is taken from an invitation. The joining device reaches the space its
+  own way (the same drive's folder on a computer, its WebDAV on a phone) and checks it is that
+  space, as when the storage settings change.
   Without another device, the storage settings and the sync key typed in do the same. A device
   with no vault yet becomes one, under that password. A device with a vault checks its own master
   password first, and opens the space with it; only when that opens nothing does it ask for
@@ -249,7 +256,8 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   the user installed is not trusted, as for any app that does not opt in to them. Plain HTTP is
   refused except to this computer (the tests' servers), and a redirect may not lead to it either.
   The requests carry the storage's credentials (S3 signatures, WebDAV basic authentication inside
-  TLS) and ciphertext.
+  TLS) and ciphertext. A cloud drive's folder is no transport of Lockra's: Lockra reads and writes
+  local files, and the drive's own client carries them.
 - **A new master password** re-wraps this device's keyring, which its next run writes with the
   snapshot (the data key stays); until then the old password still joins new devices through this
   device. Devices change their passwords apart, each its own keyring: neither change can be lost
@@ -286,7 +294,8 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   device: the weakest master password among the space's devices is the last line. The storage's
   operator sees when devices write and how many there are, and can delete the space. Removing a
   device deletes its snapshot and its keyring but revokes nothing: the device keeps the data key,
-  and a copy of the storage taken earlier keeps its keyring. To shut out a lost device, or someone
+  and a copy of the storage taken earlier keeps its keyring (a cloud drive's version history is
+  such a copy, and so is every computer its folder reaches). To shut out a lost device, or someone
   who has the sync key and an old master password, set up a new space and join the other devices
   to it.
 - On Android, the sync trusts the certificate authorities the system ships (its Conscrypt

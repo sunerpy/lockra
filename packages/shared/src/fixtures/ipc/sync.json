@@ -184,6 +184,41 @@
     }
   },
   {
+    "space": {
+      "storage": {
+        "kind": "folder",
+        "path": "C:\\Users\\me\\OneDrive\\Lockra"
+      },
+      "device_name": "Desktop",
+      "devices": [
+        {
+          "tag": "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7",
+          "name": "Desktop",
+          "written_at_ms": 1789999940000,
+          "this_device": true
+        },
+        {
+          "tag": "0a9b8c7d6e5f40312233445566778899",
+          "name": "Pixel 8",
+          "written_at_ms": 1789996400000,
+          "this_device": false
+        }
+      ],
+      "status": {
+        "state": "failed",
+        "code": "sync_folder_missing",
+        "at_ms": 1790000000000
+      },
+      "last_sync_ms": 1789999940000,
+      "rolled_back": [],
+      "unreadable": [
+        "ffeeddccbbaa99887766554433221100"
+      ],
+      "keyring_pending": false,
+      "key_saved": false
+    }
+  },
+  {
     "space": null
   }
 ]

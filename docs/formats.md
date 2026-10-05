@@ -92,9 +92,9 @@ backup, no sync): `clock` (its device number and the latest stamp), `view` (the 
 the code list, `{collapsed_groups}`, "" for the accounts in no group: group names stay inside the
 encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and
 credentials, the space id, its data key, the sync key, this device's name, its keyring and what
-the runs remember). A `sync` this version cannot read (one kept by an earlier
-build) is left out and the vault opens without it: sync is off on that device until it is set up
-again.
+the runs remember). A `sync` this version cannot read (one kept by an earlier build, or by a later
+Lockra: to 0.7.3, a space in a cloud drive's folder, `{kind: "folder", path}`) is left out and the
+vault opens without it: sync is off on that device until it is set up again.
 
 Duplicates: the same secret and parameters is **the same account** (an import skips it); the same
 issuer and account with a different secret is a **conflict** (both are kept by default, or the
@@ -212,11 +212,21 @@ is judged from its first bytes, not its name: Lockra magic, `SQLite format 3`, a
 ## 9. Sync
 
 A sync space lives under the prefix the user chose on their storage (an S3-compatible bucket or a
-WebDAV folder): one snapshot per device, and nothing else.
+WebDAV folder), or in a folder of the computer that a cloud drive's client keeps in sync (the
+folder is the place, no prefix): one snapshot per device, and nothing else.
 
 ```
 <prefix>/lockra-sync-v1/<space id>/devices/<device tag>.lks
+<folder>/lockra-sync-v1/<space id>/devices/<device tag>.lks
 ```
+
+The same space can be reached both ways: a computer through its cloud drive's folder, a phone
+through the same drive's WebDAV, its prefix the folder's path in the drive. In a folder, a write
+replaces the file atomically (a temporary `<name>.tmp` renamed over it) and keeps no copy beside
+it; files of the drive's own (conflicted copies, downloads in progress) are no object of the space
+and are not read. The etag of a file is the SHA-256 of its bytes. While the folder itself is
+missing (moved, deleted, its drive not connected) a run neither reads nor writes, and the folder is
+not made again.
 
 Every object is framed like the container: `magic (8) | header length (u32 LE) | header (JSON, ≤
 16 KiB) | ciphertext`, the ciphertext authenticated with every byte before it as associated data.
@@ -262,7 +272,10 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   bytes of its SHA-256, so a mistyped character is caught. Case, spaces and dashes do not matter.
 - **An invitation** is `lockra-invite:1:` and Base64url (no padding) of
   `{storage, sync_key}`: the storage settings with their credentials, and the sync key text. The QR
-  code carries it so.
+  code carries it so. A space in a folder invites with `{sync_key}` alone: a folder is of no use on
+  another device, and its path is never taken from an invitation (one naming a folder is refused);
+  the joining device says how it reaches the space. Lockra up to 0.7.3 reads only invitations
+  with their storage.
 - **A sealed invitation**, the text to send, is `lockra-invite:2:` and Base64url (no padding) of an
   object framed like the others: magic `LKSINVT2`, the header `{format: 2, kdf, nonce}`, then
   XChaCha20-Poly1305 of the plain invitation's JSON, the header bytes as associated data. The key

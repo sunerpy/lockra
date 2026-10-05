@@ -213,6 +213,13 @@
       "password": "a new password",
       "source": {
         "code": "7K2QM-XW4FD",
+        "storage": {
+          "kind": "webdav",
+          "password": "app password",
+          "prefix": "lockra",
+          "url": "https://dav.jianguoyun.com/dav/",
+          "username": "me@example.com"
+        },
         "text": "lockra-invite:2:TEtTSU5WVDI",
         "type": "invite"
       },
@@ -229,11 +236,7 @@
       "command": "sync_set_storage",
       "password": "a new password",
       "storage": {
-        "kind": "webdav",
-        "password": "app password",
-        "prefix": "lockra",
-        "url": "https://dav.jianguoyun.com/dav/",
-        "username": "me@example.com"
+        "kind": "folder"
       }
     },
     {
@@ -273,6 +276,7 @@
     "backup_pick_dir",
     "restore_pick",
     "export_otpauth_file",
-    "sync_key_save"
+    "sync_key_save",
+    "sync_pick_folder"
   ]
 }

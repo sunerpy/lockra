@@ -1,5 +1,7 @@
-//! The storage of a sync space over HTTP: S3-compatible object storage or WebDAV, through Apache
-//! OpenDAL, as lockra-sync's [`RemoteStore`] (docs/security.md, "Sync").
+//! The storage of a sync space, as lockra-sync's [`RemoteStore`] (docs/security.md, "Sync"):
+//! S3-compatible object storage or WebDAV over HTTP, through Apache OpenDAL, or a folder of this
+//! computer that a cloud drive keeps in sync ([`FolderStore`]). [`open`] picks the one a
+//! configuration names.
 //!
 //! Only HTTPS, with rustls on ring and the system's certificate verifier (on Android, the
 //! certificate authorities the system keeps), through the system proxy; plain HTTP only to this
@@ -8,10 +10,14 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+mod folder;
+
 use std::fmt;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+pub use folder::FolderStore;
 use futures_util::StreamExt as _;
 pub use lockra_sync::{ConfigError, StorageConfig};
 use lockra_sync::{MAX_OBJECT_BYTES, ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SyncError};
@@ -28,7 +34,18 @@ const ATTEMPTS: usize = 3;
 /// Redirects followed at most.
 const MAX_REDIRECTS: usize = 5;
 
-/// A sync space's storage, ready for requests.
+/// The storage `config` names, nothing contacted yet: over HTTP, or in a folder of this computer.
+pub fn open(config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+    match config {
+        StorageConfig::Folder { path } => {
+            config.validate().map_err(|e| SyncError::Storage(format!("{e:?}")))?;
+            Ok(Arc::new(FolderStore::new(path)))
+        }
+        StorageConfig::S3 { .. } | StorageConfig::Webdav { .. } => Ok(Arc::new(Storage::open(config)?)),
+    }
+}
+
+/// A sync space's storage over HTTP, ready for requests.
 pub struct Storage {
     operator: Operator,
     conditional: AtomicBool,
@@ -64,6 +81,7 @@ impl Storage {
                 let builder = opendal::services::Webdav::default().endpoint(url.trim()).username(username.trim()).password(password);
                 (Operator::new(builder).map_err(map)?, false)
             }
+            StorageConfig::Folder { .. } => return Err(SyncError::Storage("a folder is not reached over HTTP".into())),
         };
         let transport = opendal::HttpTransporter::new(opendal_http_transport_reqwest::ReqwestTransport::new(http_client()?));
         let operator = operator

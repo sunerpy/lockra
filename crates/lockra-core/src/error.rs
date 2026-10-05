@@ -119,6 +119,13 @@ pub enum ErrorCode {
     /// This vault's master password is right but opens nothing in the space: the space's devices
     /// use another one, which the join needs as well.
     SyncSpacePasswordNeeded,
+    /// The invitation carries the sync key alone (its space is in a folder of the computer that
+    /// invites): this device says how it reaches the space.
+    SyncInviteNeedsStorage,
+    /// A folder was asked for before the dialog chose one.
+    SyncFolderNotChosen,
+    /// The folder the space is kept in is not there: moved, deleted, or its drive not connected.
+    SyncFolderMissing,
     /// The space's data on the storage is damaged or was altered.
     SyncDataCorrupted,
     /// The space was written by a newer Lockra.

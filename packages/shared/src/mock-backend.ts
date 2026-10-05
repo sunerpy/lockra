@@ -78,6 +78,8 @@ export interface MockOptions {
   clipboard?: string;
   /** What a camera scan reads (`null`, the default: the scan is left), or the error it ends in. */
   scan?: MockScan;
+  /** The folder the sync folder dialog chooses; `null`: it is cancelled. */
+  folder?: string | null;
   now?: () => number;
   /** How this copy installs an update; `null`: it cannot update itself (the default). */
   updateMethod?: InstallMethod | null;
@@ -105,6 +107,10 @@ export interface MockRelease {
 export const MOCK_PASSWORD = "correct horse battery";
 /** The storage secret the mock accepts (any other is refused, like wrong credentials). */
 export const MOCK_STORAGE_SECRET = "storage secret";
+/** The folder the mock's dialog chooses unless told otherwise. */
+export const MOCK_SYNC_FOLDER = "/Users/me/Dropbox/Lockra";
+/** What the mock's invitation of a space in a folder holds: the sync key alone. */
+const KEY_ONLY = "mock-key-only-invite";
 /** The one-time code of the mock's sealed invitation. */
 export const MOCK_INVITE_CODE = "7K2QM-XW4FD";
 /** The sync key of the mock's spaces. */
@@ -309,8 +315,13 @@ export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpace
   };
 }
 
-/** The core's checks of a storage configuration (lockra-sync `StorageConfig::validate`). */
-function checkStorage(storage: StorageConfig): void {
+/** The core's checks of a storage configuration (lockra-sync `StorageConfig::validate`); a folder
+ *  is the one `chosen`. */
+function checkStorage(storage: StorageConfig, chosen: string | null): void {
+  if (storage.kind === "folder") {
+    if (chosen === null) throw new LockraError("sync_folder_not_chosen");
+    return;
+  }
   const [address, required] =
     storage.kind === "s3"
       ? [
@@ -333,7 +344,17 @@ function checkStorage(storage: StorageConfig): void {
   if (secret !== MOCK_STORAGE_SECRET) throw new LockraError("sync_denied");
 }
 
-function storageView(storage: StorageConfig): StorageView {
+/** A mock invitation (either text) that holds the sync key alone. */
+function keyOnly(text: string): boolean {
+  try {
+    return atob(text.slice("lockra-invite:1:".length)).startsWith(KEY_ONLY);
+  } catch {
+    return false;
+  }
+}
+
+function storageView(storage: StorageConfig, chosen: string | null): StorageView {
+  if (storage.kind === "folder") return { kind: "folder", path: chosen ?? "" };
   return storage.kind === "s3"
     ? {
         kind: "s3",
@@ -387,6 +408,9 @@ export class MockBackend implements Backend {
   private restoreEntries: MockEntry[] | null = null;
   private clipboard: string | undefined;
   private scan: MockScan;
+  /** What the sync folder dialog chooses, and what it chose last. */
+  private folderPick: string | null;
+  private chosenFolder: string | null = null;
   private readonly now: () => number;
   private release: MockRelease | null;
   private updateFailure: MockOptions["updateFailure"];
@@ -406,6 +430,7 @@ export class MockBackend implements Backend {
     this.password = options.password ?? MOCK_PASSWORD;
     this.clipboard = options.clipboard;
     this.scan = options.scan ?? null;
+    this.folderPick = options.folder === undefined ? MOCK_SYNC_FOLDER : options.folder;
     this.release = options.release ?? null;
     this.updateFailure = options.updateFailure;
     this.releasePageOpens = options.releasePageOpens ?? true;
@@ -484,7 +509,7 @@ export class MockBackend implements Backend {
     if (this.scan === null) return false;
     if (typeof this.scan !== "string") throw new LockraError(this.scan.error);
     this.syncJoin(
-      { type: "invite", text: this.scan },
+      { type: "invite", text: this.scan, storage: join.storage },
       join.password,
       join.deviceName,
       join.spacePassword,
@@ -590,6 +615,12 @@ export class MockBackend implements Backend {
     return status.state === "available"
       ? `${releases}/tag/v${status.version}`
       : `${releases}/latest`;
+  }
+
+  async pickSyncFolder(): Promise<string | null> {
+    if (this.folderPick === null) return null;
+    this.chosenFolder = this.folderPick;
+    return this.folderPick;
   }
 
   /** Test hook: what the next camera scans read. */
@@ -905,8 +936,8 @@ export class MockBackend implements Backend {
       case "sync_set_storage": {
         const space = this.requireSpace();
         this.checkPassword(command.password);
-        checkStorage(command.storage);
-        this.setSpace({ ...space, storage: storageView(command.storage) });
+        checkStorage(command.storage, this.chosenFolder);
+        this.setSpace({ ...space, storage: storageView(command.storage, this.chosenFolder) });
         return null;
       }
       case "sync_rename_device": {
@@ -985,7 +1016,7 @@ export class MockBackend implements Backend {
   ): void {
     const name = this.deviceName(deviceName);
     this.syncRun({
-      storage: storageView(storage),
+      storage: storageView(storage, this.chosenFolder),
       device_name: name,
       devices: [
         { tag: mockTag(`${name}:${this.now()}`), name, written_at_ms: null, this_device: true },
@@ -1007,7 +1038,7 @@ export class MockBackend implements Backend {
   ): { sync_key: string } {
     this.requireUnlocked();
     if (this.space !== null) throw new LockraError("sync_already_on");
-    checkStorage(storage);
+    checkStorage(storage, this.chosenFolder);
     this.checkPassword(password);
     this.newSpace(storage, deviceName, []);
     // The key is shown once now; Settings › Sync reminds of it until it is saved.
@@ -1028,6 +1059,8 @@ export class MockBackend implements Backend {
         throw new LockraError("sync_invite_code_wrong");
     } else if (source.type === "invite" && !text.startsWith("lockra-invite:1:"))
       throw new LockraError("sync_invite_invalid");
+    if (source.type === "invite" && source.storage === undefined && keyOnly(text))
+      throw new LockraError("sync_invite_needs_storage");
     if (
       source.type === "manual" &&
       !/^LKS1(-?[A-Z2-7]{4}){14}$/i.test(source.sync_key.replace(/\s/g, ""))
@@ -1041,14 +1074,14 @@ export class MockBackend implements Backend {
     const storage: StorageConfig =
       source.type === "manual"
         ? source.storage
-        : {
+        : (source.storage ?? {
             kind: "webdav",
             url: "https://dav.example.com/dav/",
             prefix: "lockra",
             username: "me@example.com",
             password: MOCK_STORAGE_SECRET,
-          };
-    checkStorage(storage);
+          });
+    checkStorage(storage, this.chosenFolder);
     // The space's device uses the mock's master password. A vault of its own whose password is
     // another asks for the space's first, as the core does.
     if (
@@ -1076,12 +1109,16 @@ export class MockBackend implements Backend {
   private syncInvite(password: string | undefined, reason: string | undefined): SyncInvite {
     this.requireSpace();
     this.confirmPresence(password, reason);
+    // A space in a folder of this computer invites with its sync key alone.
+    const includes = this.requireSpace().storage.kind !== "folder";
+    const held = includes ? "mock-invite" : KEY_ONLY;
     return {
-      invite: `lockra-invite:1:${btoa(`mock-invite:${this.now()}`)}`,
+      invite: `lockra-invite:1:${btoa(`${held}:${this.now()}`)}`,
       svg: placeholderSvg("invite"),
-      shared_text: `lockra-invite:2:${btoa(`mock-shared-invite:${this.now()}`)}`,
+      shared_text: `lockra-invite:2:${btoa(`${held}:${this.now()}`)}`,
       code: MOCK_INVITE_CODE,
       sync_key: MOCK_SYNC_KEY,
+      includes_storage: includes,
     };
   }
 

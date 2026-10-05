@@ -2,6 +2,7 @@ import { isLockraError } from "./backend";
 import {
   MOCK_PASSWORD,
   MOCK_STORAGE_SECRET,
+  MOCK_SYNC_FOLDER,
   MOCK_SYNC_KEY,
   MockBackend,
   fakeCode,
@@ -592,6 +593,51 @@ describe("MockBackend", () => {
     expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
       "locked",
     );
+  });
+
+  it("keeps a space in the folder its dialog chose and invites with the sync key alone", async () => {
+    const windows = new MockBackend({ entries: [mockEntry("GitHub", "octocat")] });
+    const folder: StorageConfig = { kind: "folder" };
+    const create = (backend: MockBackend) =>
+      backend.dispatch({
+        command: "sync_create",
+        storage: folder,
+        password: MOCK_PASSWORD,
+        device_name: "Windows",
+      });
+    expect(await errorCode(create(windows))).toBe("sync_folder_not_chosen");
+    expect(await windows.pickSyncFolder()).toBe(MOCK_SYNC_FOLDER);
+    await create(windows);
+    expect((await windows.getState()).sync.space?.storage).toEqual({
+      kind: "folder",
+      path: MOCK_SYNC_FOLDER,
+    });
+    const invite = await windows.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
+    expect(invite.includes_storage).toBe(false);
+
+    // A phone with the invitation alone is asked how it reaches the space, then joins over WebDAV.
+    const phone = new MockBackend({ phase: "no_vault", scan: invite.invite });
+    const dav: StorageConfig = {
+      kind: "webdav",
+      url: "https://dav.jianguoyun.com/dav/",
+      prefix: "我的坚果云/Lockra",
+      username: "me@example.com",
+      password: MOCK_STORAGE_SECRET,
+    };
+    const texts = { prompt: "Point at it", cancel: "Cancel" };
+    const join = { password: MOCK_PASSWORD, deviceName: "Phone" };
+    expect(await errorCode(phone.scanJoin(texts, join))).toBe("sync_invite_needs_storage");
+    expect((await phone.getState()).phase).toBe("no_vault");
+    expect(await phone.scanJoin(texts, { ...join, storage: dav })).toBe(true);
+    expect((await phone.getState()).sync.space?.storage.kind).toBe("webdav");
+    // The sealed text holds the key alone too.
+    const mac = new MockBackend({ phase: "no_vault", folder: null });
+    expect(await mac.pickSyncFolder()).toBeNull();
+    const sealed: JoinSource = { type: "invite", text: invite.shared_text, code: invite.code };
+    const joinMac = (source: JoinSource) =>
+      mac.dispatch({ command: "sync_join", source, password: MOCK_PASSWORD, device_name: "Mac" });
+    expect(await errorCode(joinMac(sealed))).toBe("sync_invite_needs_storage");
+    expect(await errorCode(joinMac({ ...sealed, storage: folder }))).toBe("sync_folder_not_chosen");
   });
 
   it("starts with a space when told to", async () => {

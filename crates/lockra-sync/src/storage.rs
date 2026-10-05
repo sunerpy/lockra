@@ -1,8 +1,10 @@
 //! Where a sync space is stored, as the user configures it: S3-compatible object storage or a
-//! WebDAV server, with the credentials to reach it. Only data and the checks that need no request;
-//! lockra-remote turns a configuration into a [`crate::RemoteStore`].
+//! WebDAV server, with the credentials to reach it, or a folder on this computer that a cloud
+//! drive's client keeps in sync. Only data and the checks that need no request; lockra-remote
+//! turns a configuration into a [`crate::RemoteStore`].
 
 use std::fmt;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -41,6 +43,15 @@ pub enum StorageConfig {
         /// The password (an app password where the service offers one).
         password: Zeroizing<String>,
     },
+    /// A folder on this computer that a cloud drive's client keeps in sync (OneDrive, iCloud
+    /// Drive, Dropbox, Jianguoyun, Nextcloud, Synology Drive, Syncthing, …): the drive carries
+    /// the snapshots, and no credential is needed here. Only a native dialog names it: the
+    /// interface asks for "the folder chosen" without a path, which the core fills in.
+    Folder {
+        /// The folder, absolute.
+        #[serde(default)]
+        path: PathBuf,
+    },
 }
 
 impl fmt::Debug for StorageConfig {
@@ -55,6 +66,7 @@ impl fmt::Debug for StorageConfig {
                 .field("path_style", path_style)
                 .finish_non_exhaustive(),
             Self::Webdav { url, prefix, .. } => f.debug_struct("Webdav").field("url", url).field("prefix", prefix).finish_non_exhaustive(),
+            Self::Folder { path } => f.debug_struct("Folder").field("path", path).finish(),
         }
     }
 }
@@ -72,10 +84,12 @@ pub enum ConfigError {
 }
 
 impl StorageConfig {
-    /// The folder inside the storage the space lives under.
+    /// The folder inside the storage the space lives under (none in a folder of this computer:
+    /// the folder is the place).
     pub fn prefix(&self) -> &str {
         match self {
             Self::S3 { prefix, .. } | Self::Webdav { prefix, .. } => prefix,
+            Self::Folder { .. } => "",
         }
     }
 
@@ -84,18 +98,26 @@ impl StorageConfig {
         let address = match self {
             Self::S3 { endpoint, .. } => endpoint,
             Self::Webdav { url, .. } => url,
+            Self::Folder { .. } => return None,
         };
         Url::parse(address.trim()).ok().and_then(|u| u.host_str().map(str::to_owned))
     }
 
+    /// A folder on this computer.
+    pub fn is_folder(&self) -> bool {
+        matches!(self, Self::Folder { .. })
+    }
+
     /// Everything that can be checked without a request: the required fields, an address, and
-    /// HTTPS (plain HTTP only to this computer).
+    /// HTTPS (plain HTTP only to this computer); for a folder, an absolute path.
     pub fn validate(&self) -> Result<(), ConfigError> {
         let (address, required) = match self {
             Self::S3 { endpoint, region, bucket, access_key_id, secret_access_key, .. } => {
                 (endpoint, vec![region.as_str(), bucket.as_str(), access_key_id.as_str(), secret_access_key.as_str()])
             }
             Self::Webdav { url, username, password, .. } => (url, vec![username.as_str(), password.as_str()]),
+            Self::Folder { path } if path.as_os_str().is_empty() => return Err(ConfigError::Missing),
+            Self::Folder { path } => return if path.is_absolute() { Ok(()) } else { Err(ConfigError::Address) },
         };
         if required.iter().any(|v| v.trim().is_empty()) {
             return Err(ConfigError::Missing);
@@ -120,6 +142,8 @@ fn is_loopback(host: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
 
     fn s3(endpoint: &str) -> StorageConfig {
@@ -169,6 +193,26 @@ mod tests {
             password: Zeroizing::new(String::new()),
         };
         assert_eq!(no_password.validate(), Err(ConfigError::Missing));
+    }
+
+    #[test]
+    fn a_folder_is_an_absolute_path_with_no_prefix_and_no_host() {
+        let place = std::env::temp_dir().join("Dropbox").join("Lockra");
+        let folder = StorageConfig::Folder { path: place.clone() };
+        assert_eq!(folder.validate(), Ok(()));
+        assert_eq!(folder.prefix(), "");
+        assert_eq!(folder.host(), None);
+        assert!(format!("{folder:?}").contains("Lockra"));
+        assert_eq!(StorageConfig::Folder { path: PathBuf::from("Dropbox/Lockra") }.validate(), Err(ConfigError::Address));
+        assert_eq!(StorageConfig::Folder { path: PathBuf::new() }.validate(), Err(ConfigError::Missing));
+        // In the vault's local part with its path; from the interface without one (the folder the
+        // native dialog chose stands in).
+        let json = serde_json::to_value(&folder).unwrap();
+        assert_eq!(json, serde_json::json!({ "kind": "folder", "path": place.to_str().unwrap() }));
+        assert_eq!(serde_json::from_value::<StorageConfig>(json).unwrap(), folder);
+        let asked: StorageConfig = serde_json::from_value(serde_json::json!({ "kind": "folder" })).unwrap();
+        assert_eq!(asked, StorageConfig::Folder { path: PathBuf::new() });
+        assert!(asked.is_folder() && !webdav("https://dav.example.com").is_folder());
     }
 
     #[test]

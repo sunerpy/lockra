@@ -1,6 +1,7 @@
 // The sync storage form's fields (the desktop's and the phone's), the settings they make and the
 // ones they start from. The secret (S3 secret key, WebDAV password) is typed in every time: the
-// core never sends it back.
+// core never sends it back. A folder of the computer is chosen through the system's dialog every
+// time too: the form only shows it, and the core takes the one the dialog chose.
 import type { StorageConfig, StorageKind, StorageView } from "./schema";
 import {
   type PresetId,
@@ -28,6 +29,8 @@ export interface StorageForm {
   username: string;
   password: string;
   prefix: string;
+  /** The folder the dialog chose for this form (`pickSyncFolder`), as shown; "" until it did. */
+  folder: string;
 }
 
 export function emptyStorageForm(): StorageForm {
@@ -46,6 +49,7 @@ export function emptyStorageForm(): StorageForm {
     username: "",
     password: "",
     prefix: "lockra",
+    folder: "",
   };
 }
 
@@ -54,6 +58,8 @@ export function emptyStorageForm(): StorageForm {
 export function storageFormFrom(view: StorageView): StorageForm {
   const empty = emptyStorageForm();
   const { region, ...preset } = detectPreset(view);
+  // A folder is chosen again: the dialog's choice is what the core takes.
+  if (view.kind === "folder") return { ...empty, ...preset, kind: "folder" };
   return view.kind === "s3"
     ? {
         ...empty,
@@ -78,6 +84,7 @@ export function storageFormFrom(view: StorageView): StorageForm {
 
 /** The settings the core receives (the core checks them again). */
 export function storageConfig(form: StorageForm): StorageConfig {
+  if (form.kind === "folder") return { kind: "folder" };
   return form.kind === "s3"
     ? {
         kind: "s3",
@@ -100,6 +107,7 @@ export function storageConfig(form: StorageForm): StorageConfig {
 
 /** Every field the kind needs is filled, and the preset's settings can be used. */
 export function storageComplete(form: StorageForm): boolean {
+  if (form.kind === "folder") return form.folder !== "";
   // A preset of the other kind (a form put together by hand) counts as the custom one.
   const own =
     PRESETS[form.preset].kind === form.kind ? form : { ...form, preset: customPreset(form.kind) };
@@ -113,6 +121,7 @@ export function storageComplete(form: StorageForm): boolean {
 
 /** Where a space lives, in one line: the host and the folder (no credential). */
 export function storageSummary(view: StorageView): string {
+  if (view.kind === "folder") return view.path;
   const address = view.kind === "s3" ? view.endpoint : view.url;
   let host = address;
   try {

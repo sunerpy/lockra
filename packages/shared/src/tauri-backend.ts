@@ -134,6 +134,7 @@ export class TauriBackend implements Backend {
         password: join.password,
         deviceName: join.deviceName,
         spacePassword: join.spacePassword ?? null,
+        storage: join.storage ?? null,
       }),
     );
   }
@@ -157,6 +158,10 @@ export class TauriBackend implements Backend {
 
   async pickBackupDir(): Promise<string | null> {
     return fileNameSchema.parse(await this.call("backup_pick_dir"));
+  }
+
+  async pickSyncFolder(): Promise<string | null> {
+    return fileNameSchema.parse(await this.call("sync_pick_folder"));
   }
 
   async pickRestoreFile(): Promise<boolean> {

@@ -5,19 +5,24 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The storage of a sync space over HTTPS: S3-compatible object storage or WebDAV, through Apache OpenDAL."
+description = "The storage of a sync space: S3-compatible object storage or WebDAV over HTTPS (Apache OpenDAL), or a folder a cloud drive keeps in sync."
 publish = false
 
 [lints]
 workspace = true
 
 [dependencies]
+data-encoding.workspace = true
 futures-util.workspace = true
 lockra-sync.workspace = true
+lockra-vault.workspace = true
 opendal.workspace = true
 opendal-http-transport-reqwest.workspace = true
+parking_lot.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
+sha2.workspace = true
+tokio.workspace = true
 url.workspace = true
 
 [dev-dependencies]

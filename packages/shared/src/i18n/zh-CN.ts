@@ -582,6 +582,7 @@ export const zhCN = {
       kind: "存储类型",
       s3: "S3 兼容",
       webdav: "WebDAV",
+      folder: "网盘文件夹",
       s3Hint: "AWS S3、Cloudflare R2、Backblaze B2、阿里云 OSS、MinIO 等。",
       webdavHint: "Nextcloud、坚果云、群晖 NAS 等支持 WebDAV 的服务。",
       endpoint: "服务地址",
@@ -615,6 +616,7 @@ export const zhCN = {
         nextcloud: "Nextcloud",
         synology: "群晖 NAS",
         "webdav-custom": "其他 WebDAV 服务",
+        folder: "由网盘客户端同步的文件夹",
       },
       presetHints: {
         aws: "中国区域（北京、宁夏）请选「AWS S3（中国区域）」：两边的账号和密钥不通用。",
@@ -630,6 +632,8 @@ export const zhCN = {
         nextcloud: "密码请用应用密码：在 Nextcloud「设置 › 安全」中创建。",
         synology:
           "需要在群晖上安装并启用 WebDAV Server，HTTPS 端口默认是 5006。「文件夹」请以共享文件夹开头，例如 home/lockra。",
+        folder:
+          "选一个由 OneDrive、iCloud 云盘、Dropbox、坚果云、Nextcloud、群晖 Drive 或 Syncthing 同步的文件夹。Lockra 只在里面写加密文件，由网盘负责传到其他设备；手机上用同一个网盘的 WebDAV 连接这个文件夹。",
       },
       account: "账户 ID",
       host: "服务器地址",
@@ -818,6 +822,10 @@ export const zhCN = {
     sync_invite_code_wrong: "口令不正确，请核对邀请码旁显示的口令",
     sync_space_password_needed:
       "这台设备的主密码打不开同步空间，请再输入同步空间中任一设备的主密码",
+    sync_invite_needs_storage:
+      "这个邀请只带同步密钥：同步空间在那台电脑的网盘文件夹里，请选择这台设备访问同一个文件夹的方式",
+    sync_folder_not_chosen: "请先选择文件夹",
+    sync_folder_missing: "找不到同步文件夹：网盘客户端可能没有运行，或者文件夹已被移动或删除",
     sync_data_corrupted: "存储里的同步数据已损坏或被改动",
     sync_unsupported: "同步数据来自更新版本的 Lockra，请先升级",
     internal: "出现内部错误",

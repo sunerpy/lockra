@@ -2772,15 +2772,18 @@ dependencies = [
 name = "lockra-remote"
 version = "0.0.0"
 dependencies = [
+ "data-encoding",
  "futures-util",
  "lockra-sync",
  "lockra-vault",
  "opendal",
  "opendal-http-transport-reqwest",
+ "parking_lot",
  "reqwest",
  "rustls",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tempfile",
  "tokio",
  "url",
