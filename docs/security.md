@@ -99,10 +99,11 @@ The method is Voltip's, measured on GitHub's Macs and users' keychains in 2026-0
 - **Not signed so** (local and CI builds, ad hoc): the keyring store as before, and no hand-over. A
   debug build compiled with `LOCKRA_DEV_RELEASE_REQUIREMENT` trusts that requirement instead of the
   release's, which is how CI checks the real app end to end; a release build never reads it.
-- **Checked in CI** on the login keychains of macOS 15 and 26 (`macos-keychain`):
-  `check-keychain-handoff.sh` between harness builds, and `check-keychain-preinstall.sh` with the
-  real app, signed with the hardened runtime as the release is, staged from an updater-shaped
-  `Lockra.app.tar.gz` and installed at another path; a package signed otherwise is handed nothing.
+- **Checked in CI** on the login keychains of macOS 15 and 26, Apple silicon and Intel
+  (`macos-keychain`): `check-keychain-handoff.sh` between harness builds, and
+  `check-keychain-preinstall.sh` with the real app, signed with the hardened runtime as the release
+  is, staged from an updater-shaped `Lockra.app.tar.gz` and installed at another path; a package
+  signed otherwise is handed nothing.
 
 All of it is security-framework's safe calls: the workspace keeps forbidding unsafe code.
 

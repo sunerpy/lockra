@@ -23,8 +23,9 @@
 #   clipboard adapter carry Windows-only code.
 # - `macos-check` is the same warning for macOS: the shell's Touch ID check is macOS-only code.
 # - `macos-keychain` hands the keychain over across builds on the runners' login keychains, on
-#   macOS 15 and 26: between two harness builds, then with the real app signed with the hardened
-#   runtime and staged from an updater-shaped package (.github/scripts/check-keychain-*.sh).
+#   macOS 15 and 26 (Apple silicon and Intel): between two harness builds, then with the real app
+#   signed with the hardened runtime and staged from an updater-shaped package
+#   (.github/scripts/check-keychain-*.sh).
 # - `android` builds the phone app (apps/mobile) for arm64, signs it with a key made for the run and
 #   checks the packages; `android-device` runs that APK on an emulator: it creates a vault, locks on
 #   leaving and unlocks.
@@ -462,13 +463,13 @@ jobs:
   # The keychain hand-over of a macOS update on the runner's login keychain, with its real
   # partitions (docs/security.md, "Keychain items across updates"): between two harness builds,
   # then end to end with the real app as an update installs it. On the macOS the releases are built
-  # on and on the one users run.
+  # on and on the one users run, Apple silicon and Intel.
   macos-keychain:
     name: macOS keychain hand-over (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26]
+        os: [macos-15, macos-26, macos-26-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
