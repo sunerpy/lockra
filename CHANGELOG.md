@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.3](https://github.com/sunerpy/lockra/compare/v0.7.2...v0.7.3) (2026-10-04)
+
+
+### Features
+
+* **sync:** 前台时更及时地同步，并提示同步带来的更改 ([#58](https://github.com/sunerpy/lockra/issues/58)) ([3750892](https://github.com/sunerpy/lockra/commit/3750892859810edaf08c30e8f5ed48398b49c0ec))
+* **sync:** 存储设置按服务商预填地址与区域 ([#55](https://github.com/sunerpy/lockra/issues/55)) ([de7985a](https://github.com/sunerpy/lockra/commit/de7985a9debe57d13042fec0e347a87ee4e3956b))
+* **sync:** 邀请与加入少输密码，邀请码可以安全发送 ([#57](https://github.com/sunerpy/lockra/issues/57)) ([6275397](https://github.com/sunerpy/lockra/commit/6275397bfbd87239cd592acc4da54c5d94c165c7))
+
+
+### Documentation
+
+* **acceptance:** 补上同步第一阶段的自动化覆盖与真机检查项 ([#59](https://github.com/sunerpy/lockra/issues/59)) ([a162a20](https://github.com/sunerpy/lockra/commit/a162a20c4f93389f33a336056881a6efe50b8818))
+
 ## [0.7.2](https://github.com/sunerpy/lockra/compare/v0.7.1...v0.7.2) (2026-10-04)
 
 

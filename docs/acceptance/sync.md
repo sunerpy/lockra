@@ -47,6 +47,45 @@ Problems found by looking at them, and fixed:
 5. Joining from a vault put the optional space password alone on a row under the device name; the
    two passwords now share a row, the device name above them.
 
+## Providers, sealed invitations and timelier runs (0.7.3)
+
+Automated:
+
+- `packages/shared/src/storage-presets.test.ts`: each provider's address from what is typed, with
+  its addressing; AWS's China partition kept to its two regions and its own domain, and refused
+  under the global one (and the other way round); R2's account endpoint and region `auto`; MinIO
+  with path-style requests; saved settings found on their provider only when it would make them
+  again. `packages/ui/src/components/StorageFields.test.tsx`: the provider list fills the form,
+  suggests regions, and a refusal adds the provider's likely cause.
+- `crates/lockra-sync/src/invite.rs`: a sealed invitation opens with its code only (case, spaces,
+  dashes and Crockford's look-alike letters do not matter), a wrong code is told from a damaged
+  text, hostile Argon2 parameters are refused before any work, and two invitations of one space
+  share neither text nor code.
+- `crates/lockra-core/src/tests/sync.rs`: a sealed invitation joins with its code, and the
+  biometric check that unlocks the vault can show an invitation; a vault joins with its own master
+  password and is asked for the space's only when that opens nothing; the device that made the
+  space is reminded of the sync key until the key file is saved or the user says it is kept;
+  runs come every minute in front and every five minutes behind, one half a minute after the last
+  on coming back, five minutes after a failure in front too; what a run brought is told once,
+  with the devices it came from, and without them when the write failed afterwards.
+- `crates/lockra-bridge/tests/contract.rs` and the fixtures: the sealed invitation's answer, the
+  sync key commands and the `sync_brought` notice.
+- Web: `apps/desktop/src/pages/settings/Sync.test.tsx` and `apps/mobile/src/sync.test.tsx`: the
+  code field for a sealed invitation, the biometric button, the second password only when asked,
+  the key file and the reminder; `packages/shared/src/labels.test.ts`: the `sync_brought` text
+  names only the counts that are not zero.
+
+To check on real devices:
+
+1. An invitation sent from Windows over a chat app, joined on the phone with its code typed in;
+   a wrong code refused, the QR code still scanned without one.
+2. Touch ID, Windows Hello and the fingerprint showing an invitation and saving the sync key;
+   cancelling the check asks for the master password.
+3. The sync key file saved on Windows, macOS and Android through the system's save dialog.
+4. On a computer, Lockra in front syncs every minute and behind other windows every five; coming
+   back to it syncs; an account added on the phone appears with "Synced from …".
+5. The provider forms against the real services below, AWS's China regions with a China account.
+
 ## Not verified here
 
 Real services: AWS S3, Cloudflare R2, Backblaze B2, Alibaba Cloud OSS, MinIO, Nextcloud,
