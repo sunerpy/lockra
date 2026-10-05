@@ -1,0 +1,32 @@
+[package]
+name = "lockra-lan"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Sync over the local network: a hub keeps a copy of a space in a folder and serves it, over Noise, to the devices paired with it."
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+data-encoding.workspace = true
+getrandom.workspace = true
+hmac.workspace = true
+lockra-sync.workspace = true
+lockra-vault.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+snow.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["net", "io-util"] }
+tracing.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
