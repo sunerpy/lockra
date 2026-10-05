@@ -86,7 +86,7 @@ To check on real devices:
    back to it syncs; an account added on the phone appears with "Synced from …".
 5. The provider forms against the real services below, AWS's China regions with a China account.
 
-## Cloud drive folders
+## Cloud drive folders (0.7.4)
 
 Automated:
 
