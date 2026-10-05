@@ -1,8 +1,6 @@
-// Settings › Sync on the phone: set up a space on storage of the user's own, join one, or pair with
-// a computer that syncs over the local network; with a space, how it is doing (each storage's
-// own state when there are two), where it is stored, the computer it syncs through, this phone's
-// name, the space's devices, invitations for more, and turning it off here (the desktop's
-// Settings › Sync).
+// Settings › Sync on the phone: set up a space on storage of the user's own, or join one; with a
+// space, how it is doing, where it is stored, this phone's name, the space's devices, invitations
+// for more, and turning it off here (the desktop's Settings › Sync).
 import {
   type SyncSpaceView,
   errorText,
@@ -59,14 +57,6 @@ function SyncOff() {
           testId="sync-setup-open"
         />
         <ActionRow
-          icon="monitor"
-          label={t("mobile.sync.pairTitle")}
-          hint={t("mobile.sync.pairHint")}
-          opensPage
-          onClick={() => nav.open({ name: "syncPair" })}
-          testId="sync-pair-open"
-        />
-        <ActionRow
           icon="link"
           label={t("sync.off.joinTitle")}
           hint={t("sync.off.joinBody")}
@@ -89,9 +79,7 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
   const nav = useNav();
   const now = useNow();
   const dispatch = useDispatch();
-  const [dialog, setDialog] = useState<
-    "rename" | "disable" | "lanDisable" | { remove: string } | null
-  >(null);
+  const [dialog, setDialog] = useState<"rename" | "disable" | { remove: string } | null>(null);
   const line = syncStatusLine(space.status, t, now);
   const syncing = space.status.state === "syncing";
   const removing =
@@ -106,24 +94,6 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
         <LampText tone={line.tone} pulse={syncing}>
           <span data-testid="sync-status">{line.text}</span>
         </LampText>
-        {space.transports.length > 1 && (
-          <ul className="flex flex-col gap-1">
-            {space.transports.map((transport) => {
-              const own = syncStatusLine(transport.status, t, now);
-              return (
-                <li
-                  key={transport.kind}
-                  className="flex items-center gap-2 text-[13px] text-fg-muted"
-                  data-testid="sync-transport">
-                  <span>{t(`sync.transports.${transport.kind}`)}</span>
-                  <LampText tone={own.tone} size="sm">
-                    {own.text}
-                  </LampText>
-                </li>
-              );
-            })}
-          </ul>
-        )}
         {space.keyring_pending && (
           <p className="text-[13px] text-fg-muted">{t("sync.status.keyringPending")}</p>
         )}
@@ -165,38 +135,20 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
           </Banner>
         </div>
       )}
-      {space.storage !== null && (
-        <Section title={t("sync.storageRow")}>
-          <p className="mono px-4 py-3 text-[13px] break-all text-fg" data-testid="sync-storage">
-            {`${t(`sync.storage.${space.storage.kind}`)} · ${storageSummary(space.storage)}`}
-          </p>
-          <div className="p-1">
-            <ActionRow
-              icon="edit"
-              label={t("sync.storageEdit")}
-              opensPage
-              onClick={() => nav.open({ name: "syncStorage" })}
-              testId="sync-storage-edit"
-            />
-          </div>
-        </Section>
-      )}
-      {space.lan?.role === "client" && (
-        <Section title={t("sync.lan.title")}>
-          <p className="px-4 py-3 text-[15px] text-fg" data-testid="sync-lan-client">
-            {t("sync.lan.clientBody", { hub: space.lan.hub_name })}
-          </p>
-          <div className="p-1">
-            <ActionRow
-              icon="close"
-              label={t("sync.lan.disable")}
-              danger
-              onClick={() => setDialog("lanDisable")}
-              testId="sync-lan-disable"
-            />
-          </div>
-        </Section>
-      )}
+      <Section title={t("sync.storageRow")}>
+        <p className="mono px-4 py-3 text-[13px] break-all text-fg" data-testid="sync-storage">
+          {`${t(`sync.storage.${space.storage.kind}`)} · ${storageSummary(space.storage)}`}
+        </p>
+        <div className="p-1">
+          <ActionRow
+            icon="edit"
+            label={t("sync.storageEdit")}
+            opensPage
+            onClick={() => nav.open({ name: "syncStorage" })}
+            testId="sync-storage-edit"
+          />
+        </div>
+      </Section>
       <Section title={t("sync.device.label")}>
         <p className="px-4 py-3 text-[15px] text-fg" data-testid="sync-device-name">
           {space.device_name}
@@ -242,26 +194,13 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
       </Section>
       <p className="-mt-3 px-1 text-[13px] text-fg-muted">{t("sync.devices.description")}</p>
       <Card padding="none" className="p-1">
-        {/* An invitation carries the storage: a space on the LAN alone pairs instead. */}
-        {space.storage !== null && (
-          <ActionRow
-            icon="qr"
-            label={t("sync.invite.open")}
-            opensPage
-            onClick={() => nav.open({ name: "syncInvite" })}
-            testId="sync-invite-open"
-          />
-        )}
-        {space.lan === null && (
-          <ActionRow
-            icon="monitor"
-            label={t("mobile.sync.connect")}
-            hint={t("mobile.sync.connectHint")}
-            opensPage
-            onClick={() => nav.open({ name: "syncPair" })}
-            testId="sync-pair-open"
-          />
-        )}
+        <ActionRow
+          icon="qr"
+          label={t("sync.invite.open")}
+          opensPage
+          onClick={() => nav.open({ name: "syncInvite" })}
+          testId="sync-invite-open"
+        />
         <ActionRow
           icon="close"
           label={t("sync.disable.open")}
@@ -293,34 +232,6 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
             </>
           }>
           <p>{t("sync.disable.body")}</p>
-        </Dialog>
-      )}
-      {dialog === "lanDisable" && space.lan?.role === "client" && (
-        <Dialog
-          open
-          title={t("sync.lan.disableTitle")}
-          onClose={close}
-          actions={
-            <>
-              <Button variant="ghost" size="lg" onClick={close}>
-                {t("common.cancel")}
-              </Button>
-              <Button
-                variant="danger"
-                size="lg"
-                onClick={() => {
-                  close();
-                  void dispatch({ command: "sync_lan_disable" });
-                }}>
-                {t("sync.lan.disable")}
-              </Button>
-            </>
-          }>
-          <p>
-            {t(space.storage === null ? "sync.lan.disableClientOnly" : "sync.lan.disableClient", {
-              hub: space.lan.hub_name,
-            })}
-          </p>
         </Dialog>
       )}
       {removing !== undefined && (

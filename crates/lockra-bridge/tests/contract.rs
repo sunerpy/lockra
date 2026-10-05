@@ -15,9 +15,8 @@ use lockra_core::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain,
 use lockra_core::settings::{AccentId, AutoBackup, DefaultUnlock, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded,
-    ExportPage, ExportStarted, ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LanJoiningView, LanOffer, LanPeerView, LanView,
-    LockView, Notice, PairRequestView, Phase, Platform, RestoreView, Revealed, StorageView, SyncCreated, SyncDeviceView, SyncInvite, SyncSpaceView, SyncStatus,
-    SyncView, TransportKind, TransportView, UiEvent, UiState, UpdateStatus, UpdateView,
+    ExportPage, ExportStarted, ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView,
+    Revealed, StorageView, SyncCreated, SyncDeviceView, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
@@ -160,20 +159,19 @@ fn sync_statuses() -> Vec<SyncStatus> {
         SyncStatus::Syncing,
         SyncStatus::Synced { at_ms: T0 - 60_000 },
         SyncStatus::Failed { code: ErrorCode::SyncNetwork, at_ms: T0 - 5_000 },
-        SyncStatus::Offline { at_ms: T0 - 20_000 },
     ]
 }
 
 fn sync_space(status: SyncStatus) -> SyncSpaceView {
     SyncSpaceView {
-        storage: Some(StorageView::S3 {
+        storage: StorageView::S3 {
             endpoint: "https://s3.eu-central-1.amazonaws.com".into(),
             region: "eu-central-1".into(),
             bucket: "my-lockra".into(),
             prefix: "lockra/".into(),
             access_key_id: "AKIAIOSFODNN7EXAMPLE".into(),
             path_style: false,
-        }),
+        },
         device_name: "Desktop".into(),
         devices: vec![
             SyncDeviceView { tag: DESKTOP_TAG.into(), name: "Desktop".into(), written_at_ms: Some(T0 - 60_000), this_device: true },
@@ -185,38 +183,7 @@ fn sync_space(status: SyncStatus) -> SyncSpaceView {
         unreadable: vec![ALTERED_TAG.into()],
         keyring_pending: false,
         key_saved: false,
-        transports: vec![TransportView { kind: TransportKind::Cloud, status: status_copy(), last_ok_ms: Some(T0 - 60_000) }],
-        lan: None,
     }
-}
-
-fn status_copy() -> SyncStatus {
-    SyncStatus::Synced { at_ms: T0 - 60_000 }
-}
-
-/// A hub with a phone paired and a laptop asking to pair, on the LAN alone.
-fn hub_space() -> SyncSpaceView {
-    let mut space = sync_space(SyncStatus::Synced { at_ms: T0 - 10_000 });
-    space.storage = None;
-    space.transports = vec![TransportView { kind: TransportKind::Lan, status: SyncStatus::Synced { at_ms: T0 - 10_000 }, last_ok_ms: Some(T0 - 10_000) }];
-    space.lan = Some(LanView::Hub {
-        serving: true,
-        port: 47_100,
-        peers: vec![LanPeerView { peer_id: id(7), name: "Pixel 8".into(), platform: "android".into(), tag: Some(PHONE_TAG.into()) }],
-        request: Some(PairRequestView { name: "Laptop".into(), platform: "linux".into(), code: "246813".into() }),
-        offer_until_ms: Some(T0 + 90_000),
-    });
-    space
-}
-
-/// A phone paired with its hub, on the user's storage too, the hub out of reach.
-fn client_space() -> SyncSpaceView {
-    let mut space = sync_space(SyncStatus::Synced { at_ms: T0 - 60_000 });
-    space
-        .transports
-        .insert(0, TransportView { kind: TransportKind::Lan, status: SyncStatus::Offline { at_ms: T0 - 20_000 }, last_ok_ms: Some(T0 - 3_600_000) });
-    space.lan = Some(LanView::Client { hub_name: "Desktop".into() });
-    space
 }
 
 fn import_view() -> ImportView {
@@ -303,7 +270,7 @@ fn state(phase: Phase) -> UiState {
             Phase::Locked => UpdateView { method: Some(InstallMethod::Nsis), status: update_statuses()[6].clone() },
             Phase::NoVault => UpdateView { method: None, status: UpdateStatus::Idle },
         },
-        sync: SyncView { space: unlocked.then(|| sync_space(sync_statuses()[2].clone())), joining: None },
+        sync: SyncView { space: unlocked.then(|| sync_space(sync_statuses()[2].clone())) },
     }
 }
 
@@ -381,14 +348,6 @@ fn commands() -> Vec<Value> {
         json!({"command": "sync_remove_device", "tag": PHONE_TAG}),
         json!({"command": "sync_now"}),
         json!({"command": "sync_disable"}),
-        json!({"command": "sync_lan_enable", "password": "a new password", "device_name": "Desktop"}),
-        json!({"command": "sync_lan_offer", "reason": "show the pairing offer"}),
-        json!({"command": "sync_lan_answer", "approve": true}),
-        json!({"command": "sync_lan_remove_peer", "peer_id": id(7).to_string()}),
-        json!({"command": "sync_lan_disable"}),
-        json!({"command": "sync_lan_join", "text": "lockra-pair:1:eyJodWJfaWQiOiIifQ", "password": "a new password", "device_name": "Pixel 8"}),
-        json!({"command": "sync_add_storage", "source": {"type": "storage", "storage": s3_storage()}, "password": "a new password"}),
-        json!({"command": "sync_remove_storage"}),
     ]
 }
 
@@ -430,20 +389,17 @@ fn update_fixtures() {
 
 #[test]
 fn sync_fixtures() {
-    let mut views: Vec<SyncView> = sync_statuses().into_iter().map(|status| SyncView { space: Some(sync_space(status)), joining: None }).collect();
+    let mut views: Vec<SyncView> = sync_statuses().into_iter().map(|status| SyncView { space: Some(sync_space(status)) }).collect();
     let mut webdav = sync_space(SyncStatus::Idle);
-    webdav.storage = Some(StorageView::Webdav { url: "https://dav.jianguoyun.com/dav/".into(), prefix: "lockra".into(), username: "me@example.com".into() });
+    webdav.storage = StorageView::Webdav { url: "https://dav.jianguoyun.com/dav/".into(), prefix: "lockra".into(), username: "me@example.com".into() };
     webdav.devices.truncate(1);
     webdav.devices[0].written_at_ms = None;
     webdav.last_sync_ms = None;
     webdav.rolled_back = vec![PHONE_TAG.into()];
     webdav.unreadable = Vec::new();
     webdav.keyring_pending = true;
-    views.push(SyncView { space: Some(webdav), joining: None });
-    views.push(SyncView { space: Some(hub_space()), joining: None });
-    views.push(SyncView { space: Some(client_space()), joining: None });
-    views.push(SyncView { space: None, joining: Some(LanJoiningView { hub_name: "Desktop".into(), code: "246813".into() }) });
-    views.push(SyncView { space: None, joining: None });
+    views.push(SyncView { space: Some(webdav) });
+    views.push(SyncView { space: None });
     check("sync.json", &views);
 }
 
@@ -502,11 +458,6 @@ fn response_fixtures() {
                 code: "7K2QM-XW4FD".into(),
                 sync_key: SYNC_KEY.into(),
             },
-            "lan_offer": LanOffer {
-                text: "lockra-pair:1:eyJodWJfaWQiOiIifQ".into(),
-                svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
-                expires_at_ms: T0 + 120_000,
-            },
             "codes_frame": codes,
             "codes_frame_locked": CodesFrame { at_ms: T0, codes: Vec::new() },
             "errors": errors,
@@ -545,8 +496,6 @@ fn secret_views_are_flagged_for_the_shell() {
     // Without a password the biometric check proves presence; the answer is the same secret.
     assert!(parse(json!({"command": "sync_invite", "reason": "show the invitation"})).shows_secret());
     assert!(!parse(json!({"command": "sync_now"})).shows_secret());
-    assert!(parse(json!({"command": "sync_lan_offer"})).shows_secret());
-    assert!(!parse(json!({"command": "sync_lan_answer", "approve": true})).shows_secret());
     assert!(!parse(json!({"command": "app_state"})).shows_secret());
     for command in [json!({"command": "secret_view_closed"}), json!({"command": "export_close", "session": id(1)}), json!({"command": "vault_lock"})] {
         assert!(parse(command).hides_secret());

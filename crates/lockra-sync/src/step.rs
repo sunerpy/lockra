@@ -110,9 +110,6 @@ pub struct Space<'a> {
     /// This device's keyring ([`crate::seal_keyring`] under its master password), carried in its
     /// snapshots.
     pub keyring: &'a [u8],
-    /// The highest number this device gave a write on any of its storages: a write here takes a
-    /// higher one, so one number names one snapshot wherever it is.
-    pub seq_floor: u64,
 }
 
 /// A device of the space, as a run found it.
@@ -289,8 +286,8 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
     let payload_digest = digest(&name, space.keyring, &payload);
     if state.written_digest.as_deref() != Some(payload_digest.as_str()) {
         // Never a number another write had: one whose answer never came may still have landed,
-        // and another device may have read it; nor one this device gave a write on another storage.
-        let seq = state.own_seq.max(state.pending.as_ref().map_or(0, |p| p.seq)).max(space.seq_floor) + 1;
+        // and another device may have read it.
+        let seq = state.own_seq.max(state.pending.as_ref().map_or(0, |p| p.seq)) + 1;
         let snapshot = Snapshot { seq, written_at_ms: now_ms, device_name: name.clone(), keyring: space.keyring.to_vec(), payload };
         let object = seal_snapshot(keys, &own_tag, &snapshot)?;
         state.pending = Some(PendingWrite { seq, digest: payload_digest.clone() });
@@ -421,21 +418,19 @@ mod tests {
         keyring: Vec<u8>,
         state: SyncState,
         doc: Doc,
-        /// The highest number this device wrote on any other storage.
-        floor: u64,
     }
 
     impl Device {
         fn new(number: u64, name: &'static str) -> Self {
-            Self { number, name, keyring: format!("keyring of device {number}").into_bytes(), state: SyncState::default(), doc: Doc::default(), floor: 0 }
+            Self { number, name, keyring: format!("keyring of device {number}").into_bytes(), state: SyncState::default(), doc: Doc::default() }
         }
 
         fn space<'a>(&'a self, keys: &'a SpaceKeys) -> Space<'a> {
-            Space { prefix: PREFIX, keys, device: self.number, device_name: self.name, keyring: &self.keyring, seq_floor: self.floor }
+            Space { prefix: PREFIX, keys, device: self.number, device_name: self.name, keyring: &self.keyring }
         }
 
         async fn sync(&mut self, remote: &dyn RemoteStore, keys: &SpaceKeys, now_ms: u64) -> Result<Outcome, SyncError> {
-            let space = Space { prefix: PREFIX, keys, device: self.number, device_name: self.name, keyring: &self.keyring, seq_floor: self.floor };
+            let space = Space { prefix: PREFIX, keys, device: self.number, device_name: self.name, keyring: &self.keyring };
             step(remote, &space, &mut self.state, &mut self.doc, now_ms).await
         }
 
@@ -595,8 +590,7 @@ mod tests {
             original.doc.put(1, "GitHub", 10, 1);
             original.sync(&remote, &keys, 100).await.unwrap();
             // A copy of the vault, local part included, on another computer.
-            let mut copy =
-                Device { number: 1, name: "Copy", keyring: original.keyring.clone(), state: original.state.clone(), doc: original.doc.clone(), floor: 0 };
+            let mut copy = Device { number: 1, name: "Copy", keyring: original.keyring.clone(), state: original.state.clone(), doc: original.doc.clone() };
             copy.doc.put(2, "Mail", 20, 1);
             copy.sync(&remote, &keys, 150).await.unwrap();
             original.doc.put(3, "Bank", 30, 1);
@@ -785,27 +779,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_write_numbers_itself_above_what_another_storage_reached() {
-        let remote = MemoryRemote::new(true);
-        let keys = keys();
-        let mut laptop = Device::new(1, "Laptop");
-        let mut phone = Device::new(2, "Phone");
-        laptop.doc.put(1, "GitHub", 10, 1);
-        // On another storage this device already wrote up to 7: here it goes on from there.
-        laptop.floor = 7;
-        laptop.sync(&remote, &keys, 100).await.unwrap();
-        assert_eq!((laptop.stored(&remote, &keys).seq, laptop.state.own_seq), (8, 8));
-        // A floor below this storage's own number changes nothing.
-        laptop.floor = 3;
-        laptop.doc.put(2, "Mail", 20, 1);
-        laptop.sync(&remote, &keys, 200).await.unwrap();
-        assert_eq!(laptop.stored(&remote, &keys).seq, 9);
-        // Read elsewhere, the numbers are this storage's: nothing went back.
-        let read = phone.sync(&remote, &keys, 300).await.unwrap();
-        assert!(read.rolled_back.is_empty() && phone.doc.values() == ["GitHub", "Mail"], "{read:?}");
-    }
-
-    #[tokio::test]
     async fn a_write_whose_answer_never_came_back_is_recognised() {
         for conditional in [true, false] {
             let remote = MemoryRemote::new(conditional);
@@ -830,7 +803,7 @@ mod tests {
         let mut laptop = Device::new(1, "Laptop");
         laptop.doc.put(1, "GitHub", 10, 1);
         let keyring = laptop.keyring.clone();
-        let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop", keyring: &keyring, seq_floor: 0 };
+        let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop", keyring: &keyring };
         let mut kept: Vec<(SyncState, Doc)> = Vec::new();
         let mut keep = |state: &SyncState, doc: &Doc| {
             kept.push((state.clone(), doc.clone()));
@@ -864,7 +837,7 @@ mod tests {
             // vault holds is what the run kept before writing.
             laptop.doc.put(2, "Mail", 20, 1);
             let keyring = laptop.keyring.clone();
-            let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop", keyring: &keyring, seq_floor: 0 };
+            let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop", keyring: &keyring };
             let mut kept: Option<SyncState> = None;
             let mut keep = |state: &SyncState, _: &Doc| {
                 kept = Some(state.clone());

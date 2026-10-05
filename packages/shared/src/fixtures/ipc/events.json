@@ -60,8 +60,7 @@
         }
       },
       "sync": {
-        "space": null,
-        "joining": null
+        "space": null
       }
     }
   },

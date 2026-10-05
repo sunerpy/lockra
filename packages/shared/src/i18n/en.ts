@@ -164,18 +164,6 @@ export const en: Messages = {
       welcomeBody:
         "Already syncing Lockra on other devices? Scan an invitation from one of them, and this phone gets the same accounts.",
       renameTitle: "Rename this device",
-      pairTitle: "Sync from a computer",
-      pairBody:
-        "On the computer, turn on local network sync under Settings › Sync and choose Pair a device…, then scan the QR code it shows with this phone. Both need to be on the same network.",
-      pairHint: "Sync straight through a computer on the same network, no storage needed",
-      connect: "Connect to a computer",
-      connectHint: "Sync through a computer on the same network; changes show within seconds",
-      fromPaste: "Paste the code",
-      pairScan: "Scan to pair",
-      pairSubmit: "Pair",
-      pairPrompt: "Point the camera at the pairing code on the computer",
-      pairNewVault:
-        "There is no vault on this phone yet: pairing creates one under this master password.",
     },
   },
   palette: {
@@ -206,7 +194,7 @@ export const en: Messages = {
     },
     join: {
       title: "Join from sync",
-      body: "Already syncing Lockra on other devices? Join with an invitation, the sync key, or the local network pairing code a computer shows, and this computer gets the same accounts.",
+      body: "Already syncing Lockra on other devices? Join with an invitation or the sync key, and this computer gets the same accounts.",
       open: "Join sync…",
     },
   },
@@ -624,10 +612,6 @@ export const en: Messages = {
       joinTitle: "Join an existing sync",
       joinBody:
         "Scan or paste another device's invitation; with no other device, recover with the storage settings and the sync key.",
-      lanTitle: "Sync over the local network",
-      lanBody:
-        "No storage needed: this computer becomes the hub, and the phones and computers on the same network sync once paired with it. A storage can be added later.",
-      lanSubmit: "Turn on local network sync",
     },
     storage: {
       kind: "Storage",
@@ -714,10 +698,7 @@ export const en: Messages = {
       fromInvite: "Invitation",
       fromKey: "Sync key",
       invite: "Invitation",
-      inviteHint:
-        "From Settings › Sync › Invite another device, on a device of the space. To pair with a computer that syncs over the local network, paste the pairing code it shows.",
-      pairNewVault:
-        "There is no vault on this computer yet: pairing creates one under this master password.",
+      inviteHint: "From Settings › Sync › Invite another device, on a device of the space.",
       syncKey: "Sync key",
       submit: "Join",
       newVault:
@@ -759,14 +740,12 @@ export const en: Messages = {
       idle: "Not synced yet",
       syncing: "Syncing…",
       synced: "Synced · {when}",
-      offline: "Offline · the computer is out of reach; trying again soon",
       failed: "Sync failed: {error}",
       now: "Sync now",
       keyringPending:
         "This device's new master password reaches the sync space on the next sync; until then, joining a device takes the old one or another device's.",
     },
     storageRow: "Storage",
-    lanOnly: "Over the local network only",
     storageEdit: "Change storage settings",
     storageEditBody:
       "A new access key, password or address. The sync space must already be at the new place.",
@@ -820,93 +799,6 @@ export const en: Messages = {
       title: "Turn off sync on this device?",
       body: "This device stops syncing and keeps its accounts. The sync space on the storage and the other devices are not affected, and you can join again later.",
       confirm: "Turn off sync",
-    },
-    lan: {
-      title: "Local network",
-      offBody:
-        "This computer becomes the hub: the devices on the same network pair with it and see each other's changes within seconds, with no storage needed.",
-      enable: "Turn on for this computer",
-      enablePrompt: "Enter the master password to sync over the local network.",
-      enablePromptBiometric: "Verify to sync over the local network, or enter the master password.",
-      enableReason: "sync over the local network",
-      enableSubmit: "Turn on",
-      connect: "Connect to another computer…",
-      connectBody:
-        "Paste the pairing code that computer shows under Pair a device, then enter this device's master password.",
-      connectSubmit: "Connect",
-      hubBody:
-        "This computer is the hub: the paired devices sync through it. While locked it still takes in their changes, and merges them at the unlock.",
-      clientBody: "Syncs through “{hub}” while on the same network.",
-      port: "Port {port}",
-      notServing:
-        "The local network service is not running, so the devices cannot reach this computer. The port may be taken or blocked by a firewall.",
-      firewall:
-        "The first time, Windows asks whether Lockra may use the network: allow private networks.",
-      peers: "Paired devices",
-      peersEmpty: "No device is paired yet.",
-      pair: "Pair a device…",
-      unpair: "Unpair",
-      unpairTitle: "Unpair “{name}”?",
-      unpairBody:
-        "It can no longer reach this computer, and its sync data here is deleted. The accounts it already has are not taken back.",
-      disable: "Stop syncing over the local network",
-      disableTitle: "Stop syncing over the local network?",
-      disableHub:
-        "This computer stops being the hub, and the paired devices have to pair again. Syncing through the storage goes on.",
-      disableHubOnly:
-        "This device stops syncing and keeps its accounts. The paired devices have to pair again.",
-      disableClient:
-        "This device stops syncing through “{hub}”. Syncing through the storage goes on.",
-      disableClientOnly:
-        "This device stops syncing and keeps its accounts. You can pair again later.",
-      offer: {
-        title: "Pair a device",
-        prompt: "Enter the master password to show the pairing code.",
-        promptBiometric: "Verify to show the pairing code, or enter the master password.",
-        reason: "show the pairing code",
-        submit: "Show pairing code",
-        body: "On a phone, scan the QR code with Lockra; on another computer, paste the pairing code below under Settings › Sync. When it asks to join, its check code shows here.",
-        text: "Pairing code",
-        warning:
-          "The pairing code works once. Until you allow the request, the device gets nothing of the sync space.",
-        hideIn: "The pairing code lapses in {s} s",
-      },
-      request: {
-        title: "“{name}” asks to join",
-        body: "Check that the other screen shows this same code:",
-        hint: "If the codes differ, refuse: another device may be using this pairing code.",
-        approve: "Allow",
-        refuse: "Refuse",
-      },
-      joining: {
-        title: "Waiting for “{hub}”",
-        body: "On that computer, check the code and allow this device:",
-      },
-      platform: {
-        windows: "Windows",
-        macos: "macOS",
-        linux: "Linux",
-        android: "Android",
-      },
-    },
-    transports: {
-      lan: "Local network",
-      cloud: "Storage",
-    },
-    addStorage: {
-      title: "Add a storage",
-      body: "Sync through your own S3-compatible bucket or WebDAV folder when away from this network.",
-      open: "Add a storage…",
-      fromStorage: "Storage settings",
-      fromInvite: "Invitation",
-      inviteHint: "When a device of the space already uses a storage, paste its invitation.",
-      submit: "Add",
-    },
-    removeStorage: {
-      open: "Remove storage",
-      title: "Remove the storage?",
-      body: "This device then syncs over the local network only. The sync space on the storage and the other devices are not affected.",
-      confirm: "Remove",
     },
     platformDevice: {
       windows: "Windows PC",
@@ -980,15 +872,6 @@ export const en: Messages = {
       "This device's master password does not open the sync space: also enter the master password of a device in the space",
     sync_data_corrupted: "The sync data on the storage is damaged or was altered",
     sync_unsupported: "The sync data comes from a newer Lockra; update Lockra first",
-    sync_no_storage: "This sync space syncs over the local network alone; it has no storage",
-    sync_other_space: "It belongs to another sync space",
-    sync_lan_unavailable: "This version cannot sync over the local network",
-    sync_lan_unpaired: "The computer no longer pairs with this device; pair again",
-    sync_lan_refused: "The computer refused this device's request",
-    sync_lan_full: "This computer pairs with 32 devices already; remove one it no longer needs",
-    sync_pairing_invalid: "Not a Lockra pairing offer",
-    sync_pairing_expired: "The pairing offer expired or was used; show it again on the computer",
-    sync_pairing_refused: "The user at the computer refused the pairing",
     internal: "An internal error occurred",
   },
   reject: {

@@ -86,15 +86,9 @@ describe("IPC fixtures", () => {
     const views = ipcFixtures.sync.map((view) => syncViewSchema.parse(view));
     const spaces = views.flatMap((v) => (v.space ? [v.space] : []));
     expect(new Set(spaces.map((s) => s.status.state))).toEqual(
-      new Set(["idle", "syncing", "synced", "failed", "offline"]),
+      new Set(["idle", "syncing", "synced", "failed"]),
     );
-    expect(new Set(spaces.map((s) => s.storage?.kind ?? "lan only"))).toEqual(
-      new Set(["s3", "webdav", "lan only"]),
-    );
-    expect(new Set(spaces.flatMap((s) => (s.lan ? [s.lan.role] : [])))).toEqual(
-      new Set(["hub", "client"]),
-    );
-    expect(views.some((v) => v.space === null && v.joining !== null)).toBe(true);
+    expect(new Set(spaces.map((s) => s.storage.kind))).toEqual(new Set(["s3", "webdav"]));
     expect(views.some((v) => v.space === null)).toBe(true);
     const unlocked = uiStateSchema.parse(ipcFixtures.state.unlocked).sync.space;
     expect(unlocked?.devices.map((d) => d.this_device)).toEqual([true, false]);
@@ -146,7 +140,6 @@ describe("IPC fixtures", () => {
         export_page: ipcFixtures.responses.export_page,
         sync_create: ipcFixtures.responses.sync_created,
         sync_invite: ipcFixtures.responses.sync_invite,
-        sync_lan_offer: ipcFixtures.responses.lan_offer,
       };
       const { transport, calls } = recordingTransport(answers[command.command] ?? null);
       const answer = await new TauriBackend(transport).dispatch(command);

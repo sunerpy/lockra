@@ -1,8 +1,8 @@
 //! The mobile shell's command layer on Tauri's mock runtime: its commands are the bridge's phone
 //! commands, a core command runs through `lockra_dispatch` with the core's typed errors, a copied
 //! code goes to the clipboard port, the code stream subscribes through a channel, what the camera
-//! or the photo picker hands over reaches the import, an invitation the camera reads joins its
-//! sync space, and a pairing code it reads pairs with its LAN hub.
+//! or the photo picker hands over reaches the import, and an invitation the camera reads joins its
+//! sync space.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -13,7 +13,7 @@ use lockra_core::fakes::{FakeClipboard, FakeTransport};
 use lockra_core::ports::{PortError, SyncTransport as _};
 use lockra_core::{Core, ErrorCode, KdfCost, PickedFile, StorageConfig};
 use lockra_mobile_lib::scanner::Scan;
-use lockra_mobile_lib::sync::PhoneSync;
+use lockra_mobile_lib::sync::HttpSync;
 use lockra_mobile_lib::{COMMANDS, ShellOptions, build_app, files, scanner, sync};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
@@ -190,8 +190,8 @@ fn the_code_stream_subscribes_through_a_channel_and_stops() {
 #[test]
 fn the_phone_s_sync_storage_opens_without_contacting_it_and_plain_http_elsewhere_is_refused() {
     let dav = |url: &str| StorageConfig::Webdav { url: url.into(), prefix: String::new(), username: "me".into(), password: Zeroizing::new("pw".into()) };
-    assert!(matches!(PhoneSync.open(&dav("https://dav.example.com/dav/")), Ok(storage) if !storage.conditional_puts()));
-    assert!(PhoneSync.open(&dav("http://192.168.1.2/dav/")).is_err());
+    assert!(matches!(HttpSync.open(&dav("https://dav.example.com/dav/")), Ok(storage) if !storage.conditional_puts()));
+    assert!(HttpSync.open(&dav("http://192.168.1.2/dav/")).is_err());
 }
 
 #[test]
@@ -230,48 +230,4 @@ fn an_invitation_the_camera_reads_joins_its_space() {
     let join_texts =
         json!({ "prompt": "Point the camera at the invitation", "cancel": "Cancel", "password": PASSWORD, "deviceName": "Phone", "spacePassword": null });
     assert_eq!(phone.invoke("sync_scan_join", join_texts).unwrap_err(), json!({ "code": "camera_unavailable" }));
-}
-
-#[test]
-fn a_pairing_code_the_camera_reads_pairs_with_its_hub() {
-    let transport = Arc::new(FakeTransport::default());
-    let desktop = shell_on(Arc::clone(&transport));
-    desktop.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
-    desktop.dispatch(json!({ "command": "sync_lan_enable", "password": PASSWORD, "device_name": "Desktop" })).unwrap();
-    let offer = desktop.dispatch(json!({ "command": "sync_lan_offer", "password": PASSWORD })).unwrap()["text"].as_str().unwrap().to_owned();
-    // A new phone: the password it pairs with becomes its vault's.
-    let phone = shell_on(transport);
-    let core = phone.core();
-    let pair = |scan| tauri::async_runtime::block_on(sync::pair(&core, scan, Zeroizing::new(PASSWORD.into()), "Phone".into()));
-    assert!(!pair(Ok(Scan::Left)).unwrap());
-    assert_eq!(pair(Ok(Scan::Code(Zeroizing::new("lockra-invite:1:abc".into())))).unwrap_err().code, ErrorCode::SyncPairingInvalid);
-    assert_eq!(pair(Ok(Scan::NoCamera)).unwrap_err().code, ErrorCode::CameraUnavailable);
-    let asking = {
-        let core = core.clone();
-        tauri::async_runtime::spawn(
-            async move { sync::pair(&core, Ok(Scan::Code(Zeroizing::new(offer))), Zeroizing::new(PASSWORD.into()), "Phone".into()).await },
-        )
-    };
-    // The desktop's user sees the request with the code the phone shows, and allows it.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let request = loop {
-        let request = desktop.dispatch(json!({ "command": "app_state" })).unwrap()["sync"]["space"]["lan"]["request"].clone();
-        if !request.is_null() {
-            break request;
-        }
-        assert!(std::time::Instant::now() < deadline, "the hub never saw the request");
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    };
-    let joining = phone.dispatch(json!({ "command": "app_state" })).unwrap()["sync"]["joining"].clone();
-    assert_eq!(joining["code"], request["code"]);
-    assert_eq!(joining["hub_name"], "Desktop");
-    assert_eq!(request["name"], "Phone");
-    desktop.dispatch(json!({ "command": "sync_lan_answer", "approve": true })).unwrap();
-    assert!(tauri::async_runtime::block_on(asking).unwrap().unwrap());
-    let state = phone.dispatch(json!({ "command": "app_state" })).unwrap();
-    assert_eq!(state["phase"], "unlocked");
-    assert_eq!(state["sync"]["space"]["lan"], json!({ "role": "client", "hub_name": "Desktop" }));
-    // This build has no camera, and its command says so.
-    let texts = json!({ "prompt": "Point the camera at the pairing code", "cancel": "Cancel", "password": PASSWORD, "deviceName": "Phone" });
-    assert_eq!(phone.invoke("sync_scan_pair", texts).unwrap_err(), json!({ "code": "camera_unavailable" }));
 }

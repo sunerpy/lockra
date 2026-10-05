@@ -1,7 +1,7 @@
 // New storage settings for the space: another access key, password or address. The space must be
 // at the new place already; the secret is typed in again (the core never sends it back).
 import {
-  type StorageView,
+  type SyncSpaceView,
   errorText,
   storageComplete,
   storageConfig,
@@ -12,11 +12,11 @@ import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
 import { Page } from "../components/Page";
 
-export function SyncStorage({ storage }: { storage: StorageView }) {
+export function SyncStorage({ space }: { space: SyncSpaceView }) {
   const t = useT();
   const nav = useNav();
   const { backend } = useBackend();
-  const [form, setForm] = useState(() => storageFormFrom(storage));
+  const [form, setForm] = useState(() => storageFormFrom(space.storage));
   const [password, setPassword] = useState("");
   const submit = useSubmit();
   const ready = storageComplete(form) && password !== "";

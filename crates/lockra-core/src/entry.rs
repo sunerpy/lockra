@@ -605,7 +605,7 @@ mod tests {
         };
         let sync_key = lockra_sync::SyncKey::generate().unwrap();
         let keys = lockra_sync::SpaceKeys::generate(sync_key.space_id()).unwrap();
-        data.local_mut().sync = Some(SyncLocal::new(Some(storage), &keys, &sync_key, "Laptop".into(), b"keyring"));
+        data.local_mut().sync = Some(SyncLocal::new(storage, &keys, &sync_key, "Laptop".into(), b"keyring"));
         let whole = VaultData::open(&data.to_bytes()).unwrap();
         assert!(whole.sync().is_some());
         // Kept by an earlier build, its space without this device's keyring: the vault opens, its

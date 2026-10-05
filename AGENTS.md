@@ -8,8 +8,7 @@ How to work in this repository, for coding agents and people alike.
   encrypted container), `lockra-transfer` (Google, Microsoft, otpauth lists, QR codes),
   `lockra-core` (the platform-free application core: commands in, state and notices out, ports for
   everything native), `lockra-bridge` (the IPC contract), `lockra-sync` (the end-to-end encrypted
-  sync: keyring, device snapshots, merge; no I/O), `lockra-remote` (its S3 and WebDAV storage) and
-  `lockra-lan` (the LAN sync: the hub's folder, its server and its clients over Noise).
+  sync: keyring, device snapshots, merge; no I/O) and `lockra-remote` (its S3 and WebDAV storage).
 - `apps/desktop` — the React app (`src/`) and the Tauri 2 shell (`src-tauri/`, crate
   `lockra-desktop`).
 - `apps/mobile` — the Android app (released from 0.7.0): the React phone app (`src/`) and its Tauri 2
@@ -52,8 +51,8 @@ make help                        # everything else
   fixtures: `UPDATE_IPC_FIXTURES=1 cargo test -p lockra-bridge --test contract`. They are compared
   byte for byte, so formatters must not touch them (`.oxfmtignore`).
 - **No path and no secret to the webview**: files are opened in Rust after a native dialog or a
-  drop (on the phone, the photo picker or the camera); only `entry_reveal`, `export_page`, `sync_create` (the new sync key), `sync_invite`
-  and `sync_lan_offer` (a pairing offer) answer with secret material (docs/security.md). A new command needs its zod schema, its fixture
+  drop (on the phone, the photo picker or the camera); only `entry_reveal`, `export_page`, `sync_create` (the new sync key) and `sync_invite`
+  answer with secret material (docs/security.md). A new command needs its zod schema, its fixture
   and its i18n strings.
 - **Commands are `async`** in the shell; Argon2 and file I/O go through `spawn_blocking` in the core.
 - **Copy** lives in `packages/shared/src/i18n/zh-CN.ts` (the keys) and `en.ts` (same shape, tested).

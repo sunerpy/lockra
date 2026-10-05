@@ -1,5 +1,5 @@
 import { MOCK_PASSWORD, MockBackend } from "@lockra/shared/mock";
-import { act, screen, within } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../test/render";
 
 function noVault() {
@@ -31,40 +31,6 @@ describe("Welcome", () => {
       device_name: "Linux 电脑",
     });
     expect((await backend.getState()).sync.space?.devices[0]?.name).toBe("Linux 电脑");
-  });
-
-  it("pairs with a computer on the LAN, making the vault under a new password", async () => {
-    const backend = new MockBackend({
-      phase: "no_vault",
-      lan: true,
-      settings: { locale: "zh-cn" },
-    });
-    const { user } = renderApp({ backend });
-    await ready();
-    const join = within(screen.getByTestId("welcome-join"));
-    await user.click(join.getByTestId("welcome-join-open"));
-    await user.type(join.getByLabelText("邀请码"), "lockra-pair:1:abc");
-    // No other device's password to check: a new one, typed twice.
-    expect(join.queryByLabelText("同步空间的主密码")).not.toBeInTheDocument();
-    expect(
-      join.getByText("这台电脑上还没有保险库，配对后会用这个主密码创建一个。"),
-    ).toBeInTheDocument();
-    const submit = join.getByRole("button", { name: "加入" });
-    await user.type(join.getByLabelText("主密码"), "a new master password");
-    await user.type(join.getByLabelText("再输入一次"), "a new master passwor");
-    expect(join.getByText("两次输入的密码不一致")).toBeInTheDocument();
-    expect(submit).toBeDisabled();
-    await user.type(join.getByLabelText("再输入一次"), "d");
-    await user.click(submit);
-    expect(await join.findByTestId("sync-lan-joining-code")).toHaveTextContent("246 813");
-    act(() => backend.lanWelcome(true));
-    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
-    expect(backend.calls).toContainEqual({
-      command: "sync_lan_join",
-      text: "lockra-pair:1:abc",
-      password: "a new master password",
-      device_name: "Linux 电脑",
-    });
   });
 
   it("the join form closes again", async () => {

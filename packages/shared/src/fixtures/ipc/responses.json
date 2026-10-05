@@ -69,11 +69,6 @@
     "replaced": 1,
     "skipped": 2
   },
-  "lan_offer": {
-    "expires_at_ms": 1790000120000,
-    "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
-    "text": "lockra-pair:1:eyJodWJfaWQiOiIifQ"
-  },
   "revealed": {
     "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
     "secret": "JBSW Y3DP EHPK 3PXP",

@@ -31,7 +31,7 @@ use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
 use zeroize::Zeroizing;
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
-pub const COMMANDS: [&str; 12] = [
+pub const COMMANDS: [&str; 11] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -41,7 +41,6 @@ pub const COMMANDS: [&str; 12] = [
     "restore_pick",
     "export_otpauth_file",
     "sync_scan_join",
-    "sync_scan_pair",
     "sync_key_save",
     "update_open_release",
 ];
@@ -54,8 +53,7 @@ pub struct ShellOptions {
     pub clipboard: Option<Arc<dyn Clipboard>>,
     /// The check before the remembered key unlocks (default: the fingerprint, src/biometrics.rs).
     pub biometrics: Option<Arc<dyn Biometrics>>,
-    /// The sync storage and the LAN (default: lockra-remote over HTTPS and lockra-lan's client,
-    /// src/sync.rs).
+    /// The sync storage (default: lockra-remote over HTTPS, src/sync.rs).
     pub sync: Option<Arc<dyn SyncTransport>>,
     /// The update check (default: the release manifest on GitHub, src/updater.rs).
     pub updater: Option<Arc<dyn Updater>>,
@@ -210,25 +208,6 @@ async fn sync_scan_join<R: Runtime>(
     sync::join(&core, scan, password, device_name, space_password).await
 }
 
-/// Pair with a computer's LAN hub from the pairing code it shows, read with the camera; `false`
-/// when left without one. The code goes from the camera to the core, not through the webview; the
-/// call ends once the hub's user answered (meanwhile the state shows the code to compare).
-/// `password` and `device_name` as for `sync_lan_join`; `prompt` and `cancel` as for `import_scan`.
-#[tauri::command]
-async fn sync_scan_pair<R: Runtime>(
-    app: AppHandle<R>,
-    core: State<'_, Core>,
-    prompt: String,
-    cancel: String,
-    password: Zeroizing<String>,
-    device_name: String,
-) -> Result<bool, CoreError> {
-    let camera = scanner::Scanner::new(app);
-    let texts = scanner::ScanTexts { prompt, cancel };
-    let scan = tauri::async_runtime::spawn_blocking(move || camera.scan(&texts)).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
-    sync::pair(&core, scan, password, device_name).await
-}
-
 /// Open the page of the release a check found (else the newest release's) in the phone's browser;
 /// `None` once it opened, else the page's address, for the webview to show (no browser opened it).
 /// The address is the shell's: the webview names none.
@@ -285,7 +264,6 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             restore_pick,
             export_otpauth_file,
             sync_scan_join,
-            sync_scan_pair,
             sync_key_save,
             update_open_release
         ])
@@ -304,7 +282,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let biometrics: Arc<dyn Biometrics> = options.biometrics.clone().unwrap_or_else(|| Arc::new(fingerprint));
             let config =
                 CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
-            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::PhoneSync));
+            let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::HttpSync));
             let updater: Arc<dyn Updater> =
                 options.updater.clone().unwrap_or_else(|| Arc::new(updater::PhoneUpdater::new(&app.package_info().version.to_string())));
             let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics };

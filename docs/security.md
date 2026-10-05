@@ -259,25 +259,6 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   key. A run that started under the old settings writes nothing more there once they changed,
   except a write already on its way, which may still land at the old place: the space at the new
   place stays whole, and what lands at the old place is ciphertext like everything it held.
-- **Sync over the local network** (crates/lockra-lan; not yet offered by the apps). A hub serves
-  its copy of the space to the devices paired with it, on loopback, private and link-local
-  addresses only, and drops everything else. Each paired device has a 32-byte key of its own with
-  the hub; a connection is a Noise NNpsk0 handshake under it, after a cleartext preamble whose
-  hint, new with every nonce, lets the hub pick the key without the wire naming the device. A
-  device lists and reads the space's devices directory and writes its own object only, under one
-  tag the hub binds to it; the snapshots inside are sealed under the space's keys as on any
-  storage. A pairing offer is a secret for two minutes and one handshake, and joining also needs
-  the user at the hub to compare a six-digit code drawn from the handshake and say yes: an
-  attacker in the middle with the offer would see a different code. This is a second way into a
-  space beside "any device's master password and the sync key": the user at the unlocked hub,
-  having seen the offer, lets a device in, and the welcome gives it the space's keys (and the
-  storage's credentials) inside the encrypted channel; no other device's master password is asked.
-  The device's own keyring is still sealed under its own master password. The offer is shown only
-  after the master password or the biometric check that unlocks the vault, and is one of the
-  answers that carry a secret (`sync_lan_offer`). Removing a device revokes its
-  key with the hub (it is kept only to answer `removed`); as on any storage, the space's keys the
-  device already holds are not taken back. Limits: eight connections, five seconds per handshake,
-  thirty without a request, 17 MiB per message.
 
 ## Residual risks
 
