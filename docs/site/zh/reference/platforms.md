@@ -27,7 +27,7 @@ Mac 版改为使用 Lockra 固定的签名证书，应用内更新在安装新�
 
 ### 新版本无法接管密钥时
 
-<StatusTag status="building" />
+<StatusTag status="available" /> 自 0.7.5 版起提供。
 
 如果新版本无法接管本机记住的密钥，更新不会安装。Lockra 继续运行当前版本，提示「新版本无法接管钥匙串中的设备密钥，未安装更新」，并把原因写入 `~/Library/Logs/dev.lockra.desktop/lockra.log`。0.7.4 及更早的版本遇到这种情况仍会安装更新，重新打开后 macOS 会询问一次。
 
