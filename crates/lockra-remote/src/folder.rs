@@ -22,10 +22,13 @@ use sha2::{Digest as _, Sha256};
 const EXTENSION: &str = ".lks";
 
 /// A sync space's storage in a folder. Paths are those of a space (lowercase letters, digits and
-/// dashes, an object's name ending in `.lks`); anything else is refused, `..` included. A write
-/// replaces its file atomically and keeps no copy beside it (the drive would carry that too). The
-/// folder itself is never made: while it is missing (moved, deleted, a drive not connected) every
-/// call is [`SyncError::FolderMissing`]. An object's etag is the SHA-256 of its bytes.
+/// dashes, an object's name ending in `.lks`); anything else is refused, `..` included. A link
+/// below the folder (a drive or a sync peer may bring one) is never followed: a linked directory
+/// of the space is refused, a linked object is no object, so nothing outside the folder is read or
+/// written. A write replaces its file atomically and keeps no copy beside it (the drive would carry
+/// that too). The folder itself is never made: while it is missing (moved, deleted, a drive not
+/// connected) every call is [`SyncError::FolderMissing`]. An object's etag is the SHA-256 of its
+/// bytes.
 #[derive(Debug, Clone)]
 pub struct FolderStore {
     root: PathBuf,
@@ -53,10 +56,6 @@ impl FolderStore {
         Ok(segments)
     }
 
-    fn place(&self, path: &str) -> Result<PathBuf, SyncError> {
-        Ok(Self::segments(path)?.iter().fold(self.root.clone(), |place, segment| place.join(segment)))
-    }
-
     /// Run `work` off the async runtime, the folder checked first: file I/O blocks.
     async fn blocking<T: Send + 'static>(&self, work: impl FnOnce(&Path, &RwLock<()>) -> Result<T, SyncError> + Send + 'static) -> Result<T, SyncError> {
         let (root, lock) = (self.root.clone(), Arc::clone(&self.lock));
@@ -82,6 +81,38 @@ pub(crate) fn object_name(name: &str) -> bool {
 
 fn etag(bytes: &[u8]) -> String {
     HEXLOWER.encode(&Sha256::digest(bytes))
+}
+
+/// The space's directories `dirs` below `root`, each one there as a directory of its own, not a
+/// link. `make` makes the missing ones (a write); otherwise a missing one answers `false`.
+fn walk(root: &Path, dirs: &[String], make: bool) -> Result<bool, SyncError> {
+    let mut place = root.to_path_buf();
+    for dir in dirs {
+        place.push(dir);
+        match fs::symlink_metadata(&place) {
+            Ok(meta) if meta.file_type().is_dir() => {}
+            Ok(_) => return Err(SyncError::Storage(format!("not a folder of the space (a link?): {}", place.display()))),
+            Err(error) if error.kind() == io::ErrorKind::NotFound && make => match fs::create_dir(&place) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists && fs::symlink_metadata(&place).is_ok_and(|m| m.file_type().is_dir()) => {}
+                Err(error) => return Err(failed(&error)),
+            },
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(failed(&error)),
+        }
+    }
+    Ok(true)
+}
+
+/// `path`'s directories and, for an object, its name.
+fn split(path: &str) -> Result<(Vec<String>, Option<String>), SyncError> {
+    let mut segments: Vec<String> = FolderStore::segments(path)?.into_iter().map(str::to_owned).collect();
+    let name = if path.ends_with('/') { None } else { segments.pop() };
+    Ok((segments, name))
+}
+
+fn under(root: &Path, dirs: &[String]) -> PathBuf {
+    dirs.iter().fold(root.to_path_buf(), |place, dir| place.join(dir))
 }
 
 /// The folder is there, and is one.
@@ -123,8 +154,15 @@ fn patiently<T>(mut work: impl FnMut() -> io::Result<T>) -> io::Result<T> {
 }
 
 /// The object at `place` and its etag when there is one; one larger than an object may be is not
-/// read, even when it grows while being read.
+/// read, even when it grows while being read, and a link or a directory where it goes is no
+/// object (reported as a damaged one, which the next write replaces).
 fn read(place: &Path) -> Result<Option<(Vec<u8>, String)>, SyncError> {
+    match fs::symlink_metadata(place) {
+        Ok(meta) if !meta.file_type().is_file() => return Err(SyncError::Corrupted),
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(failed(&error)),
+    }
     let file = match patiently(|| File::open(place)) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -152,10 +190,14 @@ impl RemoteStore for FolderStore {
             if !dir.ends_with('/') {
                 return Err(SyncError::Storage(format!("not a directory: {dir}")));
             }
-            let place = self.place(dir)?;
-            self.blocking(move |_, lock| {
+            let (dirs, _) = split(dir)?;
+            self.blocking(move |root, lock| {
                 let _reading = lock.read();
-                let entries = match fs::read_dir(&place) {
+                // No space here yet (the folder itself is there).
+                if !walk(root, &dirs, false)? {
+                    return Ok(Vec::new());
+                }
+                let entries = match fs::read_dir(under(root, &dirs)) {
                     Ok(entries) => entries,
                     // No space here yet (the folder itself is there).
                     Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -191,13 +233,15 @@ impl RemoteStore for FolderStore {
 
     fn get<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, Option<(Vec<u8>, Option<String>)>> {
         Box::pin(async move {
-            if path.ends_with('/') {
+            let (dirs, Some(name)) = split(path)? else {
                 return Err(SyncError::Storage(format!("not an object: {path}")));
-            }
-            let place = self.place(path)?;
-            self.blocking(move |_, lock| {
+            };
+            self.blocking(move |root, lock| {
                 let _reading = lock.read();
-                Ok(read(&place)?.map(|(bytes, etag)| (bytes, Some(etag))))
+                if !walk(root, &dirs, false)? {
+                    return Ok(None);
+                }
+                Ok(read(&under(root, &dirs).join(name))?.map(|(bytes, etag)| (bytes, Some(etag))))
             })
             .await
         })
@@ -205,25 +249,20 @@ impl RemoteStore for FolderStore {
 
     fn put<'a>(&'a self, path: &'a str, bytes: Vec<u8>, _condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
         Box::pin(async move {
-            if path.ends_with('/') || bytes.len() as u64 > MAX_OBJECT_BYTES {
+            let (dirs, Some(name)) = split(path)? else {
+                return Err(SyncError::Storage(format!("not an object a space keeps: {path}")));
+            };
+            if bytes.len() as u64 > MAX_OBJECT_BYTES {
                 return Err(SyncError::Storage(format!("not an object a space keeps: {path}")));
             }
-            let segments: Vec<String> = Self::segments(path)?.into_iter().map(str::to_owned).collect();
             self.blocking(move |root, lock| {
                 let _writing = lock.write();
                 // The space's folders, one by one under the folder (which is never made here: a
-                // drive that went away would otherwise get a new, empty copy of it).
-                let mut place = root.to_path_buf();
-                let (name, dirs) = segments.split_last().ok_or_else(|| SyncError::Storage("an empty path".into()))?;
-                for dir in dirs {
-                    place.push(dir);
-                    match fs::create_dir(&place) {
-                        Ok(()) => {}
-                        Err(error) if error.kind() == io::ErrorKind::AlreadyExists && place.is_dir() => {}
-                        Err(error) => return Err(failed(&error)),
-                    }
-                }
-                place.push(name);
+                // drive that went away would otherwise get a new, empty copy of it), none a link.
+                walk(root, &dirs, true)?;
+                let place = under(root, &dirs).join(name);
+                // The temporary file is made anew and renamed over the object: a link at either
+                // name is replaced, never written through.
                 patiently(|| lockra_vault::replace_atomic(&place, &bytes)).map_err(|e| failed(&e))?;
                 Ok(Some(etag(&bytes)))
             })
@@ -233,12 +272,16 @@ impl RemoteStore for FolderStore {
 
     fn delete<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, ()> {
         Box::pin(async move {
-            if path.ends_with('/') {
+            let (dirs, Some(name)) = split(path)? else {
                 return Err(SyncError::Storage(format!("not an object: {path}")));
-            }
-            let place = self.place(path)?;
-            self.blocking(move |_, lock| {
+            };
+            self.blocking(move |root, lock| {
                 let _writing = lock.write();
+                if !walk(root, &dirs, false)? {
+                    return Ok(());
+                }
+                // A link where the object goes is removed itself, not what it points to.
+                let place = under(root, &dirs).join(name);
                 match patiently(|| fs::remove_file(&place)) {
                     Ok(()) => Ok(()),
                     Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -309,6 +352,42 @@ mod tests {
         assert!(matches!(store.list("lockra-sync-v1/x/devices").await, Err(SyncError::Storage(_))), "a directory ends in /");
         assert!(matches!(store.put(DIR, b"x".to_vec(), PutCondition::Always).await, Err(SyncError::Storage(_))));
         assert_eq!(names(folder.path()), ["space"], "nothing written outside");
+    }
+
+    /// A link inside the folder (a drive or a sync peer such as Syncthing can bring one) is never
+    /// followed: no write lands outside the folder, and nothing outside is read.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn links_inside_the_folder_are_never_followed() {
+        use std::os::unix::fs::symlink;
+        let folder = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let store = FolderStore::new(folder.path());
+        // A folder of the space that is a link to another place.
+        symlink(elsewhere.path(), folder.path().join("lockra-sync-v1")).unwrap();
+        assert!(matches!(store.put(&object(), b"x".to_vec(), PutCondition::Always).await, Err(SyncError::Storage(_))));
+        assert!(matches!(store.list(DIR).await, Err(SyncError::Storage(_))));
+        assert!(matches!(store.get(&object()).await, Err(SyncError::Storage(_))));
+        assert!(matches!(store.delete(&object()).await, Err(SyncError::Storage(_))));
+        assert_eq!(names(elsewhere.path()), Vec::<String>::new(), "nothing written outside");
+        fs::remove_file(folder.path().join("lockra-sync-v1")).unwrap();
+        // The temporary file's name, a link to a file outside: replaced, never written through.
+        store.put(&object(), b"one".to_vec(), PutCondition::Always).await.unwrap();
+        let victim = elsewhere.path().join("victim");
+        fs::write(&victim, b"keep").unwrap();
+        let devices = folder.path().join(DIR.trim_end_matches('/'));
+        symlink(&victim, devices.join(format!("{TAG}{EXTENSION}.tmp"))).unwrap();
+        store.put(&object(), b"two".to_vec(), PutCondition::Always).await.unwrap();
+        assert_eq!(fs::read(&victim).unwrap(), b"keep");
+        assert_eq!(store.get(&object()).await.unwrap().unwrap().0, b"two");
+        // An object that is a link: not read (it does not open, as a damaged one), and the next
+        // write puts a file in its place.
+        fs::remove_file(devices.join(format!("{TAG}{EXTENSION}"))).unwrap();
+        symlink(&victim, devices.join(format!("{TAG}{EXTENSION}"))).unwrap();
+        assert_eq!(store.get(&object()).await, Err(SyncError::Corrupted));
+        store.put(&object(), b"three".to_vec(), PutCondition::Always).await.unwrap();
+        assert_eq!(fs::read(&victim).unwrap(), b"keep");
+        assert!(!fs::symlink_metadata(devices.join(format!("{TAG}{EXTENSION}"))).unwrap().file_type().is_symlink());
     }
 
     #[tokio::test]

@@ -2036,8 +2036,9 @@ impl Core {
         }
     }
 
-    /// The drive brought a change into the space's folder: a run once it settled, or right after
-    /// the run in progress (which may have looked before it came).
+    /// The drive brought a change into the space's folder: a run a moment after the first change
+    /// (the next ones within that moment join it), or right after the run in progress (which may
+    /// have looked before it came).
     fn on_folder_changed(&self) {
         let mut st = self.lock();
         if !matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some_and(|s| s.storage.is_folder())) {

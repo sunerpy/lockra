@@ -224,7 +224,8 @@ The same space can be reached both ways: a computer through its cloud drive's fo
 through the same drive's WebDAV, its prefix the folder's path in the drive. In a folder, a write
 replaces the file atomically (a temporary `<name>.tmp` renamed over it) and keeps no copy beside
 it; files of the drive's own (conflicted copies, downloads in progress) are no object of the space
-and are not read. The etag of a file is the SHA-256 of its bytes. While the folder itself is
+and are not read. A link below the folder is never followed: a linked directory of the space is
+refused, a linked object is no object, and a link at the temporary name is replaced. The etag of a file is the SHA-256 of its bytes. While the folder itself is
 missing (moved, deleted, its drive not connected) a run neither reads nor writes, and the folder is
 not made again.
 

@@ -90,7 +90,9 @@ To check on real devices:
 
 Automated:
 
-- `crates/lockra-remote/src/folder.rs`: only a space's paths are reached; the drive's own files
+- `crates/lockra-remote/src/folder.rs`: only a space's paths are reached, and a link inside the
+  folder is never followed (a linked directory refused, a linked object no object, a link at the
+  temporary name replaced, nothing outside read or written); the drive's own files
   (conflicted copies, downloads in progress, `.tmp`) are no objects; an object over 16 MiB is
   listed and never read; a write leaves neither `.prev` nor `.tmp`; a missing folder is reported
   and never made again, and works again once back; a folder this user may not write is refused;
@@ -109,7 +111,8 @@ Automated:
   storage before any password and joins over the same drive's WebDAV, another computer chooses
   its own copy of the folder; a folder is looked at every 15 s in front and every minute behind
   and after a failure, a missing one told as such; a space moves into the drive's folder that
-  holds it; a change the drive brings runs a sync a second after it settled (a burst, one run),
+  holds it; a change the drive brings runs a sync a second later (the changes within that second,
+  one run),
   and the folder is watched only while its space is open here (not while locked, not after the
   space moved or sync was turned off). `entry.rs`: a storage of a kind this version does not know (as 0.7.3 sees a folder)
   leaves sync off and the vault whole.

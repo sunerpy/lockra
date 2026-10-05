@@ -1027,12 +1027,12 @@ async fn a_change_the_drive_brings_into_the_folder_runs_a_sync_within_a_second()
     advance(SYNC_INTERVAL_FOLDER_FOREGROUND).await;
     let store = transport.store(&folder);
     let quiet = runs_of(&store);
-    // The drive writes a few files in a row: one run follows, a moment after the last.
+    // The drive writes a few files within a second: one run follows, a second after the first.
     for _ in 0..3 {
         transport.touch(&folder);
         advance(SYNC_FOLDER_SETTLE / 4).await;
     }
-    assert_eq!(runs_of(&store), quiet, "not before the change settled");
+    assert_eq!(runs_of(&store), quiet, "not at once");
     advance(SYNC_FOLDER_SETTLE).await;
     assert_eq!(runs_of(&store), quiet + 1, "one run for the burst");
     // Nothing more until the next look, a minute on.
