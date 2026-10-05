@@ -201,7 +201,13 @@ mod tests {
         assert!(sync.open(&dav("http://192.168.1.2/dav/")).is_err());
         // The hub's copy is a folder store; a client's key must be one a hub gives.
         assert!(sync.open_hub_store(Uuid::nil()).unwrap().conditional_puts());
-        let client = |psk: Vec<u8>| LanClientConfig { hub_id: Uuid::nil(), peer_id: Uuid::nil(), psk: Zeroizing::new(psk), port: 47_100, addrs: vec!["192.168.1.20".into(), "not an address".into()] };
+        let client = |psk: Vec<u8>| LanClientConfig {
+            hub_id: Uuid::nil(),
+            peer_id: Uuid::nil(),
+            psk: Zeroizing::new(psk),
+            port: 47_100,
+            addrs: vec!["192.168.1.20".into(), "not an address".into()],
+        };
         assert!(sync.open_lan_client(&client(vec![7; 32])).is_ok());
         assert!(matches!(sync.open_lan_client(&client(vec![7; 16])), Err(SyncError::WrongCredentials)));
         assert!(sync.addresses().iter().all(|ip| lockra_lan::local_address(*ip)));
