@@ -27,6 +27,8 @@ lockra-bridge.workspace = true
 lockra-core.workspace = true
 # The sync storage, opened only for a space the user set up (src/sync.rs, docs/security.md).
 lockra-remote.workspace = true
+# The LAN sync: the hub's copy, its server and pairing, only for a space the user set up.
+lockra-lan.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
 serde_json.workspace = true

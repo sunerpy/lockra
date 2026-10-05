@@ -2781,6 +2781,7 @@ dependencies = [
  "keyring",
  "lockra-bridge",
  "lockra-core",
+ "lockra-lan",
  "lockra-remote",
  "lockra-vault",
  "parking_lot",

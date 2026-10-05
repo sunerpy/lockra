@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use zeroize::Zeroizing;
 
-pub use addr::local_address;
+pub use addr::{local_address, local_addresses};
 pub use client::{ClientConfig, HubClient, Joined, Joining, join};
 pub use discover::DISCOVERY_WAIT;
 pub use folder::FolderStore;
