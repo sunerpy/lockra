@@ -7,11 +7,33 @@ import {
   mockSyncSpace,
   sampleEntries,
 } from "@lockra/shared/mock";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import type { ScanPair, ScanTexts } from "@lockra/shared";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { depthOf } from "./app/nav";
 import { ready, renderApp } from "./test/render";
 
+/** A camera that reads the pairing code when the test says. */
+class SlowPairCamera extends MockBackend {
+  read: (() => void) | undefined;
+  override async scanPair(texts: ScanTexts, pair: ScanPair): Promise<boolean> {
+    await new Promise<void>((resolve) => {
+      this.read = resolve;
+    });
+    return super.scanPair(texts, pair);
+  }
+}
+
+/** The page shown or hidden, once the effects that listen for it have run. */
+async function setVisibility(state: "visible" | "hidden") {
+  await act(async () => {});
+  Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+  act(() => {
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+}
+
 afterEach(async () => {
+  Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
   cleanup();
   await waitFor(() => {
     if (depthOf(history.state) !== 0) throw new Error("the history still holds pages");
@@ -310,5 +332,142 @@ describe("sync on the phone", () => {
     expect(backend.calls.filter((c) => c.command === "sync_join").at(-1)).toMatchObject({
       source: { type: "invite", text: "lockra-invite:2:TEtTSU5WVDI", code: MOCK_INVITE_CODE },
     });
+  });
+
+  it("pairs a new phone with a computer on the welcome screen, under a new master password", async () => {
+    const backend = new MockBackend({
+      phase: "no_vault",
+      lan: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const welcome = within(screen.getByTestId("welcome-pair"));
+    await user.click(welcome.getByTestId("welcome-pair-open"));
+    const form = within(await screen.findByTestId("sync-pair"));
+    expect(form.getByText(/这部手机上还没有保险库，配对后/)).toBeInTheDocument();
+    const scan = form.getByRole("button", { name: "扫码配对" });
+    await user.type(form.getByLabelText("主密码"), "a new master password");
+    await user.type(form.getByLabelText("再输入一次"), "a new master passwor");
+    expect(form.getByText("两次输入的密码不一致")).toBeInTheDocument();
+    expect(scan).toBeDisabled();
+    await user.type(form.getByLabelText("再输入一次"), "d");
+    backend.setScan("lockra-pair:1:bW9jaw");
+    await user.click(scan);
+    // The code to compare on the computer, while its user decides.
+    expect(await form.findByTestId("sync-lan-joining")).toHaveTextContent("等待「Desktop」确认");
+    expect(form.getByTestId("sync-lan-joining-code")).toHaveTextContent("246 813");
+    act(() => backend.lanWelcome(true));
+    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+    // The pairing code went from the camera to the core, not through the page.
+    expect(backend.calls.some((c) => c.command === "sync_lan_join")).toBe(false);
+    expect((await backend.getState()).sync.space?.lan).toEqual({
+      role: "client",
+      hub_name: "Desktop",
+    });
+  });
+
+  it("pairs a phone's vault with a computer from a pasted code, shows the computer, stops", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      lan: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-pair-open"));
+    const form = within(await screen.findByTestId("sync-pair"));
+    await user.click(form.getByRole("radio", { name: "粘贴配对码" }));
+    const pair = form.getByRole("button", { name: "配对" });
+    await user.type(form.getByLabelText("配对码"), "lockra-invite:1:bW9jaw");
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    // Not a pairing code: nothing to send.
+    expect(pair).toBeDisabled();
+    await user.clear(form.getByLabelText("配对码"));
+    await user.type(form.getByLabelText("配对码"), "lockra-pair:1:bW9jaw");
+    await user.click(pair);
+    await form.findByTestId("sync-lan-joining");
+    act(() => backend.lanWelcome(false));
+    expect(await form.findByRole("alert")).toHaveTextContent("电脑上的用户拒绝了配对");
+    expect(form.queryByTestId("sync-lan-joining")).not.toBeInTheDocument();
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(pair);
+    await form.findByTestId("sync-lan-joining");
+    act(() => backend.lanWelcome(true));
+    // Back on the sync page: the computer it syncs through, and no invitation (no storage).
+    expect(await screen.findByTestId("sync-lan-client")).toHaveTextContent(
+      "在同一网络里时经「Desktop」同步。",
+    );
+    expect(screen.queryByTestId("sync-invite-open")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sync-pair-open")).not.toBeInTheDocument();
+    expect(backend.calls).toContainEqual({
+      command: "sync_lan_join",
+      text: "lockra-pair:1:bW9jaw",
+      password: MOCK_PASSWORD,
+      device_name: "Android 手机",
+    });
+    await user.click(screen.getByTestId("sync-lan-disable"));
+    const stop = within(await screen.findByRole("dialog", { name: "停止局域网同步？" }));
+    expect(
+      stop.getByText("这台设备不再同步，账号保留在本机。之后可以重新配对。"),
+    ).toBeInTheDocument();
+    await user.click(stop.getByRole("button", { name: "停止局域网同步" }));
+    expect(await screen.findByTestId("sync-setup-open")).toBeInTheDocument();
+  });
+
+  it("a space on storage connects to a computer, each storage then saying how it is doing", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace(),
+      lan: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    expect(screen.queryAllByTestId("sync-transport")).toHaveLength(0);
+    await user.click(screen.getByTestId("sync-pair-open"));
+    const form = within(await screen.findByTestId("sync-pair"));
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    backend.setScan("lockra-pair:1:bW9jaw");
+    await user.click(form.getByRole("button", { name: "扫码配对" }));
+    await form.findByTestId("sync-lan-joining");
+    act(() => backend.lanWelcome(true));
+    expect(await screen.findByTestId("sync-lan-client")).toBeInTheDocument();
+    expect(screen.getAllByTestId("sync-transport").map((row) => row.textContent)).toEqual([
+      expect.stringMatching(/^局域网已同步/),
+      expect.stringMatching(/^存储已同步/),
+    ]);
+    await user.click(screen.getByTestId("sync-lan-disable"));
+    const stop = within(await screen.findByRole("dialog", { name: "停止局域网同步？" }));
+    expect(
+      stop.getByText("这台设备不再经「Desktop」同步。经存储的同步不受影响。"),
+    ).toBeInTheDocument();
+  });
+
+  it("leaving while the camera reads keeps the vault open, and locks it once the computer is asked", async () => {
+    const backend = new SlowPairCamera({
+      entries: sampleEntries(),
+      lan: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-pair-open"));
+    const form = within(await screen.findByTestId("sync-pair"));
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    backend.setScan("lockra-pair:1:bW9jaw");
+    await user.click(form.getByRole("button", { name: "扫码配对" }));
+    // The camera is the phone's own screen over the app: not leaving.
+    await setVisibility("hidden");
+    await setVisibility("visible");
+    expect(backend.calls.some((c) => c.command === "vault_lock")).toBe(false);
+    act(() => backend.read?.());
+    await form.findByTestId("sync-lan-joining");
+    await setVisibility("hidden");
+    expect(backend.calls.some((c) => c.command === "vault_lock")).toBe(true);
+    act(() => backend.lanWelcome(false));
   });
 });

@@ -13,14 +13,22 @@ export function phoneScreenOpen(): boolean {
   return open > 0 || returning;
 }
 
-/** Run `work`, which opens such a screen. */
-export async function overPhoneScreen<T>(work: () => Promise<T>): Promise<T> {
+/** Run `work`, which opens such a screen. A work that goes on once the screen closed (a pairing
+ *  waits for the computer's answer after the scan) calls `closed` then: leaving the app locks the
+ *  vault again from that moment. */
+export async function overPhoneScreen<T>(work: (closed: () => void) => Promise<T>): Promise<T> {
   open += 1;
-  try {
-    return await work();
-  } finally {
+  let over = true;
+  const closed = () => {
+    if (!over) return;
+    over = false;
     open -= 1;
     if (open === 0 && document.visibilityState === "hidden") returning = true;
+  };
+  try {
+    return await work(closed);
+  } finally {
+    closed();
   }
 }
 

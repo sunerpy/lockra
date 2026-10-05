@@ -118,7 +118,9 @@ The first time, Windows asks whether Lockra may use the network: allow private n
 ### Pairing a device
 
 1. On the hub, choose **Pair a device…** and verify or enter the master password. Lockra shows a QR code and a pairing code, which work once and for 2 minutes.
-2. On the other computer, open **Settings › Sync**. Not syncing yet, paste the pairing code under **Join an existing sync**; already syncing, choose **Connect to another computer…** under **Local network** and paste it there. Then enter this device's master password; on a computer with no vault yet, choose a new master password.
+2. On the device to pair:
+   - **A phone**: on a new install, choose **Sync from a computer** on the welcome screen; with a vault, open **Settings › Sync** and choose **Sync from a computer** or **Connect to a computer**. Enter this phone's master password (on a new install, choose a new one and type it twice), then scan the QR code on the computer. The camera hands the pairing code to Lockra without showing it on the phone; **Paste the code** works too.
+   - **Another computer**: open **Settings › Sync**. Not syncing yet, paste the pairing code under **Join an existing sync**; already syncing, choose **Connect to another computer…** under **Local network** and paste it there. Then enter this device's master password; on a computer with no vault yet, choose a new master password.
 3. Both screens show the same 6-digit code. Once it matches on the hub, choose **Allow**; if the codes differ, choose **Refuse**.
 
 Until you allow it, the device gets nothing of the sync space. A paired device does not need the hub's master password: it keeps the sync space's key encrypted under its own.

@@ -11,6 +11,7 @@ import {
   LockraError,
   type SaveSyncKey,
   type ScanJoin,
+  type ScanPair,
   type ScanTexts,
   type Unsubscribe,
 } from "./backend";
@@ -521,6 +522,13 @@ export class MockBackend implements Backend {
       join.deviceName,
       join.spacePassword,
     );
+    return true;
+  }
+
+  async scanPair(_texts: ScanTexts, pair: ScanPair): Promise<boolean> {
+    if (this.scan === null) return false;
+    if (typeof this.scan !== "string") throw new LockraError(this.scan.error);
+    await this.lanJoin(this.scan, pair.password, pair.deviceName);
     return true;
   }
 

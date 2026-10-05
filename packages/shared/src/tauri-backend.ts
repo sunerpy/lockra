@@ -13,6 +13,7 @@ import {
   LockraError,
   type SaveSyncKey,
   type ScanJoin,
+  type ScanPair,
   type ScanTexts,
   type Unsubscribe,
 } from "./backend";
@@ -134,6 +135,17 @@ export class TauriBackend implements Backend {
         password: join.password,
         deviceName: join.deviceName,
         spacePassword: join.spacePassword ?? null,
+      }),
+    );
+  }
+
+  async scanPair(texts: ScanTexts, pair: ScanPair): Promise<boolean> {
+    return z.boolean().parse(
+      await this.call("sync_scan_pair", {
+        prompt: texts.prompt,
+        cancel: texts.cancel,
+        password: pair.password,
+        deviceName: pair.deviceName,
       }),
     );
   }

@@ -776,6 +776,25 @@ describe("MockBackend", () => {
     expect(await errorCode(join(new MockBackend(), MOCK_PASSWORD))).toBe("sync_lan_unavailable");
   });
 
+  it("pairs with the hub whose pairing code the camera reads, or says why it could not", async () => {
+    const texts = { prompt: "Point at the code", cancel: "Cancel" };
+    const pair = { password: MOCK_PASSWORD, deviceName: "Phone" };
+    expect(await new MockBackend({ lan: true }).scanPair(texts, pair)).toBe(false);
+    const denied = new MockBackend({ lan: true, scan: { error: "camera_denied" } });
+    expect(await errorCode(denied.scanPair(texts, pair))).toBe("camera_denied");
+    const invite = new MockBackend({ lan: true, scan: "lockra-invite:1:abc" });
+    expect(await errorCode(invite.scanPair(texts, pair))).toBe("sync_pairing_invalid");
+    const fresh = new MockBackend({ lan: true, scan: "lockra-pair:1:abc" });
+    const paired = fresh.scanPair(texts, pair);
+    expect((await fresh.getState()).sync.joining?.code).toBe(MOCK_PAIR_CODE);
+    fresh.lanWelcome(true);
+    expect(await paired).toBe(true);
+    expect((await fresh.getState()).sync.space?.lan).toEqual({
+      role: "client",
+      hub_name: "Desktop",
+    });
+  });
+
   it("starts with a space when told to", async () => {
     const backend = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace() });
     expect((await backend.getState()).sync.space?.devices).toHaveLength(2);

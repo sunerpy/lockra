@@ -164,6 +164,18 @@ export const en: Messages = {
       welcomeBody:
         "Already syncing Lockra on other devices? Scan an invitation from one of them, and this phone gets the same accounts.",
       renameTitle: "Rename this device",
+      pairTitle: "Sync from a computer",
+      pairBody:
+        "On the computer, turn on local network sync under Settings › Sync and choose Pair a device…, then scan the QR code it shows with this phone. Both need to be on the same network.",
+      pairHint: "Sync straight through a computer on the same network, no storage needed",
+      connect: "Connect to a computer",
+      connectHint: "Sync through a computer on the same network; changes show within seconds",
+      fromPaste: "Paste the code",
+      pairScan: "Scan to pair",
+      pairSubmit: "Pair",
+      pairPrompt: "Point the camera at the pairing code on the computer",
+      pairNewVault:
+        "There is no vault on this phone yet: pairing creates one under this master password.",
     },
   },
   palette: {

@@ -24,6 +24,7 @@ tauri-codegen = "=2.6.3"
 data-encoding.workspace = true
 lockra-bridge.workspace = true
 lockra-core.workspace = true
+lockra-lan.workspace = true
 lockra-remote.workspace = true
 semver.workspace = true
 serde.workspace = true

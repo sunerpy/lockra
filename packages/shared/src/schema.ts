@@ -849,6 +849,7 @@ export const PHONE_COMMAND_NAMES = [
   "restore_pick",
   "export_otpauth_file",
   "sync_scan_join",
+  "sync_scan_pair",
   "sync_key_save",
   "update_open_release",
 ] as const;

@@ -36,6 +36,7 @@ import { Settings } from "./screens/Settings";
 import { Sync } from "./screens/Sync";
 import { SyncInvite } from "./screens/SyncInvite";
 import { SyncJoin } from "./screens/SyncJoin";
+import { SyncPair } from "./screens/SyncPair";
 import { SyncKey } from "./screens/SyncKey";
 import { SyncSetup } from "./screens/SyncSetup";
 import { SyncStorage } from "./screens/SyncStorage";
@@ -163,6 +164,8 @@ function Pages() {
       return <SyncKey syncKey={route.syncKey} password={route.password} />;
     case "syncJoin":
       return <SyncJoin />;
+    case "syncPair":
+      return <SyncPair />;
     case "syncInvite":
       return <SyncInvite />;
     case "syncStorage":

@@ -124,6 +124,7 @@ describe("TauriBackend", () => {
       restore_pick: false,
       export_otpauth_file: "x.txt",
       sync_scan_join: true,
+      sync_scan_pair: false,
       update_open_release: "https://github.com/sunerpy/lockra/releases/tag/v0.7.0",
     });
     const backend = new TauriBackend(f.transport);
@@ -137,6 +138,9 @@ describe("TauriBackend", () => {
     expect(await backend.exportOtpauthFile(["a"], "pw")).toBe("x.txt");
     const join = { password: "pw", deviceName: "Phone" };
     expect(await backend.scanJoin({ prompt: "Point at it", cancel: "Cancel" }, join)).toBe(true);
+    expect(await backend.scanPair({ prompt: "Point at the code", cancel: "Cancel" }, join)).toBe(
+      false,
+    );
     expect(await backend.openRelease()).toBe(
       "https://github.com/sunerpy/lockra/releases/tag/v0.7.0",
     );
@@ -158,6 +162,10 @@ describe("TauriBackend", () => {
           deviceName: "Phone",
           spacePassword: null,
         },
+      ],
+      [
+        "sync_scan_pair",
+        { prompt: "Point at the code", cancel: "Cancel", password: "pw", deviceName: "Phone" },
       ],
       ["update_open_release", undefined],
     ]);
