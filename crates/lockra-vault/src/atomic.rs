@@ -68,15 +68,20 @@ fn sibling(path: &Path, suffix: &str) -> PathBuf {
     path.with_file_name(name)
 }
 
-#[cfg(unix)]
+/// A temporary file made anew: whatever is at its name goes first (a link is removed, never
+/// followed: another program may share the folder, a cloud drive's peer among them), and the file
+/// is created exclusively, failing rather than opening anything that appears there meanwhile.
 fn create_private(path: &Path) -> io::Result<File> {
-    use std::os::unix::fs::OpenOptionsExt;
-    OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(path)
-}
-
-#[cfg(not(unix))]
-fn create_private(path: &Path) -> io::Result<File> {
-    OpenOptions::new().write(true).create(true).truncate(true).open(path)
+    match fs::remove_file(path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    options.open(path)
 }
 
 #[cfg(unix)]
@@ -164,6 +169,25 @@ mod tests {
         assert_eq!(fs::read(&path).unwrap(), b"old");
         assert!(!dir.path().join("snapshot.lks.tmp").exists());
         assert!(!dir.path().join("snapshot.lks.prev").exists());
+    }
+
+    /// A link where the temporary file goes (left there by whoever else writes the folder, a cloud
+    /// drive's peer) is replaced, never written through.
+    #[cfg(unix)]
+    #[test]
+    fn a_link_where_the_temporary_file_goes_is_not_written_through() {
+        let dir = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        let victim = elsewhere.path().join("victim");
+        fs::write(&victim, b"keep").unwrap();
+        let path = dir.path().join("snapshot.lks");
+        std::os::unix::fs::symlink(&victim, dir.path().join("snapshot.lks.tmp")).unwrap();
+        replace_atomic(&path, b"new").unwrap();
+        assert_eq!(fs::read(&victim).unwrap(), b"keep");
+        assert_eq!(fs::read(&path).unwrap(), b"new");
+        assert!(!fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
+        let names: Vec<_> = fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
+        assert_eq!(names, ["snapshot.lks"]);
     }
 
     #[test]
