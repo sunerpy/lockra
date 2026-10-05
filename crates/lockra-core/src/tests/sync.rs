@@ -6,7 +6,10 @@ use tokio::sync::Notify;
 use super::*;
 use crate::settings::Settings;
 use crate::ui::{JoinSource, StorageView, SyncStatus};
-use crate::{SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND, StorageConfig};
+use crate::{
+    SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_FOLDER_SETTLE, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND,
+    StorageConfig,
+};
 
 const STORAGE_SECRET: &str = FakeTransport::SECRET;
 
@@ -1006,4 +1009,65 @@ async fn a_space_moves_into_the_drives_folder_that_holds_it() {
     settle().await;
     assert_eq!(space(&desktop).storage, StorageView::Folder { path: folder.display().to_string() });
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
+}
+
+/// The `list` calls a storage has had: one per run.
+fn runs_of(store: &MemoryRemote) -> usize {
+    store.calls().iter().filter(|call| call.starts_with("list")).count()
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_change_the_drive_brings_into_the_folder_runs_a_sync_within_a_second() {
+    let transport = Arc::new(FakeTransport::default());
+    let parent = tempfile::tempdir().unwrap();
+    let folder = StorageConfig::Folder { path: parent.path().to_path_buf() };
+    let (windows, _) = folder_device(&transport, parent.path()).await;
+    windows.core.set_settings(Settings { auto_lock_minutes: 0, ..windows.core.state().settings }).unwrap();
+    windows.core.set_foreground(false);
+    advance(SYNC_INTERVAL_FOLDER_FOREGROUND).await;
+    let store = transport.store(&folder);
+    let quiet = runs_of(&store);
+    // The drive writes a few files in a row: one run follows, a moment after the last.
+    for _ in 0..3 {
+        transport.touch(&folder);
+        advance(SYNC_FOLDER_SETTLE / 4).await;
+    }
+    assert_eq!(runs_of(&store), quiet, "not before the change settled");
+    advance(SYNC_FOLDER_SETTLE).await;
+    assert_eq!(runs_of(&store), quiet + 1, "one run for the burst");
+    // Nothing more until the next look, a minute on.
+    advance(SYNC_INTERVAL_FOLDER - SYNC_FOLDER_SETTLE * 2).await;
+    assert_eq!(runs_of(&store), quiet + 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_folder_is_watched_only_while_its_space_is_open_here() {
+    let transport = Arc::new(FakeTransport::default());
+    let parent = tempfile::tempdir().unwrap();
+    let folder = StorageConfig::Folder { path: parent.path().to_path_buf() };
+    let (windows, _) = folder_device(&transport, parent.path()).await;
+    windows.core.set_settings(Settings { auto_lock_minutes: 0, ..windows.core.state().settings }).unwrap();
+    assert_eq!(transport.watching(&folder), 1, "watched once the space is set up");
+    windows.core.lock_vault();
+    assert_eq!(transport.watching(&folder), 0, "locked: not watched");
+    let store = transport.store(&folder);
+    let locked = runs_of(&store);
+    transport.touch(&folder);
+    advance(SYNC_FOLDER_SETTLE * 2).await;
+    assert_eq!(runs_of(&store), locked, "locked: nothing runs");
+    windows.core.unlock(pw(MASTER)).await.unwrap();
+    settle().await;
+    assert_eq!(transport.watching(&folder), 1, "watched again once unlocked");
+    // Moved to a storage of its own: that one tells nothing, the folder is no longer watched.
+    transport.share(&webdav(), &folder);
+    windows.core.sync_set_storage(webdav(), pw(MASTER)).await.unwrap();
+    settle().await;
+    assert_eq!(transport.watching(&folder), 0);
+    // Back into the folder, then sync turned off here.
+    windows.core.sync_choose_folder(parent.path()).unwrap();
+    windows.core.sync_set_storage(chosen_folder(), pw(MASTER)).await.unwrap();
+    settle().await;
+    assert_eq!(transport.watching(&folder), 1);
+    windows.core.sync_disable().unwrap();
+    assert_eq!(transport.watching(&folder), 0);
 }

@@ -95,6 +95,9 @@ Automated:
   listed and never read; a write leaves neither `.prev` nor `.tmp`; a missing folder is reported
   and never made again, and works again once back; a folder this user may not write is refused;
   on Windows, a file the drive holds for a moment is replaced once it lets go.
+  `crates/lockra-remote/src/watch.rs`: a snapshot written into the folder is heard through the
+  system's file events (native on Linux, Windows and macOS in CI), reads and the drive's own files
+  are not, and a missing folder is not watched.
 - `crates/lockra-remote/tests/folder.rs`: the sync step through real folders: two devices in one,
   a drive that carries files late, cut short and beside conflicted copies, an older snapshot put
   back (refused, then written again), a copied vault, a folder that went away.
@@ -106,18 +109,24 @@ Automated:
   storage before any password and joins over the same drive's WebDAV, another computer chooses
   its own copy of the folder; a folder is looked at every 15 s in front and every minute behind
   and after a failure, a missing one told as such; a space moves into the drive's folder that
-  holds it. `entry.rs`: a storage of a kind this version does not know (as 0.7.3 sees a folder)
+  holds it; a change the drive brings runs a sync a second after it settled (a burst, one run),
+  and the folder is watched only while its space is open here (not while locked, not after the
+  space moved or sync was turned off). `entry.rs`: a storage of a kind this version does not know (as 0.7.3 sees a folder)
   leaves sync off and the vault whole.
 - `crates/lockra-bridge/tests/contract.rs`: a folder from the webview has no path, and one with a
   path is refused through dispatch. Web: the folder kind on the desktop only, the dialog's folder
   shown, a key-only invitation asking for this device's storage (the desktop's folder, the phone's
   WebDAV), the invitation dialog saying it holds the key alone.
+- `apps/desktop/src-tauri/tests/ipc.rs`: two computers on the shell's own storage and one real
+  folder: the folder chosen as the dialog does, the key-only invitation, the account crossing both
+  ways, the way back by the watch alone (no **Sync now**), ciphertext only in the folder.
 
 To check on real devices:
 
 1. Windows with OneDrive, and a Mac with iCloud Drive, each with a space in the drive's folder:
-   a change on one shows on the other once the drive carried it; the folder holds one `.lks` file
-   per device under `lockra-sync-v1/`, and nothing else of Lockra's.
+   a change on one shows on the other about a second after the drive carried it, Lockra in front
+   or behind other windows; the folder holds one `.lks` file per device under `lockra-sync-v1/`,
+   and nothing else of Lockra's.
 2. Jianguoyun (or Nextcloud): the computer in the client's folder, the phone over WebDAV at the
    same folder, joined by scanning the key-only invitation; an account added on the phone reaches
    the computer.

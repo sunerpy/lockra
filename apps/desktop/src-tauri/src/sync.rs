@@ -1,11 +1,12 @@
 //! The sync storage: lockra-remote, over HTTPS (S3-compatible object storage or WebDAV, through
-//! OpenDAL) or in a folder of this computer that a cloud drive keeps in sync. The core opens it
-//! only for a space the user set up on storage of their own.
+//! OpenDAL) or in a folder of this computer that a cloud drive keeps in sync, watched for the
+//! files the drive brings. The core opens it only for a space the user set up on storage of their
+//! own.
 
 use std::sync::Arc;
 
 use lockra_core::StorageConfig;
-use lockra_core::ports::{RemoteStore, SyncError, SyncTransport};
+use lockra_core::ports::{RemoteStore, StorageChanged, StorageWatch, SyncError, SyncTransport};
 
 /// lockra-remote's storages.
 #[derive(Debug, Default, Clone, Copy)]
@@ -14,6 +15,16 @@ pub struct Storages;
 impl SyncTransport for Storages {
     fn open(&self, config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
         lockra_remote::open(config)
+    }
+
+    fn watch(&self, config: &StorageConfig, dir: &str, changed: StorageChanged) -> Option<StorageWatch> {
+        match lockra_remote::watch(config, dir, changed) {
+            Ok(watch) => watch.map(|watch| Box::new(watch) as StorageWatch),
+            Err(error) => {
+                tracing::debug!(%error, "the sync folder is not watched; the runs look at it at their intervals");
+                None
+            }
+        }
     }
 }
 

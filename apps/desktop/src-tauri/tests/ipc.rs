@@ -140,11 +140,10 @@ fn two_computers_sync_through_a_cloud_drive_folder() {
         let bytes = std::fs::read(&path).unwrap();
         assert!(!String::from_utf8_lossy(&bytes).contains("GitHub"), "ciphertext only");
     }
-    // Back the other way: the Mac's account reaches Windows on its next run.
+    // Back the other way, by itself: the Mac writes its new account three seconds later, and
+    // Windows, watching the folder, runs a second after it changed (its next look would come
+    // only fifteen seconds after its last).
     mac.dispatch(json!({ "command": "entry_add_uri", "uri": "otpauth://totp/Mail:me?secret=GEZDGNBVGY3TQOJQ&issuer=Mail" })).unwrap();
-    mac.dispatch(json!({ "command": "sync_now" })).unwrap();
-    until("the Mac's account written", || mac.state()["sync"]["space"]["status"]["state"] == "synced");
-    windows.dispatch(json!({ "command": "sync_now" })).unwrap();
     until("the account on Windows", || windows.state()["entries"].as_array().is_some_and(|e| e.iter().any(|x| x["issuer"] == "Mail")));
 }
 

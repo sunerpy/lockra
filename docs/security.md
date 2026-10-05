@@ -192,7 +192,9 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   that storage only while the vault is unlocked: at unlock, 3 s after a change, every minute while
   the app is in front (every 5 minutes behind other windows and after a failed run), when the
   desktop window comes back to the front once the last run is 30 s old, and on **Sync now**. A
-  folder costs no request: it is looked at every 15 s in front and every minute otherwise. Setting up, joining and moving the storage
+  folder costs no request: it is looked at every 15 s in front and every minute otherwise, and a
+  second after the operating system says a snapshot in it changed (the space's own folder only,
+  while the vault is unlocked). Setting up, joining and moving the storage
   settings ask for the master password again. Showing an invitation and saving the sync key to a
   file accept instead the biometric check that unlocks this vault (Touch ID, Windows Hello, the
   fingerprint): it proves the user is at the device, and nothing is sealed under it, whereas

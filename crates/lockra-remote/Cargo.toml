@@ -16,6 +16,7 @@ data-encoding.workspace = true
 futures-util.workspace = true
 lockra-sync.workspace = true
 lockra-vault.workspace = true
+notify.workspace = true
 opendal.workspace = true
 opendal-http-transport-reqwest.workspace = true
 parking_lot.workspace = true

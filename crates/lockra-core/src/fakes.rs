@@ -11,8 +11,8 @@ use tokio::time::Instant;
 use zeroize::Zeroizing;
 
 use crate::ports::{
-    BiometricError, Biometrics, Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, MemorySecretStore, PortError, Release, SecretStore, SyncTransport,
-    UpdateFailure, UpdateFuture, UpdateProgress, Updater,
+    BiometricError, Biometrics, Clipboard, ClipboardImage, Clock, CodeSink, KeychainStatus, MemorySecretStore, PortError, Release, SecretStore, StorageChanged,
+    StorageWatch, SyncTransport, UpdateFailure, UpdateFuture, UpdateProgress, Updater,
 };
 use crate::ui::{BiometricKind, CodesFrame, InstallMethod};
 
@@ -301,11 +301,25 @@ impl Updater for FakeUpdater {
 /// [`MemoryRemote`] by its address (S3: endpoint and bucket, with conditional writes; WebDAV: the
 /// URL, and a folder its path, without), and any secret but [`FakeTransport::SECRET`] is refused
 /// on every request.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct FakeTransport {
     stores: Mutex<BTreeMap<String, Arc<MemoryRemote>>>,
+    /// The watches handed out (folders only, as the shells'), alive while their token is.
+    watches: Mutex<Vec<FakeWatch>>,
     /// How many times a storage was opened.
     pub opened: AtomicUsize,
+}
+
+struct FakeWatch {
+    address: String,
+    changed: StorageChanged,
+    alive: std::sync::Weak<()>,
+}
+
+impl std::fmt::Debug for FakeTransport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FakeTransport").field("stores", &self.stores.lock().len()).finish_non_exhaustive()
+    }
 }
 
 impl FakeTransport {
@@ -323,6 +337,21 @@ impl FakeTransport {
     pub fn share(&self, config: &StorageConfig, other: &StorageConfig) {
         let store = self.store(other);
         self.stores.lock().insert(Self::address(config).0, store);
+    }
+
+    /// What the drive does when it brings a file into the folder `config` names: every watch on
+    /// it hears.
+    pub fn touch(&self, config: &StorageConfig) {
+        let address = Self::address(config).0;
+        for watch in self.watches.lock().iter().filter(|w| w.address == address && w.alive.strong_count() > 0) {
+            (watch.changed)();
+        }
+    }
+
+    /// How many watches on `config` are alive.
+    pub fn watching(&self, config: &StorageConfig) -> usize {
+        let address = Self::address(config).0;
+        self.watches.lock().iter().filter(|w| w.address == address && w.alive.strong_count() > 0).count()
     }
 
     fn address(config: &StorageConfig) -> (String, bool) {
@@ -346,6 +375,17 @@ impl SyncTransport for FakeTransport {
             return Ok(Arc::new(Refusing));
         }
         Ok(self.store(config))
+    }
+
+    fn watch(&self, config: &StorageConfig, _dir: &str, changed: StorageChanged) -> Option<StorageWatch> {
+        if !config.is_folder() {
+            return None;
+        }
+        let token = Arc::new(());
+        let mut watches = self.watches.lock();
+        watches.retain(|w| w.alive.strong_count() > 0);
+        watches.push(FakeWatch { address: Self::address(config).0, changed, alive: Arc::downgrade(&token) });
+        Some(Box::new(token))
     }
 }
 

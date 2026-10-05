@@ -128,9 +128,10 @@ OneDrive, iCloud Drive and Dropbox offer no official WebDAV: with them, only com
 For a phone as well, use Jianguoyun, Nextcloud or Synology, or an S3-compatible bucket or WebDAV
 instead.
 
-Reading a folder on this computer needs no network, so Lockra looks at the folder every 15
-seconds while it is in front, and every minute behind other windows and after a failed run. When
-another device's changes reach the folder is up to the drive's app. When the drive's app is not
+Reading a folder on this computer needs no network: once the drive's app puts another device's
+changes into the folder, Lockra syncs about a second later; besides, it looks at the folder every
+15 seconds while it is in front, and every minute behind other windows and after a failed run.
+When another device's changes reach the folder is up to the drive's app. When the drive's app is not
 running, or the folder was moved or deleted, **Settings › Sync** says the sync folder is missing,
 and Lockra does not make it again; if the folder moved, choose it again in **Change storage
 settings**.
