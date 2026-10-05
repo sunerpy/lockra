@@ -6,6 +6,10 @@
          (ScannerActivity.kt); and no system backup or device transfer of the app's data: the
          vault and its sealed device key stay on this phone (Lockra's own backups move them).
          Keep it so when regenerating the project. -->
+    <!-- INTERNET also opens the local network (the LAN sync with a computer) while the target SDK
+         is 36: Android asks apps below 37 not to declare ACCESS_LOCAL_NETWORK. From target SDK 37
+         it is a runtime permission (NEARBY_DEVICES), to declare here and ask for before pairing
+         (developer.android.com/privacy-and-security/local-network-permission). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- A phone without a camera still installs Lockra: it imports from images and links. -->

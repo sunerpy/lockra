@@ -30,6 +30,7 @@ export type Route =
    *  goes with the page. */
   | { name: "syncKey"; syncKey: string; password: string }
   | { name: "syncJoin" }
+  | { name: "syncPair" }
   | { name: "syncInvite" }
   | { name: "syncStorage" }
   | { name: "account"; id: string }

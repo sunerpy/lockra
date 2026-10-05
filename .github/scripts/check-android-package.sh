@@ -78,6 +78,8 @@ target_sdk=$(sed -n "s/^targetSdkVersion:'\([^']*\)'/\1/p" <<<"$badging")
 [ "$package" = dev.lockra.mobile ] || fail "package name $package"
 [ "$version_name" = "$version" ] || fail "version name $version_name, expected $version"
 [ "$version_code" = "$code" ] || fail "version code $version_code, expected $code"
+# Moving to 37 makes the local network a runtime permission: the LAN sync then needs
+# ACCESS_LOCAL_NETWORK declared and asked for (the note in AndroidManifest.xml).
 [ "$target_sdk" = 36 ] || fail "target SDK $target_sdk, expected 36"
 
 echo "check-android-package: $package $version_name (code $version_code, target SDK $target_sdk); APK and AAB signed by $expected; $libraries native libraries 16 KB aligned"

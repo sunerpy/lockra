@@ -152,6 +152,17 @@ export const zhCN = {
       newVault: "这部手机上还没有保险库，加入后会用这个主密码创建一个。",
       welcomeBody: "已经在其他设备上用 Lockra 同步？扫描它的邀请码加入，这部手机会得到同样的账号。",
       renameTitle: "重命名这台设备",
+      pairTitle: "从电脑同步",
+      pairBody:
+        "在电脑的「设置 › 同步」中开启局域网同步并选择「配对新设备…」，然后用这部手机扫描电脑上的二维码。手机和电脑需要在同一网络里。",
+      pairHint: "在同一网络里经电脑直接同步，不需要存储",
+      connect: "连接电脑",
+      connectHint: "在同一网络里经电脑直接同步，改动几秒内可见",
+      fromPaste: "粘贴配对码",
+      pairScan: "扫码配对",
+      pairSubmit: "配对",
+      pairPrompt: "将相机对准电脑上的配对码",
+      pairNewVault: "这部手机上还没有保险库，配对后会用这个主密码创建一个。",
     },
   },
   palette: {

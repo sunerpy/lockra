@@ -2841,6 +2841,7 @@ dependencies = [
  "data-encoding",
  "lockra-bridge",
  "lockra-core",
+ "lockra-lan",
  "lockra-remote",
  "lockra-vault",
  "semver",
