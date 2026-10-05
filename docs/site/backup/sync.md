@@ -20,7 +20,7 @@ before it leaves the device.
 
 ### By provider
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.3.
 
 After the storage type, choose the provider: Lockra fills in the address and the addressing, and
 asks only for what the table lists besides the credentials. For a service that is not listed,
@@ -83,7 +83,7 @@ device's next sync, and the old one no longer opens the space unless another dev
 
 ### Easier inviting and joining
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.3.
 
 - **Show the invitation with Touch ID, Windows Hello or the fingerprint**: on a device that unlocks with one of them, **Invite another device** accepts it instead of the master password.
 - **An invitation you can send**: a 10-character code is shown beside the invitation. Send the invitation to the new device by chat or mail, and tell the code another way, in person or by phone; the new device pastes the invitation and enters the code. Scanning the QR code needs no code.
@@ -102,13 +102,13 @@ invitation, or typing the storage settings and the sync key, works as on a compu
 
 ## When devices sync
 
-While the vault is unlocked, a device syncs when you unlock it, three seconds after a change,
-every five minutes, and when you choose **Sync now**. While the vault is locked, nothing goes out.
+While the vault is unlocked, a device syncs when you unlock it, three seconds after a change, at
+intervals (below), and when you choose **Sync now**. While the vault is locked, nothing goes out.
 The status line shows **Synced** and when, or why the last run failed; the next run tries again.
 
 ### Syncing sooner
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.3.
 
 - **More often in front**: while Lockra is in front, a device syncs every minute; on a computer,
   behind other windows, every five minutes. Back in Lockra, a computer syncs once the last run is
