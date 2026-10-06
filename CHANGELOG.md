@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.6](https://github.com/sunerpy/lockra/compare/v0.7.5...v0.7.6) (2026-10-06)
+
+
+### Bug Fixes
+
+* **desktop:** Windows 应用内更新不再弹出安装程序窗口 ([#82](https://github.com/sunerpy/lockra/issues/82)) ([1dacb89](https://github.com/sunerpy/lockra/commit/1dacb89b012f2d22bf23be1cfee3427a2f6ff64a))
+
 ## [0.7.5](https://github.com/sunerpy/lockra/compare/v0.7.4...v0.7.5) (2026-10-05)
 
 
