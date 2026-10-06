@@ -438,7 +438,13 @@ pub fn run() {
         std::process::exit(keychain_handoff::probe(&entry));
     }
     let options = ShellOptions { plugin_updates: true, ..ShellOptions::default() };
-    let app = build_app(tauri::Builder::default(), options).run(tauri::generate_context!());
+    #[cfg_attr(not(windows), allow(unused_mut, reason = "only Windows adjusts the context"))]
+    let mut context = tauri::generate_context!();
+    // Windows: the update's installer runs silently when this copy came from the NSIS installer,
+    // passively when it came from the MSI (updater::windows_install_mode).
+    #[cfg(windows)]
+    updater::set_windows_install_mode(&mut context.config_mut().plugins, updater::windows_install_mode(tauri::utils::platform::bundle_type()));
+    let app = build_app(tauri::Builder::default(), options).run(context);
     if let Err(error) = app {
         tracing::error!(%error, "Lockra could not start");
         std::process::exit(1);

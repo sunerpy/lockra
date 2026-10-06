@@ -47,6 +47,30 @@ pub fn install_method() -> Option<InstallMethod> {
     }
 }
 
+/// How the Windows installer of an update runs (`plugins.updater.windows.installMode`), by how
+/// this copy was installed. The NSIS installer installs for the current user without
+/// administrator rights, so it runs silently (`/S /UPDATE /R`): no installer window comes between
+/// the update dialog and the new version, which the installer starts itself. Its passive mode shows
+/// its own progress page instead. The MSI installs for the whole computer and needs the
+/// administrator prompt, which silent mode cannot show: it stays passive, as does anything else.
+pub fn windows_install_mode(bundle: Option<tauri::utils::config::BundleType>) -> &'static str {
+    match bundle {
+        Some(tauri::utils::config::BundleType::Nsis) => "quiet",
+        _ => "passive",
+    }
+}
+
+/// Put `mode` in the updater plugin's configuration before the app runs: the plugin takes its
+/// install mode from there and offers no way to change it later. Nothing to do without an updater
+/// block.
+pub fn set_windows_install_mode(plugins: &mut tauri::utils::config::PluginConfig, mode: &str) {
+    let Some(serde_json::Value::Object(updater)) = plugins.0.get_mut("updater") else { return };
+    let windows = updater.entry("windows").or_insert_with(|| serde_json::json!({}));
+    if let serde_json::Value::Object(windows) = windows {
+        windows.insert("installMode".to_owned(), serde_json::Value::from(mode));
+    }
+}
+
 /// The update port on tauri-plugin-updater: the release `check` found and the package `download`
 /// verified stay here until `install`.
 pub struct PluginUpdater<R: Runtime> {
@@ -304,6 +328,39 @@ mod tests {
         // An install that fails after the hand-over is the plugin's failure.
         let failed = prepare_then_install(vec![7], |_| Ok(()), |_| Err(PluginError::InvalidUpdaterFormat));
         assert!(matches!(failed, Err(Installing::Install(PluginError::InvalidUpdaterFormat))));
+    }
+
+    /// Regression (user report 2026-10-06: after an in-app update on Windows the installer's own
+    /// window came up before Lockra opened again): the NSIS installer of an update runs silently;
+    /// the MSI keeps its passive mode, which can show the administrator prompt it needs.
+    #[test]
+    fn regression_a_windows_update_installs_without_a_window_where_it_can() {
+        use tauri::utils::config::BundleType;
+        assert_eq!(windows_install_mode(Some(BundleType::Nsis)), "quiet");
+        assert_eq!(windows_install_mode(Some(BundleType::Msi)), "passive");
+        assert_eq!(windows_install_mode(None), "passive");
+    }
+
+    #[test]
+    fn the_install_mode_reaches_the_plugin_s_own_configuration() {
+        let mut plugins = tauri::utils::config::PluginConfig(
+            [(
+                "updater".to_owned(),
+                serde_json::json!({"pubkey": "key", "endpoints": ["https://example.com/latest.json"], "windows": {"installMode": "passive"}}),
+            )]
+            .into(),
+        );
+        set_windows_install_mode(&mut plugins, "quiet");
+        let config: tauri_plugin_updater::Config = serde_json::from_value(plugins.0["updater"].clone()).unwrap();
+        assert_eq!(config.windows.map(|w| w.install_mode.to_string()).as_deref(), Some("quiet"));
+        assert_eq!(config.pubkey, "key");
+        // A block without `windows` gets one; no updater block, nothing to set.
+        let mut bare = tauri::utils::config::PluginConfig([("updater".to_owned(), serde_json::json!({"pubkey": "key", "endpoints": []}))].into());
+        set_windows_install_mode(&mut bare, "quiet");
+        assert_eq!(bare.0["updater"]["windows"]["installMode"], "quiet");
+        let mut none = tauri::utils::config::PluginConfig::default();
+        set_windows_install_mode(&mut none, "quiet");
+        assert!(none.0.is_empty());
     }
 
     #[test]

@@ -34,6 +34,16 @@ cannot update itself and says so in **Settings › General**.
 You can always update with the install script instead, or by installing the new package over the
 old one.
 
+### No installer window on Windows
+
+<StatusTag status="building" />
+
+When Lockra was installed with the Windows installer (`setup.exe`), an update installs without
+the installer's window: after **Update now**, Lockra closes, and a few seconds later the new
+version opens. Lockra installed from the MSI still shows the installer's progress and the
+administrator prompt it needs. The update from 0.7.5 or earlier shows the installer's window for a
+moment at most.
+
 ### Automatic updates
 
 **Settings › General › Automatic updates** is off until you turn it on. Then, 10 seconds after it
