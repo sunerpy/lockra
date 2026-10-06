@@ -308,7 +308,10 @@ What the automated gates cannot cover, before announcing a release:
    once), lock, unlock with it; the traffic lights sit in the title strip.
 2. **Windows**: install the NSIS package, repeat the steps with Credential Manager, copy a code and
    check that _Win+V_ clipboard history does not show it; reveal a secret and check that a
-   screenshot shows the window black.
+   screenshot shows the window black. Update in the app from the previous release: after _Update
+   now_ Lockra closes and the new version opens a few seconds later, with no installer window in
+   between (the update from 0.7.5 or earlier: a flash of it at most; an MSI copy shows the
+   installer's progress and the administrator prompt).
 3. **Google Authenticator**: export two accounts from Lockra (one page), scan them with _Transfer
    accounts → Import accounts_, compare the codes; export eleven or more (two pages) and import both.
 4. **Microsoft Authenticator**: scan one exported code with _+ → Other account_, compare the code.

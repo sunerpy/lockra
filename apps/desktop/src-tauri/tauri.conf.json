@@ -44,7 +44,9 @@
     "longDescription": "Lockra keeps TOTP and HOTP secrets in an encrypted vault on your own computer, imports from Google Authenticator and Microsoft Authenticator, exports back to them, and backs up to a folder you choose. It goes online only for its updates (when you check, or at start once automatic updates are on) and, once you set it up, to sync your devices through storage of your own, end-to-end encrypted.",
     "copyright": "Copyright 2026 The Lockra Authors",
     "license": "Apache-2.0",
-    "windows": { "nsis": { "installMode": "currentUser" } },
+    "windows": {
+      "nsis": { "installMode": "currentUser", "installerHooks": "windows/installer-hooks.nsh" }
+    },
     "createUpdaterArtifacts": true
   },
   "plugins": {

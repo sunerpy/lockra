@@ -190,8 +190,10 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 - **The right package for the copy.** The bundler writes the install method into each package's
   executable; the manifest has a key per method (`linux-x86_64-deb`, …), so a copy installed from
   the `.deb` updates through a `.deb` (installed with `pkexec dpkg -i`, which asks for an
-  administrator), an AppImage replaces itself, the Windows installer runs in its passive mode and
-  the macOS app is replaced in place. A copy that was not installed from a package (a build from
+  administrator), an AppImage replaces itself, the Windows NSIS installer runs silently and starts
+  Lockra again (`/S /UPDATE /R`; it installs for the current user, without elevation), the MSI runs
+  in its passive mode, which can show the administrator prompt it needs (`updater::windows_install_mode`,
+  set before the app runs), and the macOS app is replaced in place. A copy that was not installed from a package (a build from
   the tree) reports that it cannot update itself and never replaces its own executable.
 - **Before installing**, an automatic backup still inside its debounce is written, because the
   process ends with the install.
