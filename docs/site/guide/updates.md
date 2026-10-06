@@ -36,7 +36,7 @@ old one.
 
 ### No installer window on Windows
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.7.6.
 
 When Lockra was installed with the Windows installer (`setup.exe`), an update installs without
 the installer's window: after **Update now**, Lockra closes, and a few seconds later the new
