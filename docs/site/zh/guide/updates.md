@@ -23,7 +23,7 @@
 
 ### Windows 上不再出现安装程序窗口
 
-<StatusTag status="building" />
+<StatusTag status="available" /> 自 0.7.6 版起提供。
 
 使用 Windows 安装程序（`setup.exe`）安装的 Lockra，更新时不再显示安装程序窗口：选择「立即更新」后，Lockra 关闭，几秒后新版本自动打开。使用 MSI 安装的 Lockra 仍会显示安装进度，以及安装所需的管理员授权提示。从 0.7.5 或更早版本更新的那一次，安装程序窗口最多一闪而过。
 
