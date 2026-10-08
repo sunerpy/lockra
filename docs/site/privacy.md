@@ -49,3 +49,9 @@ your browser.
 Copied codes go to the system clipboard, where other apps can read them until Lockra clears it.
 Secrets and export codes appear on screen only after the master password; see
 [How Lockra protects your accounts](/security/).
+
+## Contact
+
+Lockra is developed by sunerpy, who also publishes it on Google Play. For a question about privacy,
+open an issue on [GitHub](https://github.com/sunerpy/lockra/issues) or write to
+nkuzhangshn@gmail.com.
