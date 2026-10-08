@@ -4,11 +4,7 @@
 
 ## 当前版本
 
-Lockra 提供电脑上的验证器所需的功能：支持所有标准账号的验证码，在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，otpauth 链接与列表，加密备份与自动备份，通过你自己的存储进行端到端加密的[多设备同步](/zh/backup/sync)，对保险库（电脑支持时可用 Touch ID 或 Windows Hello 验证）、剪贴板和屏幕的保护，以及经过签名校验的应用内更新和各平台的一键安装。自 0.7.0 版起还提供 [Android 应用](/zh/reference/platforms#android)：在手机上使用同一个保险库，用相机或截图扫描二维码，用指纹解锁，并与其他设备同步。欢迎在[问题跟踪](https://github.com/sunerpy/lockra/issues)中提出建议。
-
-## 开发中
-
-- **经 Lockra 中继同步** <StatusTag status="building" />：为没有自己存储的设备保存同步空间加密文件的服务器，可以使用 Lockra 内置中继，也可以自建（[经 Lockra 中继同步](/zh/backup/sync#经-lockra-中继同步)、[自建中继](/zh/backup/relay)）。
+Lockra 提供电脑上的验证器所需的功能：支持所有标准账号的验证码，在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，otpauth 链接与列表，加密备份与自动备份，通过你自己的存储或 Lockra 中继（内置中继，或[你自建的中继](/zh/backup/relay)）进行端到端加密的[多设备同步](/zh/backup/sync)，对保险库（电脑支持时可用 Touch ID 或 Windows Hello 验证）、剪贴板和屏幕的保护，以及经过签名校验的应用内更新和各平台的一键安装。自 0.7.0 版起还提供 [Android 应用](/zh/reference/platforms#android)：在手机上使用同一个保险库，用相机或截图扫描二维码，用指纹解锁，并与其他设备同步。欢迎在[问题跟踪](https://github.com/sunerpy/lockra/issues)中提出建议。
 
 ## 有意不做的功能
 

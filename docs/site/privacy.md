@@ -1,7 +1,8 @@
 # Privacy
 
 This page lists what Lockra stores, where, and what it sends: update checks and downloads, and,
-from version 0.4.0 once you turn on sync, encrypted files to storage of your own.
+once you turn on sync, encrypted files to storage of your own (from version 0.4.0) or to a Lockra
+relay (from version 0.8.1).
 
 ## What Lockra stores
 
@@ -12,7 +13,7 @@ from version 0.4.0 once you turn on sync, encrypted files to storage of your own
 | A key for **Remember on this device**, if on      | the system keychain                                  | protected by your sign-in           |
 | Backups                                           | where you save them, and the automatic backup folder | encrypted                           |
 | Sync settings and credentials, if sync is on      | inside `vault.lockra`                                | encrypted with your master password |
-| The sync space, if sync is on                     | the bucket or WebDAV folder you set up               | encrypted on the device             |
+| The sync space, if sync is on                     | the relay, bucket or folder you set up               | encrypted on the device             |
 
 [Updates, uninstalling and your data](/guide/updates#where-the-files-are) lists the folders for each
 system.
@@ -30,13 +31,16 @@ or WebDAV folder you set up and reads the other devices' files from there, and c
 storage sees encrypted files, their sizes in steps of 4 KiB, the number of devices and when they
 write; never an account, a secret or a device name ([Sync between devices](/backup/sync)).
 
-There is no Lockra account, no Lockra server, no crash report and no telemetry. Fonts, images and
-icons ship inside the app. Accounts leave the device only when you export them, save a backup to a
-place that synchronises, or sync them, encrypted, through your storage.
+On a Lockra relay (from version 0.8.1), the devices write and read the same encrypted files there
+instead; what the built-in relay receives and keeps is below.
+
+There is no Lockra account, no crash report and no telemetry. Fonts, images and icons ship inside
+the app. Accounts leave the device only when you export them, save a backup to a place that
+synchronises, or sync them, encrypted, through your storage or a relay.
 
 ## The built-in relay
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.8.1.
 
 When you choose **Lockra's built-in relay** for sync, each device sends its encrypted files to the
 relay Lockra runs and reads the other devices' files from there. The relay is run by Lockra's

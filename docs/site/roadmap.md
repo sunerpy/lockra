@@ -8,19 +8,13 @@ out.
 Lockra covers what an authenticator on a computer needs: codes for every standard account, moving
 accounts from and to Google Authenticator and Microsoft Authenticator, otpauth links and lists,
 encrypted and automatic backups, end-to-end encrypted [sync between devices](/backup/sync) through
-storage of your own, protection for the vault (with Touch ID or Windows Hello where the computer
+storage of your own or a Lockra relay (the built-in one, or
+[one you run yourself](/backup/relay)), protection for the vault (with Touch ID or Windows Hello where the computer
 has it), the clipboard and the screen, and signed in-app updates with a one-line install for every
 platform. From version 0.7.0 there is an [Android app](/reference/platforms#android) too: the same
 vault on the phone, scanning QR codes with the camera or from screenshots, unlocking with a
 fingerprint, and syncing with your other devices. Suggestions are welcome in the
 [issue tracker](https://github.com/sunerpy/lockra/issues).
-
-## In progress
-
-- **Sync through a Lockra relay** <StatusTag status="building" />: a server that keeps a sync
-  space's encrypted files for devices without storage of their own, either Lockra's built-in relay
-  or one you run yourself ([Through a Lockra relay](/backup/sync#through-a-lockra-relay),
-  [Running your own relay](/backup/relay)).
 
 ## Deliberately left out
 
