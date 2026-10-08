@@ -157,6 +157,11 @@ pub enum StorageView {
         /// The folder, as the system writes it.
         path: String,
     },
+    /// A Lockra relay.
+    Relay {
+        /// Its address.
+        url: String,
+    },
 }
 
 /// A device of the sync space.

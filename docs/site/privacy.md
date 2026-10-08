@@ -34,6 +34,28 @@ There is no Lockra account, no Lockra server, no crash report and no telemetry. 
 icons ship inside the app. Accounts leave the device only when you export them, save a backup to a
 place that synchronises, or sync them, encrypted, through your storage.
 
+## The built-in relay
+
+<StatusTag status="building" /> In development, not released yet.
+
+When you choose **Lockra's built-in relay** for sync, each device sends its encrypted files to the
+relay Lockra runs and reads the other devices' files from there. The relay is run by Lockra's
+developer, on a server in AWS's Seoul region (South Korea).
+
+- **What it receives**: the encrypted files, as the devices made them; an identifier of the space
+  and of each device, computed from the space's keys, from which a device cannot be recognised in
+  another space; the value the devices identify themselves with, of which it keeps only a
+  fingerprint; and the network address each request comes from.
+- **What it cannot see**: your accounts, their secrets, the device names, the sync key and the
+  master passwords. The files stay encrypted on the relay; neither the relay nor Lockra's developer
+  can open them.
+- **How long**: a space is deleted with its files 400 days after a device last reached it.
+  Removing a device in **Settings › Sync** deletes its file at once.
+- **Network addresses**: kept in the relay's memory only, to limit the requests from each address,
+  and never written to disk. The relay logs no request, and the load balancer in front of it keeps
+  no access logs.
+- **No sharing**: nothing the relay holds is shared or sold. AWS hosts the server.
+
 ## On Android
 
 <StatusTag status="available" /> Available from version 0.7.0.

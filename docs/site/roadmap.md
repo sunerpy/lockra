@@ -15,10 +15,17 @@ vault on the phone, scanning QR codes with the camera or from screenshots, unloc
 fingerprint, and syncing with your other devices. Suggestions are welcome in the
 [issue tracker](https://github.com/sunerpy/lockra/issues).
 
+## In progress
+
+- **Sync through a Lockra relay** <StatusTag status="building" />: a server that keeps a sync
+  space's encrypted files for devices without storage of their own, either Lockra's built-in relay
+  or one you run yourself ([Through a Lockra relay](/backup/sync#through-a-lockra-relay),
+  [Running your own relay](/backup/relay)).
+
 ## Deliberately left out
 
-- **A sync server.** Devices sync through storage you choose; Lockra runs none and keeps no
-  account.
+- **A sync account, or a server that can read your accounts.** Sync needs no account, and what
+  keeps the space, your storage or a relay, holds only encrypted files.
 - **A browser extension or filling in codes.** Copy a code and paste it.
 - **Website icons.** Accounts show their initial; fetching icons would mean going online.
 - **Non-standard codes** such as Steam Guard.

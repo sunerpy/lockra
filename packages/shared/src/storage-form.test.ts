@@ -11,6 +11,7 @@ describe("the sync storage form", () => {
   it("makes trimmed settings and keeps the secret as typed", () => {
     const s3 = {
       ...emptyStorageForm(),
+      kind: "s3" as const,
       endpoint: " https://s3.example.com ",
       region: " auto ",
       bucket: " vault ",
@@ -46,13 +47,31 @@ describe("the sync storage form", () => {
   });
 
   it("is complete once every field of its kind is filled", () => {
-    const s3 = { ...emptyStorageForm(), endpoint: "e", region: "r", bucket: "b", accessKeyId: "a" };
+    const s3 = {
+      ...emptyStorageForm(),
+      kind: "s3" as const,
+      endpoint: "e",
+      region: "r",
+      bucket: "b",
+      accessKeyId: "a",
+    };
     expect(storageComplete(s3)).toBe(false);
     expect(storageComplete({ ...s3, secretAccessKey: "s" })).toBe(true);
     const dav = { ...emptyStorageForm(), kind: "webdav" as const, url: "u", username: "me" };
     expect(storageComplete(dav)).toBe(false);
     expect(storageComplete({ ...dav, password: "  " })).toBe(false);
     expect(storageComplete({ ...dav, password: "pw" })).toBe(true);
+  });
+
+  it("sums a relay up as its host, and a folder as its path", () => {
+    expect(storageSummary({ kind: "relay", url: "https://lockra-relay.onethinker.top" })).toBe(
+      "lockra-relay.onethinker.top",
+    );
+    expect(storageSummary({ kind: "relay", url: "not an address" })).toBe("not an address");
+    expect(storageFormFrom({ kind: "folder", path: "/home/me/Dropbox/Lockra" })).toMatchObject({
+      kind: "folder",
+      url: "",
+    });
   });
 
   it("starts from a space's settings without the secret, and sums them up in a line", () => {

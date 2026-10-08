@@ -96,6 +96,10 @@ home:
             body: End-to-end encrypted, through an S3-compatible bucket or a WebDAV folder of your own. Lockra runs no server, and the storage sees only encrypted files.
             status: available
             link: /backup/sync
+          - title: Sync through a Lockra relay
+            body: No storage of your own needed. The built-in relay, or one you run yourself, keeps the encrypted files and opens none of them; a phone joins by scanning the computer's QR code.
+            status: building
+            link: /backup/sync#through-a-lockra-relay
       - name: Protection
         items:
           - title: A master password

@@ -6,6 +6,8 @@ import type { StorageKind, StorageView } from "./schema";
 import type { StorageForm } from "./storage-form";
 
 export type PresetId =
+  | "relay-hosted"
+  | "relay-custom"
   | "aws"
   | "aws-cn"
   | "r2"
@@ -19,6 +21,9 @@ export type PresetId =
   | "synology"
   | "webdav-custom"
   | "folder";
+
+/** The relay Lockra runs (docs/relay.md): a space on it needs no storage of one's own. */
+export const BUILT_IN_RELAY = "https://lockra-relay.onethinker.top";
 
 /** What a preset asks for besides the credentials and the folder. */
 export type PresetField = "endpoint" | "region" | "account" | "url" | "host" | "pathStyle";
@@ -139,6 +144,10 @@ const B2_REGIONS = [
 ] as const;
 
 export const PRESETS: Readonly<Record<PresetId, Preset>> = {
+  // A Lockra relay keeps the space's encrypted snapshots and opens none (docs/security.md, "The
+  // relay"): Lockra's own, or one the user runs.
+  "relay-hosted": { id: "relay-hosted", kind: "relay", fields: [], address: () => BUILT_IN_RELAY },
+  "relay-custom": { id: "relay-custom", kind: "relay", fields: ["url"] },
   aws: {
     id: "aws",
     kind: "s3",
@@ -245,24 +254,33 @@ export function presetsOf(kind: StorageKind): Preset[] {
   return Object.values(PRESETS).filter((preset) => preset.kind === kind);
 }
 
-/** The preset a kind starts with: the one that asks for every field. */
+/** The preset that asks for every field of a kind. */
 export function customPreset(kind: StorageKind): PresetId {
   if (kind === "folder") return "folder";
+  if (kind === "relay") return "relay-custom";
   return kind === "s3" ? "s3-custom" : "webdav-custom";
+}
+
+/** The preset a kind starts with: Lockra's relay for a relay, the custom one otherwise. */
+export function startPreset(kind: StorageKind): PresetId {
+  return kind === "relay" ? "relay-hosted" : customPreset(kind);
 }
 
 /**
  * The form after `patch`, with what its preset decides filled in: the address, the region of a
- * service without one, and the addressing style. A new kind starts on its custom preset; a
- * preset left for the custom one keeps the address it made, ready to be edited.
+ * service without one, and the addressing style. A new kind starts on its first preset (Lockra's
+ * relay, or the custom one); a preset left for the custom one keeps the address it made, ready
+ * to be edited.
  */
 export function withPreset(form: StorageForm, patch: Partial<StorageForm>): StorageForm {
   const next = { ...form, ...patch };
-  if (patch.kind !== undefined && patch.kind !== form.kind && patch.preset === undefined) {
-    next.preset = customPreset(patch.kind);
+  if (patch.kind !== undefined && patch.kind !== form.kind) {
+    if (patch.preset === undefined) next.preset = startPreset(patch.kind);
+    // A relay's address is no WebDAV address, nor the other way round.
+    if (patch.url === undefined && (patch.kind === "relay" || form.kind === "relay")) next.url = "";
   }
   const preset = PRESETS[next.preset];
-  if (preset.kind !== next.kind) next.preset = customPreset(next.kind);
+  if (preset.kind !== next.kind) next.preset = startPreset(next.kind);
   const chosen = PRESETS[next.preset];
   if (chosen.pathStyle !== undefined) next.pathStyle = chosen.pathStyle;
   if (chosen.fixedRegion !== undefined) next.region = chosen.fixedRegion;
@@ -305,6 +323,10 @@ export function detectPreset(
 ): Pick<StorageForm, "preset" | "account" | "host"> & { region?: string } {
   const none = { account: "", host: "" };
   if (view.kind === "folder") return { preset: "folder", ...none };
+  if (view.kind === "relay") {
+    const builtIn = view.url.trim().replace(/\/+$/, "") === BUILT_IN_RELAY;
+    return { preset: builtIn ? "relay-hosted" : "relay-custom", ...none };
+  }
   if (view.kind === "s3") {
     const endpoint = view.endpoint.trim().replace(/\/+$/, "");
     const matchers: [PresetId, RegExp][] = [

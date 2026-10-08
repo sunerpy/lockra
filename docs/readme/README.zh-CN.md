@@ -19,7 +19,7 @@
 ---
 
 Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号保存在本机的一个加密文件中，Lockra
-只为自身的更新联网。它可以从 Google 身份验证器和 Microsoft Authenticator 导入账号，也可以导出给它们，并把
+只为自身的更新以及你开启的端到端加密同步联网。它可以从 Google 身份验证器和 Microsoft Authenticator 导入账号，也可以导出给它们，并把
 加密备份写入你选择的文件夹。
 
 ![Lockra 的验证码页](../acceptance/screens/desktop/codes-1280-light.png)
@@ -35,6 +35,9 @@ Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号
   每种方式都要再次输入主密码，二维码旁边显示当前验证码，方便与手机核对。
 - **备份**：随时手动备份为加密的 `.lockrabackup` 文件；也可以在每次修改几秒后自动备份到指定文件夹（OneDrive、
   Google Drive 或 iCloud 的同步文件夹均可），只保留最近几份。恢复时可以合并，也可以整体替换。
+- **同步**：在电脑和 Android 应用之间端到端加密同步，可以通过 S3 兼容存储桶、WebDAV 文件夹、网盘客户端同步的
+  文件夹，或从 0.8.1 起通过 Lockra 中继（[见下文](#同步中继)）。手机扫描电脑上的二维码即可加入。保存同步空间
+  的一方只能看到加密的文件（[同步指南](https://firlab.app/lockra/zh/backup/sync)）。
 - **安全**：Argon2id 与 XChaCha20-Poly1305，可选用系统钥匙串解锁，自动锁定，显示密钥时阻止截屏（Windows 和
   macOS）。
 - **更新**：有新版本时，标题栏会提示，并可打开更新对话框（更新内容、带速度的下载进度、重启）；开启自动更新后，
@@ -72,6 +75,20 @@ Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号
 3. **从源码构建**（见[开发](#开发)）。
 
 从 0.2.0 起，Lockra 可以自行更新：「设置 › 通用 › 检查更新」，或标题栏中的提示（[更新说明](https://firlab.app/lockra/zh/guide/updates)）。
+
+## 同步中继
+
+从 0.8.1 起，没有自己存储的设备可以通过 Lockra 中继同步。内置中继无需任何设置。自建中继时，每个版本都提供
+Linux 版 `lockra-relay`（x64 与 ARM64）及其 systemd 服务；`deploy/relay/` 中还有一个 Docker Compose 文件，
+在中继前面运行 Caddy 并自动配置 HTTPS：
+
+```bash
+RELAY_HOST=relay.example.com docker compose -f deploy/relay/compose.yaml up -d
+```
+
+中继只保存设备加密后的快照：加密快照的密钥和同步密钥都不会到达中继；设备向中继出示由同步密钥派生的访问令牌，
+中继只保存它的哈希。中继能看到设备何时、从哪些地址同步（[自建指南](https://firlab.app/lockra/zh/backup/relay)、
+[docs/relay.md](../relay.md)（英文）、[安全模型](../security.md#the-relay)（英文））。
 
 ## 快速开始
 

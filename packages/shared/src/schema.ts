@@ -370,7 +370,8 @@ export type UpdateView = z.infer<typeof updateViewSchema>;
 
 /** Where a sync space is stored, credentials included: what the webview sends (lockra-sync
  *  `StorageConfig`). The core never sends the secret back. A folder of this computer (one a cloud
- *  drive keeps in sync) has no path here: it is "the folder chosen" through `pickSyncFolder`. */
+ *  drive keeps in sync) has no path here: it is "the folder chosen" through `pickSyncFolder`. A
+ *  Lockra relay needs its address alone: the core shows it the space's access, from the sync key. */
 export const storageConfigSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("s3"),
@@ -390,6 +391,7 @@ export const storageConfigSchema = z.discriminatedUnion("kind", [
     password: z.string(),
   }),
   z.object({ kind: z.literal("folder") }),
+  z.object({ kind: z.literal("relay"), url: z.string() }),
 ]);
 export type StorageConfig = z.infer<typeof storageConfigSchema>;
 export type StorageKind = StorageConfig["kind"];
@@ -413,6 +415,8 @@ export const storageViewSchema = z.discriminatedUnion("kind", [
   }),
   /** A folder of this computer that a cloud drive keeps in sync, as the system writes it. */
   z.object({ kind: z.literal("folder"), path: z.string() }),
+  /** A Lockra relay, by its address. */
+  z.object({ kind: z.literal("relay"), url: z.string() }),
 ]);
 export type StorageView = z.infer<typeof storageViewSchema>;
 

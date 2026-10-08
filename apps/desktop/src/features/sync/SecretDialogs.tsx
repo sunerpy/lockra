@@ -144,7 +144,7 @@ export function SyncKeyDialog({
 export function InviteDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const { backend } = useBackend();
-  const { platform, lock } = useUiState();
+  const { platform, lock, sync } = useUiState();
   const biometric = unlockBiometric(lock);
   const formId = useId();
   const now = useClock();
@@ -231,7 +231,13 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
       }>
       <div className="flex flex-col gap-4" data-testid="sync-invite">
         <Banner tone="warn" marker="icon">
-          {t(answer.includes_storage ? "sync.invite.warning" : "sync.invite.warningKeyOnly")}
+          {t(
+            sync.space?.storage.kind === "relay"
+              ? "sync.invite.warningRelay"
+              : answer.includes_storage
+                ? "sync.invite.warning"
+                : "sync.invite.warningKeyOnly",
+          )}
         </Banner>
         {!answer.includes_storage && (
           <p className="text-[13px] text-fg-muted" data-testid="invite-key-only">

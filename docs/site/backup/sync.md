@@ -141,6 +141,58 @@ settings**.
 Versions up to 0.7.3 do not know cloud drive folders: opening the same vault file with one of them
 keeps the accounts, and shows sync as off.
 
+## Through a Lockra relay
+
+<StatusTag status="building" /> In development, not released yet.
+
+A relay is a server that keeps a sync space's encrypted files, for devices that have no storage of
+their own. Lockra runs one, the built-in relay, and you can run your own
+([Running your own relay](/backup/relay)). To the devices it is one more kind of storage: they
+write the same encrypted files there as anywhere else, and the relay can open none of them.
+
+1. On the first device, open **Settings › Sync** and choose **Start syncing**. **Storage** starts
+   on **Lockra relay**, with **Lockra's built-in relay** as the provider and nothing to fill in.
+   For a relay of your own, choose **A relay of your own** and enter its **Relay address**, which
+   starts with `https://`.
+2. Check **This device's name**, enter the master password, and choose **Start syncing**.
+3. Keep the sync key Lockra shows, as for any storage.
+
+The invitation of such a space holds the relay's address and the sync key. To add a phone, show the
+invitation on the computer (**Invite another device**) and scan its QR code on the phone
+(**Settings › Sync › Join an existing sync › Scan to join**, or **Join from sync** on the welcome
+screen): the phone needs no storage settings, only a master password. Pasting the
+invitation and entering the code shown beside it works too, on a phone or a computer. Without
+another device at hand, choose **Sync key**, keep **Lockra relay**, and enter the sync key.
+
+While the vault is unlocked, a device keeps one request waiting at the relay, which answers it when
+another device writes: the change arrives about a second later. Besides, a device syncs at the
+intervals of any storage ([When devices sync](#when-devices-sync)).
+
+**Change storage settings** also moves a space onto a relay. Unlike other storage, the relay need
+not hold the space yet: this device writes it there on its next sync. Then change the storage
+settings on the other devices the same way.
+
+What the relay can see:
+
+- **What any storage sees.** Encrypted files, their sizes in steps of 4 KiB, how many devices a
+  space has and when they write, and the network addresses the devices connect from. Never an
+  account, a secret, a device name, the sync key or a master password
+  ([What the storage can see](#what-the-storage-can-see)).
+- **Only the space's devices change it.** The devices identify themselves with a value made from
+  the sync key, from which the sync key cannot be recovered; the relay keeps only a fingerprint of
+  that value and refuses every request without it. Someone who learns where a space lives on the
+  relay can neither read nor change it.
+- **The relay can be unavailable.** It can also delete a space, like any storage: the devices keep
+  every account, and write the space again on their next sync. The built-in relay is a single
+  server; for a space that must not depend on it, run a relay of your own or use storage of your
+  own.
+
+The built-in relay keeps a space for 400 days after a device last reached it, holds at most 64
+devices and 32 MiB per space, and limits the requests each network address makes. When it is full,
+a run fails with "The storage answered with an error"; when it asks a device to slow down, with
+"The storage could not be reached"; the next run tries again. What the built-in relay keeps is on
+the [Privacy](/privacy#the-built-in-relay) page.
+
 ## When devices sync
 
 While the vault is unlocked, a device syncs when you unlock it, three seconds after a change, at

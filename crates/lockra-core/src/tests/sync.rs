@@ -29,6 +29,10 @@ fn webdav() -> StorageConfig {
     StorageConfig::Webdav { url: "https://dav.example.com/dav/".into(), prefix: String::new(), username: "me".into(), password: pw(STORAGE_SECRET) }
 }
 
+fn relay() -> StorageConfig {
+    StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() }
+}
+
 fn manual(storage: StorageConfig, sync_key: &str) -> JoinSource {
     JoinSource::Manual { storage, sync_key: pw(sync_key) }
 }
@@ -64,7 +68,7 @@ fn device_names(h: &Harness) -> Vec<(String, bool)> {
 
 #[tokio::test(start_paused = true)]
 async fn a_space_created_on_one_device_is_joined_by_a_new_one_and_both_converge() {
-    for storage in [s3(STORAGE_SECRET), webdav()] {
+    for storage in [s3(STORAGE_SECRET), webdav(), relay()] {
         let transport = Arc::new(FakeTransport::default());
         let (desktop, sync_key) = first_device(&transport, storage.clone()).await;
         assert!(sync_key.starts_with("LKS1-"));
@@ -631,7 +635,7 @@ impl RemoteStore for Gate {
 struct GateTransport(Arc<Gate>);
 
 impl SyncTransport for GateTransport {
-    fn open(&self, _config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+    fn open(&self, _config: &StorageConfig, _access: &lockra_sync::SpaceAccess) -> Result<Arc<dyn RemoteStore>, SyncError> {
         Ok(Arc::clone(&self.0) as Arc<dyn RemoteStore>)
     }
 }
@@ -1094,4 +1098,65 @@ async fn the_folder_is_watched_only_while_its_space_is_open_here() {
     assert_eq!(transport.watching(&folder), 1);
     windows.core.sync_disable().unwrap();
     assert_eq!(transport.watching(&folder), 0);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktops_code() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, relay()).await;
+    desktop.core.set_settings(Settings { auto_lock_minutes: 0, ..desktop.core.state().settings }).unwrap();
+    // The relay was shown the token the sync key gives, never the key.
+    let access = lockra_sync::SpaceAccess::of(&lockra_sync::SyncKey::from_text(&sync_key).unwrap());
+    assert_eq!(transport.relay_token(&relay()).as_deref(), Some(access.relay_token()));
+    assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
+    assert_eq!(transport.watching(&relay()), 1, "a relay tells of changes");
+
+    // The phone scans the desktop's code: the relay's address and the sync key, nothing more.
+    let invite = desktop.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    assert!(invite.includes_storage);
+    let phone = device(&transport);
+    phone.core.sync_join(JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None }, pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
+    phone.core.set_settings(Settings { auto_lock_minutes: 0, ..phone.core.state().settings }).unwrap();
+    assert_eq!(issuers(&phone), ["GitHub"]);
+    assert_eq!(transport.watching(&relay()), 2);
+
+    // The phone adds an account; the relay tells the desktop, which runs a moment later.
+    phone.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    settle().await;
+    assert_eq!(issuers(&desktop), ["GitHub"], "not before the relay tells");
+    transport.touch(&relay());
+    settle().await;
+    advance(SYNC_FOLDER_SETTLE * 2).await;
+    assert_eq!(issuers(&desktop), ["GitHub", "Mail"]);
+
+    // A device with another sync key is refused by the relay, as its space was not made by it.
+    let stranger = device(&transport);
+    let other = lockra_sync::SyncKey::generate().unwrap().to_text();
+    assert!(stranger.core.sync_join(manual(relay(), &other), pw(MASTER), "Stranger".into(), None).await.is_err());
+    // Locked: watched no longer.
+    desktop.core.lock_vault();
+    assert_eq!(transport.watching(&relay()), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_space_moves_to_a_relay_that_keeps_nothing_of_it_yet() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, webdav()).await;
+    // Another, empty WebDAV place is still refused: it may be a typo.
+    let elsewhere =
+        StorageConfig::Webdav { url: "https://dav.example.com/other/".into(), prefix: String::new(), username: "me".into(), password: pw(STORAGE_SECRET) };
+    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, pw(MASTER)).await), ErrorCode::SyncSpaceNotFound);
+    // A relay keeps the space under its own id: taken, and the next run writes the space there.
+    desktop.core.sync_set_storage(relay(), pw(MASTER)).await.unwrap();
+    settle().await;
+    assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
+    assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
+    assert_eq!(transport.store(&relay()).paths().len(), 1);
+    // A phone joins it there with the sync key.
+    let phone = device(&transport);
+    phone.core.sync_join(manual(relay(), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    settle().await;
+    assert_eq!(issuers(&phone), ["GitHub"]);
 }

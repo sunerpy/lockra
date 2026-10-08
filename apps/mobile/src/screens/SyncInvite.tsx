@@ -24,7 +24,7 @@ export function SyncInvite() {
   const t = useT();
   const nav = useNav();
   const { backend } = useBackend();
-  const { lock } = useUiState();
+  const { lock, sync } = useUiState();
   const biometric = unlockBiometric(lock);
   const [password, setPassword] = useState("");
   const [invite, setInvite] = useState<{ answer: Invite; at: number } | undefined>(undefined);
@@ -90,7 +90,11 @@ export function SyncInvite() {
     <Page title={t("sync.invite.open")} testId="page-sync-invite">
       <div className="flex flex-col gap-4" data-testid="sync-invite">
         <Banner tone="warn" marker="icon">
-          {t("sync.invite.warning")}
+          {t(
+            sync.space?.storage.kind === "relay"
+              ? "sync.invite.warningRelay"
+              : "sync.invite.warning",
+          )}
         </Banner>
         <div className="self-center">
           <QrView svg={answer.svg} label={t("ui.a11y.qr")} size={260} />

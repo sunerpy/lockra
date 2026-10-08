@@ -160,7 +160,7 @@ Options (each also as an environment variable):
 
 Serve it behind HTTPS (a reverse proxy or a load balancer): Lockra connects to relays over HTTPS only.
 SIZE is bytes, or a number with K, M or G (binary multiples).
-Docs: https://firlab.app/lockra/guide/relay
+Docs: https://firlab.app/lockra/backup/relay
 ";
 
 /// The options, as `(flag, environment variable)`.

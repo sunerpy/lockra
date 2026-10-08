@@ -1,14 +1,17 @@
 import { emptyStorageForm, storageComplete, storageConfig, storageFormFrom } from "./storage-form";
 import {
+  BUILT_IN_RELAY,
   PRESETS,
   customPreset,
   detectPreset,
   presetProblem,
   presetsOf,
+  startPreset,
   withPreset,
 } from "./storage-presets";
 
-const s3 = emptyStorageForm();
+// A new form starts on Lockra's relay; these are the empty forms of the other kinds.
+const s3 = withPreset(emptyStorageForm(), { kind: "s3" });
 const dav = withPreset(s3, { kind: "webdav" });
 
 describe("storage presets", () => {
@@ -74,6 +77,39 @@ describe("storage presets", () => {
       "https://nas.example.com:443/",
     );
     expect(withPreset(dav, { preset: "synology", host: " " }).url).toBe("");
+  });
+
+  it("start on Lockra's relay, which needs nothing typed in, and keep its address to relays", () => {
+    const form = emptyStorageForm();
+    expect(form).toMatchObject({ kind: "relay", preset: "relay-hosted", url: BUILT_IN_RELAY });
+    expect(storageComplete(form)).toBe(true);
+    expect(storageConfig(form)).toEqual({ kind: "relay", url: BUILT_IN_RELAY });
+    expect(presetsOf("relay").map((p) => p.id)).toEqual(["relay-hosted", "relay-custom"]);
+    expect([startPreset("relay"), customPreset("relay")]).toEqual(["relay-hosted", "relay-custom"]);
+    // One's own relay keeps what is typed; back on the built-in one, its address returns.
+    const own = withPreset(form, { preset: "relay-custom" });
+    expect(own.url).toBe(BUILT_IN_RELAY);
+    const typed = withPreset(own, { url: " https://relay.example.com/ " });
+    expect(storageConfig(typed)).toEqual({ kind: "relay", url: "https://relay.example.com/" });
+    expect(storageComplete({ ...typed, url: " " })).toBe(false);
+    expect(withPreset(typed, { preset: "relay-hosted" }).url).toBe(BUILT_IN_RELAY);
+    // A relay's address is no WebDAV address, nor the other way round.
+    expect(withPreset(typed, { kind: "webdav" })).toMatchObject({
+      preset: "webdav-custom",
+      url: "",
+    });
+    const fromDav = withPreset({ ...dav, url: "https://dav.example.com/" }, { kind: "relay" });
+    expect(fromDav).toMatchObject({ preset: "relay-hosted", url: BUILT_IN_RELAY });
+    // Saved settings find their preset again.
+    expect(detectPreset({ kind: "relay", url: `${BUILT_IN_RELAY}/` }).preset).toBe("relay-hosted");
+    expect(detectPreset({ kind: "relay", url: "https://relay.example.com" }).preset).toBe(
+      "relay-custom",
+    );
+    expect(storageFormFrom({ kind: "relay", url: "https://relay.example.com" })).toMatchObject({
+      kind: "relay",
+      preset: "relay-custom",
+      url: "https://relay.example.com",
+    });
   });
 
   it("start a new kind on its custom preset and never keep another kind's", () => {

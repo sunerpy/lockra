@@ -640,6 +640,55 @@ describe("MockBackend", () => {
     expect(await errorCode(joinMac({ ...sealed, storage: folder }))).toBe("sync_folder_not_chosen");
   });
 
+  it("keeps a space on a relay by its address, and a phone joins it from the desktop's code", async () => {
+    const desktop = new MockBackend({ entries: [mockEntry("GitHub", "octocat")] });
+    const create = (storage: StorageConfig) =>
+      desktop.dispatch({
+        command: "sync_create",
+        storage,
+        password: MOCK_PASSWORD,
+        device_name: "Desktop",
+      });
+    // An address alone, over HTTPS (plain HTTP to this computer only), nothing else in it.
+    expect(await errorCode(create({ kind: "relay", url: "http://relay.example.com" }))).toBe(
+      "sync_insecure",
+    );
+    for (const url of [
+      "relay.example.com",
+      "https://relay.example.com/?space=1",
+      "https://me:pw@relay.example.com",
+      "ftp://relay.example.com",
+    ])
+      expect(await errorCode(create({ kind: "relay", url }))).toBe("sync_config_invalid");
+    await create({ kind: "relay", url: " https://lockra-relay.onethinker.top " });
+    expect((await desktop.getState()).sync.space?.storage).toEqual({
+      kind: "relay",
+      url: "https://lockra-relay.onethinker.top",
+    });
+    const invite = await desktop.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
+    expect(invite.includes_storage).toBe(true);
+    // The phone scans it and is on the same relay; the sealed text names the relay too.
+    const phone = new MockBackend({ phase: "no_vault", scan: invite.invite });
+    expect(
+      await phone.scanJoin(
+        { prompt: "Point at it", cancel: "Cancel" },
+        { password: MOCK_PASSWORD, deviceName: "Phone" },
+      ),
+    ).toBe(true);
+    expect((await phone.getState()).sync.space?.storage).toEqual({
+      kind: "relay",
+      url: "https://lockra-relay.onethinker.top",
+    });
+    const tablet = new MockBackend({ phase: "no_vault" });
+    await tablet.dispatch({
+      command: "sync_join",
+      source: { type: "invite", text: invite.shared_text, code: invite.code },
+      password: MOCK_PASSWORD,
+      device_name: "Tablet",
+    });
+    expect((await tablet.getState()).sync.space?.storage.kind).toBe("relay");
+  });
+
   it("starts with a space when told to", async () => {
     const backend = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace() });
     expect((await backend.getState()).sync.space?.devices).toHaveLength(2);

@@ -144,7 +144,7 @@ export const zhCN = {
     },
     sync: {
       rowOff: "设置同步",
-      settingsHint: "在你自己的存储上与其他设备同步",
+      settingsHint: "经 Lockra 中继或你自己的存储，与其他设备同步",
       fromScan: "扫码",
       scan: "扫码加入",
       scanPrompt: "将相机对准另一台设备上的邀请码",
@@ -164,7 +164,7 @@ export const zhCN = {
   welcome: {
     title: "欢迎使用 Lockra",
     subtitle:
-      "本地加密的两步验证器。验证码只在你的设备上生成；同步默认关闭，开启后只用你自己的存储。",
+      "本地加密的两步验证器。验证码只在你的设备上生成；同步默认关闭，开启后经 Lockra 中继或你自己的存储进行，端到端加密。",
     create: {
       title: "新建保险库",
       body: "设置主密码。主密码无法找回，请务必记住它。",
@@ -563,7 +563,8 @@ export const zhCN = {
       fontsValue: "Instrument Sans、JetBrains Mono、Noto Sans SC（SIL OFL 1.1）",
       credits: "致谢",
       creditsValue: "界面设计源自 Voltip（Apache-2.0）",
-      privacy: "Lockra 只在检查和下载更新、以及同步到你自己配置的存储时联网，不收集任何数据。",
+      privacy:
+        "Lockra 只在检查和下载更新、以及同步时联网（同步到你自己配置的存储，或 Lockra 中继），不收集任何数据。中继只保存加密后的快照，打不开其中任何一个。",
       update: {
         label: "更新",
         help: "自动更新开关位于「通用」分组。",
@@ -571,17 +572,21 @@ export const zhCN = {
     },
   },
   sync: {
-    lede: "在你自己的存储上，端到端加密地同步多台设备。Lockra 不提供服务器，存储里只有密文。",
+    lede: "端到端加密地同步多台设备：经 Lockra 中继，或在你自己的存储上。中继和存储里都只有密文。",
     off: {
       createTitle: "在这台设备上开始同步",
       createBody:
-        "把同步空间建在你的 S3 兼容存储桶或 WebDAV 文件夹里。建好后会显示同步密钥，请和主密码分开妥善保存。",
+        "把同步空间建在 Lockra 中继上（无需自备存储），或建在你的 S3 兼容存储桶、WebDAV 文件夹里。建好后会显示同步密钥，请和主密码分开妥善保存。",
       createSubmit: "开始同步",
       joinTitle: "加入已有的同步",
       joinBody: "扫描或粘贴另一台设备的邀请码；没有其他设备时，用存储设置和同步密钥恢复。",
     },
     storage: {
       kind: "存储类型",
+      relay: "Lockra 中继",
+      relayHint: "无需自备存储：快照在设备上加密后经中继同步，中继只看到密文。",
+      relayUrl: "中继地址",
+      relayUrlHint: "以 https:// 开头，例如 https://relay.example.com。自建中继的方法见文档。",
       s3: "S3 兼容",
       webdav: "WebDAV",
       folder: "网盘文件夹",
@@ -611,6 +616,8 @@ export const zhCN = {
       httpsOnly: "只接受 HTTPS 地址（本机地址除外）。凭据保存在加密的保险库里，不会再显示。",
       provider: "服务商",
       presets: {
+        "relay-hosted": "Lockra 内置中继",
+        "relay-custom": "自建中继",
         aws: "AWS S3（全球区域）",
         "aws-cn": "AWS S3（中国区域）",
         r2: "Cloudflare R2",
@@ -626,6 +633,9 @@ export const zhCN = {
         folder: "由网盘客户端同步的文件夹",
       },
       presetHints: {
+        "relay-hosted":
+          "由 Lockra 运行的中继，什么都不用填。中继只保存设备加密后的快照，没有数据密钥和同步密钥，打不开其中任何一个；它能看到设备何时同步、来自哪个地址。",
+        "relay-custom": "你自己运行的 lockra-relay，放在 HTTPS 之后。它和内置中继一样只保存密文。",
         aws: "中国区域（北京、宁夏）请选「AWS S3（中国区域）」：两边的账号和密钥不通用。",
         "aws-cn":
           "北京（cn-north-1）或宁夏（cn-northwest-1）。中国区域的账号和密钥不能用于全球区域。",
@@ -718,7 +728,8 @@ export const zhCN = {
     },
     storageRow: "存储",
     storageEdit: "修改存储设置",
-    storageEditBody: "更换访问密钥、密码或地址。同步空间必须已经在新的位置。",
+    storageEditBody:
+      "更换访问密钥、密码或地址。同步空间必须已经在新的位置；换到 Lockra 中继时不必，这台设备下次同步就会把空间写过去。",
     device: {
       label: "这台设备",
       rename: "重命名",
@@ -756,6 +767,7 @@ export const zhCN = {
       body: "在新设备上扫描二维码；不方便扫码时，把下面的邀请码发给新设备，在新设备上粘贴并输入口令。最后输入主密码即可加入。",
       warning: "邀请码包含存储凭据和同步密钥，只能在你自己的设备上使用。",
       warningKeyOnly: "邀请码包含同步密钥，只能在你自己的设备上使用。",
+      warningRelay: "邀请码包含中继地址和同步密钥，只能在你自己的设备上使用。",
       keyOnly:
         "这个同步空间在本机的网盘文件夹里，邀请只带同步密钥。另一台设备加入时，要选它访问同一个文件夹的方式：电脑选同一个网盘文件夹，手机填这个网盘的 WebDAV。",
       text: "可以发送的邀请码",

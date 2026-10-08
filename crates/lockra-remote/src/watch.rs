@@ -5,7 +5,9 @@
 
 use std::path::Path;
 
-use lockra_sync::{StorageConfig, SyncError};
+use lockra_sync::{SpaceAccess, StorageConfig, SyncError};
+
+use crate::RelayWatch;
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher as _};
 
 use crate::folder::object_name;
@@ -41,12 +43,27 @@ impl FolderWatch {
     }
 }
 
+/// A watch on a space's storage, of whichever kind; dropping it stops the watch.
+#[derive(Debug)]
+pub enum Watch {
+    /// The operating system's events on a folder of this computer.
+    Folder(FolderWatch),
+    /// Listings a relay holds back until the space changes.
+    Relay(RelayWatch),
+}
+
 /// A watch on the directory `dir` (ending in `/`, as the sync engine names it) of `config`'s
-/// storage, where the storage can tell: a folder of this computer. `None` for the others.
-pub fn watch(config: &StorageConfig, dir: &str, changed: Box<dyn Fn() + Send + Sync>) -> Result<Option<FolderWatch>, SyncError> {
-    let StorageConfig::Folder { path } = config else { return Ok(None) };
-    let place = dir.trim_end_matches('/').split('/').filter(|s| !s.is_empty()).fold(path.clone(), |place, segment| place.join(segment));
-    FolderWatch::start(&place, changed).map(Some)
+/// storage, where the storage can tell: a folder of this computer, or a relay (shown `access`).
+/// `None` for the others.
+pub fn watch(config: &StorageConfig, access: &SpaceAccess, dir: &str, changed: Box<dyn Fn() + Send + Sync>) -> Result<Option<Watch>, SyncError> {
+    match config {
+        StorageConfig::Folder { path } => {
+            let place = dir.trim_end_matches('/').split('/').filter(|s| !s.is_empty()).fold(path.clone(), |place, segment| place.join(segment));
+            FolderWatch::start(&place, changed).map(|w| Some(Watch::Folder(w)))
+        }
+        StorageConfig::Relay { url } => RelayWatch::start(url, access, dir, changed).map(|w| Some(Watch::Relay(w))),
+        StorageConfig::S3 { .. } | StorageConfig::Webdav { .. } => Ok(None),
+    }
 }
 
 /// An event about an object of the space: one of its files made, written, renamed or removed. Not
@@ -74,6 +91,10 @@ mod tests {
 
     use super::*;
     use crate::FolderStore;
+
+    fn access() -> SpaceAccess {
+        SpaceAccess::of(&lockra_sync::SyncKey::generate().unwrap())
+    }
 
     const TAG: &str = "0123456789abcdef0123456789abcdef";
 
@@ -111,6 +132,7 @@ mod tests {
         let config = StorageConfig::Folder { path: folder_path.clone() };
         let _watch = watch(
             &config,
+            &access(),
             dir,
             Box::new(move || {
                 let _ = sender.send(());
@@ -126,9 +148,9 @@ mod tests {
     fn only_a_folder_that_is_there_is_watched() {
         let dav =
             StorageConfig::Webdav { url: "https://dav.example.com/".into(), prefix: String::new(), username: "me".into(), password: "pw".to_owned().into() };
-        assert!(watch(&dav, "x/", Box::new(|| {})).unwrap().is_none(), "WebDAV tells nothing");
+        assert!(watch(&dav, &access(), "x/", Box::new(|| {})).unwrap().is_none(), "WebDAV tells nothing");
         let folder = tempfile::tempdir().unwrap();
         let missing = StorageConfig::Folder { path: folder.path().join("gone") };
-        assert!(matches!(watch(&missing, "devices/", Box::new(|| {})), Err(SyncError::FolderMissing)));
+        assert!(matches!(watch(&missing, &access(), "devices/", Box::new(|| {})), Err(SyncError::FolderMissing)));
     }
 }

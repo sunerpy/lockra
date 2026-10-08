@@ -19,7 +19,8 @@
 ---
 
 Lockra is a TOTP/HOTP authenticator for Windows, macOS and Linux. Your accounts live in one
-encrypted file on your computer, and Lockra goes online only for its updates. It imports from
+encrypted file on your computer, and Lockra goes online only for its updates and, once you turn it
+on, for end-to-end encrypted sync. It imports from
 Google Authenticator and Microsoft Authenticator, exports back to them, and keeps encrypted backups
 in a folder you choose.
 
@@ -40,6 +41,11 @@ in a folder you choose.
 - **Backups**: encrypted `.lockrabackup` files on demand, and automatic ones into a folder (a
   OneDrive, Google Drive or iCloud folder works) a few seconds after each change, keeping the
   newest few. Restore by merging or by replacing.
+- **Sync**: end-to-end encrypted, between your computers and the Android app, through an
+  S3-compatible bucket, a WebDAV folder, a folder your cloud drive keeps in sync or, from 0.8.1, a
+  Lockra relay ([below](#sync-relay)). A phone joins by scanning the computer's QR code. Whatever
+  keeps the space sees encrypted files only
+  ([sync guide](https://firlab.app/lockra/backup/sync)).
 - **Security**: Argon2id and XChaCha20-Poly1305, optional unlock with the system keychain,
   auto-lock, and screen-capture protection while a secret is shown (Windows and macOS).
 - **Updates**: the title bar tells you when a new version is out and opens the update dialog
@@ -82,6 +88,23 @@ in a folder you choose.
 
 From 0.2.0, Lockra updates itself: **Settings › General › Check for updates**, or the note in the
 title bar ([updates](https://firlab.app/lockra/guide/updates)).
+
+## Sync relay
+
+From 0.8.1, devices without storage of their own sync through a Lockra relay. The built-in relay
+needs nothing set up. To run your own, every release carries `lockra-relay` for Linux (x64 and
+ARM64) with a systemd unit, and `deploy/relay/` also has a Docker Compose file that puts Caddy and
+its automatic HTTPS in front of it:
+
+```bash
+RELAY_HOST=relay.example.com docker compose -f deploy/relay/compose.yaml up -d
+```
+
+A relay keeps the devices' encrypted snapshots and nothing else: the key that seals them and the
+sync key never reach it, and the devices show it an access token derived from the sync key, of
+which it keeps only a hash. It sees when devices sync and from which addresses
+([self-hosting guide](https://firlab.app/lockra/backup/relay), [docs/relay.md](docs/relay.md),
+[security model](docs/security.md#the-relay)).
 
 ## Quick start
 

@@ -1,5 +1,5 @@
-//! End-to-end encrypted multi-device sync over storage the user configures (S3-compatible or
-//! WebDAV), docs/formats.md "Sync" and docs/security.md "Sync".
+//! End-to-end encrypted multi-device sync over storage the user configures (S3-compatible, WebDAV,
+//! a cloud drive's folder, or a Lockra relay), docs/formats.md "Sync" and docs/security.md "Sync".
 //!
 //! A sync space lives under one prefix of the user's storage: one encrypted snapshot per device,
 //! each carrying a keyring that wraps the space's data key under that device's master password
@@ -28,7 +28,7 @@ mod storage;
 pub use clock::{Clock, Hlc};
 pub use error::SyncError;
 pub use invite::Invite;
-pub use keys::{SYNC_KEY_TEXT_LEN, SpaceKeys, SyncKey, open_keyring, seal_keyring};
+pub use keys::{SYNC_KEY_TEXT_LEN, SpaceAccess, SpaceKeys, SyncKey, open_keyring, seal_keyring};
 pub use lww::{Record, Tombstone, merge};
 pub use object::{PAD_TO, Snapshot, open_snapshot, seal_snapshot, snapshot_keyring};
 pub use remote::{MAX_OBJECT_BYTES, MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteStore};

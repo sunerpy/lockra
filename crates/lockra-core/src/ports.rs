@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub use lockra_sync::{RemoteStore, StorageConfig, SyncError};
+pub use lockra_sync::{RemoteStore, SpaceAccess, StorageConfig, SyncError};
 use parking_lot::Mutex;
 use zeroize::Zeroizing;
 
@@ -169,15 +169,16 @@ pub type StorageChanged = Box<dyn Fn() + Send + Sync>;
 
 /// Opens the storage of a sync space: lockra-remote over HTTPS in the shells. Opening contacts
 /// nothing; the requests go out when the core runs the sync, which it does only for a space the
-/// user set up on storage of their own.
+/// user set up, on storage of their own or on a Lockra relay.
 pub trait SyncTransport: Send + Sync {
-    /// The storage `config` names, ready for requests.
-    fn open(&self, config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError>;
+    /// The storage `config` names for the space `access` belongs to (a relay is shown it), ready
+    /// for requests.
+    fn open(&self, config: &StorageConfig, access: &SpaceAccess) -> Result<Arc<dyn RemoteStore>, SyncError>;
 
-    /// Hear, where the storage can tell (a folder of this computer), when objects in `dir` (a
-    /// directory of `config`'s, ending in `/`) appear, change or go: `changed` is called then.
+    /// Hear, where the storage can tell (a folder of this computer, a relay), when objects in `dir`
+    /// (a directory of `config`'s, ending in `/`) appear, change or go: `changed` is called then.
     /// `None` where it cannot, or could not start: the runs then look at their intervals only.
-    fn watch(&self, _config: &StorageConfig, _dir: &str, _changed: StorageChanged) -> Option<StorageWatch> {
+    fn watch(&self, _config: &StorageConfig, _access: &SpaceAccess, _dir: &str, _changed: StorageChanged) -> Option<StorageWatch> {
         None
     }
 }
@@ -187,7 +188,7 @@ pub trait SyncTransport: Send + Sync {
 pub struct NoSync;
 
 impl SyncTransport for NoSync {
-    fn open(&self, _config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+    fn open(&self, _config: &StorageConfig, _access: &SpaceAccess) -> Result<Arc<dyn RemoteStore>, SyncError> {
         Err(SyncError::Storage("sync is not available in this build".into()))
     }
 }

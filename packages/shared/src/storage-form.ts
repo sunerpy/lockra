@@ -1,14 +1,17 @@
 // The sync storage form's fields (the desktop's and the phone's), the settings they make and the
 // ones they start from. The secret (S3 secret key, WebDAV password) is typed in every time: the
 // core never sends it back. A folder of the computer is chosen through the system's dialog every
-// time too: the form only shows it, and the core takes the one the dialog chose.
+// time too: the form only shows it, and the core takes the one the dialog chose. A Lockra relay
+// needs its address alone, and the form starts on Lockra's own.
 import type { StorageConfig, StorageKind, StorageView } from "./schema";
 import {
+  BUILT_IN_RELAY,
   type PresetId,
   PRESETS,
   customPreset,
   detectPreset,
   presetProblem,
+  startPreset,
 } from "./storage-presets";
 
 export interface StorageForm {
@@ -33,10 +36,11 @@ export interface StorageForm {
   folder: string;
 }
 
+/** A new form: on Lockra's relay, which needs nothing typed in. */
 export function emptyStorageForm(): StorageForm {
   return {
-    kind: "s3",
-    preset: customPreset("s3"),
+    kind: "relay",
+    preset: startPreset("relay"),
     account: "",
     host: "",
     endpoint: "",
@@ -45,7 +49,7 @@ export function emptyStorageForm(): StorageForm {
     accessKeyId: "",
     secretAccessKey: "",
     pathStyle: false,
-    url: "",
+    url: BUILT_IN_RELAY,
     username: "",
     password: "",
     prefix: "lockra",
@@ -59,11 +63,13 @@ export function storageFormFrom(view: StorageView): StorageForm {
   const empty = emptyStorageForm();
   const { region, ...preset } = detectPreset(view);
   // A folder is chosen again: the dialog's choice is what the core takes.
-  if (view.kind === "folder") return { ...empty, ...preset, kind: "folder" };
+  if (view.kind === "folder") return { ...empty, ...preset, kind: "folder", url: "" };
+  if (view.kind === "relay") return { ...empty, ...preset, kind: "relay", url: view.url };
   return view.kind === "s3"
     ? {
         ...empty,
         ...preset,
+        url: "",
         kind: "s3",
         endpoint: view.endpoint,
         region: region ?? view.region,
@@ -85,6 +91,7 @@ export function storageFormFrom(view: StorageView): StorageForm {
 /** The settings the core receives (the core checks them again). */
 export function storageConfig(form: StorageForm): StorageConfig {
   if (form.kind === "folder") return { kind: "folder" };
+  if (form.kind === "relay") return { kind: "relay", url: form.url.trim() };
   return form.kind === "s3"
     ? {
         kind: "s3",
@@ -108,6 +115,7 @@ export function storageConfig(form: StorageForm): StorageConfig {
 /** Every field the kind needs is filled, and the preset's settings can be used. */
 export function storageComplete(form: StorageForm): boolean {
   if (form.kind === "folder") return form.folder !== "";
+  if (form.kind === "relay") return form.url.trim() !== "";
   // A preset of the other kind (a form put together by hand) counts as the custom one.
   const own =
     PRESETS[form.preset].kind === form.kind ? form : { ...form, preset: customPreset(form.kind) };
@@ -129,6 +137,7 @@ export function storageSummary(view: StorageView): string {
   } catch {
     // Shown as it is.
   }
+  if (view.kind === "relay") return host;
   const place = view.kind === "s3" ? [view.bucket, view.prefix] : [view.prefix];
   return [host, ...place.map((p) => p.replace(/^\/+|\/+$/g, "")).filter((p) => p !== "")].join(
     " / ",

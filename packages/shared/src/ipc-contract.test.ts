@@ -88,7 +88,9 @@ describe("IPC fixtures", () => {
     expect(new Set(spaces.map((s) => s.status.state))).toEqual(
       new Set(["idle", "syncing", "synced", "failed"]),
     );
-    expect(new Set(spaces.map((s) => s.storage.kind))).toEqual(new Set(["s3", "webdav", "folder"]));
+    expect(new Set(spaces.map((s) => s.storage.kind))).toEqual(
+      new Set(["s3", "webdav", "folder", "relay"]),
+    );
     expect(views.some((v) => v.space === null)).toBe(true);
     const unlocked = uiStateSchema.parse(ipcFixtures.state.unlocked).sync.space;
     expect(unlocked?.devices.map((d) => d.this_device)).toEqual([true, false]);

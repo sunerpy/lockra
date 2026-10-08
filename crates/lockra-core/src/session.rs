@@ -14,8 +14,8 @@ use std::time::Duration;
 use data_encoding::BASE64;
 use lockra_otp::{OtpKind, base32, hotp, totp_window, uri};
 use lockra_sync::{
-    Invite, Outcome as SyncOutcome, RemoteStore, Space, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, devices_dir, find_space, open_keyring,
-    open_space, remove_device, seal_keyring, step, step_with,
+    Invite, Outcome as SyncOutcome, RemoteStore, Space, SpaceAccess, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, devices_dir, find_space,
+    open_keyring, open_space, remove_device, seal_keyring, step, step_with,
 };
 use lockra_transfer::{Item, Origin, detect, microsoft, qr, text};
 use lockra_vault::{DeviceCheck, DeviceKey, DeviceSlot, FileKind, KdfCost, Opened, Sealed, read_header, write_atomic};
@@ -110,9 +110,9 @@ struct Shared {
     state: Mutex<State>,
     events: broadcast::Sender<UiEvent>,
     wake: Notify,
-    /// The watch on the space's folder heard a change (set from the watcher's thread, without the
-    /// state's lock; the scheduler takes it).
-    folder_changed: AtomicBool,
+    /// The watch on the space's storage (its folder, its relay) heard a change (set from the
+    /// watcher's thread or task, without the state's lock; the scheduler takes it).
+    storage_changed: AtomicBool,
 }
 
 struct State {
@@ -145,12 +145,13 @@ struct State {
     /// The folder the shell's dialog chose last for a sync space: the interface names it as "the
     /// folder chosen", never by its path.
     chosen_folder: Option<PathBuf>,
-    /// The watch on the folder the unlocked space is kept in.
-    folder_watch: Option<FolderWatch>,
+    /// The watch on the storage the unlocked space is kept in, where the storage can tell (a
+    /// folder of this computer, a relay).
+    storage_watch: Option<SpaceWatch>,
 }
 
-/// A watch on a space's folder, for that space and storage.
-struct FolderWatch {
+/// A watch on a space's storage, for that space and storage.
+struct SpaceWatch {
     space_id: Uuid,
     storage: StorageConfig,
     _watch: StorageWatch,
@@ -181,6 +182,7 @@ struct SyncJob {
     space_id: Uuid,
     remote: Option<Arc<dyn RemoteStore>>,
     storage: StorageConfig,
+    access: SpaceAccess,
     keys: SpaceKeys,
     device: u64,
     device_name: String,
@@ -245,11 +247,11 @@ impl Core {
             sync: SyncRuntime::default(),
             foreground: true,
             chosen_folder: None,
-            folder_watch: None,
+            storage_watch: None,
         };
         let (events, _) = broadcast::channel(64);
         let shared =
-            Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new(), folder_changed: AtomicBool::new(false) });
+            Arc::new(Shared { config, ports, settings_store, state: Mutex::new(state), events, wake: Notify::new(), storage_changed: AtomicBool::new(false) });
         tokio::spawn(scheduler(Arc::clone(&shared)));
         let core = Self { shared };
         core.refresh_biometrics();
@@ -514,7 +516,7 @@ impl Core {
             was_unlocked
         };
         if locked {
-            self.follow_folder();
+            self.follow_storage();
             self.changed();
             self.refresh_biometrics();
         }
@@ -1488,7 +1490,6 @@ impl Core {
             (session.sealed.clone(), working, session.data.device())
         };
         let vault_id = sealed.vault_id();
-        let remote = self.open_storage(&storage)?;
         let cost = self.shared.config.kdf;
         let (keys, sync_key, keyring) = blocking(move || {
             sealed.verify_password(password.as_bytes())?;
@@ -1498,6 +1499,8 @@ impl Core {
             Ok((keys, sync_key, keyring))
         })
         .await?;
+        // Opened once the space has its key: a relay is shown the space's access.
+        let remote = self.open_storage(&storage, &SpaceAccess::of(&sync_key))?;
         let mut space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
         // The key is shown once now; Settings › Sync reminds of it until it is saved.
         space.key_saved = false;
@@ -1558,7 +1561,7 @@ impl Core {
             let checked = password.clone();
             blocking(move || Ok(sealed.verify_password(checked.as_bytes())?)).await?;
         }
-        let remote = self.open_storage(&storage)?;
+        let remote = self.open_storage(&storage, &SpaceAccess::of(&sync_key))?;
         let space_id = sync_key.space_id();
         // Without a password of its own, a space whose devices use another one asks for it, rather
         // than calling this vault's (verified) password wrong.
@@ -1746,17 +1749,23 @@ impl Core {
     pub async fn sync_set_storage(&self, storage: StorageConfig, password: Zeroizing<String>) -> CoreResult<()> {
         let storage = self.resolve_storage(storage)?;
         storage.validate().map_err(config_error)?;
-        let (sealed, keys, device) = {
+        let (sealed, keys, access, device) = {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (session.sealed.clone(), sync.keys().map_err(|e| sync_error(&e))?, session.data.device())
+            (session.sealed.clone(), sync.keys().map_err(|e| sync_error(&e))?, sync.access().map_err(|e| sync_error(&e))?, session.data.device())
         };
         let space_id = keys.space_id();
         blocking(move || Ok(sealed.verify_password(password.as_bytes())?)).await?;
-        let remote = self.open_storage(&storage)?;
+        let remote = self.open_storage(&storage, &access)?;
         // This space, not just objects at its place: one of its snapshots opens under its data key.
-        find_space(&*remote, storage.prefix(), &keys, device).await.map_err(|e| sync_error(&e))?;
+        // A relay keeps each space under its own id, which no typo can reach: one that keeps
+        // nothing of the space yet takes it, this device's next run writing it there.
+        match find_space(&*remote, storage.prefix(), &keys, device).await {
+            Ok(()) => {}
+            Err(SyncError::NoSpace) if storage.is_relay() => {}
+            Err(error) => return Err(sync_error(&error)),
+        }
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
@@ -1797,13 +1806,13 @@ impl Core {
     /// Remove another device's snapshot from the space (a lost or retired device): it stops being
     /// listed. A device still in use writes its snapshot again on its next run.
     pub async fn sync_remove_device(&self, tag: &str) -> CoreResult<()> {
-        let (storage, keys, device) = {
+        let (storage, keys, access, device) = {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (sync.storage.clone(), sync.keys().map_err(|e| sync_error(&e))?, session.data.device())
+            (sync.storage.clone(), sync.keys().map_err(|e| sync_error(&e))?, sync.access().map_err(|e| sync_error(&e))?, session.data.device())
         };
-        let remote = self.space_storage(keys.space_id(), &storage).map_err(|e| sync_error(&e))?;
+        let remote = self.space_storage(keys.space_id(), &storage, &access).map_err(|e| sync_error(&e))?;
         let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: "", keyring: &[] };
         match remove_device(&*remote, &space, &mut SyncState::default(), tag).await {
             Ok(()) => {}
@@ -1874,7 +1883,7 @@ impl Core {
             self.save(&mut st, false, move |s| s.data.local_mut().sync = Some(previous))?;
             st.sync = SyncRuntime { busy: st.sync.busy, ..SyncRuntime::default() };
         }
-        self.follow_folder();
+        self.follow_storage();
         self.changed();
         Ok(())
     }
@@ -1917,8 +1926,8 @@ impl Core {
         }
     }
 
-    fn open_storage(&self, storage: &StorageConfig) -> CoreResult<Arc<dyn RemoteStore>> {
-        self.shared.ports.sync.open(storage).map_err(|e| sync_error(&e))
+    fn open_storage(&self, storage: &StorageConfig, access: &SpaceAccess) -> CoreResult<Arc<dyn RemoteStore>> {
+        self.shared.ports.sync.open(storage, access).map_err(|e| sync_error(&e))
     }
 
     /// Start a run unless one is in progress, which another then follows.
@@ -2002,53 +2011,57 @@ impl Core {
             }
         }
         // Set up, joined, unlocked or moved: the space's folder is watched from its first run on.
-        self.follow_folder();
+        self.follow_storage();
     }
 
-    /// Watch the folder the unlocked space is kept in, and nothing else: started for a space in a
-    /// folder of this computer, stopped when the vault locks, the space goes or moves. A watch
-    /// that cannot start (the space's folder not made yet) is tried again after the next run.
-    fn follow_folder(&self) {
+    /// Watch the storage the unlocked space is kept in, where it can tell, and nothing else:
+    /// started for a space in a folder of this computer or on a relay, stopped when the vault
+    /// locks, the space goes or moves. A watch that cannot start (the space's folder not made yet)
+    /// is tried again after the next run.
+    fn follow_storage(&self) {
         let wanted = {
             let st = self.lock();
             match &st.phase {
-                PhaseState::Unlocked(session) => session.data.sync().filter(|s| s.storage.is_folder()).map(|s| (s.space_id, s.storage.clone())),
+                PhaseState::Unlocked(session) => {
+                    session.data.sync().filter(|s| watched(&s.storage)).and_then(|s| Some((s.space_id, s.storage.clone(), s.access().ok()?)))
+                }
                 _ => None,
             }
         };
         let stale = {
             let mut st = self.lock();
-            let current = st.folder_watch.as_ref().map(|w| (w.space_id, &w.storage));
-            if current == wanted.as_ref().map(|(id, storage)| (*id, storage)) {
+            let current = st.storage_watch.as_ref().map(|w| (w.space_id, &w.storage));
+            if current == wanted.as_ref().map(|(id, storage, _)| (*id, storage)) {
                 return;
             }
-            st.folder_watch.take()
+            st.storage_watch.take()
         };
         // Stopped outside the lock: a watcher's thread may be on its way in.
         drop(stale);
-        let Some((space_id, storage)) = wanted else { return };
+        let Some((space_id, storage, access)) = wanted else { return };
         let weak = Arc::downgrade(&self.shared);
         let changed = Box::new(move || {
             if let Some(shared) = weak.upgrade() {
-                shared.folder_changed.store(true, Ordering::SeqCst);
+                shared.storage_changed.store(true, Ordering::SeqCst);
                 shared.wake.notify_one();
             }
         });
-        let Some(watch) = self.shared.ports.sync.watch(&storage, &devices_dir(storage.prefix(), space_id), changed) else { return };
+        let Some(watch) = self.shared.ports.sync.watch(&storage, &access, &devices_dir(storage.prefix(), space_id), changed) else { return };
         let mut st = self.lock();
         let still = matches!(&st.phase, PhaseState::Unlocked(session)
             if session.data.sync().is_some_and(|s| s.space_id == space_id && s.storage == storage));
-        if still && st.folder_watch.is_none() {
-            st.folder_watch = Some(FolderWatch { space_id, storage, _watch: watch });
+        if still && st.storage_watch.is_none() {
+            st.storage_watch = Some(SpaceWatch { space_id, storage, _watch: watch });
         }
     }
 
-    /// The drive brought a change into the space's folder: a run a moment after the first change
-    /// (the next ones within that moment join it), or right after the run in progress (which may
-    /// have looked before it came).
-    fn on_folder_changed(&self) {
+    /// The storage told of a change in the space (the drive brought a snapshot into its folder,
+    /// another device wrote to its relay): a run a moment after the first change (the next ones
+    /// within that moment join it), or right after the run in progress (which may have looked
+    /// before it came).
+    fn on_storage_changed(&self) {
         let mut st = self.lock();
-        if !matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some_and(|s| s.storage.is_folder())) {
+        if !matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some_and(|s| watched(&s.storage))) {
             return;
         }
         if st.sync.busy {
@@ -2070,7 +2083,7 @@ impl Core {
     }
 
     async fn sync_into(&self, brought: &mut Brought) -> Result<SyncOutcome, SyncError> {
-        let SyncJob { space_id, remote, storage, keys, device, device_name, keyring, mut state, mut working } = self.sync_job()?;
+        let SyncJob { space_id, remote, storage, keys, device, device_name, keyring, mut state, mut working, .. } = self.sync_job()?;
         let remote = remote.ok_or(SyncError::Interrupted)?;
         let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: &device_name, keyring: &keyring };
         let outcome = {
@@ -2093,6 +2106,7 @@ impl Core {
                 space_id: sync.space_id,
                 remote: None,
                 storage: sync.storage.clone(),
+                access: sync.access()?,
                 keys: sync.keys()?,
                 device: session.data.device(),
                 device_name: sync.device_name.clone(),
@@ -2102,21 +2116,21 @@ impl Core {
             };
             (job, sync.storage.clone())
         };
-        let remote = self.space_storage(job.space_id, &storage)?;
+        let remote = self.space_storage(job.space_id, &storage, &job.access)?;
         Ok(SyncJob { remote: Some(remote), ..job })
     }
 
     /// The space's storage: opened once and kept for the next runs, until the space or its
     /// storage settings change. Opening (an HTTP client, the system's certificates) happens
     /// outside the state's lock.
-    fn space_storage(&self, space_id: Uuid, storage: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+    fn space_storage(&self, space_id: Uuid, storage: &StorageConfig, access: &SpaceAccess) -> Result<Arc<dyn RemoteStore>, SyncError> {
         if let Some((id, config, remote)) = &self.lock().sync.remote
             && *id == space_id
             && config == storage
         {
             return Ok(Arc::clone(remote));
         }
-        let remote = self.shared.ports.sync.open(storage)?;
+        let remote = self.shared.ports.sync.open(storage, access)?;
         self.lock().sync.remote = Some((space_id, storage.clone(), Arc::clone(&remote)));
         Ok(remote)
     }
@@ -2476,8 +2490,8 @@ impl Core {
 async fn scheduler(shared: Arc<Shared>) {
     let core = Core { shared };
     loop {
-        if core.shared.folder_changed.swap(false, Ordering::SeqCst) {
-            core.on_folder_changed();
+        if core.shared.storage_changed.swap(false, Ordering::SeqCst) {
+            core.on_storage_changed();
         }
         let notified = core.shared.wake.notified();
         tokio::pin!(notified);
@@ -2636,6 +2650,11 @@ fn current_code(entry: &Entry, now_ms: u64) -> String {
 }
 
 /// A change to sync: a run follows after the debounce.
+/// A storage that tells of changes: a folder of this computer, or a relay.
+fn watched(storage: &StorageConfig) -> bool {
+    storage.is_folder() || storage.is_relay()
+}
+
 fn schedule_sync(st: &mut State) {
     if matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some()) {
         st.sync.at = Some(Instant::now() + SYNC_DEBOUNCE);

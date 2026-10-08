@@ -208,15 +208,18 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 
 ## Sync
 
-- **Off unless set up, on storage of the user's own.** Sync stays off until the user sets up a
-  space on an S3-compatible bucket or a WebDAV folder of their own, or, on a computer, in a folder
-  their cloud drive's client keeps in sync; Lockra runs no server. With a space, Lockra contacts
-  that storage only while the vault is unlocked: at unlock, 3 s after a change, every minute while
+- **Off unless set up.** Sync stays off until the user sets up a space: on a Lockra relay (the
+  built-in one, which Lockra runs, or one of the user's own; "The relay" below), on an
+  S3-compatible bucket or a WebDAV folder of their own, or, on a computer, in a folder their cloud
+  drive's client keeps in sync. With a space, Lockra contacts that storage only while the vault is
+  unlocked: at unlock, 3 s after a change, every minute while
   the app is in front (every 5 minutes behind other windows and after a failed run), when the
   desktop window comes back to the front once the last run is 30 s old, and on **Sync now**. A
   folder costs no request: it is looked at every 15 s in front and every minute otherwise, and a
   second after the operating system says a snapshot in it changed (the space's own folder only,
-  while the vault is unlocked). Setting up, joining and moving the storage
+  while the vault is unlocked). A relay is asked, one request at a time while the vault is
+  unlocked, to hold the space's listing back until a snapshot in it changes; a run follows a second
+  after it answers with a change. Setting up, joining and moving the storage
   settings ask for the master password again. Showing an invitation and saving the sync key to a
   file accept instead the biometric check that unlocks this vault (Touch ID, Windows Hello, the
   fingerprint): it proves the user is at the device, and nothing is sealed under it, whereas
@@ -246,7 +249,7 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   two devices are both kept. Another device only ever deletes a snapshot (removing a device); a
   device still in use writes it again on its next run.
 - **Joining.** Another device shows an invitation: the storage settings with their credentials
-  and the sync key, everything but a master password, which the joining device asks for: that of
+  (for a relay, its address alone) and the sync key, everything but a master password, which the joining device asks for: that of
   any device in the space. The QR code carries it as it is, to be scanned on the user's own
   devices only. The text to send is sealed under a one-time code shown only beside it (50 bits,
   stretched with Argon2id; `docs/formats.md`): sent through a chat or a mail, it is of no use
@@ -283,7 +286,7 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   the user installed is not trusted, as for any app that does not opt in to them. Plain HTTP is
   refused except to this computer (the tests' servers), and a redirect may not lead to it either.
   The requests carry the storage's credentials (S3 signatures, WebDAV basic authentication inside
-  TLS) and ciphertext. A cloud drive's folder is no transport of Lockra's: Lockra reads and writes
+  TLS; a relay's access token, below) and ciphertext. A cloud drive's folder is no transport of Lockra's: Lockra reads and writes
   local files, and the drive's own client carries them.
 - **A new master password** re-wraps this device's keyring, which its next run writes with the
   snapshot (the data key stays); until then the old password still joins new devices through this
@@ -305,7 +308,8 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   leaves the devices; the keyrings in them open only with a device's master password together with
   the sync key, and neither reaches the relay. A device shows it an access token instead: HKDF of
   the sync key with a label of its own (`docs/formats.md` §9, "The relay"), from which neither the
-  sync key nor anything else of the space can be computed. The relay keeps only the token's SHA-256.
+  sync key nor anything else of the space can be computed. The device derives it from the sync key
+  whenever it opens the relay and stores it nowhere; the relay keeps only the token's SHA-256.
   Whoever takes the relay's disk, or the relay itself, holds ciphertext and hashes, as an S3 bucket's
   operator would.
 - **What it sees.** The space's id (derived one way from the sync key), its devices' tags (keyed

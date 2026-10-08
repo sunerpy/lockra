@@ -139,6 +139,65 @@ To check on real devices:
    recovers.
 4. The same vault file opened with 0.7.3: the accounts are there and sync is off.
 
+## Lockra relay (0.8.1)
+
+Automated:
+
+- `crates/lockra-relay`: a space is made by its first write and bound to its token, another token
+  refused everywhere and a missing one asked for; conditions on writes; a listing that waits for a
+  change, and every waiting client hears it; every limit (snapshot size, devices, bytes per space
+  and in all, spaces), the rates per client (an IPv6 /64 as one), per space and for new spaces; the
+  client as the last untrusted `X-Forwarded-For` hop; only device snapshots under canonical space
+  ids; a body that fails or never ends refused; what was kept read back at start and an unfinished
+  write dropped; idle spaces removed; the connection limit; the settings and their environment.
+- `crates/lockra-sync`: a relay is an `https://` address alone (loopback over HTTP); the access
+  token is the documented derivation of the sync key (a fixed vector); an invitation to a relay
+  carries its address and the sync key.
+- `crates/lockra-remote/tests/relay.rs`, on a relay started in the test: the store contract, two
+  devices syncing (one snapshot each, no account in clear on the relay's disk), another sync key's
+  token denied, an address with no relay or nothing behind it, a listing or a snapshot larger than
+  allowed not read, and the watch hearing another device's write and nothing once dropped.
+- `crates/lockra-core/src/tests/sync.rs`: a relay space is opened with the space's access and
+  watched while unlocked; a phone joins from the desktop's invitation with nothing but its master
+  password; a space moves onto a relay that keeps nothing of it yet. Bridge fixtures for the relay
+  storage; web: the form starting on the built-in relay, a relay of one's own, a relay space's
+  invitation saying it holds the relay's address and the sync key (desktop and phone), the phone
+  joining from a relay invitation.
+
+Run here, 2026-10-09:
+
+- `make smoke-sync` with its relay phases: two more copies of the real app and `lockra-relay` on
+  127.0.0.1. Device C finds the form on the built-in relay, sets up a space on a relay of its own
+  and shows an invitation; the relay's folder holds one snapshot and an `access` file equal to the
+  SHA-256 of the token computed apart in Python from the sync key, and none of the accounts, the
+  device name, the sync key or the token. Device D joins from the sealed invitation and its code
+  alone, and C takes D's new account in.
+
+  ```text
+  smoke-sync: C set up a space on its relay (1 snapshot, nothing readable, only the token's SHA-256)
+  smoke-sync: C showed a sealed invitation for its relay space and kept it with its code
+  smoke-sync: D joined from C's invitation and code alone, got C's accounts, and added one
+  smoke-sync: C has D's new account through the relay, and lists both devices
+  smoke-sync: passed
+  ```
+
+  Screenshots in `screens/sync/`: `sync-relay-create-light` (the built-in relay, nothing to fill
+  in), `sync-relay-invite-light` (the relay space's invitation), `sync-relay-join-light` (device
+  D's welcome screen), `sync-relay-on-light` (device C with both devices).
+
+- The built-in relay at `https://lockra-relay.onethinker.top` (docs/relay.md):
+  `LOCKRA_IT_RELAY_URL=https://lockra-relay.onethinker.top cargo test -p lockra-remote --test relay a_live_relay`
+  passed through its load balancer: two devices synced, another token was denied, the watch heard a
+  write of the other device, and the test removed its snapshots. The relay's journal holds its start
+  and nothing of the requests.
+
+To check on real devices:
+
+1. A computer on the built-in relay and the Android app: scanning the computer's invitation joins
+   the phone with nothing typed in but a master password; an account added on either shows on the
+   other within seconds while both are unlocked.
+2. A vault on a relay opened with 0.8.0: the accounts are there and sync is off.
+
 ## Not verified here
 
 Real services: AWS S3, Cloudflare R2, Backblaze B2, Alibaba Cloud OSS, MinIO, Nextcloud,

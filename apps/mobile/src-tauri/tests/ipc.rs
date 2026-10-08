@@ -189,9 +189,17 @@ fn the_code_stream_subscribes_through_a_channel_and_stops() {
 
 #[test]
 fn the_phone_s_sync_storage_opens_without_contacting_it_and_plain_http_elsewhere_is_refused() {
+    let access = lockra_sync::SpaceAccess::of(&lockra_sync::SyncKey::generate().unwrap());
     let dav = |url: &str| StorageConfig::Webdav { url: url.into(), prefix: String::new(), username: "me".into(), password: Zeroizing::new("pw".into()) };
-    assert!(matches!(Storages.open(&dav("https://dav.example.com/dav/")), Ok(storage) if !storage.conditional_puts()));
-    assert!(Storages.open(&dav("http://192.168.1.2/dav/")).is_err());
+    assert!(matches!(Storages.open(&dav("https://dav.example.com/dav/"), &access), Ok(storage) if !storage.conditional_puts()));
+    assert!(Storages.open(&dav("http://192.168.1.2/dav/"), &access).is_err());
+    let relay = StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() };
+    assert!(matches!(Storages.open(&relay, &access), Ok(storage) if storage.conditional_puts()));
+    // WebDAV tells nothing; a relay is waited on, from a runtime.
+    assert!(Storages.watch(&dav("https://dav.example.com/dav/"), &access, "x/", Box::new(|| {})).is_none());
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let dir = format!("lockra-sync-v1/{}/devices/", uuid::Uuid::new_v4());
+    assert!(runtime.block_on(async { Storages.watch(&relay, &access, &dir, Box::new(|| {})) }).is_some());
 }
 
 #[test]

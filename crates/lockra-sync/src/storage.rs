@@ -1,7 +1,7 @@
 //! Where a sync space is stored, as the user configures it: S3-compatible object storage or a
-//! WebDAV server, with the credentials to reach it, or a folder on this computer that a cloud
-//! drive's client keeps in sync. Only data and the checks that need no request; lockra-remote
-//! turns a configuration into a [`crate::RemoteStore`].
+//! WebDAV server, with the credentials to reach it, a folder on this computer that a cloud drive's
+//! client keeps in sync, or a Lockra relay. Only data and the checks that need no request;
+//! lockra-remote turns a configuration into a [`crate::RemoteStore`].
 
 use std::fmt;
 use std::path::PathBuf;
@@ -52,6 +52,14 @@ pub enum StorageConfig {
         #[serde(default)]
         path: PathBuf,
     },
+    /// A Lockra relay (lockra-relay, docs/relay.md): the built-in one, or one the user runs. It
+    /// keeps the snapshots like any storage and opens none of them. The space's access token comes
+    /// from the sync key ([`crate::SpaceAccess`]), so the settings hold the address alone, and an
+    /// invitation carries nothing more than the address and the sync key.
+    Relay {
+        /// The relay's address, `https://lockra-relay.onethinker.top`.
+        url: String,
+    },
 }
 
 impl fmt::Debug for StorageConfig {
@@ -67,6 +75,7 @@ impl fmt::Debug for StorageConfig {
                 .finish_non_exhaustive(),
             Self::Webdav { url, prefix, .. } => f.debug_struct("Webdav").field("url", url).field("prefix", prefix).finish_non_exhaustive(),
             Self::Folder { path } => f.debug_struct("Folder").field("path", path).finish(),
+            Self::Relay { url } => f.debug_struct("Relay").field("url", url).finish(),
         }
     }
 }
@@ -84,12 +93,12 @@ pub enum ConfigError {
 }
 
 impl StorageConfig {
-    /// The folder inside the storage the space lives under (none in a folder of this computer:
-    /// the folder is the place).
+    /// The folder inside the storage the space lives under (none in a folder of this computer,
+    /// which is the place, nor on a relay, which keeps each space under its id).
     pub fn prefix(&self) -> &str {
         match self {
             Self::S3 { prefix, .. } | Self::Webdav { prefix, .. } => prefix,
-            Self::Folder { .. } => "",
+            Self::Folder { .. } | Self::Relay { .. } => "",
         }
     }
 
@@ -97,7 +106,7 @@ impl StorageConfig {
     pub fn host(&self) -> Option<String> {
         let address = match self {
             Self::S3 { endpoint, .. } => endpoint,
-            Self::Webdav { url, .. } => url,
+            Self::Webdav { url, .. } | Self::Relay { url } => url,
             Self::Folder { .. } => return None,
         };
         Url::parse(address.trim()).ok().and_then(|u| u.host_str().map(str::to_owned))
@@ -108,14 +117,28 @@ impl StorageConfig {
         matches!(self, Self::Folder { .. })
     }
 
+    /// A Lockra relay.
+    pub fn is_relay(&self) -> bool {
+        matches!(self, Self::Relay { .. })
+    }
+
     /// Everything that can be checked without a request: the required fields, an address, and
-    /// HTTPS (plain HTTP only to this computer); for a folder, an absolute path.
+    /// HTTPS (plain HTTP only to this computer); for a folder, an absolute path; for a relay, an
+    /// address without a query or a fragment (the API's paths go after it).
     pub fn validate(&self) -> Result<(), ConfigError> {
         let (address, required) = match self {
             Self::S3 { endpoint, region, bucket, access_key_id, secret_access_key, .. } => {
                 (endpoint, vec![region.as_str(), bucket.as_str(), access_key_id.as_str(), secret_access_key.as_str()])
             }
             Self::Webdav { url, username, password, .. } => (url, vec![username.as_str(), password.as_str()]),
+            Self::Relay { url } if url.trim().is_empty() => return Err(ConfigError::Missing),
+            Self::Relay { url } => {
+                let parsed = Url::parse(url.trim()).map_err(|_| ConfigError::Address)?;
+                if parsed.query().is_some() || parsed.fragment().is_some() {
+                    return Err(ConfigError::Address);
+                }
+                (url, Vec::new())
+            }
             Self::Folder { path } if path.as_os_str().is_empty() => return Err(ConfigError::Missing),
             Self::Folder { path } => return if path.is_absolute() { Ok(()) } else { Err(ConfigError::Address) },
         };
@@ -213,6 +236,32 @@ mod tests {
         let asked: StorageConfig = serde_json::from_value(serde_json::json!({ "kind": "folder" })).unwrap();
         assert_eq!(asked, StorageConfig::Folder { path: PathBuf::new() });
         assert!(asked.is_folder() && !webdav("https://dav.example.com").is_folder());
+    }
+
+    #[test]
+    fn a_relay_is_an_https_address_alone() {
+        let relay = |url: &str| StorageConfig::Relay { url: url.into() };
+        assert_eq!(relay("https://lockra-relay.onethinker.top").validate(), Ok(()));
+        assert_eq!(relay("https://example.com/lockra/").validate(), Ok(()));
+        assert_eq!(relay("http://127.0.0.1:8090").validate(), Ok(()));
+        assert_eq!(relay("http://relay.example.com").validate(), Err(ConfigError::Insecure));
+        assert_eq!(relay(" ").validate(), Err(ConfigError::Missing));
+        for bad in [
+            "relay.example.com",
+            "https://me:pw@relay.example.com",
+            "https://relay.example.com/?space=1",
+            "https://relay.example.com/#x",
+            "ftp://relay.example.com",
+        ] {
+            assert_eq!(relay(bad).validate(), Err(ConfigError::Address), "{bad}");
+        }
+        let built_in = relay("https://lockra-relay.onethinker.top");
+        assert_eq!((built_in.prefix(), built_in.host().as_deref()), ("", Some("lockra-relay.onethinker.top")));
+        assert!(built_in.is_relay() && !built_in.is_folder() && !s3("https://s3.example.com").is_relay());
+        assert_eq!(format!("{built_in:?}"), "Relay { url: \"https://lockra-relay.onethinker.top\" }");
+        let json = serde_json::to_value(&built_in).unwrap();
+        assert_eq!(json, serde_json::json!({ "kind": "relay", "url": "https://lockra-relay.onethinker.top" }));
+        assert_eq!(serde_json::from_value::<StorageConfig>(json).unwrap(), built_in);
     }
 
     #[test]

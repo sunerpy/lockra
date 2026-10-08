@@ -20,19 +20,23 @@ balancer, and tell it which proxies to believe about the client's address (`--tr
 ### The release binary
 
 Every release has a static Linux binary for x64 and ARM64,
-`lockra-relay_<version>_linux_<x64|arm64>.tar.gz`, in `SHA256SUMS` and the release's attestations:
+`lockra-relay_<version>_linux_<x64|arm64>.tar.gz` (the binary, its systemd unit and the licence), in
+`SHA256SUMS` and the release's attestations:
 
 ```sh
 version=0.8.1 arch=x64
 gh release download "v$version" --repo sunerpy/lockra --pattern "lockra-relay_${version}_linux_${arch}.tar.gz" --pattern SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 gh attestation verify "lockra-relay_${version}_linux_${arch}.tar.gz" --repo sunerpy/lockra
-tar -xzf "lockra-relay_${version}_linux_${arch}.tar.gz" lockra-relay
+tar -xzf "lockra-relay_${version}_linux_${arch}.tar.gz"
 sudo install -m 0755 lockra-relay /usr/local/bin/lockra-relay
+sudo cp lockra-relay.service /etc/systemd/system/ && sudo systemctl enable --now lockra-relay
 ```
 
-`deploy/relay/lockra-relay.service` runs it under systemd as a dynamic user, its spaces in
-`/var/lib/lockra-relay`, listening on `127.0.0.1:8090` for a proxy on the same machine.
+The unit (`deploy/relay/lockra-relay.service`) runs it under systemd as a dynamic user, its spaces
+in `/var/lib/lockra-relay`, listening on `127.0.0.1:8090` for a proxy on the same machine. Behind a
+load balancer on another machine, change its `LOCKRA_RELAY_BIND` to `0.0.0.0:8090` and its
+`LOCKRA_RELAY_TRUST_PROXY` to the balancer's addresses, and let only the balancer reach the port.
 
 ### Docker, with HTTPS
 
@@ -84,7 +88,7 @@ the only one in front (deploy/relay/Caddyfile does).
 ## What it keeps
 
 ```
-<data>/lockra-relay-v1/spaces/<space id>/access               SHA-256 of the space's access token, hex
+<data>/lockra-relay-v1/spaces/<space id>/access               SHA-256 of the access token's 32 bytes, hex
 <data>/lockra-relay-v1/spaces/<space id>/devices/<tag>.lks    a device's snapshot, as the device sealed it
 ```
 

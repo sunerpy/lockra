@@ -42,12 +42,13 @@ describe("sync on the phone", () => {
     await user.click(screen.getByTestId("codes-settings"));
     const row = await screen.findByTestId("settings-sync");
     expect(row).toHaveTextContent("设置同步");
-    expect(row).toHaveTextContent("在你自己的存储上与其他设备同步");
+    expect(row).toHaveTextContent("经 Lockra 中继或你自己的存储，与其他设备同步");
     await user.click(row);
     await user.click(await screen.findByTestId("sync-setup-open"));
     const form = within(await screen.findByTestId("sync-create"));
     const submit = form.getByRole("button", { name: "开始同步" });
     expect(submit).toBeDisabled();
+    await user.click(form.getByRole("radio", { name: "S3 兼容" }));
     await user.type(form.getByLabelText("服务地址"), "https://s3.eu-central-1.amazonaws.com");
     await user.type(form.getByLabelText("区域"), "eu-central-1");
     await user.type(form.getByLabelText("存储桶"), "my-lockra");
@@ -121,6 +122,30 @@ describe("sync on the phone", () => {
     expect(backend.calls.some((c) => c.command === "sync_join")).toBe(false);
   });
 
+  it("joins a space on Lockra's relay from the desktop's code, with nothing else to type", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-join-open"));
+    const form = within(await screen.findByTestId("sync-join"));
+    // What the desktop's code holds: the relay's address and the sync key.
+    backend.setScan(
+      `lockra-invite:1:${btoa("mock-relay-invite|https://lockra-relay.onethinker.top\n:1")}`,
+    );
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "扫码加入" }));
+    expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(screen.getByText("Lockra 中继 · lockra-relay.onethinker.top")).toBeInTheDocument();
+    // The phone's own invitation holds the relay's address and the sync key, no credentials.
+    await user.click(screen.getByTestId("sync-invite-open"));
+    const page = within(await screen.findByTestId("page-sync-invite"));
+    await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    expect(await page.findByTestId("invite-text")).toHaveTextContent(/^lockra-invite:2:/);
+    expect(
+      page.getByText("邀请码包含中继地址和同步密钥，只能在你自己的设备上使用。"),
+    ).toBeInTheDocument();
+  });
+
   it("asks for this phone's own storage when the invitation holds the sync key alone", async () => {
     const { user, backend } = renderApp();
     await ready();
@@ -154,6 +179,7 @@ describe("sync on the phone", () => {
     const form = within(await screen.findByTestId("sync-join"));
     await user.click(form.getByRole("radio", { name: "同步密钥" }));
     const join = form.getByRole("button", { name: "加入" });
+    await user.click(form.getByRole("radio", { name: "S3 兼容" }));
     await user.type(form.getByLabelText("服务地址"), "https://s3.example.com");
     await user.type(form.getByLabelText("区域"), "auto");
     await user.type(form.getByLabelText("存储桶"), "vault");

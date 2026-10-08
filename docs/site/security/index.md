@@ -115,6 +115,18 @@ refused. The storage's
 credentials and the sync key are kept in the encrypted vault and never in a backup.
 [Sync between devices](/backup/sync#what-the-storage-can-see) explains what the storage can see.
 
+### Through a Lockra relay
+
+<StatusTag status="building" /> In development, not released yet.
+
+A Lockra relay, the built-in one or your own, is storage like any other and is trusted with no
+more: it keeps the same encrypted files, and neither the key that encrypts them nor the sync key
+reaches it. The devices identify themselves to it with a value made from the sync key, from which
+the sync key cannot be recovered, so nobody else can read or change the space there. The relay sees
+when and from which network addresses the devices sync, and it can delete the space or be
+unavailable; the devices keep every account either way
+([Through a Lockra relay](/backup/sync#through-a-lockra-relay)).
+
 ## What Lockra cannot protect against
 
 - Malware running as your user on the computer can read what you type, including the master

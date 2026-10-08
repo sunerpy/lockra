@@ -153,7 +153,7 @@ export const en: Messages = {
     },
     sync: {
       rowOff: "Set up sync",
-      settingsHint: "Sync with your other devices on storage of your own",
+      settingsHint: "Sync with your other devices through a Lockra relay or storage of your own",
       fromScan: "Scan",
       scan: "Scan to join",
       scanPrompt: "Point the camera at the invitation on the other device",
@@ -176,7 +176,7 @@ export const en: Messages = {
   welcome: {
     title: "Welcome to Lockra",
     subtitle:
-      "A two-factor authenticator encrypted on your own devices. Codes are generated here; sync is off unless you set it up on storage of your own.",
+      "A two-factor authenticator encrypted on your own devices. Codes are generated here; sync is off unless you set it up, end-to-end encrypted, through a Lockra relay or on storage of your own.",
     create: {
       title: "Create a vault",
       body: "Choose a master password. It cannot be recovered, so make sure you remember it.",
@@ -597,7 +597,7 @@ export const en: Messages = {
       credits: "Credits",
       creditsValue: "Interface design derived from Voltip (Apache-2.0)",
       privacy:
-        "Lockra goes online only to check for and download updates, and to sync with storage you set up yourself; it collects nothing.",
+        "Lockra goes online only to check for and download updates, and to sync (with storage you set up yourself, or through a Lockra relay); it collects nothing. A relay keeps encrypted snapshots only, and opens none of them.",
       update: {
         label: "Updates",
         help: "The automatic update switch is under General.",
@@ -605,11 +605,11 @@ export const en: Messages = {
     },
   },
   sync: {
-    lede: "End-to-end encrypted sync between your devices, on storage of your own. Lockra runs no server; the storage holds ciphertext only.",
+    lede: "End-to-end encrypted sync between your devices, through a Lockra relay or on storage of your own. The relay and the storage hold ciphertext only.",
     off: {
       createTitle: "Start syncing from this device",
       createBody:
-        "The sync space goes into your S3-compatible bucket or WebDAV folder. Its sync key is shown when it is ready: keep it safe, apart from the master password.",
+        "The sync space goes on a Lockra relay (no storage of your own needed), or into your S3-compatible bucket or WebDAV folder. Its sync key is shown when it is ready: keep it safe, apart from the master password.",
       createSubmit: "Start syncing",
       joinTitle: "Join an existing sync",
       joinBody:
@@ -617,6 +617,12 @@ export const en: Messages = {
     },
     storage: {
       kind: "Storage",
+      relay: "Lockra relay",
+      relayHint:
+        "No storage of your own needed: the snapshots are encrypted on the devices and synced through the relay, which sees ciphertext only.",
+      relayUrl: "Relay address",
+      relayUrlHint:
+        "Starts with https://, for example https://relay.example.com. The docs explain how to run one.",
       s3: "S3-compatible",
       webdav: "WebDAV",
       folder: "Cloud drive folder",
@@ -649,6 +655,8 @@ export const en: Messages = {
         "HTTPS addresses only (plain HTTP only to this computer). The credentials are kept in the encrypted vault and never shown again.",
       provider: "Provider",
       presets: {
+        "relay-hosted": "Lockra's built-in relay",
+        "relay-custom": "A relay of your own",
         aws: "AWS S3 (global regions)",
         "aws-cn": "AWS S3 (China regions)",
         r2: "Cloudflare R2",
@@ -664,6 +672,10 @@ export const en: Messages = {
         folder: "A folder your cloud drive's app syncs",
       },
       presetHints: {
+        "relay-hosted":
+          "The relay Lockra runs; nothing to fill in. It keeps the snapshots as the devices encrypted them and, without the data key or the sync key, opens none of them; it sees when devices sync and from which addresses.",
+        "relay-custom":
+          "A lockra-relay you run yourself, behind HTTPS. Like the built-in one, it keeps ciphertext only.",
         aws: "For the China regions (Beijing, Ningxia), choose AWS S3 (China regions): their accounts and keys are separate.",
         "aws-cn":
           "Beijing (cn-north-1) or Ningxia (cn-northwest-1). Keys of the China regions do not work in the global regions.",
@@ -762,7 +774,7 @@ export const en: Messages = {
     storageRow: "Storage",
     storageEdit: "Change storage settings",
     storageEditBody:
-      "A new access key, password or address. The sync space must already be at the new place.",
+      "A new access key, password or address. The sync space must already be at the new place, except on a Lockra relay: this device writes the space there on its next sync.",
     device: {
       label: "This device",
       rename: "Rename",
@@ -803,6 +815,8 @@ export const en: Messages = {
       warning:
         "The invitation holds the storage's credentials and the sync key: use it on your own devices only.",
       warningKeyOnly: "The invitation holds the sync key: use it on your own devices only.",
+      warningRelay:
+        "The invitation holds the relay's address and the sync key: use it on your own devices only.",
       keyOnly:
         "This space is in a cloud drive folder on this computer, so the invitation carries the sync key alone. The other device chooses how it reaches the same folder: a computer, the same drive's folder; a phone, that drive's WebDAV.",
       text: "Invitation to send",
