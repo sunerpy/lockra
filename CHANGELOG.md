@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.1](https://github.com/sunerpy/lockra/compare/v0.8.0...v0.8.1) (2026-10-08)
+
+
+### Features
+
+* **relay:** 新增可自部署的同步中继 lockra-relay ([#89](https://github.com/sunerpy/lockra/issues/89)) ([0c160d1](https://github.com/sunerpy/lockra/commit/0c160d19e57781ef1c554aa4b311290fca541592))
+* **sync:** 同步可经 Lockra 中继进行，手机扫码即可加入 ([#91](https://github.com/sunerpy/lockra/issues/91)) ([838f451](https://github.com/sunerpy/lockra/commit/838f451d2dd8884a77abb045fc806d94d618c372))
+
 ## [0.8.0](https://github.com/sunerpy/lockra/compare/v0.7.6...v0.8.0) (2026-10-08)
 
 
