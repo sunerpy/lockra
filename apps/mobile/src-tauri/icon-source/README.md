@@ -14,6 +14,6 @@ background and monochrome layers, and the plain icons) and `icons/`. The phone a
 
 - `lockra.svg`: the whole mark.
 - `lockra-background.svg`: the mark's navy, full bleed; the launcher masks the shape.
-- `lockra-foreground.svg`, `lockra-monochrome.svg`: the ring and the lock alone, at 0.8, so that
-  they stay inside the 66 dp safe circle of the 108 dp canvas (the generator draws an SVG canvas
-  whole, so the scale lives in the sources). The monochrome layer cuts the keyhole out.
+- `lockra-foreground.svg`, `lockra-monochrome.svg`: the padlock alone, at 0.8, so that it stays
+  inside the 66 dp safe circle of the 108 dp canvas (the generator draws an SVG canvas whole, so the
+  scale lives in the sources). The monochrome layer cuts the code's three dots out of the lock.
