@@ -32,3 +32,7 @@ Android 应用把保险库和设置保存在应用的私有目录中，Android �
 ## 剪贴板与屏幕
 
 复制的验证码进入系统剪贴板，在 Lockra 清空剪贴板之前，其他应用可以读取。密钥和导出二维码只在输入主密码后才会显示在屏幕上，详见 [Lockra 如何保护你的账号](/zh/security/)。
+
+## 联系方式
+
+Lockra 由 sunerpy 开发，并以同一开发者身份发布在 Google Play 上。如有隐私相关的问题，请在 [GitHub](https://github.com/sunerpy/lockra/issues) 提交 issue，或发送邮件至 nkuzhangshn@gmail.com。
