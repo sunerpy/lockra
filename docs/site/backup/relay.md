@@ -3,7 +3,7 @@
 This page explains how to run a Lockra relay of your own, so that your devices sync through a
 server you control rather than Lockra's built-in relay.
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.8.1.
 
 A relay keeps a sync space's encrypted files and tells the waiting devices when one of them writes
 ([Through a Lockra relay](/backup/sync#through-a-lockra-relay)). It cannot open the files: the key

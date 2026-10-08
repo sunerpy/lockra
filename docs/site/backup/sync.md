@@ -1,11 +1,12 @@
 # Sync between devices
 
-This page explains how to keep the same accounts on several devices through storage of your own,
-how a new device joins, and how Lockra keeps that storage from reading your accounts.
+This page explains how to keep the same accounts on several devices, through storage of your own
+or a Lockra relay, how a new device joins, and how Lockra keeps that storage from reading your
+accounts.
 
 <StatusTag status="available" /> Sync is available from version 0.4.0.
 
-Sync is off until you set it up. Lockra runs no server and has no account: your devices meet in an
+Sync is off until you set it up, and has no account: your devices meet on a Lockra relay, in an
 S3-compatible bucket or a WebDAV folder that you choose, or, on a computer, in a folder your cloud
 drive keeps in sync, and everything they put there is encrypted before it leaves the device.
 
@@ -19,6 +20,8 @@ drive keeps in sync, and everything they put there is encrypted before it leaves
   on the same computer.
 - Or, on a computer, a folder that a cloud drive's app keeps in sync, with no credentials at all
   (below, [Through a cloud drive folder](#through-a-cloud-drive-folder)).
+- Or nothing at all: Lockra's built-in relay, or a relay of your own (below,
+  [Through a Lockra relay](#through-a-lockra-relay)).
 
 ### By provider
 
@@ -143,7 +146,7 @@ keeps the accounts, and shows sync as off.
 
 ## Through a Lockra relay
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.8.1.
 
 A relay is a server that keeps a sync space's encrypted files, for devices that have no storage of
 their own. Lockra runs one, the built-in relay, and you can run your own

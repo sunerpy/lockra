@@ -12,7 +12,7 @@ Google Authenticator and Microsoft Authenticator use.
 Lockra keeps all your accounts in one file on your computer, encrypted with a key derived from a
 master password that only you know. Lockra goes online for its own updates
 ([Updating](/guide/updates#updating)) and, from version 0.4.0 if you turn it on, to sync your
-devices through storage of your own ([Sync between devices](/backup/sync)): there is no account to create and nothing is
+devices through storage of your own or, from version 0.8.1, a Lockra relay ([Sync between devices](/backup/sync)): there is no account to create and nothing is
 reported back. The codes are calculated on your computer from the secret each service gave you and
 the current time.
 
@@ -31,9 +31,10 @@ and the password it was made under.
 
 ## What Lockra does not do
 
-Lockra runs no sync server, has no browser extension, and does not fill in codes for you. These
-are deliberate: each would mean sending your accounts somewhere or reaching into other apps. See
-[Roadmap](/roadmap) for the full list and what is planned.
+Lockra has no sync service that can read your accounts (a relay keeps encrypted files only), no
+browser extension, and does not fill in codes for you. These are deliberate: each would mean
+sending your accounts where they can be read, or reaching into other apps. See [Roadmap](/roadmap)
+for the full list and what is planned.
 
 ## Next steps
 

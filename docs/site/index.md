@@ -2,12 +2,12 @@
 layout: home
 title: Lockra — an encrypted two-factor authenticator for Windows, macOS and Linux
 titleTemplate: false
-description: Lockra keeps your two-factor codes in one encrypted file on your computer. Move accounts from and to Google Authenticator and Microsoft Authenticator, keep encrypted backups in a folder you choose, and sync your devices through storage of your own.
+description: Lockra keeps your two-factor codes in one encrypted file on your computer. Move accounts from and to Google Authenticator and Microsoft Authenticator, keep encrypted backups in a folder you choose, and sync your devices, end-to-end encrypted, through a Lockra relay or storage of your own.
 
 hero:
   name: Lockra
   text: Two-factor codes that stay on your devices.
-  tagline: An encrypted authenticator for Windows, macOS and Linux. Move your accounts from Google Authenticator or Microsoft Authenticator, keep encrypted backups where you choose, and sync your devices through storage of your own if you want to.
+  tagline: An encrypted authenticator for Windows, macOS and Linux. Move your accounts from Google Authenticator or Microsoft Authenticator, keep encrypted backups where you choose, and sync your devices, end-to-end encrypted, if you want to.
   actions:
     - theme: brand
       text: Download
@@ -24,7 +24,7 @@ home:
     - term: Runs on
       text: Windows 10 and 11, macOS 11 or later (Apple silicon and Intel), and Linux, on x64 and ARM64.
     - term: Your accounts
-      text: In one encrypted file on each device. Lockra connects to GitHub for updates and, once you turn on sync, to your own storage; to nothing else.
+      text: In one encrypted file on each device. Lockra connects to GitHub for updates and, once you turn on sync, to the relay or storage you chose; to nothing else.
 
   visual:
     home:
@@ -93,12 +93,12 @@ home:
             status: available
             link: /backup/#restoring-a-backup
           - title: Sync between your devices
-            body: End-to-end encrypted, through an S3-compatible bucket or a WebDAV folder of your own. Lockra runs no server, and the storage sees only encrypted files.
+            body: End-to-end encrypted, through a Lockra relay, an S3-compatible bucket or a WebDAV folder. Whatever keeps the space sees only encrypted files.
             status: available
             link: /backup/sync
           - title: Sync through a Lockra relay
             body: No storage of your own needed. The built-in relay, or one you run yourself, keeps the encrypted files and opens none of them; a phone joins by scanning the computer's QR code.
-            status: building
+            status: available
             link: /backup/sync#through-a-lockra-relay
       - name: Protection
         items:
@@ -222,17 +222,17 @@ home:
         value: Where you save them
         detail: Encrypted the same way. Automatic backups go only to the folder you chose; if that folder syncs, the encrypted file syncs with it.
       - name: Sync
-        value: Your own storage, if you turn it on
-        detail: Each device writes encrypted files to the bucket or WebDAV folder you set up. The storage cannot read an account, a secret or a device name.
+        value: A relay or your own storage, if you turn it on
+        detail: Each device writes encrypted files to the Lockra relay, bucket or WebDAV folder you set up. None of them can read an account, a secret or a device name.
       - name: The network
         value: Updates and your sync
-        detail: Lockra asks GitHub for the newest version when you check, or at start if you turn on automatic updates; nothing from your accounts goes with it. There is no Lockra account, server or telemetry, and fonts and images ship with the app.
+        detail: Lockra asks GitHub for the newest version when you check, or at start if you turn on automatic updates; nothing from your accounts goes with it. There is no Lockra account or telemetry, the built-in relay keeps encrypted files only, and fonts and images ship with the app.
 
   scope:
     title: Deliberately left out
-    intro: Lockra does one thing, on your devices and your storage.
+    intro: Lockra does one thing, on your devices.
     items:
-      - A sync server or an account. Devices sync through storage you choose.
+      - An account, or a server that can read your accounts. Sync needs no account, and the relay or storage holds encrypted files only.
       - A browser extension or filling in codes. Copy a code and paste it.
       - Website icons. Accounts show their initial; fetching icons would mean going online.
       - Non-standard codes such as Steam Guard.
@@ -258,7 +258,7 @@ Moving the other way, Lockra shows migration codes for Google Authenticator and 
 
 ## Backups you never have to remember
 
-Turn on automatic backups once and choose a folder. A few seconds after each change Lockra writes an encrypted copy there and keeps only the newest few. A folder of OneDrive, Google Drive or iCloud carries the copies to your other devices without Lockra going online, and sync keeps the accounts themselves the same on every device, through storage of your own.
+Turn on automatic backups once and choose a folder. A few seconds after each change Lockra writes an encrypted copy there and keeps only the newest few. A folder of OneDrive, Google Drive or iCloud carries the copies to your other devices without Lockra going online, and sync keeps the accounts themselves the same on every device, through a Lockra relay or storage of your own.
 
 Restoring merges a backup into your accounts through the same preview as an import, or replaces them after saving a copy of the vault you had.
 

@@ -107,7 +107,7 @@ so, so mind screen sharing.
 
 ## Sync
 
-Sync (from version 0.4.0) is off until you set it up on storage of your own. Everything a device writes there is
+Sync (from version 0.4.0) is off until you set it up, on storage of your own or a Lockra relay. Everything a device writes there is
 encrypted on the device, and the key that encrypts it opens only with both the master password of
 a device in the space and the sync key. Each device writes only its own file, so devices never
 overwrite each other's changes; a file that was altered or put back to an older version is
@@ -117,7 +117,7 @@ credentials and the sync key are kept in the encrypted vault and never in a back
 
 ### Through a Lockra relay
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.8.1.
 
 A Lockra relay, the built-in one or your own, is storage like any other and is trusted with no
 more: it keeps the same encrypted files, and neither the key that encrypts them nor the sync key
