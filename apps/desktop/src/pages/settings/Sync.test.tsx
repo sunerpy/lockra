@@ -28,6 +28,7 @@ describe("Settings › Sync", () => {
     const form = within(pane.getByTestId("sync-create"));
     const submit = form.getByRole("button", { name: "开始同步" });
     expect(submit).toBeDisabled();
+    await user.click(form.getByRole("radio", { name: "S3 兼容" }));
     await user.type(form.getByLabelText("服务地址"), "https://s3.eu-central-1.amazonaws.com");
     await user.type(form.getByLabelText("区域"), "eu-central-1");
     await user.type(form.getByLabelText("存储桶"), "my-lockra");
@@ -74,6 +75,36 @@ describe("Settings › Sync", () => {
     );
     expect(pane.getAllByTestId("sync-device")).toHaveLength(1);
     expect(document.body.textContent).not.toContain(MOCK_STORAGE_SECRET);
+  });
+
+  it("sets up a space on Lockra's relay with nothing to type but the master password", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-create-open"));
+    const form = within(pane.getByTestId("sync-create"));
+    expect(form.getByRole("radio", { name: "Lockra 中继" })).toBeChecked();
+    expect(form.getByTestId("storage-address")).toHaveTextContent(
+      "https://lockra-relay.onethinker.top",
+    );
+    await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "开始同步" }));
+    expect(await screen.findByTestId("sync-created")).toBeInTheDocument();
+    expect(backend.calls.find((c) => c.command === "sync_create")).toMatchObject({
+      storage: { kind: "relay", url: "https://lockra-relay.onethinker.top" },
+    });
+    await user.click(screen.getByRole("button", { name: "我已保存" }));
+    expect(pane.getByTestId("sync-storage")).toHaveTextContent(
+      "Lockra 中继 · lockra-relay.onethinker.top",
+    );
+    // The invitation holds the relay's address and the sync key: no storage credentials.
+    await user.click(pane.getByTestId("sync-invite-open"));
+    const prompt = await screen.findByRole("dialog", { name: "邀请其他设备" });
+    await user.type(within(prompt).getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
+    const invite = await screen.findByTestId("sync-invite");
+    expect(invite).toHaveTextContent("邀请码包含中继地址和同步密钥，只能在你自己的设备上使用。");
+    expect(within(invite).queryByTestId("invite-key-only")).not.toBeInTheDocument();
   });
 
   it("joins a space with the storage settings and the sync key", async () => {
@@ -279,6 +310,7 @@ describe("Settings › Sync", () => {
     pane = await openSync(second.user);
     await second.user.click(pane.getByTestId("sync-create-open"));
     const form = within(pane.getByTestId("sync-create"));
+    await second.user.click(form.getByRole("radio", { name: "S3 兼容" }));
     await second.user.type(form.getByLabelText("服务地址"), "https://s3.example.com");
     await second.user.type(form.getByLabelText("区域"), "auto");
     await second.user.type(form.getByLabelText("存储桶"), "b");
@@ -303,6 +335,7 @@ describe("Settings › Sync", () => {
     const create = async () => {
       await user.click(pane.getByTestId("sync-create-open"));
       const form = within(pane.getByTestId("sync-create"));
+      await user.click(form.getByRole("radio", { name: "S3 兼容" }));
       await user.selectOptions(form.getByLabelText("服务商"), "aws");
       await user.type(form.getByLabelText("区域"), "eu-central-1");
       await user.type(form.getByLabelText("存储桶"), "b");

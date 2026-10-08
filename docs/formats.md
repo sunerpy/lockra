@@ -93,8 +93,9 @@ the code list, `{collapsed_groups}`, "" for the accounts in no group: group name
 encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and
 credentials, the space id, its data key, the sync key, this device's name, its keyring and what
 the runs remember). A `sync` this version cannot read (one kept by an earlier build, or by a later
-Lockra: to 0.7.3, a space in a cloud drive's folder, `{kind: "folder", path}`) is left out and the
-vault opens without it: sync is off on that device until it is set up again.
+Lockra: to 0.7.3, a space in a cloud drive's folder, `{kind: "folder", path}`; to 0.8.0, a space on
+a relay, `{kind: "relay", url}`) is left out and the vault opens without it: sync is off on that
+device until it is set up again.
 
 Duplicates: the same secret and parameters is **the same account** (an import skips it); the same
 issuer and account with a different secret is a **conflict** (both are kept by default, or the
@@ -212,12 +213,14 @@ is judged from its first bytes, not its name: Lockra magic, `SQLite format 3`, a
 ## 9. Sync
 
 A sync space lives under the prefix the user chose on their storage (an S3-compatible bucket or a
-WebDAV folder), or in a folder of the computer that a cloud drive's client keeps in sync (the
-folder is the place, no prefix): one snapshot per device, and nothing else.
+WebDAV folder), in a folder of the computer that a cloud drive's client keeps in sync (the folder
+is the place, no prefix), or on a Lockra relay, which keeps each space by its id ("The relay"
+below): one snapshot per device, and nothing else.
 
 ```
 <prefix>/lockra-sync-v1/<space id>/devices/<device tag>.lks
 <folder>/lockra-sync-v1/<space id>/devices/<device tag>.lks
+<relay>/v1/spaces/<space id>/devices/<device tag>.lks
 ```
 
 The same space can be reached both ways: a computer through its cloud drive's folder, a phone
@@ -260,8 +263,8 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
 - **Payload.** `{format: 1, entries, tombstones}` as in the vault (§2), without
   `last_used_at_ms`. A device writes its snapshot when its device name, keyring or payload
   changed, under a sequence number no write of it had before: one higher than the last written or
-  attempted. S3 writes carry `If-None-Match: *` or `If-Match: <etag>`, which catch a copied vault
-  writing under the same name sooner. A snapshot under a new etag is read and merged even at a
+  attempted. S3 and relay writes carry `If-None-Match: *` or `If-Match: <etag>`, which catch a
+  copied vault writing under the same name sooner. A snapshot under a new etag is read and merged even at a
   sequence number already seen; one under a lower number than seen is refused. An object larger
   than 16 MiB is never read (`MAX_OBJECT_BYTES`): it is reported as unreadable. An object is read
   as a stream, and no further than the size the storage gave for it.
@@ -275,8 +278,8 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
 - **The sync key** is `LKS1-` and 14 groups of four Base32 characters: the 32-byte key and three
   bytes of its SHA-256, so a mistyped character is caught. Case, spaces and dashes do not matter.
 - **An invitation** is `lockra-invite:1:` and Base64url (no padding) of
-  `{storage, sync_key}`: the storage settings with their credentials, and the sync key text. The QR
-  code carries it so. A space in a folder invites with `{sync_key}` alone: a folder is of no use on
+  `{storage, sync_key}`: the storage settings with their credentials (a relay's are its address,
+  `{kind: "relay", url}`), and the sync key text. The QR code carries it so. A space in a folder invites with `{sync_key}` alone: a folder is of no use on
   another device, and its path is never taken from an invitation (one naming a folder is refused);
   the joining device says how it reaches the space. Lockra up to 0.7.3 reads only invitations
   with their storage.
@@ -303,8 +306,8 @@ GET    <relay>/v1/                                              {service: "lockr
 
 - **Access.** Every request for a space carries `Authorization: Bearer <token>`, the space's access
   token: Base64url (no padding) of the 32 bytes of HKDF-SHA256(salt = the space id's 16 bytes,
-  ikm = sync key, info `lockra-relay v1 access token`). The relay keeps the token's SHA-256 (hex,
-  in the space's `access` file); a space's first write binds it. Another token is refused (403), a
+  ikm = sync key, info `lockra-relay v1 access token`). The relay keeps the SHA-256 of those 32
+  bytes (hex, in the space's `access` file); a space's first write binds it. Another token is refused (403), a
   missing or malformed one asks for one (401). Nothing else of the sync key reaches the relay.
 - **The listing** is `{"objects": [{"name", "size", "etag"}]}`, the snapshots by name. Its `ETag`
   is the listing's revision, a hash of the names and etags. `If-None-Match: <revision>` answers

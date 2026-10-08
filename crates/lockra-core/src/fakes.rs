@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
-use lockra_sync::{MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteStore, StorageConfig, SyncError};
+use lockra_sync::{MemoryRemote, ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SpaceAccess, StorageConfig, SyncError};
 use parking_lot::Mutex;
 use tokio::time::Instant;
 use zeroize::Zeroizing;
@@ -304,10 +304,13 @@ impl Updater for FakeUpdater {
 #[derive(Default)]
 pub struct FakeTransport {
     stores: Mutex<BTreeMap<String, Arc<MemoryRemote>>>,
-    /// The watches handed out (folders only, as the shells'), alive while their token is.
+    /// The watches handed out (folders and relays, as the shells'), alive while their token is.
     watches: Mutex<Vec<FakeWatch>>,
     /// How many times a storage was opened.
     pub opened: AtomicUsize,
+    /// Each relay's access token, as the first device to open it showed it: another is refused,
+    /// as a relay refuses a token its space was not created with.
+    relay_tokens: Mutex<BTreeMap<String, String>>,
 }
 
 struct FakeWatch {
@@ -354,31 +357,44 @@ impl FakeTransport {
         self.watches.lock().iter().filter(|w| w.address == address && w.alive.strong_count() > 0).count()
     }
 
+    /// The access token `config`, a relay, was first opened with.
+    pub fn relay_token(&self, config: &StorageConfig) -> Option<String> {
+        self.relay_tokens.lock().get(&Self::address(config).0).cloned()
+    }
+
     fn address(config: &StorageConfig) -> (String, bool) {
         match config {
             StorageConfig::S3 { endpoint, bucket, .. } => (format!("s3:{endpoint}/{bucket}"), true),
             StorageConfig::Webdav { url, .. } => (format!("dav:{url}"), false),
             StorageConfig::Folder { path } => (format!("folder:{}", path.display()), false),
+            StorageConfig::Relay { url } => (format!("relay:{url}"), true),
         }
     }
 }
 
 impl SyncTransport for FakeTransport {
-    fn open(&self, config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+    fn open(&self, config: &StorageConfig, access: &SpaceAccess) -> Result<Arc<dyn RemoteStore>, SyncError> {
         self.opened.fetch_add(1, Ordering::SeqCst);
         let secret = match config {
             StorageConfig::S3 { secret_access_key, .. } => Some(secret_access_key),
             StorageConfig::Webdav { password, .. } => Some(password),
-            StorageConfig::Folder { .. } => None,
+            StorageConfig::Folder { .. } | StorageConfig::Relay { .. } => None,
         };
         if secret.is_some_and(|secret| secret.as_str() != Self::SECRET) {
             return Ok(Arc::new(Refusing));
         }
+        if config.is_relay() {
+            let mut tokens = self.relay_tokens.lock();
+            let bound = tokens.entry(Self::address(config).0).or_insert_with(|| access.relay_token().to_owned());
+            if bound != access.relay_token() {
+                return Ok(Arc::new(Refusing));
+            }
+        }
         Ok(self.store(config))
     }
 
-    fn watch(&self, config: &StorageConfig, _dir: &str, changed: StorageChanged) -> Option<StorageWatch> {
-        if !config.is_folder() {
+    fn watch(&self, config: &StorageConfig, _access: &SpaceAccess, _dir: &str, changed: StorageChanged) -> Option<StorageWatch> {
+        if !config.is_folder() && !config.is_relay() {
             return None;
         }
         let token = Arc::new(());

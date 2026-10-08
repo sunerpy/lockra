@@ -1,7 +1,7 @@
 //! The storage of a sync space, as lockra-sync's [`RemoteStore`] (docs/security.md, "Sync"):
-//! S3-compatible object storage or WebDAV over HTTP, through Apache OpenDAL, or a folder of this
-//! computer that a cloud drive keeps in sync ([`FolderStore`]). [`open`] picks the one a
-//! configuration names.
+//! S3-compatible object storage or WebDAV over HTTP, through Apache OpenDAL, a folder of this
+//! computer that a cloud drive keeps in sync ([`FolderStore`]), or a Lockra relay
+//! ([`RelayStore`]). [`open`] picks the one a configuration names.
 //!
 //! Only HTTPS, with rustls on ring and the system's certificate verifier (on Android, the
 //! certificate authorities the system keeps), through the system proxy; plain HTTP only to this
@@ -11,6 +11,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 mod folder;
+mod relay;
 mod watch;
 
 use std::fmt;
@@ -20,12 +21,13 @@ use std::time::Duration;
 
 pub use folder::FolderStore;
 use futures_util::StreamExt as _;
-pub use lockra_sync::{ConfigError, StorageConfig};
+pub use lockra_sync::{ConfigError, SpaceAccess, StorageConfig};
 use lockra_sync::{MAX_OBJECT_BYTES, ObjectMeta, PutCondition, RemoteFuture, RemoteStore, SyncError};
 use opendal::layers::{RetryLayer, TimeoutLayer};
 use opendal::{ErrorKind, Operator};
+pub use relay::{RelayStore, RelayWatch};
 use url::Url;
-pub use watch::{FolderWatch, watch};
+pub use watch::{FolderWatch, Watch, watch};
 
 /// How long opening a connection may take.
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
@@ -36,13 +38,13 @@ const ATTEMPTS: usize = 3;
 /// Redirects followed at most.
 const MAX_REDIRECTS: usize = 5;
 
-/// The storage `config` names, nothing contacted yet: over HTTP, or in a folder of this computer.
-pub fn open(config: &StorageConfig) -> Result<Arc<dyn RemoteStore>, SyncError> {
+/// The storage `config` names for the space `access` belongs to, nothing contacted yet: over HTTP,
+/// in a folder of this computer, or on a relay (which is shown `access`).
+pub fn open(config: &StorageConfig, access: &SpaceAccess) -> Result<Arc<dyn RemoteStore>, SyncError> {
+    config.validate().map_err(|e| SyncError::Storage(format!("{e:?}")))?;
     match config {
-        StorageConfig::Folder { path } => {
-            config.validate().map_err(|e| SyncError::Storage(format!("{e:?}")))?;
-            Ok(Arc::new(FolderStore::new(path)))
-        }
+        StorageConfig::Folder { path } => Ok(Arc::new(FolderStore::new(path))),
+        StorageConfig::Relay { url } => Ok(Arc::new(RelayStore::open(url, access)?)),
         StorageConfig::S3 { .. } | StorageConfig::Webdav { .. } => Ok(Arc::new(Storage::open(config)?)),
     }
 }
@@ -83,7 +85,7 @@ impl Storage {
                 let builder = opendal::services::Webdav::default().endpoint(url.trim()).username(username.trim()).password(password);
                 (Operator::new(builder).map_err(map)?, false)
             }
-            StorageConfig::Folder { .. } => return Err(SyncError::Storage("a folder is not reached over HTTP".into())),
+            StorageConfig::Folder { .. } | StorageConfig::Relay { .. } => return Err(SyncError::Storage("not reached through OpenDAL".into())),
         };
         let transport = opendal::HttpTransporter::new(opendal_http_transport_reqwest::ReqwestTransport::new(http_client()?));
         let operator = operator

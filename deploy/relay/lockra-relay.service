@@ -4,7 +4,7 @@
 #   sudo cp lockra-relay.service /etc/systemd/system/ && sudo systemctl enable --now lockra-relay
 [Unit]
 Description=Lockra relay (end-to-end encrypted sync spaces)
-Documentation=https://firlab.app/lockra/guide/relay
+Documentation=https://firlab.app/lockra/backup/relay
 After=network-online.target
 Wants=network-online.target
 

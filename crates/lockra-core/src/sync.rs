@@ -8,7 +8,7 @@ use std::ops::AddAssign;
 use std::time::Duration;
 
 use data_encoding::BASE64;
-use lockra_sync::{ConfigError, Replica, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, Tombstone, merge};
+use lockra_sync::{ConfigError, Replica, SpaceAccess, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, Tombstone, merge};
 use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 use zeroize::Zeroizing;
@@ -113,6 +113,12 @@ impl SyncLocal {
         SyncKey::from_text(&self.sync_key)
     }
 
+    /// What the storage is shown for the space beyond its own credentials: a relay's access
+    /// token, from the sync key.
+    pub fn access(&self) -> Result<SpaceAccess, SyncError> {
+        self.sync_key().map(|key| SpaceAccess::of(&key))
+    }
+
     pub fn keyring(&self) -> Result<Vec<u8>, SyncError> {
         BASE64.decode(self.keyring.as_bytes()).map_err(|_| SyncError::Corrupted)
     }
@@ -160,6 +166,7 @@ pub(crate) fn storage_view(storage: &StorageConfig) -> StorageView {
         },
         StorageConfig::Webdav { url, prefix, username, .. } => StorageView::Webdav { url: url.clone(), prefix: prefix.clone(), username: username.clone() },
         StorageConfig::Folder { path } => StorageView::Folder { path: path.display().to_string() },
+        StorageConfig::Relay { url } => StorageView::Relay { url: url.clone() },
     }
 }
 

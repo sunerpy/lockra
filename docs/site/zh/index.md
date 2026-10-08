@@ -96,6 +96,10 @@ home:
             body: 通过你自己的 S3 兼容存储桶或 WebDAV 文件夹进行端到端加密同步。Lockra 不运行服务器，存储只能看到加密的文件。
             status: available
             link: /zh/backup/sync
+          - title: 经 Lockra 中继同步
+            body: 无需自备存储。内置中继或你自建的中继保存加密文件，无法打开其中任何一个；手机扫描电脑上的二维码即可加入。
+            status: building
+            link: /zh/backup/sync#经-lockra-中继同步
       - name: 安全
         items:
           - title: 主密码

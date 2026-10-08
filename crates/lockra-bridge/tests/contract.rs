@@ -337,7 +337,8 @@ fn commands() -> Vec<Value> {
         json!({"command": "activity"}),
         json!({"command": "update_check"}),
         json!({"command": "update_install"}),
-        json!({"command": "sync_create", "storage": s3_storage(), "password": "a new password", "device_name": "Desktop"}),
+        // On a Lockra relay: its address alone (the space's access comes from the sync key).
+        json!({"command": "sync_create", "storage": {"kind": "relay", "url": "https://lockra-relay.onethinker.top"}, "password": "a new password", "device_name": "Desktop"}),
         // With this device's own way to the space (needed when the invitation holds the sync key
         // alone: a space in another computer's folder).
         json!({
@@ -406,6 +407,9 @@ fn sync_fixtures() {
     let mut folder = sync_space(SyncStatus::Failed { code: ErrorCode::SyncFolderMissing, at_ms: T0 });
     folder.storage = StorageView::Folder { path: "C:\\Users\\me\\OneDrive\\Lockra".into() };
     views.push(SyncView { space: Some(folder) });
+    let mut relay = sync_space(SyncStatus::Synced { at_ms: T0 });
+    relay.storage = StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() };
+    views.push(SyncView { space: Some(relay) });
     views.push(SyncView { space: None });
     check("sync.json", &views);
 }

@@ -219,6 +219,21 @@ mod tests {
     }
 
     #[test]
+    fn an_invitation_to_a_relay_carries_its_address_and_the_sync_key() {
+        let relay =
+            Invite { storage: Some(StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() }), sync_key: SyncKey::generate().unwrap() };
+        let text = relay.to_text();
+        let json = json_of(&text);
+        assert_eq!(json["storage"], serde_json::json!({ "kind": "relay", "url": "https://lockra-relay.onethinker.top" }));
+        assert_eq!(json.as_object().unwrap().len(), 2);
+        let back = Invite::from_text(&text).unwrap();
+        assert!(back == relay);
+        // Sealed for sending as well.
+        let (shared, code) = relay.to_shared_text(KdfCost::FAST_INSECURE).unwrap();
+        assert!(Invite::from_any_text(&shared, Some(&code)).unwrap() == relay);
+    }
+
+    #[test]
     fn an_invitation_with_its_storage_reads_as_before() {
         // The fields of 0.7: an older Lockra reads it.
         let json = json_of(&invite().to_text());

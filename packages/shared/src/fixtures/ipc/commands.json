@@ -197,14 +197,8 @@
       "device_name": "Desktop",
       "password": "a new password",
       "storage": {
-        "access_key_id": "AKIAIOSFODNN7EXAMPLE",
-        "bucket": "my-lockra",
-        "endpoint": "https://s3.eu-central-1.amazonaws.com",
-        "kind": "s3",
-        "path_style": false,
-        "prefix": "lockra/",
-        "region": "eu-central-1",
-        "secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        "kind": "relay",
+        "url": "https://lockra-relay.onethinker.top"
       }
     },
     {

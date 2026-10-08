@@ -44,6 +44,7 @@ tao = { version = "=0.35.3", default-features = false }
 
 [dev-dependencies]
 lockra-core = { workspace = true, features = ["fakes"] }
+lockra-sync.workspace = true
 lockra-vault = { workspace = true, features = ["test-kdf"] }
 tauri = { version = "=2.11.6", default-features = false, features = ["wry", "test"] }
 tempfile.workspace = true

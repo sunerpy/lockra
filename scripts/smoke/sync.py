@@ -11,10 +11,21 @@ one phase per app start:
   c  device A again: unlock, the changes arrive, both devices are listed; then B's older snapshot
      is put back on the storage and A refuses it as a rollback.
 
+Then the same through a Lockra relay (lockra-relay on 127.0.0.1, its data folder read back):
+
+  r1 device C: the storage form starts on Lockra's built-in relay; C sets up a space on a relay of
+     its own instead, and shows an invitation (the sealed text and its code kept for device D).
+     The relay holds one snapshot, nothing readable, and the SHA-256 of the access token derived
+     from the sync key (computed here apart), never the sync key.
+  r2 device D, no vault: the welcome screen's "join sync" with C's invitation and code alone (no
+     storage settings); C's accounts arrive; D adds one.
+  r3 device C again: unlock, D's account arrives, both devices are listed.
+
 Screenshots go to --out. Every wait is a condition with a deadline.
 """
 
 import argparse
+import base64
 import datetime
 import hashlib
 import hmac
@@ -24,6 +35,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+import uuid
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -35,6 +47,13 @@ CLEAR = (
     "const el = arguments[0];"
     "Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set.call(el, '');"
     "el.dispatchEvent(new Event('input', { bubbles: true }));"
+)
+
+# A native <select> chosen as a user would: React reads the value from the change event.
+SELECT = (
+    "const el = arguments[0];"
+    "Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, arguments[1]);"
+    "el.dispatchEvent(new Event('change', { bubbles: true }));"
 )
 
 PASSWORD = "smoke sync pass phrase"
@@ -89,6 +108,25 @@ class S3:
         self.request("PUT", key, body=body)
 
 
+def hkdf32(salt, ikm, info):
+    """HKDF-SHA256 to 32 bytes (RFC 5869), as lockra-sync derives its keys."""
+    prk = hmac.new(salt, ikm, hashlib.sha256).digest()
+    return hmac.new(prk, info + b"\x01", hashlib.sha256).digest()
+
+
+def relay_access(sync_key):
+    """The space id and the access token's 32 bytes a sync key gives (docs/formats.md §9), computed
+    apart from the Rust code: the relay must keep their SHA-256 and nothing else of the key."""
+    body = sync_key.replace("-", "").upper().removeprefix("LKS1")
+    raw = base64.b32decode(body + "=" * (-len(body) % 8))
+    key = raw[:32]
+    if hashlib.sha256(key).digest()[:3] != raw[32:]:
+        sys.exit("smoke-sync: the sync key's checksum does not hold")
+    space = uuid.UUID(bytes=hkdf32(b"LKS1", key, b"lockra-sync v1 space id")[:16], version=4)
+    token = hkdf32(space.bytes, key, b"lockra-relay v1 access token")
+    return key, space, token
+
+
 class Phase:
     def __init__(self, args):
         self.args = args
@@ -97,6 +135,16 @@ class Phase:
             self.secret = f.read().strip()
         self.web = Session(args.driver, args.app)
         self.s3 = S3(args.s3, args.s3_user, self.secret)
+
+    def relay_files(self):
+        """Every file the relay keeps, by its path under the data folder."""
+        files = {}
+        for folder, _, names in os.walk(self.args.relay_data):
+            for name in names:
+                path = os.path.join(folder, name)
+                with open(path, "rb") as f:
+                    files[os.path.relpath(path, self.args.relay_data)] = f.read()
+        return files
 
     # ---- helpers ------------------------------------------------------------------------------
 
@@ -158,6 +206,8 @@ class Phase:
         self.web.invoke({"command": "settings_set", "settings": {**settings, "locale": "zh-cn", "follow_system_theme": False, "theme": "light", "reduce_motion": True}})
 
     def storage_form(self, scope):
+        # The form starts on Lockra's relay; this smoke test syncs through S3.
+        self.web.click(self.web.wait(xpath=f"{scope}//*[@role='radio'][normalize-space()='S3 兼容']"))
         self.fill("服务地址", self.args.s3, scope)
         self.fill("区域", REGION, scope)
         self.fill("存储桶", BUCKET, scope)
@@ -292,13 +342,134 @@ class Phase:
         web.quit()
 
 
+    # ---- through a relay -------------------------------------------------------------------------
+
+    def r1(self):
+        web = self.web
+        until("the first state", self.state, timeout=60)
+        web.invoke({"command": "vault_create", "password": PASSWORD})
+        self.light()
+        web.invoke({"command": "entry_add_uri", "uri": GITHUB})
+        web.invoke({"command": "entry_add_uri", "uri": MAIL})
+        self.open_sync()
+        web.click(web.wait(css="[data-testid=sync-create-open]"))
+        scope = "//*[@data-testid='sync-create']"
+        # The form starts on Lockra's built-in relay, with nothing to fill in.
+        web.wait(xpath=f"{scope}//*[@role='radio'][@aria-checked='true'][normalize-space()='Lockra 中继']")
+        address = web.text(web.wait(xpath=f"{scope}//*[@data-testid='storage-address']"))
+        if "https://lockra-relay.onethinker.top" not in address:
+            sys.exit(f"smoke-sync: the form does not start on the built-in relay: {address}")
+        self.fill("这台设备的名称", "台式机", scope)
+        self.fill("主密码", PASSWORD, scope)
+        self.shot("sync-relay-create-light")
+        # This smoke test's relay is one of its own, on this computer.
+        web.run(SELECT, {ELEMENT: web.wait(xpath=f"{scope}//select[@data-testid='storage-provider']")}, "relay-custom")
+        self.fill("中继地址", self.args.relay, scope)
+        before = int(time.time() * 1000)
+        web.click(self.button("开始同步", scope))
+        key = web.text(web.wait(css="[data-testid=sync-created] [data-testid=sync-key]", timeout=60)).strip()
+        web.click(self.button("我已保存", "//*[@role='dialog']"))
+        web.gone("[data-testid=sync-created]")
+        space = self.synced_after(before)
+        if space["storage"] != {"kind": "relay", "url": self.args.relay}:
+            sys.exit(f"smoke-sync: C's storage reads {space['storage']}")
+
+        raw_key, space_id, token = relay_access(key)
+        bearer = base64.urlsafe_b64encode(token).rstrip(b"=")
+        files = self.relay_files()
+        base = f"lockra-relay-v1/spaces/{space_id}"
+        snapshots = [p for p in files if p.startswith(f"{base}/devices/") and p.endswith(".lks")]
+        if sorted(files) != sorted([f"{base}/access", *snapshots]) or len(snapshots) != 1:
+            sys.exit(f"smoke-sync: the relay keeps {sorted(files)}")
+        if files[f"{base}/access"].decode().strip() != hashlib.sha256(token).hexdigest():
+            sys.exit("smoke-sync: the relay's access file is not the SHA-256 of the access token")
+        for path, body in files.items():
+            for clear in [b"GitHub", b"octocat", b"JBSWY3DPEHPK3PXP", "台式机".encode(), key.encode(), raw_key, token, bearer]:
+                if clear in body:
+                    sys.exit(f"smoke-sync: {clear[:12]!r}… is readable in the relay's {path}")
+        print("smoke-sync: C set up a space on its relay (1 snapshot, nothing readable, only the token's SHA-256)")
+
+        web.click(web.wait(css="[data-testid=sync-invite-open]"))
+        dialog = "//*[@role='dialog']"
+        self.fill("主密码", PASSWORD, dialog)
+        web.click(self.button("显示邀请码", dialog))
+        invite = web.wait(css="[data-testid=sync-invite]")
+        if "中继地址" not in web.text(invite):
+            sys.exit(f"smoke-sync: the invitation does not say it holds the relay's address: {web.text(invite)[:80]}")
+        text = web.text(web.wait(css="[data-testid=sync-invite] [data-testid=invite-text]")).strip()
+        code = web.text(web.wait(css="[data-testid=sync-invite] [data-testid=invite-code]")).strip()
+        if not text.startswith("lockra-invite:2:"):
+            sys.exit(f"smoke-sync: the invitation to send is not sealed: {text[:20]}…")
+        for name, value in [("relay-invite", text), ("relay-code", code)]:
+            with open(os.path.join(self.args.work, name), "w") as f:
+                os.chmod(f.name, 0o600)
+                f.write(value)
+        self.shot("sync-relay-invite-light")
+        web.click(self.button("完成", dialog))
+        web.gone("[data-testid=sync-invite]")
+        print("smoke-sync: C showed a sealed invitation for its relay space and kept it with its code")
+        web.quit()
+
+    def r2(self):
+        web = self.web
+        until("the first state", self.state, timeout=60)
+        with open(os.path.join(self.args.work, "relay-invite")) as f:
+            text = f.read().strip()
+        with open(os.path.join(self.args.work, "relay-code")) as f:
+            code = f.read().strip()
+        web.wait(css="[data-testid=page-welcome]")
+        web.click(web.wait(css="[data-testid=welcome-join-open]"))
+        scope = "//*[@data-testid='welcome-join']"
+        # The invitation and its code: no storage settings to type.
+        self.fill("邀请码", text, scope)
+        self.fill("口令", code, scope)
+        self.fill("这台设备的名称", "笔记本", scope)
+        self.fill("同步空间的主密码", PASSWORD, scope)
+        self.shot("sync-relay-join-light")
+        before = int(time.time() * 1000)
+        web.click(self.button("加入", scope))
+        web.wait(css="[data-testid=page-codes]", timeout=60)
+        space = self.synced_after(before)
+        self.light()
+        if space["storage"] != {"kind": "relay", "url": self.args.relay}:
+            sys.exit(f"smoke-sync: D's storage reads {space['storage']}")
+        until("C's accounts on D", lambda: self.issuers() == ["GitHub", "Mail"])
+        web.invoke({"command": "entry_add_uri", "uri": BANK})
+        before = int(time.time() * 1000)
+        web.invoke({"command": "sync_now"})
+        self.synced_after(before)
+        snapshots = [p for p in self.relay_files() if p.endswith(".lks")]
+        if len(snapshots) != 2:
+            sys.exit(f"smoke-sync: the relay keeps {snapshots}")
+        print("smoke-sync: D joined from C's invitation and code alone, got C's accounts, and added one")
+        web.quit()
+
+    def r3(self):
+        web = self.web
+        until("the first state", self.state, timeout=60)
+        before = int(time.time() * 1000)
+        web.invoke({"command": "vault_unlock", "password": PASSWORD})
+        space = self.synced_after(before)
+        until("D's account on C", lambda: self.issuers() == ["Bank", "GitHub", "Mail"])
+        names = [(d["name"], d["this_device"]) for d in space["devices"]]
+        if names != [("台式机", True), ("笔记本", False)]:
+            sys.exit(f"smoke-sync: device C lists {names}")
+        self.open_sync()
+        storage = web.text(web.wait(css="[data-testid=sync-storage]"))
+        if "Lockra 中继" not in storage:
+            sys.exit(f"smoke-sync: C's storage shows as {storage}")
+        self.shot("sync-relay-on-light")
+        print("smoke-sync: C has D's new account through the relay, and lists both devices")
+        web.quit()
+
+
 def main():
     parser = argparse.ArgumentParser()
-    for name in ["phase", "driver", "app", "out", "work", "s3", "s3-user", "secret-file"]:
+    for name in ["phase", "driver", "app", "out", "work", "s3", "s3-user", "secret-file", "relay", "relay-data"]:
         parser.add_argument(f"--{name}", required=True)
     args = parser.parse_args()
     phase = Phase(args)
-    {"a": phase.a, "b": phase.b, "c": phase.c}[args.phase]()
+    {"a": phase.a, "b": phase.b, "c": phase.c, "r1": phase.r1, "r2": phase.r2, "r3": phase.r3}[args.phase]()
 
 
 if __name__ == "__main__":

@@ -111,6 +111,8 @@ export const MOCK_STORAGE_SECRET = "storage secret";
 export const MOCK_SYNC_FOLDER = "/Users/me/Dropbox/Lockra";
 /** What the mock's invitation of a space in a folder holds: the sync key alone. */
 const KEY_ONLY = "mock-key-only-invite";
+/** What a mock invitation to a relay holds before the relay's address. */
+const RELAY_INVITE = "mock-relay-invite|";
 /** The one-time code of the mock's sealed invitation. */
 export const MOCK_INVITE_CODE = "7K2QM-XW4FD";
 /** The sync key of the mock's spaces. */
@@ -322,6 +324,22 @@ function checkStorage(storage: StorageConfig, chosen: string | null): void {
     if (chosen === null) throw new LockraError("sync_folder_not_chosen");
     return;
   }
+  if (storage.kind === "relay") {
+    // Its address alone: HTTPS (plain HTTP to this computer only), no credential, query or anchor.
+    let url: URL;
+    try {
+      url = new URL(storage.url.trim());
+    } catch {
+      throw new LockraError("sync_config_invalid");
+    }
+    if (url.username !== "" || url.password !== "" || url.search !== "" || url.hash !== "")
+      throw new LockraError("sync_config_invalid");
+    const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+    if (url.protocol === "http:" && !loopback) throw new LockraError("sync_insecure");
+    if (url.protocol !== "https:" && url.protocol !== "http:")
+      throw new LockraError("sync_config_invalid");
+    return;
+  }
   const [address, required] =
     storage.kind === "s3"
       ? [
@@ -344,17 +362,30 @@ function checkStorage(storage: StorageConfig, chosen: string | null): void {
   if (secret !== MOCK_STORAGE_SECRET) throw new LockraError("sync_denied");
 }
 
+/** What a mock invitation (either text) holds. */
+function held(text: string): string {
+  try {
+    return atob(text.slice("lockra-invite:1:".length));
+  } catch {
+    return "";
+  }
+}
+
 /** A mock invitation (either text) that holds the sync key alone. */
 function keyOnly(text: string): boolean {
-  try {
-    return atob(text.slice("lockra-invite:1:".length)).startsWith(KEY_ONLY);
-  } catch {
-    return false;
-  }
+  return held(text).startsWith(KEY_ONLY);
+}
+
+/** The relay a mock invitation names, if it names one. */
+function invitedRelay(text: string): string | undefined {
+  const inside = held(text);
+  if (!inside.startsWith(RELAY_INVITE)) return undefined;
+  return inside.slice(RELAY_INVITE.length).split("\n")[0];
 }
 
 function storageView(storage: StorageConfig, chosen: string | null): StorageView {
   if (storage.kind === "folder") return { kind: "folder", path: chosen ?? "" };
+  if (storage.kind === "relay") return { kind: "relay", url: storage.url.trim() };
   return storage.kind === "s3"
     ? {
         kind: "s3",
@@ -1071,16 +1102,20 @@ export class MockBackend implements Backend {
       throw new LockraError("sync_already_on");
     if (this.state.phase === "no_vault") this.checkLength(password);
     else this.checkPassword(password);
+    const relay = source.type === "invite" ? invitedRelay(text) : undefined;
     const storage: StorageConfig =
       source.type === "manual"
         ? source.storage
-        : (source.storage ?? {
-            kind: "webdav",
-            url: "https://dav.example.com/dav/",
-            prefix: "lockra",
-            username: "me@example.com",
-            password: MOCK_STORAGE_SECRET,
-          });
+        : (source.storage ??
+          (relay !== undefined
+            ? { kind: "relay", url: relay }
+            : {
+                kind: "webdav",
+                url: "https://dav.example.com/dav/",
+                prefix: "lockra",
+                username: "me@example.com",
+                password: MOCK_STORAGE_SECRET,
+              }));
     checkStorage(storage, this.chosenFolder);
     // The space's device uses the mock's master password. A vault of its own whose password is
     // another asks for the space's first, as the core does.
@@ -1109,13 +1144,20 @@ export class MockBackend implements Backend {
   private syncInvite(password: string | undefined, reason: string | undefined): SyncInvite {
     this.requireSpace();
     this.confirmPresence(password, reason);
-    // A space in a folder of this computer invites with its sync key alone.
-    const includes = this.requireSpace().storage.kind !== "folder";
-    const held = includes ? "mock-invite" : KEY_ONLY;
+    // A space in a folder of this computer invites with its sync key alone; one on a relay with
+    // the relay's address and the sync key.
+    const storage = this.requireSpace().storage;
+    const includes = storage.kind !== "folder";
+    const inside =
+      storage.kind === "relay"
+        ? `${RELAY_INVITE}${storage.url}\n`
+        : includes
+          ? "mock-invite"
+          : KEY_ONLY;
     return {
-      invite: `lockra-invite:1:${btoa(`${held}:${this.now()}`)}`,
+      invite: `lockra-invite:1:${btoa(`${inside}:${this.now()}`)}`,
       svg: placeholderSvg("invite"),
-      shared_text: `lockra-invite:2:${btoa(`${held}:${this.now()}`)}`,
+      shared_text: `lockra-invite:2:${btoa(`${inside}:${this.now()}`)}`,
       code: MOCK_INVITE_CODE,
       sync_key: MOCK_SYNC_KEY,
       includes_storage: includes,

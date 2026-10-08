@@ -1,21 +1,33 @@
-import { type ErrorCode, LockraError, type StorageForm, emptyStorageForm } from "@lockra/shared";
+import {
+  BUILT_IN_RELAY,
+  type ErrorCode,
+  LockraError,
+  type StorageForm,
+  emptyStorageForm,
+  withPreset,
+} from "@lockra/shared";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { StorageFields } from "./StorageFields";
+
+/** An empty S3 form (a new one starts on Lockra's relay). */
+const s3 = () => withPreset(emptyStorageForm(), { kind: "s3" });
 
 function Form({
   size,
   onForm,
   failure,
   pickFolder,
+  start = emptyStorageForm,
 }: {
   size?: "md" | "lg";
   onForm: (form: StorageForm) => void;
   failure?: ErrorCode;
   pickFolder?: () => Promise<string | null>;
+  start?: () => StorageForm;
 }) {
-  const [form, setForm] = useState(emptyStorageForm);
+  const [form, setForm] = useState(start);
   return (
     <StorageFields
       form={form}
@@ -66,6 +78,31 @@ describe("StorageFields", () => {
     expect(screen.getByRole("button", { name: "更换文件夹…" })).toBeInTheDocument();
   });
 
+  it("starts on Lockra's relay, which needs nothing typed in, or takes one's own", async () => {
+    const user = userEvent.setup();
+    let form = emptyStorageForm();
+    render(<Form onForm={(next) => (form = next)} />);
+    expect(screen.getByRole("radio", { name: "Lockra 中继" })).toBeChecked();
+    expect(screen.getByTestId("storage-address")).toHaveTextContent(BUILT_IN_RELAY);
+    expect(screen.getByTestId("storage-preset-hint")).toHaveTextContent("打不开其中任何一个");
+    // Nothing to type: no credentials, no folder.
+    expect(screen.queryByLabelText("中继地址")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("文件夹（可选）")).not.toBeInTheDocument();
+    // One's own relay: its address is typed.
+    await user.selectOptions(screen.getByTestId("storage-provider"), "relay-custom");
+    const address = screen.getByLabelText("中继地址");
+    await user.clear(address);
+    await user.type(address, "https://relay.example.com");
+    expect(form).toMatchObject({
+      kind: "relay",
+      preset: "relay-custom",
+      url: "https://relay.example.com",
+    });
+    // WebDAV does not keep the relay's address.
+    await user.click(screen.getByRole("radio", { name: "WebDAV" }));
+    expect(form).toMatchObject({ kind: "webdav", url: "" });
+  });
+
   it("offers no folder without the folder dialog (the phone)", () => {
     render(<Form onForm={() => undefined} />);
     expect(screen.queryByRole("radio", { name: "网盘文件夹" })).not.toBeInTheDocument();
@@ -74,7 +111,7 @@ describe("StorageFields", () => {
   it("asks for an S3 bucket's settings, or a WebDAV folder's", async () => {
     const user = userEvent.setup();
     let form = emptyStorageForm();
-    render(<Form size="lg" onForm={(next) => (form = next)} />);
+    render(<Form size="lg" start={s3} onForm={(next) => (form = next)} />);
     await user.type(screen.getByLabelText("服务地址"), "https://s3.example.com");
     await user.type(screen.getByLabelText("访问密钥"), "secret");
     await user.click(screen.getByRole("switch", { name: "路径式访问" }));
@@ -103,7 +140,7 @@ describe("StorageFields", () => {
   it("keeps the China regions of AWS to their own provider and shows the address it makes", async () => {
     const user = userEvent.setup();
     let form = emptyStorageForm();
-    render(<Form onForm={(next) => (form = next)} />);
+    render(<Form start={s3} onForm={(next) => (form = next)} />);
     await user.selectOptions(screen.getByLabelText("服务商"), "aws-cn");
     expect(screen.queryByLabelText("服务地址")).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "路径式访问" })).not.toBeInTheDocument();
@@ -133,7 +170,7 @@ describe("StorageFields", () => {
   it("suggests a service's regions and asks R2 for its account only", async () => {
     const user = userEvent.setup();
     let form = emptyStorageForm();
-    render(<Form onForm={(next) => (form = next)} />);
+    render(<Form start={s3} onForm={(next) => (form = next)} />);
     await user.selectOptions(screen.getByLabelText("服务商"), "oss");
     const region = screen.getByLabelText("区域");
     const list = document.getElementById(region.getAttribute("list") ?? "");
@@ -155,7 +192,7 @@ describe("StorageFields", () => {
   it("fills in a WebDAV service's address from its server and the user name", async () => {
     const user = userEvent.setup();
     let form = emptyStorageForm();
-    render(<Form size="lg" onForm={(next) => (form = next)} />);
+    render(<Form size="lg" start={s3} onForm={(next) => (form = next)} />);
     await user.click(screen.getByRole("radio", { name: "WebDAV" }));
     await user.selectOptions(screen.getByLabelText("服务商"), "jianguoyun");
     expect(screen.queryByLabelText("WebDAV 地址")).not.toBeInTheDocument();
@@ -175,17 +212,17 @@ describe("StorageFields", () => {
 
   it("says what a refusal most likely means for the chosen service", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(<Form onForm={() => {}} failure="sync_denied" />);
+    const { rerender } = render(<Form start={s3} onForm={() => {}} failure="sync_denied" />);
     expect(screen.queryByTestId("storage-failure-hint")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("服务商"), "aws");
     expect(screen.getByTestId("storage-failure-hint")).toHaveTextContent("中国区域与全球区域");
-    rerender(<Form onForm={() => {}} failure="sync_storage_failed" />);
+    rerender(<Form start={s3} onForm={() => {}} failure="sync_storage_failed" />);
     expect(screen.queryByTestId("storage-failure-hint")).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText("服务商"), "cos");
     expect(screen.getByTestId("storage-failure-hint")).toHaveTextContent("APPID");
     await user.selectOptions(screen.getByLabelText("服务商"), "oss");
     expect(screen.getByTestId("storage-failure-hint")).toHaveTextContent("2025 年 3 月 20 日");
-    rerender(<Form onForm={() => {}} failure="sync_denied" />);
+    rerender(<Form start={s3} onForm={() => {}} failure="sync_denied" />);
     await user.click(screen.getByRole("radio", { name: "WebDAV" }));
     await user.selectOptions(screen.getByLabelText("服务商"), "nextcloud");
     expect(screen.getByTestId("storage-failure-hint")).toHaveTextContent("应用密码");

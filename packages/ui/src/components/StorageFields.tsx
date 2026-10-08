@@ -1,6 +1,6 @@
-// A sync storage's fields, S3-compatible or WebDAV (the desktop's Settings › Sync and the phone's
-// sync pages), or on the desktop a folder a cloud drive keeps in sync; the form's logic is
-// @lockra/shared's storage-form and storage-presets.
+// A sync storage's fields: a Lockra relay (the built-in one or one's own), S3-compatible or WebDAV
+// (the desktop's Settings › Sync and the phone's sync pages), or on the desktop a folder a cloud
+// drive keeps in sync; the form's logic is @lockra/shared's storage-form and storage-presets.
 import {
   type ErrorCode,
   PRESETS,
@@ -35,10 +35,10 @@ function failureHint(preset: PresetId, failure: ErrorCode | undefined): FailureH
   return null;
 }
 
-/** The storage's fields: S3-compatible or WebDAV, by provider. `lg` is the phone's: taller
- *  fields. `failure` is the error the last attempt with these settings ended in. With
- *  `pickFolder` (the desktop's folder dialog), a folder a cloud drive keeps in sync is offered
- *  too: the dialog chooses it, and the form only shows it. */
+/** The storage's fields: a Lockra relay, S3-compatible or WebDAV, by provider. `lg` is the
+ *  phone's: taller fields. `failure` is the error the last attempt with these settings ended in.
+ *  With `pickFolder` (the desktop's folder dialog), a folder a cloud drive keeps in sync is
+ *  offered too: the dialog chooses it, and the form only shows it. */
 export function StorageFields({
   form,
   onChange,
@@ -89,6 +89,7 @@ export function StorageFields({
     }
   };
   const kinds = [
+    { value: "relay" as const, label: t("sync.storage.relay") },
     { value: "s3" as const, label: t("sync.storage.s3") },
     { value: "webdav" as const, label: t("sync.storage.webdav") },
     ...(pickFolder !== undefined || form.kind === "folder"
@@ -96,6 +97,7 @@ export function StorageFields({
       : []),
   ];
   const kindHint = {
+    relay: t("sync.storage.relayHint"),
     s3: t("sync.storage.s3Hint"),
     webdav: t("sync.storage.webdavHint"),
     folder: t("sync.storage.folderHint"),
@@ -113,6 +115,52 @@ export function StorageFields({
       <p className="text-[12px] text-fg-subtle">{kindHint}</p>
     </div>
   );
+  const providers = (
+    <div className="flex flex-col gap-1">
+      <Select
+        size={size}
+        label={t("sync.storage.provider")}
+        value={preset?.id ?? form.preset}
+        onChange={(id) => change({ preset: id })}
+        options={presetsOf(form.kind).map((p) => ({
+          value: p.id,
+          label: t(`sync.storage.presets.${p.id}`),
+        }))}
+        data-testid="storage-provider"
+        className="self-start"
+      />
+      {hint !== "" && (
+        <p className="text-[12px] text-fg-subtle" data-testid="storage-preset-hint">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+  if (form.kind === "relay") {
+    return (
+      <div className="flex flex-col gap-3" data-testid="storage-fields">
+        {kindSwitch}
+        {providers}
+        {has("url") ? (
+          <Input
+            size={size}
+            label={t("sync.storage.relayUrl")}
+            value={form.url}
+            onChange={(e) => change({ url: e.target.value })}
+            placeholder="https://…"
+            help={t("sync.storage.relayUrlHint")}
+            mono
+            spellCheck={false}
+            data-testid="storage-relay-url"
+          />
+        ) : (
+          <p className="min-w-0 break-all text-[12px] text-fg-subtle" data-testid="storage-address">
+            {t("sync.storage.address")}: <span className="font-mono text-fg-muted">{form.url}</span>
+          </p>
+        )}
+      </div>
+    );
+  }
   if (form.kind === "folder") {
     return (
       <div className="flex flex-col gap-3" data-testid="storage-fields">
@@ -153,25 +201,7 @@ export function StorageFields({
   return (
     <div className="flex flex-col gap-3" data-testid="storage-fields">
       {kindSwitch}
-      <div className="flex flex-col gap-1">
-        <Select
-          size={size}
-          label={t("sync.storage.provider")}
-          value={preset?.id ?? form.preset}
-          onChange={(id) => change({ preset: id })}
-          options={presetsOf(form.kind).map((p) => ({
-            value: p.id,
-            label: t(`sync.storage.presets.${p.id}`),
-          }))}
-          data-testid="storage-provider"
-          className="self-start"
-        />
-        {hint !== "" && (
-          <p className="text-[12px] text-fg-subtle" data-testid="storage-preset-hint">
-            {hint}
-          </p>
-        )}
-      </div>
+      {providers}
       {form.kind === "s3" ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {has("endpoint") && (

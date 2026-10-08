@@ -593,8 +593,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist evidence stage
-          cp "target/$TARGET/release/lockra-relay" LICENSE stage/
-          tar --owner=0 --group=0 --numeric-owner --mtime=@0 --sort=name -C stage -czf "dist/lockra-relay_${VERSION}_linux_${ARCH}.tar.gz" lockra-relay LICENSE
+          cp "target/$TARGET/release/lockra-relay" LICENSE deploy/relay/lockra-relay.service stage/
+          tar --owner=0 --group=0 --numeric-owner --mtime=@0 --sort=name -C stage -czf "dist/lockra-relay_${VERSION}_linux_${ARCH}.tar.gz" lockra-relay lockra-relay.service LICENSE
           (cd dist && sha256sum -- *) >"evidence/relay-${ARCH}.sha256"
 
       - name: Upload the archive

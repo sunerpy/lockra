@@ -19,8 +19,9 @@ crates/
   lockra-bridge    The wire contract: the UiCommand enum, dispatch, and the contract fixtures.
   lockra-sync      End-to-end encrypted sync, without I/O: the device snapshots and the keyrings
                    they carry, hybrid logical clocks, the last-writer-wins merge, one sync step.
-  lockra-remote    The sync's storage: over HTTP (S3-compatible or WebDAV, through OpenDAL), or a
-                   folder a cloud drive keeps in sync (FolderStore).
+  lockra-remote    The sync's storage: over HTTP (S3-compatible or WebDAV, through OpenDAL; a
+                   Lockra relay, RelayStore, waited on by RelayWatch), or a folder a cloud drive
+                   keeps in sync (FolderStore, watched by FolderWatch).
   lockra-relay     The relay server, a binary of its own (docs/relay.md): keeps the snapshots of
                    spaces whose devices have no storage, opening none; never linked into the apps.
 apps/desktop/
@@ -43,15 +44,15 @@ packages/ui        The design system (Voltip's tokens and components, plus Lockr
 `lockra-core` holds all behaviour and no platform code. `Core::start(config, ports)` returns a
 cheap handle; the shell injects the ports:
 
-| Port                        | Desktop adapter                                                                    | Test fake                           |
-| --------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------- |
-| `SecretStore` (device keys) | `keyring` (Credential Manager, Keychain, Secret Service), probed at start          | `FakeKeychain`, `MemorySecretStore` |
-| `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard)      | `FakeClipboard`                     |
-| `Clock`                     | `SystemClock`                                                                      | `FakeClock`                         |
-| `CodeSink` (code frames)    | a Tauri `Channel`                                                                  | `RecordingSink`                     |
-| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy         | `FakeUpdater`, `NoUpdater`          |
-| `SyncTransport` (sync)      | lockra-remote: S3/WebDAV over HTTPS, or a watched folder (`src-tauri/src/sync.rs`) | `FakeTransport`, `NoSync`           |
-| `Biometrics` (unlock check) | Touch ID, Windows Hello via robius-authentication (`src-tauri/src/biometrics.rs`)  | `FakeBiometrics`, `NoBiometrics`    |
+| Port                        | Desktop adapter                                                                   | Test fake                           |
+| --------------------------- | --------------------------------------------------------------------------------- | ----------------------------------- |
+| `SecretStore` (device keys) | `keyring` (Credential Manager, Keychain, Secret Service), probed at start         | `FakeKeychain`, `MemorySecretStore` |
+| `Clipboard`                 | `arboard` on its own thread (on Linux the owner process serves the clipboard)     | `FakeClipboard`                     |
+| `Clock`                     | `SystemClock`                                                                     | `FakeClock`                         |
+| `CodeSink` (code frames)    | a Tauri `Channel`                                                                 | `RecordingSink`                     |
+| `Updater` (in-app update)   | tauri-plugin-updater (`src-tauri/src/updater.rs`), only in a packaged copy        | `FakeUpdater`, `NoUpdater`          |
+| `SyncTransport` (sync)      | lockra-remote: S3/WebDAV/relay over HTTPS, or a folder (`src-tauri/src/sync.rs`)  | `FakeTransport`, `NoSync`           |
+| `Biometrics` (unlock check) | Touch ID, Windows Hello via robius-authentication (`src-tauri/src/biometrics.rs`) | `FakeBiometrics`, `NoBiometrics`    |
 
 State machine: **NoVault → Locked → Unlocked**. Create or restore leads from NoVault to Unlocked;
 unlock (password or device key) from Locked; lock, auto-lock and closing return to Locked; reset
@@ -63,7 +64,11 @@ code window, auto-lock, clipboard clearing, the automatic backup debounce, expor
 automatic update, the next sync run — sleeps until the earliest deadline, and is woken through a
 `Notify` whenever the state changes, so nothing polls. The desktop shell tells the core when its
 window gains or loses the focus (`Core::set_foreground`): in front, sync runs every minute
-rather than every five. Core tests run on tokio's paused clock with the fakes.
+rather than every five. While the vault is unlocked, a space in a folder or on a relay is also
+watched (`SyncTransport::watch`: the folder's file events, the relay's held-back listing), and a
+change wakes the scheduler for a run a second later. The transport opens a space with its
+`SpaceAccess`, derived from the sync key when needed (a relay's access token) and never stored.
+Core tests run on tokio's paused clock with the fakes.
 
 The in-app update follows Voltip's design. It is a run in the background, one at a time:
 `update_check` asks the `Updater` afresh (`UiState.update` goes `checking` → `up_to_date` /
@@ -147,7 +152,8 @@ a blocking thread; its answers stay in Rust:
 
 The sync storage is lockra-remote's, as on the desktop (the phone chooses no folder: a space in a
 computer's cloud drive folder is reached over the same drive's WebDAV, `sync_scan_join` carrying
-that storage when the invitation holds the sync key alone), except for the certificate authorities:
+that storage when the invitation holds the sync key alone; a relay is waited on as on the desktop),
+except for the certificate authorities:
 on Android they are read from the files the system keeps them in (the platform verifier would need
 JNI glue in unsafe code; docs/security.md, "Sync"). The updater is `src/updater.rs`: it reads the
 release manifest with the same client when the user checks, and is `InstallMethod::Android`, for

@@ -12,7 +12,7 @@ use std::fmt;
 
 use chacha20poly1305::XNonce;
 use chacha20poly1305::aead::{Aead, Payload};
-use data_encoding::{BASE32_NOPAD, BASE64};
+use data_encoding::{BASE32_NOPAD, BASE64, BASE64URL_NOPAD};
 use hmac::{Hmac, KeyInit, Mac};
 use lockra_vault::{KdfCost, KdfParams};
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,7 @@ const KEYRING_INFO: &[u8] = b"lockra-sync v1 keyring";
 const SNAPSHOT_INFO: &[u8] = b"lockra-sync v1 snapshot";
 const TAG_INFO: &[u8] = b"lockra-sync v1 device tag";
 const SPACE_ID_INFO: &[u8] = b"lockra-sync v1 space id";
+const RELAY_TOKEN_INFO: &[u8] = b"lockra-relay v1 access token";
 const SYNC_KEY_PREFIX: &str = "LKS1";
 /// Bytes of SHA-256 appended to the sync key text: a mistyped character is caught on entry.
 const CHECK_LEN: usize = 3;
@@ -97,6 +98,34 @@ impl SyncKey {
 impl fmt::Debug for SyncKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("SyncKey(…)")
+    }
+}
+
+/// What a space's devices show the storage beyond its own credentials: a Lockra relay, which keeps
+/// the space under its id, is shown an access token derived from the sync key (HKDF, salt the
+/// space id, info `lockra-relay v1 access token`). Neither the sync key nor anything else of the
+/// space can be computed from it (docs/formats.md §9, "The relay"); other storage needs none.
+#[derive(Clone)]
+pub struct SpaceAccess {
+    relay_token: Zeroizing<String>,
+}
+
+impl SpaceAccess {
+    /// The access of the space `sync_key` names.
+    pub fn of(sync_key: &SyncKey) -> Self {
+        let token = hkdf32(sync_key.space_id().as_bytes(), sync_key.0.as_ref(), RELAY_TOKEN_INFO);
+        Self { relay_token: Zeroizing::new(BASE64URL_NOPAD.encode(token.as_ref())) }
+    }
+
+    /// The relay's bearer token: the 32 bytes in unpadded Base64url.
+    pub fn relay_token(&self) -> &str {
+        &self.relay_token
+    }
+}
+
+impl fmt::Debug for SpaceAccess {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SpaceAccess(…)")
     }
 }
 
@@ -217,6 +246,21 @@ mod tests {
 
     fn space() -> SpaceKeys {
         SpaceKeys::generate(Uuid::new_v4()).unwrap()
+    }
+
+    #[test]
+    fn the_relay_token_is_the_documented_derivation_of_the_sync_key() {
+        // docs/formats.md §9, "The relay"; the vector was computed apart (Python's hmac and
+        // hashlib, RFC 5869 by hand).
+        let key = SyncKey(Zeroizing::new([7; KEY_LEN]));
+        assert_eq!(key.space_id().to_string(), "9fb8b0a7-db28-4d95-8ae0-1997f8126fac");
+        let access = SpaceAccess::of(&key);
+        assert_eq!(access.relay_token(), "AZt49rTsmnYFNQd-Zz52O6kUYGn0IPoOXZm-PoaHpRo");
+        assert_eq!(format!("{access:?}"), "SpaceAccess(…)");
+        // Another key, another token; and the token is not the space id's.
+        let other = SpaceAccess::of(&SyncKey::generate().unwrap());
+        assert_ne!(other.relay_token(), access.relay_token());
+        assert_eq!(other.relay_token().len(), 43);
     }
 
     #[test]
