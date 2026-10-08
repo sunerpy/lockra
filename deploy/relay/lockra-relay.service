@@ -1,0 +1,46 @@
+# The relay as a systemd service (docs/relay.md): the static binary from the release at
+# /usr/local/bin/lockra-relay, the spaces in /var/lib/lockra-relay, behind a proxy on this machine
+# that ends TLS. Edit the Environment lines, then:
+#   sudo cp lockra-relay.service /etc/systemd/system/ && sudo systemctl enable --now lockra-relay
+[Unit]
+Description=Lockra relay (end-to-end encrypted sync spaces)
+Documentation=https://firlab.app/lockra/guide/relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/lockra-relay
+Environment=LOCKRA_RELAY_BIND=127.0.0.1:8090
+Environment=LOCKRA_RELAY_DATA=/var/lib/lockra-relay
+# The proxy that ends TLS, when it is on this machine.
+Environment=LOCKRA_RELAY_TRUST_PROXY=127.0.0.1,::1
+DynamicUser=yes
+StateDirectory=lockra-relay
+StateDirectoryMode=0700
+Restart=always
+RestartSec=2
+LimitNOFILE=8192
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

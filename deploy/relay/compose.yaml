@@ -1,0 +1,31 @@
+# A relay of one's own with automatic HTTPS (docs/relay.md): Caddy gets a certificate for
+# RELAY_HOST from Let's Encrypt and passes the requests on; the relay listens inside the network
+# only. Start it from the repository's root:
+#   RELAY_HOST=relay.example.com docker compose -f deploy/relay/compose.yaml up -d
+services:
+  relay:
+    build:
+      context: ../..
+      dockerfile: deploy/relay/Dockerfile
+    restart: unless-stopped
+    environment:
+      # Caddy, the only one that reaches the relay, names the client (see the Caddyfile).
+      LOCKRA_RELAY_TRUST_PROXY: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    volumes:
+      - relay-data:/data
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RELAY_HOST: ${RELAY_HOST:?set RELAY_HOST to the domain the relay answers on}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:

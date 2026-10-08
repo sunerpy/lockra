@@ -519,9 +519,97 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # The relay server (crates/lockra-relay, docs/relay.md) for whoever runs one: a static Linux
+  # binary per architecture, built on its own architecture's runner. Like the phone's packages, its
+  # archives go into SHA256SUMS and the attestations, and into no updater manifest.
+  bundle-relay:
+    name: Bundle lockra-relay ${{ matrix.arch }}
+    needs: [release-please, preflight]
+    if: needs.release-please.outputs.build_artifacts == 'true'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: x64
+            runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.release-please.outputs.version }}
+      TARGET: ${{ matrix.target }}
+      ARCH: ${{ matrix.arch }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          persist-credentials: false
+
+      - name: Verify the tag resolves to the released commit
+        env:
+          RELEASE_SHA: ${{ needs.release-please.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          head=$(git rev-parse HEAD)
+          if [ "$head" != "$RELEASE_SHA" ]; then
+            echo "::error::checked-out tag commit $head != release commit $RELEASE_SHA"
+            exit 1
+          fi
+
+      - name: Install the musl C toolchain (ring's C and assembly)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Install Rust toolchain (and the musl target)
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.0
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: relay-release-${{ matrix.target }}
+          cache-on-failure: true
+
+      - name: Build the relay (static)
+        run: cargo build --release --locked -p lockra-relay --target "$TARGET"
+
+      - name: Check the binary runs and names this release
+        run: |
+          set -euo pipefail
+          binary="target/$TARGET/release/lockra-relay"
+          test "$("$binary" --version)" = "lockra-relay $VERSION"
+          file "$binary" | grep -E 'statically linked|static-pie linked'
+
+      - name: Collect the archive and its checksum
+        run: |
+          set -euo pipefail
+          mkdir -p dist evidence stage
+          cp "target/$TARGET/release/lockra-relay" LICENSE stage/
+          tar --owner=0 --group=0 --numeric-owner --mtime=@0 --sort=name -C stage -czf "dist/lockra-relay_${VERSION}_linux_${ARCH}.tar.gz" lockra-relay LICENSE
+          (cd dist && sha256sum -- *) >"evidence/relay-${ARCH}.sha256"
+
+      - name: Upload the archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tauri-relay-${{ matrix.arch }}
+          path: |
+            dist/
+            evidence/
+          if-no-files-found: error
+          retention-days: 1
+
   updater:
     name: Updater manifest and assets
-    needs: [release-please, preflight, bundle, bundle-android]
+    needs: [release-please, preflight, bundle, bundle-android, bundle-relay]
     if: needs.release-please.outputs.build_artifacts == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -548,6 +636,15 @@ jobs:
       - name: Check the Android packages against their leg's checksums
         working-directory: bundle/dist
         run: sha256sum --check --strict ../evidence/aarch64-linux-android.sha256
+
+      # The relay archives too, one per architecture.
+      - name: Check the relay archives against their legs' checksums
+        working-directory: bundle/dist
+        run: |
+          set -euo pipefail
+          for arch in x64 arm64; do
+            sha256sum --check --strict "../evidence/relay-$arch.sha256"
+          done
 
       - name: Install minisign
         run: |

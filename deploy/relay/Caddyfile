@@ -1,0 +1,7 @@
+# HTTPS for the relay (compose.yaml). X-Forwarded-For is replaced, not appended to, so it holds the
+# client Caddy saw and nothing a client wrote: the relay counts its limits by it.
+{$RELAY_HOST} {
+	reverse_proxy relay:8090 {
+		header_up X-Forwarded-For {remote_host}
+	}
+}

@@ -21,6 +21,8 @@ crates/
                    they carry, hybrid logical clocks, the last-writer-wins merge, one sync step.
   lockra-remote    The sync's storage: over HTTP (S3-compatible or WebDAV, through OpenDAL), or a
                    folder a cloud drive keeps in sync (FolderStore).
+  lockra-relay     The relay server, a binary of its own (docs/relay.md): keeps the snapshots of
+                   spaces whose devices have no storage, opening none; never linked into the apps.
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
                    screen-capture protection, single instance).
