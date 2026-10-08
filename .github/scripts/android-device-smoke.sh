@@ -312,6 +312,9 @@ showing 'Set up sync|设置同步' 30
 tap 'Set up sync' '设置同步'
 showing 'Start syncing from this device|在这台设备上开始同步' 30
 tap 'Start syncing from this device' '在这台设备上开始同步'
+# The form starts on Lockra's relay; this check reaches S3.
+showing 'S3-compatible|S3 兼容' 30
+tap 'S3-compatible' 'S3 兼容'
 showing 'Endpoint|服务地址' 30
 type_into https://s3.amazonaws.com 'Endpoint' '服务地址'
 type_into us-east-1 'Region' '区域'
