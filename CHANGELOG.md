@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/sunerpy/lockra/compare/v0.7.6...v0.8.0) (2026-10-08)
+
+
+### Features
+
+* **brand:** 换用蓝色码点锁作为 logo，不再用橙色 ([#86](https://github.com/sunerpy/lockra/issues/86)) ([3af1006](https://github.com/sunerpy/lockra/commit/3af1006bbb3d487dc6ee923da9a9141002aabd82))
+
 ## [0.7.6](https://github.com/sunerpy/lockra/compare/v0.7.5...v0.7.6) (2026-10-06)
 
 
