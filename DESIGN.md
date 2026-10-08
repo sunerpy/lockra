@@ -103,7 +103,7 @@ Ported from Voltip (same anatomy and props, Voltip-only options removed): `Icon 
 Eyebrow Card Panel Badge Chip Button IconButton Toggle Segmented Input Select Menu Popover Keycap(s)
 Banner StatusRow SettingsLayout EmptyState Progress Table ThemeTile ThemeSwitch Dialog Toast
 CommandPalette Sidebar Toolbar TitleBar OptionCard`, plus `Logo` (Voltip's navy plate with a
-pale lock body and an orange countdown arc).
+blue padlock under a pale shackle, its body showing a masked code: three pale dots).
 
 New for Lockra:
 
