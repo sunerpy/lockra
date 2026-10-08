@@ -1,0 +1,36 @@
+[package]
+name = "lockra-relay"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A relay that keeps Lockra's end-to-end encrypted sync spaces for devices without storage of their own: self-hosted, or the hosted one."
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "lockra-relay"
+path = "src/main.rs"
+
+[dependencies]
+bytes.workspace = true
+data-encoding.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "net", "signal"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["fs", "io-util", "net", "signal", "test-util"] }

@@ -287,3 +287,37 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   cost, with the usual bounds on the parameters. The code is ten characters of Crockford's Base32
   (50 bits, shown as `ABCDE-FGHJK`); case, spaces and dashes do not matter, and O reads as 0, I
   and L as 1.
+
+### The relay
+
+A relay (`docs/relay.md`) keeps a space's snapshots under its id, at an HTTPS address of its own:
+
+```
+GET    <relay>/v1/spaces/<space id>/devices/                    the listing
+GET    <relay>/v1/spaces/<space id>/devices/<device tag>.lks    a snapshot
+PUT    <relay>/v1/spaces/<space id>/devices/<device tag>.lks
+DELETE <relay>/v1/spaces/<space id>/devices/<device tag>.lks
+GET    <relay>/healthz                                          ok
+GET    <relay>/v1/                                              {service: "lockra-relay", api: 1, version}
+```
+
+- **Access.** Every request for a space carries `Authorization: Bearer <token>`, the space's access
+  token: Base64url (no padding) of the 32 bytes of HKDF-SHA256(salt = the space id's 16 bytes,
+  ikm = sync key, info `lockra-relay v1 access token`). The relay keeps the token's SHA-256 (hex,
+  in the space's `access` file); a space's first write binds it. Another token is refused (403), a
+  missing or malformed one asks for one (401). Nothing else of the sync key reaches the relay.
+- **The listing** is `{"objects": [{"name", "size", "etag"}]}`, the snapshots by name. Its `ETag`
+  is the listing's revision, a hash of the names and etags. `If-None-Match: <revision>` answers
+  `304` while nothing changed; with `?wait=<seconds>` too, the relay holds the `304` back until a
+  snapshot is written or removed, or the wait (at most its `--max-wait`, 30 s by default) is over.
+  A space the relay does not keep lists empty.
+- **Snapshots.** A read answers the bytes and their `ETag`: the first 16 bytes of their SHA-256 in
+  hex, quoted. A write answers the new etag and honours `If-None-Match: *` and `If-Match: <etag>`
+  (`412` when they fail): unlike WebDAV, a relay holds a write's condition. Removing nothing is no
+  error (`204`). A name that is no device tag and `.lks`, and a space id not written as a lowercase
+  UUID, are `404`.
+- **Refusals.** `413` for a snapshot larger than the relay keeps; `507` with `{"error": "full",
+"limit": "devices" | "space" | "relay" | "spaces"}` at a limit of the space or of the relay; `429`
+  with `Retry-After` past a rate; `503` with `Retry-After` while a space being removed was in use.
+  Every other error is `{"error": "<code>"}` with its status. Every answer carries
+  `Cache-Control: no-store`.

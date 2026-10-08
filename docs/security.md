@@ -295,6 +295,37 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   except a write already on its way, which may still land at the old place: the space at the new
   place stays whole, and what lands at the old place is ciphertext like everything it held.
 
+### The relay
+
+A relay (`docs/relay.md`) is storage that Lockra or the user runs: the built-in one at
+`https://lockra-relay.onethinker.top`, or anyone's own `lockra-relay`. It holds what any storage
+holds, the space's snapshots as the devices sealed them, and is trusted with no more.
+
+- **It cannot read the space.** The snapshots are encrypted under the space's data key, which never
+  leaves the devices; the keyrings in them open only with a device's master password together with
+  the sync key, and neither reaches the relay. A device shows it an access token instead: HKDF of
+  the sync key with a label of its own (`docs/formats.md` §9, "The relay"), from which neither the
+  sync key nor anything else of the space can be computed. The relay keeps only the token's SHA-256.
+  Whoever takes the relay's disk, or the relay itself, holds ciphertext and hashes, as an S3 bucket's
+  operator would.
+- **What it sees.** The space's id (derived one way from the sync key), its devices' tags (keyed
+  hashes, which link no device across spaces), the snapshots' sizes in 4 KiB steps, when they
+  change, and the addresses that ask. The built-in relay keeps the addresses in memory only, for
+  its rates; it writes no log of requests, and its load balancer keeps no access or connection
+  logs. A relay of one's own logs what its operator makes it log.
+- **Only the space's devices change it.** A space is bound to the token of its first write; a
+  request with another token is refused, so someone who learns a space's id (from a URL in a log,
+  say) can neither read nor change it. The relay itself can delete, withhold or roll back
+  snapshots, like any storage: the devices refuse an older snapshot than one seen, keep every
+  account when the space goes, and write their snapshots again.
+- **Limits.** The relay refuses more than it keeps (snapshot size, devices per space, bytes per
+  space and in all, spaces) and more than a client may ask (requests per client address and per
+  space, new spaces per address): one client cannot exhaust it for the others. A space no device
+  reached for 400 days is removed; its devices still hold it whole and write it again.
+- **Transport.** HTTPS, as for any storage; the token goes in the `Authorization` header, never in
+  the URL. Behind its load balancer or proxy the relay speaks plain HTTP on a network the
+  operator controls, and believes `X-Forwarded-For` only from the proxies it was told to.
+
 ## Residual risks
 
 - With "remember on this device" on, the vault is as safe as the OS account: anyone who can sign
@@ -325,6 +356,10 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   such a copy, and so is every computer its folder reaches). To shut out a lost device, or someone
   who has the sync key and an old master password, set up a new space and join the other devices
   to it.
+- A relay, the built-in one included, sees when and from which addresses a space's devices sync,
+  and its operator can make the space unavailable; the built-in relay is a single server, and can
+  be down. For a space that must not depend on Lockra's server, run a relay of your own or use
+  storage of your own.
 - On Android, the sync trusts the certificate authorities the system ships (its Conscrypt
   module's since Android 14, the system image's before): one the user turned off in the system's
   settings is still trusted by the sync, and Android's blocklist of distrusted certificates is not

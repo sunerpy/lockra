@@ -1,0 +1,8 @@
+# The build needs the Cargo workspace (every member's manifest) and nothing heavy.
+.git
+target
+**/node_modules
+apps/*/dist
+apps/mobile/src-tauri/gen/android/app/build
+docs/acceptance
+docs/site

@@ -51,18 +51,19 @@ wildcards = "warn"
 allow-wildcard-paths = true
 
 # Lockra goes online for two things only (docs/security.md, "What is protected"): the in-app update, when the
-# user asks or has turned automatic updates on, and the sync of a space the user set up on storage
-# of their own (crates/lockra-remote). The HTTP client and the TLS stack may come in through
+# user asks or has turned automatic updates on, and the sync of a space the user set up (crates/lockra-remote:
+# storage of their own, or a Lockra relay). The HTTP client and the TLS stack may come in through
 # tauri-plugin-updater and lockra-remote and nothing else: any other crate that pulls one in is a
-# design change, not a dependency bump.
+# design change, not a dependency bump. The relay server (crates/lockra-relay) is a binary of its own,
+# never linked into the apps: it serves plain HTTP/1.1 through hyper behind a proxy that ends TLS.
 [[bans.deny]]
 name = "reqwest"
 wrappers = ["tauri-plugin-updater", "lockra-remote", "opendal-http-transport-reqwest"]
 reason = "The update check and the user's own sync storage are Lockra's only network access; another HTTP client is a design change."
 [[bans.deny]]
 name = "hyper"
-wrappers = ["reqwest", "hyper-util", "hyper-rustls"]
-reason = "HTTP only for the update check and the sync storage, through reqwest."
+wrappers = ["reqwest", "hyper-util", "hyper-rustls", "lockra-relay"]
+reason = "HTTP only for the update check and the sync storage, through reqwest, and the relay server's own."
 [[bans.deny]]
 name = "ureq"
 reason = "Lockra's network access goes through reqwest only."
