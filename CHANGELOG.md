@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.2](https://github.com/sunerpy/lockra/compare/v0.8.1...v0.8.2) (2026-10-09)
+
+
+### Features
+
+* **mobile:** 手机邀请页可复制邀请码，电脑粘贴即可加入 ([#93](https://github.com/sunerpy/lockra/issues/93)) ([2a01979](https://github.com/sunerpy/lockra/commit/2a019792ee6ddc1b2b7b17292b2224e4c5d51581))
+
 ## [0.8.1](https://github.com/sunerpy/lockra/compare/v0.8.0...v0.8.1) (2026-10-08)
 
 
