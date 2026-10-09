@@ -108,11 +108,13 @@ so, so mind screen sharing.
 ## Sync
 
 Sync (from version 0.4.0) is off until you set it up, on storage of your own or a Lockra relay. Everything a device writes there is
-encrypted on the device, and the key that encrypts it opens only with both the master password of
-a device in the space and the sync key. Each device writes only its own file, so devices never
-overwrite each other's changes; a file that was altered or put back to an older version is
-refused. The storage's
-credentials and the sync key are kept in the encrypted vault and never in a backup.
+encrypted on the device, and from the storage the key that encrypts it opens only with both the
+master password of a device in the space and the recovery key. An invitation carries that key
+itself, so a device that has one joins without a password: Lockra shows it only after the master
+password or Touch ID, Windows Hello or the fingerprint, and hides it after two minutes. Each device
+writes only its own file, so devices never overwrite each other's changes; a file that was altered
+or put back to an older version is refused. The storage's credentials and the recovery key are kept
+in the encrypted vault and never in a backup.
 [Sync between devices](/backup/sync#what-the-storage-can-see) explains what the storage can see.
 
 ### Through a Lockra relay
@@ -120,9 +122,9 @@ credentials and the sync key are kept in the encrypted vault and never in a back
 <StatusTag status="available" /> Available from version 0.8.1.
 
 A Lockra relay, the built-in one or your own, is storage like any other and is trusted with no
-more: it keeps the same encrypted files, and neither the key that encrypts them nor the sync key
-reaches it. The devices identify themselves to it with a value made from the sync key, from which
-the sync key cannot be recovered, so nobody else can read or change the space there. The relay sees
+more: it keeps the same encrypted files, and neither the key that encrypts them nor the recovery
+key reaches it. The devices identify themselves to it with a value made from the recovery key, from
+which the recovery key cannot be recovered, so nobody else can read or change the space there. The relay sees
 when and from which network addresses the devices sync, and it can delete the space or be
 unavailable; the devices keep every account either way
 ([Through a Lockra relay](/backup/sync#through-a-lockra-relay)).
@@ -133,9 +135,10 @@ unavailable; the devices keep every account either way
   password.
 - With **Remember on this device** on, the vault is as safe as your account on the computer.
 - A forgotten master password cannot be recovered, by anyone.
-- With sync on, someone who has both the storage's contents and the sync key (a photographed
-  invitation, for example) can try master passwords on their own computer, against every device's;
-  a long master password on every device is the defence. Whoever can write to the storage can
+- With sync on, someone who photographs an invitation, or gets its text and its code, joins the
+  space. Someone who has both the storage's contents and the recovery key can try master passwords
+  on their own computer, against every device's; a long master password on every device is the
+  defence. Whoever can write to the storage can
   delete the space, which stops sync but not your vaults. Removing a device does not revoke it.
 
 For the full design, see the [security model](/dev/security).

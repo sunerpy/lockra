@@ -53,10 +53,11 @@ described below.
    turn on **Path-style access** for a self-hosted service such as MinIO. **Folder (optional)** is
    where Lockra keeps its files in the bucket or WebDAV folder (`lockra` by default).
 3. Check **This device's name**, enter the master password, and choose **Start syncing**.
-4. Lockra shows the **sync key**: `LKS1-` and 14 groups of four characters. Write it down or keep
-   it in a password manager, apart from the master password. Adding a device without another one
-   at hand, or recovering when every device is lost, takes both. You can see it again under
-   **Invite another device**.
+4. **Settings › Sync** reminds you to keep the **recovery key**: `LKS1-` and 14 groups of four
+   characters. Choose **Show the recovery key…**, enter the master password, and write it down or
+   keep it in a password manager, apart from the master password, or choose **Save to a file…**;
+   then **I have kept it**. You need it only to recover the space when every device is lost, with
+   the storage settings and the master password of any device.
 
 The credentials are kept in the encrypted vault and never shown again; **Settings › Sync** shows
 the storage without them.
@@ -64,36 +65,36 @@ the storage without them.
 ## Adding a device
 
 On a device that syncs, open **Settings › Sync**, choose **Invite another device** and enter the
-master password. Lockra shows a QR code and the invitation as text, for two minutes. The
-invitation holds the storage's credentials and the sync key, so use it on your own devices only.
+master password. Lockra shows a QR code for two minutes. The invitation hands the space over: a
+device that holds it joins without any other password, so use it on your own devices only.
 
-On the new device:
+On the new device, scan the QR code or paste the invitation (below, **Can't scan?**):
 
-- **No vault yet**: on the welcome screen, choose **Join sync…**, paste the invitation, enter a
-  name for the device and **The sync space's master password**, the master password of any device
-  in the space, and choose **Join**. Lockra creates the vault under that master password and the
-  accounts arrive.
+- **No vault yet**: on the welcome screen, choose **Join sync…**, enter a name for the device,
+  choose its master password in **Choose a master password for this device** and type it again,
+  and choose **Join**. Lockra creates the vault under that master password and the accounts arrive.
+  It may be the same as the other devices' master password or another one.
 - **A vault already**: open **Settings › Sync › Join an existing sync** and enter **This device's
-  master password**. If the devices in the space use another master password, also enter one of
-  theirs in **The sync space's master password (optional)**. The vault's accounts join the space,
-  and the vault keeps its own master password.
+  master password**. The vault's accounts join the space, and the vault keeps its own master
+  password.
 
-Without another device, choose **Sync key** instead of **Invitation** and fill in the storage
-settings and the sync key.
+Without another device, recover the space: choose **Recovery key** instead of **Invitation**,
+fill in the storage settings and the recovery key, and enter the master password of any device in
+the space. If this device's vault uses another master password, Lockra asks for one of theirs in
+**The sync space's master password** too.
 
 Every device in the space keeps its own copy of the space's key, encrypted with its own master
-password and the sync key. The master password of any device in the space, with the sync key,
-adds a device. After you change the master password on a device, the new one works from that
-device's next sync, and the old one no longer opens the space unless another device still uses it.
+password and the recovery key: the master password of any device in the space, with the recovery
+key, recovers the space. After you change the master password on a device, the new one works for
+a recovery from that device's next sync.
 
 ### Easier inviting and joining
 
 <StatusTag status="available" /> Available from version 0.7.3.
 
 - **Show the invitation with Touch ID, Windows Hello or the fingerprint**: on a device that unlocks with one of them, **Invite another device** accepts it instead of the master password.
-- **An invitation you can send**: a 10-character code is shown beside the invitation. Send the invitation to the new device by chat or mail, and tell the code another way, in person or by phone; the new device pastes the invitation and enters the code. Scanning the QR code needs no code.
-- **One password to join**: a device with a vault enters only its own master password; Lockra asks for another device's only when the space's devices use another one.
-- **Save the sync key**: after setting up, you can save the sync key to a file you choose. Until you save it or choose **I have kept it**, **Settings › Sync** reminds you.
+- **An invitation you can send**: under **Can't scan?**, **Copy the invitation** and a 10-character code. Send the invitation to the new device by chat or mail, and tell the code another way, in person or by phone; the new device pastes the invitation and enters the code. Scanning the QR code needs no code.
+- **Save the recovery key**: **Save to a file…** writes it to a file you choose. Until you save it or choose **I have kept it**, **Settings › Sync** reminds you.
 
 ## Adding a phone
 
@@ -103,15 +104,15 @@ The Android app syncs like a computer. Show an invitation on a device of the spa
 Sync › Invite another device**), then on the phone choose **Settings › Sync › Join an existing
 sync › Scan to join**, or **Join from sync** on the welcome screen of a new install, and scan it.
 The invitation goes from the camera to Lockra and is not shown on the phone. Pasting the
-invitation, or typing the storage settings and the sync key, works as on a computer.
+invitation, or recovering with the storage settings and the recovery key, works as on a computer.
 
 ### Adding a computer from a phone
 
 <StatusTag status="available" /> Available from version 0.8.2.
 
 A computer scans nothing, so when the space started on the phone, the phone sends it the invitation
-as text. On the phone, open **Settings › Sync › Invite another device** and choose **Copy the
-invitation**: the text goes to the clipboard, kept out of clipboard history, and is cleared after
+as text. On the phone, open **Settings › Sync › Invite another device**, choose **Can't scan?**
+and then **Copy the invitation**: the text goes to the clipboard, kept out of clipboard history, and is cleared after
 the time set in **Settings › Security › Clear clipboard**. Send it to the computer by chat or mail,
 paste it there in **Join an existing sync** (or **Join sync…** on the welcome screen), and enter the
 code the phone shows beside it.
@@ -123,9 +124,9 @@ computer.
 
 ## Simpler pairing
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.8.3.
 
-The next version asks for less when you add a device:
+From this version, adding a device asks for less:
 
 - **One password, the new device's own.** The invitation hands the space over, so the new device
   asks for no other device's master password. On a device with no vault yet, you choose its master
@@ -139,7 +140,7 @@ The next version asks for less when you add a device:
   of any device.
 
 Because an invitation hands the space over, a device that holds one joins without any password:
-use it on your own devices only. Versions up to 0.8.2 cannot read the new invitations, and the new
+use it on your own devices only. Versions up to 0.8.2 cannot read these invitations, and this
 version refuses theirs: update every device first.
 
 ## Through a cloud drive folder
@@ -156,7 +157,7 @@ carries them to your other devices.
    folder** as the storage, then **Choose folder…** and pick that folder.
 3. Check **This device's name**, enter the master password, and choose **Start syncing**.
 
-The invitation of such a space holds the sync key alone, not the folder on this computer. Once a
+The invitation of such a space holds no storage settings, nor the folder on this computer. Once a
 new device has pasted or scanned it, Lockra asks how that device reaches the same folder:
 
 - **Another computer**: choose **Cloud drive folder** and pick the same drive's folder on that
@@ -195,14 +196,14 @@ write the same encrypted files there as anywhere else, and the relay can open no
    For a relay of your own, choose **A relay of your own** and enter its **Relay address**, which
    starts with `https://`.
 2. Check **This device's name**, enter the master password, and choose **Start syncing**.
-3. Keep the sync key Lockra shows, as for any storage.
+3. Save the recovery key **Settings › Sync** reminds you of, as for any storage.
 
-The invitation of such a space holds the relay's address and the sync key. To add a phone, show the
+The invitation of such a space holds the relay's address and the space's keys. To add a phone, show the
 invitation on the computer (**Invite another device**) and scan its QR code on the phone
 (**Settings › Sync › Join an existing sync › Scan to join**, or **Join from sync** on the welcome
 screen): the phone needs no storage settings, only a master password. Pasting the
 invitation and entering the code shown beside it works too, on a phone or a computer. Without
-another device at hand, choose **Sync key**, keep **Lockra relay**, and enter the sync key.
+another device at hand, choose **Recovery key**, keep **Lockra relay**, and enter the recovery key.
 
 While the vault is unlocked, a device keeps one request waiting at the relay, which answers it when
 another device writes: the change arrives about a second later. Besides, a device syncs at the
@@ -216,10 +217,10 @@ What the relay can see:
 
 - **What any storage sees.** Encrypted files, their sizes in steps of 4 KiB, how many devices a
   space has and when they write, and the network addresses the devices connect from. Never an
-  account, a secret, a device name, the sync key or a master password
+  account, a secret, a device name, the recovery key or a master password
   ([What the storage can see](#what-the-storage-can-see)).
 - **Only the space's devices change it.** The devices identify themselves with a value made from
-  the sync key, from which the sync key cannot be recovered; the relay keeps only a fingerprint of
+  the recovery key, from which the recovery key cannot be recovered; the relay keeps only a fingerprint of
   that value and refuses every request without it. Someone who learns where a space lives on the
   relay can neither read nor change it.
 - **The relay can be unavailable.** It can also delete a space, like any storage: the devices keep
@@ -269,7 +270,7 @@ storage. A device that is still in use appears again on its next sync. **Rename*
 The space must already be at the new place: move its folder first.
 
 **Turn off sync on this device** stops sync here. The accounts stay on the device; the space and
-the other devices go on. You can join again later with an invitation or the sync key.
+the other devices go on. You can join again later with an invitation or the recovery key.
 
 ## What the storage can see
 
@@ -277,11 +278,15 @@ the other devices go on. You can join again later with an invitation or the sync
   encrypted on the device with XChaCha20-Poly1305 before they are written. Each device writes one
   file, padded to steps of 4 KiB, so its size says little about the number of accounts. The file
   names show only how many devices there are.
-- **Two secrets open the space.** On each device, the key that encrypts the files is itself
-  encrypted with both that device's master password (through Argon2id, 64 MiB of memory and three
-  passes) and the sync key. Someone with the storage's contents opens nothing without the sync key,
-  however good their guess of a master password; with the sync key, every guess still costs a full
-  Argon2id run. Give every device a strong master password.
+- **From the storage, two secrets open the space.** On each device, the key that encrypts the
+  files is itself encrypted with both that device's master password (through Argon2id, 64 MiB of
+  memory and three passes) and the recovery key. Someone with the storage's contents opens nothing
+  without the recovery key, however good their guess of a master password; with the recovery key,
+  every guess still costs a full Argon2id run. Give every device a strong master password.
+- **An invitation opens the space by itself.** It holds the space's key, so a device that has it
+  joins with no password: Lockra shows it only after the master password (or Touch ID, Windows
+  Hello or the fingerprint), hides it after two minutes and keeps it out of screenshots where the
+  system allows; the text to send needs its code.
 - **Devices never overwrite each other.** Each device writes only its own file, so devices that
   sync at the same moment keep each other's changes, on S3 and WebDAV alike.
 - **Changes are detected.** A file that was altered, moved from another device or space, or put
@@ -290,9 +295,10 @@ the other devices go on. You can join again later with an invitation or the sync
 - **Deleting is not prevented.** Whoever can write to the storage can delete the space. That stops
   sync, not your vaults: every device keeps its accounts.
 - **Removing a device does not revoke it.** A removed device still has the space's key. To shut
-  out a lost device, or someone who has the sync key and an old master password, turn off sync on
+  out a lost device, someone who saw an invitation, or someone who has the recovery key and an old
+  master password, turn off sync on
   every device, start a new sync space and add the devices to it.
-- **Backups leave sync out.** The storage settings, their credentials and the sync key are kept in
+- **Backups leave sync out.** The storage settings, their credentials and the recovery key are kept in
   the vault file only. A backup does not contain them; a device restored from a backup joins the
   space again.
 
@@ -303,8 +309,9 @@ the other devices go on. You can join again later with an invitation or the sync
 | The storage refused access; check the access key or password                                             | Check the access key or the password, and that it may list, read, write and delete in the bucket or folder.                                    |
 | The storage could not be reached                                                                         | Check the network and the address. A proxy configured in the system is used.                                                                   |
 | The storage answered with an error; check that the bucket or folder exists                               | Check the bucket, the region and **Path-style access**.                                                                                        |
-| There is no sync space for this sync key on that storage                                                 | Check the address, the bucket and **Folder (optional)**: they must be the same as on the other devices.                                        |
-| The master password or the sync key is wrong                                                             | Enter the master password of a device in the space (above) and check the sync key.                                                             |
+| That storage holds no such sync space                                                                    | Check the address, the bucket and **Folder (optional)**: they must be the same as on the other devices.                                        |
+| The master password or the recovery key is wrong                                                         | Enter the master password of a device in the space (above) and check the recovery key.                                                         |
+| This invitation comes from an older Lockra: update the device that shows it first                        | Update Lockra on the device that shows the invitation, then show it again.                                                                     |
 | The storage must be reached over HTTPS (plain HTTP only to this computer)                                | Use the service's `https://` address.                                                                                                          |
 | The sync data of a device is older than before and was refused. The storage may have been rolled back    | The storage served an older file of that device. The device writes its file again on its next change; if the message stays, remove the device. |
 | The sync folder is missing: the cloud drive's app may not be running, or the folder was moved or deleted | Start the drive's app and check the folder is where it was; if it moved, choose it again in **Change storage settings**.                       |

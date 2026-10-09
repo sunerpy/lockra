@@ -106,7 +106,7 @@ them.
 
 - **Encrypted files and nothing else.** One folder per space, with each device's encrypted file
   and a fingerprint of the value the space's devices identify themselves with. No account, no
-  device name, no sync key and no master password reach the relay.
+  device name, no recovery key and no master password reach the relay.
 - **Logs without addresses.** The relay logs when it starts and stops, an hourly count of spaces,
   bytes and requests, and failures of its disk. It logs no network address, no space and no
   request; your proxy logs what you configure it to.

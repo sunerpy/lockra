@@ -50,7 +50,7 @@ developer, on a server in AWS's Seoul region (South Korea).
   and of each device, computed from the space's keys, from which a device cannot be recognised in
   another space; the value the devices identify themselves with, of which it keeps only a
   fingerprint; and the network address each request comes from.
-- **What it cannot see**: your accounts, their secrets, the device names, the sync key and the
+- **What it cannot see**: your accounts, their secrets, the device names, the recovery key and the
   master passwords. The files stay encrypted on the relay; neither the relay nor Lockra's developer
   can open them.
 - **How long**: a space is deleted with its files 400 days after a device last reached it.
