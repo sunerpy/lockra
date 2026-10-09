@@ -121,6 +121,27 @@ accounts are on the phone and the computer is new, the computer can as well star
 its QR code; the phone joins with its own vault, and its accounts join the space and reach the
 computer.
 
+## Simpler pairing
+
+<StatusTag status="building" /> In development, not released yet.
+
+The next version asks for less when you add a device:
+
+- **One password, the new device's own.** The invitation hands the space over, so the new device
+  asks for no other device's master password. On a device with no vault yet, you choose its master
+  password while joining, typed twice; it may be the same as the other devices' or another one.
+- **The QR code first.** **Invite another device** shows the QR code; the text to send and its code
+  appear under **Can't scan?**, with **Copy the invitation**.
+- **The recovery key.** The sync key is called the recovery key, and neither starting to sync nor
+  inviting a device shows it: **Settings › Sync › Show the recovery key…** shows it after the master
+  password, and Lockra reminds you until you save it or choose **I have kept it**. You need it only
+  to recover the space when every device is lost, with the storage settings and the master password
+  of any device.
+
+Because an invitation hands the space over, a device that holds one joins without any password:
+use it on your own devices only. Versions up to 0.8.2 cannot read the new invitations, and the new
+version refuses theirs: update every device first.
+
 ## Through a cloud drive folder
 
 <StatusTag status="available" /> Available from version 0.7.4.

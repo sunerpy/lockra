@@ -231,6 +231,10 @@
       "command": "sync_key_acknowledge"
     },
     {
+      "command": "sync_key_reveal",
+      "password": "a new password"
+    },
+    {
       "command": "sync_set_storage",
       "password": "a new password",
       "storage": {

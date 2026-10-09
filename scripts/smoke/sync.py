@@ -4,21 +4,24 @@ owns the server (the Versity S3 gateway in Docker), Xvfb, the drivers and two da
 one phase per app start:
 
   a  device A: a vault with two accounts; Settings › Sync, fill in the S3 form and start syncing;
-     the sync key is shown once and kept (in the work folder, for device B).
-  b  device B, no vault: the welcome screen's "join sync" with the storage and the sync key; A's
-     accounts arrive; B renames one, deletes the other and adds a third. B's first snapshot is
-     fetched from the storage for phase c.
+     no key on screen, the reminder instead, which shows the recovery key behind the master
+     password; it is kept (in the work folder, for device B).
+  b  device B, no vault: the welcome screen's "join sync", recovering with the storage and the
+     recovery key; A's accounts arrive; B renames one, deletes the other and adds a third. B's
+     first snapshot is fetched from the storage for phase c.
   c  device A again: unlock, the changes arrive, both devices are listed; then B's older snapshot
      is put back on the storage and A refuses it as a rollback.
 
 Then the same through a Lockra relay (lockra-relay on 127.0.0.1, its data folder read back):
 
   r1 device C: the storage form starts on Lockra's built-in relay; C sets up a space on a relay of
-     its own instead, and shows an invitation (the sealed text and its code kept for device D).
-     The relay holds one snapshot, nothing readable, and the SHA-256 of the access token derived
-     from the sync key (computed here apart), never the sync key.
+     its own instead, and shows an invitation: its QR code, and behind "Can't scan?" the sealed
+     text, copied to the X clipboard, and its code (both kept for device D). The relay holds one
+     snapshot, nothing readable, and the SHA-256 of the access token derived from the sync key
+     (computed here apart), never the sync key.
   r2 device D, no vault: the welcome screen's "join sync" with C's invitation and code alone (no
-     storage settings); C's accounts arrive; D adds one.
+     storage settings) under a master password of D's own; C's accounts arrive; D adds one, and
+     its vault opens with its own password.
   r3 device C again: unlock, D's account arrives, both devices are listed.
 
 Screenshots go to --out. Every wait is a condition with a deadline.
@@ -31,6 +34,7 @@ import hashlib
 import hmac
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -57,6 +61,8 @@ SELECT = (
 )
 
 PASSWORD = "smoke sync pass phrase"
+# Device D's own: an invitation asks no other device's.
+PASSWORD_D = "device d's own pass phrase"
 BUCKET = "lockra-it"
 PREFIX = "lockra"
 REGION = "us-east-1"
@@ -201,6 +207,24 @@ class Phase:
         self.web.click(self.web.wait(xpath="//*[@role='tab'][normalize-space()='同步']"))
         self.web.wait(css="[data-testid=settings-content][data-section=sync]")
 
+    def reveal_recovery_key(self):
+        """The recovery key from Settings › Sync's reminder, behind the master password; "I have
+        kept it" ends the reminder."""
+        web = self.web
+        web.click(web.wait(xpath="//*[@data-testid='sync-key-reminder']//button[normalize-space()='显示恢复密钥…']", timeout=60))
+        dialog = "//*[@role='dialog']"
+        self.fill("主密码", PASSWORD, dialog)
+        web.click(self.button("显示恢复密钥", dialog))
+        key = web.text(web.wait(css="[data-testid=sync-recovery-key] [data-testid=sync-key]", timeout=60)).strip()
+        if not key.startswith("LKS1-"):
+            sys.exit(f"smoke-sync: the recovery key does not read as one: {key[:8]}…")
+        return key
+
+    def kept_recovery_key(self):
+        self.web.click(self.button("我已记下", "//*[@role='dialog']"))
+        self.web.gone("[data-testid=sync-recovery-key]")
+        self.web.gone("[data-testid=sync-key-reminder]")
+
     def light(self):
         settings = self.state()["settings"]
         self.web.invoke({"command": "settings_set", "settings": {**settings, "locale": "zh-cn", "follow_system_theme": False, "theme": "light", "reduce_motion": True}})
@@ -244,15 +268,16 @@ class Phase:
         self.shot("sync-create-light")
         before = int(time.time() * 1000)
         web.click(self.button("开始同步", scope))
-        key = web.text(web.wait(css="[data-testid=sync-created] [data-testid=sync-key]", timeout=60)).strip()
-        if not key.startswith("LKS1-"):
-            sys.exit(f"smoke-sync: the sync key does not read as one: {key[:8]}…")
+        # No key on screen: the reminder stands in Settings › Sync, and shows it on request.
+        web.wait(css="[data-testid=sync-key-reminder]", timeout=60)
+        if web.find(css="[data-testid=sync-key]") is not None:
+            sys.exit("smoke-sync: a key is on screen right after setting up")
+        key = self.reveal_recovery_key()
         with open(os.path.join(self.args.work, "sync-key"), "w") as f:
             os.chmod(f.name, 0o600)
             f.write(key)
         self.shot("sync-key-light")
-        web.click(self.button("我已保存", "//*[@role='dialog']"))
-        web.gone("[data-testid=sync-created]")
+        self.kept_recovery_key()
         space = self.synced_after(before)
         if [d["name"] for d in space["devices"]] != ["台式机"]:
             sys.exit(f"smoke-sync: device A's list: {space['devices']}")
@@ -266,7 +291,7 @@ class Phase:
                 if clear in body:
                     sys.exit(f"smoke-sync: {clear!r} is readable in {key_name}")
         self.shot("sync-on-light")
-        print(f"smoke-sync: A set up the space (1 object, nothing readable) and kept the sync key")
+        print("smoke-sync: A set up the space (1 object, nothing readable) and kept the recovery key it showed")
         web.quit()
 
     def b(self):
@@ -277,9 +302,9 @@ class Phase:
         web.wait(css="[data-testid=page-welcome]")
         web.click(web.wait(css="[data-testid=welcome-join-open]"))
         scope = "//*[@data-testid='welcome-join']"
-        web.click(web.wait(xpath=f"{scope}//*[@role='radio'][normalize-space()='同步密钥']"))
+        web.click(web.wait(xpath=f"{scope}//*[@role='radio'][normalize-space()='恢复密钥']"))
         self.storage_form(scope)
-        self.fill("同步密钥", key, scope)
+        self.fill("恢复密钥", key, scope)
         self.fill("这台设备的名称", "笔记本", scope)
         self.fill("同步空间的主密码", PASSWORD, scope)
         self.shot("sync-join-welcome-light")
@@ -306,7 +331,7 @@ class Phase:
         self.synced_after(before)
         self.open_sync()
         self.shot("sync-on-b-light")
-        print("smoke-sync: B joined with the sync key, got A's accounts, and renamed, deleted and added one")
+        print("smoke-sync: B recovered with the recovery key, got A's accounts, and renamed, deleted and added one")
         web.quit()
 
     def c(self):
@@ -367,9 +392,8 @@ class Phase:
         self.fill("中继地址", self.args.relay, scope)
         before = int(time.time() * 1000)
         web.click(self.button("开始同步", scope))
-        key = web.text(web.wait(css="[data-testid=sync-created] [data-testid=sync-key]", timeout=60)).strip()
-        web.click(self.button("我已保存", "//*[@role='dialog']"))
-        web.gone("[data-testid=sync-created]")
+        key = self.reveal_recovery_key()
+        self.kept_recovery_key()
         space = self.synced_after(before)
         if space["storage"] != {"kind": "relay", "url": self.args.relay}:
             sys.exit(f"smoke-sync: C's storage reads {space['storage']}")
@@ -394,12 +418,19 @@ class Phase:
         self.fill("主密码", PASSWORD, dialog)
         web.click(self.button("显示邀请码", dialog))
         invite = web.wait(css="[data-testid=sync-invite]")
-        if "中继地址" not in web.text(invite):
-            sys.exit(f"smoke-sync: the invitation does not say it holds the relay's address: {web.text(invite)[:80]}")
-        text = web.text(web.wait(css="[data-testid=sync-invite] [data-testid=invite-text]")).strip()
+        if "无需其他密码" not in web.text(invite):
+            sys.exit(f"smoke-sync: the invitation does not say it hands the space over: {web.text(invite)[:80]}")
+        if web.find(css="[data-testid=sync-invite] [data-testid=sync-key]") is not None:
+            sys.exit("smoke-sync: the invitation shows the recovery key")
+        # Behind "Can't scan?": the sealed text, copied by the core to the X clipboard, and its code.
+        web.click(self.button("无法扫码？", dialog))
+        web.click(self.button("复制邀请码", dialog))
+        web.wait(xpath=f"{dialog}//*[@role='status'][contains(normalize-space(), '已复制')]")
+        clipboard = lambda: subprocess.run(["xclip", "-o", "-selection", "clipboard"], capture_output=True, text=True, timeout=10).stdout.strip()
+        text = until("the sealed invitation on the clipboard", lambda: (lambda t: t if t.startswith("lockra-invite:2:") else None)(clipboard()))
         code = web.text(web.wait(css="[data-testid=sync-invite] [data-testid=invite-code]")).strip()
-        if not text.startswith("lockra-invite:2:"):
-            sys.exit(f"smoke-sync: the invitation to send is not sealed: {text[:20]}…")
+        if text in web.text(invite):
+            sys.exit("smoke-sync: the text to send is on screen")
         for name, value in [("relay-invite", text), ("relay-code", code)]:
             with open(os.path.join(self.args.work, name), "w") as f:
                 os.chmod(f.name, 0o600)
@@ -420,11 +451,14 @@ class Phase:
         web.wait(css="[data-testid=page-welcome]")
         web.click(web.wait(css="[data-testid=welcome-join-open]"))
         scope = "//*[@data-testid='welcome-join']"
-        # The invitation and its code: no storage settings to type.
+        # The invitation and its code: no storage settings to type, and no other device's password.
         self.fill("邀请码", text, scope)
         self.fill("口令", code, scope)
         self.fill("这台设备的名称", "笔记本", scope)
-        self.fill("同步空间的主密码", PASSWORD, scope)
+        if web.find(xpath=f"{scope}//label[normalize-space()='同步空间的主密码']") is not None:
+            sys.exit("smoke-sync: joining from an invitation asks for the space's master password")
+        self.fill("为这台设备设置主密码", PASSWORD_D, scope)
+        self.fill("再输入一次", PASSWORD_D, scope)
         self.shot("sync-relay-join-light")
         before = int(time.time() * 1000)
         web.click(self.button("加入", scope))
@@ -441,7 +475,12 @@ class Phase:
         snapshots = [p for p in self.relay_files() if p.endswith(".lks")]
         if len(snapshots) != 2:
             sys.exit(f"smoke-sync: the relay keeps {snapshots}")
-        print("smoke-sync: D joined from C's invitation and code alone, got C's accounts, and added one")
+        # D's vault is under D's own password.
+        web.invoke({"command": "vault_lock"})
+        web.invoke({"command": "vault_unlock", "password": PASSWORD_D})
+        if self.state()["phase"] != "unlocked":
+            sys.exit("smoke-sync: D's vault does not open with D's own password")
+        print("smoke-sync: D joined from C's invitation and code under its own password, got C's accounts, and added one")
         web.quit()
 
     def r3(self):

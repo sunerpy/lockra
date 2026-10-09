@@ -36,7 +36,7 @@ function inSpace() {
 }
 
 describe("sync on the phone", () => {
-  it("sets up a space on the user's storage and shows its sync key once", async () => {
+  it("sets up a space and reminds of its recovery key, which its own page shows", async () => {
     const { user, backend } = renderApp();
     await ready();
     await user.click(screen.getByTestId("codes-settings"));
@@ -65,22 +65,28 @@ describe("sync on the phone", () => {
     await user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
     await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(submit);
-    const page = within(await screen.findByTestId("page-sync-key"));
-    expect(page.getByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
-    expect(page.getByTestId("sync-key-countdown")).toHaveTextContent("120");
+    // Back on the sync page with the space: no key on screen, the reminder instead.
+    expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(screen.getByTestId("sync-key-reminder")).toHaveTextContent("恢复密钥还没有保存");
+    expect(document.body.textContent).not.toContain(MOCK_SYNC_KEY);
     expect(backend.calls.find((c) => c.command === "sync_create")).toMatchObject({
       storage: { kind: "s3", bucket: "my-lockra", prefix: "lockra" },
       device_name: "Android 手机",
     });
-    // Saved to a file with the password the space was just made with: no other prompt.
+    // Its page shows the key behind the master password, and saves it with that password.
+    const reminder = within(screen.getByTestId("sync-key-reminder"));
+    await user.click(reminder.getByRole("button", { name: "显示恢复密钥…" }));
+    const page = within(await screen.findByTestId("page-sync-key"));
+    await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    expect(await page.findByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
+    expect(page.getByTestId("sync-key-countdown")).toHaveTextContent("120");
     await user.click(page.getByRole("button", { name: "保存到文件…" }));
-    expect(await page.findByTestId("sync-key-saved")).toHaveTextContent("同步密钥已保存到文件。");
+    expect(await page.findByTestId("sync-key-saved")).toHaveTextContent("恢复密钥已保存到文件。");
     expect(backend.savedSyncKeys).toEqual([
-      { fileName: "Lockra 同步密钥.txt", text: expect.stringContaining(MOCK_SYNC_KEY) as string },
+      { fileName: "Lockra 恢复密钥.txt", text: expect.stringContaining(MOCK_SYNC_KEY) as string },
     ]);
     expect(backend.biometricReasons).toEqual([]);
-    await user.click(page.getByRole("button", { name: "我已保存" }));
-    // Back on the sync page, now with the space; the key went with its page.
+    await user.click(page.getByRole("button", { name: "我已记下" }));
     expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
     expect(screen.queryByTestId("sync-key-reminder")).not.toBeInTheDocument();
     expect(screen.queryByTestId("sync-key")).not.toBeInTheDocument();
@@ -136,17 +142,19 @@ describe("sync on the phone", () => {
     await user.click(form.getByRole("button", { name: "扫码加入" }));
     expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
     expect(screen.getByText("Lockra 中继 · lockra-relay.onethinker.top")).toBeInTheDocument();
-    // The phone's own invitation holds the relay's address and the sync key, no credentials.
+    // The phone's own invitation: its QR code, and the warning that it hands the space over.
     await user.click(screen.getByTestId("sync-invite-open"));
     const page = within(await screen.findByTestId("page-sync-invite"));
     await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
-    expect(await page.findByTestId("invite-text")).toHaveTextContent(/^lockra-invite:2:/);
+    expect(await page.findByRole("img", { name: "二维码" })).toBeInTheDocument();
     expect(
-      page.getByText("邀请码包含中继地址和同步密钥，只能在你自己的设备上使用。"),
+      page.getByText(
+        "拿到邀请码的设备无需其他密码就能加入同步空间、读取你的账号。只在你自己的设备上使用。",
+      ),
     ).toBeInTheDocument();
   });
 
-  it("asks for this phone's own storage when the invitation holds the sync key alone", async () => {
+  it("asks for this phone's own storage when the invitation carries none", async () => {
     const { user, backend } = renderApp();
     await ready();
     await openSync(user);
@@ -170,14 +178,34 @@ describe("sync on the phone", () => {
     expect(screen.getByTestId("sync-storage")).toHaveTextContent("WebDAV · dav.example.com");
   });
 
-  it("joins with a pasted invitation, or the storage and the sync key", async () => {
+  it("joins with a pasted invitation under this phone's own master password alone", async () => {
+    // This phone's master password is not the one the space's devices use: no matter.
+    const { user, backend } = renderApp({ mock: { password: "this phone's password" } });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-join-open"));
+    const form = within(await screen.findByTestId("sync-join"));
+    await user.click(form.getByRole("radio", { name: "邀请码" }));
+    await user.type(form.getByLabelText("邀请码"), "  lockra-invite:1:bW9jaw  ");
+    await user.type(form.getByLabelText("这台设备的主密码"), "this phone's password");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(backend.calls.find((c) => c.command === "sync_join")).toEqual({
+      command: "sync_join",
+      source: { type: "invite", text: "lockra-invite:1:bW9jaw" },
+      password: "this phone's password",
+      device_name: "Android 手机",
+    });
+  });
+
+  it("recovers with the storage and the recovery key, asking the space's password apart", async () => {
     // This phone's master password is not the one the space's devices use.
     const { user, backend } = renderApp({ mock: { password: "this phone's password" } });
     await ready();
     await openSync(user);
     await user.click(screen.getByTestId("sync-join-open"));
     const form = within(await screen.findByTestId("sync-join"));
-    await user.click(form.getByRole("radio", { name: "同步密钥" }));
+    await user.click(form.getByRole("radio", { name: "恢复密钥" }));
     const join = form.getByRole("button", { name: "加入" });
     await user.click(form.getByRole("radio", { name: "S3 兼容" }));
     await user.type(form.getByLabelText("服务地址"), "https://s3.example.com");
@@ -185,28 +213,24 @@ describe("sync on the phone", () => {
     await user.type(form.getByLabelText("存储桶"), "vault");
     await user.type(form.getByLabelText("访问密钥 ID"), "AKID");
     await user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
-    await user.type(form.getByLabelText("同步密钥"), "LKS1-not-a-key");
+    await user.type(form.getByLabelText("恢复密钥"), "LKS1-not-a-key");
     await user.type(form.getByLabelText("这台设备的主密码"), "this phone's password");
     await user.click(join);
-    expect(await form.findByRole("alert")).toHaveTextContent("同步密钥");
-    await user.click(form.getByRole("radio", { name: "邀请码" }));
-    await user.type(form.getByLabelText("邀请码"), "  lockra-invite:1:bW9jaw  ");
+    expect(await form.findByRole("alert")).toHaveTextContent("恢复密钥有误");
+    await user.clear(form.getByLabelText("恢复密钥"));
+    await user.type(form.getByLabelText("恢复密钥"), MOCK_SYNC_KEY);
     // One password until the space turns out to use another one.
     expect(form.queryByLabelText("同步空间的主密码")).not.toBeInTheDocument();
     await user.type(form.getByLabelText("这台设备的主密码"), "this phone's password");
-    await user.click(form.getByRole("button", { name: "加入" }));
+    await user.click(join);
     expect(await form.findByRole("alert")).toHaveTextContent("打不开同步空间");
     await user.type(form.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
     await user.type(form.getByLabelText("这台设备的主密码"), "this phone's password");
-    await user.click(form.getByRole("button", { name: "加入" }));
+    await user.click(join);
     expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
-    expect(
-      backend.calls.filter((c) => c.command === "sync_join" && c.source.type === "invite").at(-1),
-    ).toEqual({
-      command: "sync_join",
-      source: { type: "invite", text: "lockra-invite:1:bW9jaw" },
+    expect(backend.calls.filter((c) => c.command === "sync_join").at(-1)).toMatchObject({
+      source: { type: "manual", sync_key: MOCK_SYNC_KEY },
       password: "this phone's password",
-      device_name: "Android 手机",
       space_password: MOCK_PASSWORD,
     });
   });
@@ -220,14 +244,22 @@ describe("sync on the phone", () => {
     await user.click(welcome.getByRole("button", { name: "加入同步…" }));
     const form = within(await screen.findByTestId("sync-join"));
     expect(form.getByText(/这部手机上还没有保险库/)).toBeInTheDocument();
-    // One password: on a new phone, the space's becomes the vault's.
-    expect(form.getAllByLabelText(/主密码/)).toHaveLength(1);
-    await user.type(form.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
+    // A master password of the phone's own, typed twice: no other device's.
+    expect(form.queryByLabelText("同步空间的主密码")).not.toBeInTheDocument();
+    await user.type(form.getByLabelText("为这台设备设置主密码"), "the phone's own password");
+    await user.type(form.getByLabelText("再输入一次"), "the phone's own pasword");
+    expect(form.getByText("两次输入的密码不一致")).toBeInTheDocument();
+    expect(form.getByRole("button", { name: "扫码加入" })).toBeDisabled();
+    await user.clear(form.getByLabelText("再输入一次"));
+    await user.type(form.getByLabelText("再输入一次"), "the phone's own password");
     backend.setScan("lockra-invite:1:bW9jaw");
     await user.click(form.getByRole("button", { name: "扫码加入" }));
-    // The vault is the space's: the codes, with its accounts.
+    // The vault is the space's: the codes, with its accounts, under the phone's own password.
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
     expect((await backend.getState()).sync.space?.device_name).toBe("Android 手机");
+    await backend.dispatch({ command: "vault_lock" });
+    await backend.dispatch({ command: "vault_unlock", password: "the phone's own password" });
+    expect((await backend.getState()).phase).toBe("unlocked");
   });
 
   it("runs now, renames this phone, changes the storage and removes a device", async () => {
@@ -278,12 +310,11 @@ describe("sync on the phone", () => {
     await user.type(page.getByLabelText("主密码"), "wrong{Enter}");
     expect(await page.findByText("密码错误")).toBeInTheDocument();
     await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
-    // The text to send is sealed; its code is shown apart, for another channel.
-    expect(await page.findByTestId("invite-text")).toHaveTextContent(/^lockra-invite:2:/);
-    expect(page.getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
-    expect(page.getByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
+    // The QR code first; the recovery key is not here.
+    expect(await page.findByRole("img", { name: "二维码" })).toBeInTheDocument();
     expect(page.getByTestId("invite-countdown")).toHaveTextContent("120");
-    expect(page.getByRole("img", { name: "二维码" })).toBeInTheDocument();
+    expect(page.queryByTestId("sync-key")).not.toBeInTheDocument();
+    expect(page.queryByTestId("invite-code")).not.toBeInTheDocument();
     await user.click(page.getByRole("button", { name: "完成" }));
     expect(await screen.findByTestId("page-sync")).toBeInTheDocument();
     expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
@@ -297,16 +328,18 @@ describe("sync on the phone", () => {
     await user.click(screen.getByTestId("sync-invite-open"));
     const page = within(await screen.findByTestId("page-sync-invite"));
     await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
-    const text = (await page.findByTestId("invite-text")).textContent ?? "";
-    expect(text).toMatch(/^lockra-invite:2:/);
+    // Behind "Can't scan?": copying the sealed text, and its code.
+    await user.click(await page.findByRole("button", { name: "无法扫码？" }));
     await user.click(page.getByRole("button", { name: "复制邀请码" }));
     expect(await page.findByText("已复制：在另一台设备上粘贴，再输入下方的口令。")).toHaveAttribute(
       "role",
       "status",
     );
-    expect(backend.calls).toContainEqual({ command: "sync_invite_copy", text });
-    expect(backend.clipboardText).toBe(text);
-    // The code stays on the screen, to travel another way.
+    const copied = backend.calls.find((c) => c.command === "sync_invite_copy");
+    expect(copied?.text).toMatch(/^lockra-invite:2:/);
+    expect(backend.clipboardText).toBe(copied?.text);
+    // The text itself never shows; the code stays on the screen, to travel another way.
+    expect(page.queryByText(/lockra-invite:/)).not.toBeInTheDocument();
     expect(page.getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
   });
 
@@ -322,7 +355,7 @@ describe("sync on the phone", () => {
     expect((await backend.getState()).entries.length).toBeGreaterThan(0);
   });
 
-  it("reminds of a sync key left unsaved, and saves it with the fingerprint", async () => {
+  it("reminds of a recovery key left unsaved, and saves it with the fingerprint", async () => {
     const backend = new MockBackend({
       entries: sampleEntries(),
       sync: mockSyncSpace({ key_saved: false }),
@@ -335,10 +368,20 @@ describe("sync on the phone", () => {
     await ready();
     await openSync(user);
     const reminder = await screen.findByTestId("sync-key-reminder");
-    expect(reminder).toHaveTextContent("同步密钥还没有保存");
-    await user.click(screen.getByRole("button", { name: "保存同步密钥…" }));
+    expect(reminder).toHaveTextContent("恢复密钥还没有保存");
+    await user.click(within(reminder).getByRole("button", { name: "保存到文件…" }));
     await waitFor(() => expect(screen.queryByTestId("sync-key-reminder")).not.toBeInTheDocument());
-    expect(backend.biometricReasons).toEqual(["保存同步密钥"]);
+    expect(backend.biometricReasons).toEqual(["保存恢复密钥"]);
+    // Its row still shows the key, after the fingerprint.
+    await user.click(
+      within(screen.getByTestId("sync-recovery-row")).getByRole("button", {
+        name: "显示恢复密钥…",
+      }),
+    );
+    const page = within(await screen.findByTestId("page-sync-key"));
+    await user.click(page.getByRole("button", { name: "使用指纹验证" }));
+    expect(await page.findByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
+    expect(backend.biometricReasons.at(-1)).toBe("显示恢复密钥");
   });
 
   it("shows an invitation after the fingerprint that unlocks the vault", async () => {
@@ -356,7 +399,8 @@ describe("sync on the phone", () => {
     await user.click(screen.getByTestId("sync-invite-open"));
     const page = within(await screen.findByTestId("page-sync-invite"));
     await user.click(page.getByRole("button", { name: "使用指纹验证" }));
-    expect(await page.findByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
+    await user.click(await page.findByRole("button", { name: "无法扫码？" }));
+    expect(page.getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
     expect(backend.biometricReasons.at(-1)).toBe("显示同步邀请码");
   });
 

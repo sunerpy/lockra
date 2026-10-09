@@ -1,6 +1,7 @@
-// The two sync views that show a secret: the new space's sync key, and an invitation for another
-// device. Both hide themselves after two minutes like a revealed secret, and however they close,
-// the shell lifts screen-capture protection (`secret_view_closed`).
+// The two sync views that show a secret: the recovery key (the space's sync key), and an
+// invitation for another device. Both open once the user proved to be here, hide themselves after
+// two minutes like a revealed secret, and however they close, the shell lifts screen-capture
+// protection (`secret_view_closed`).
 import { REVEAL_SECONDS, type SyncInvite, errorText } from "@lockra/shared";
 import {
   Banner,
@@ -73,28 +74,93 @@ function SyncKeyText({ value }: { value: string }) {
   );
 }
 
-/** The sync key of a space just created: shown once (an invitation shows it again). "Save to a
- *  file" uses `password`, the one the space was just made with; "I have kept it" says the key is
- *  written down. Closed otherwise, Settings › Sync goes on reminding of it. */
-export function SyncKeyDialog({
-  syncKey,
-  password,
-  onClose,
-}: {
-  syncKey: string;
-  password: string;
-  onClose: () => void;
-}) {
+/** The recovery key, once the user proved to be here. "Save to a file" uses the password typed to
+ *  show it (or the biometric check again); "I have kept it" says it is written down, which ends
+ *  Settings › Sync's reminder. */
+export function RecoveryKeyDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const { backend } = useBackend();
+  const { lock } = useUiState();
+  const biometric = unlockBiometric(lock);
+  const formId = useId();
   const now = useClock();
-  const [at] = useState(() => Date.now());
-  const left = secondsLeft(now, at);
+  const [password, setPassword] = useState("");
+  const [shown, setShown] = useState<
+    { syncKey: string; password: string | undefined; at: number } | undefined
+  >(undefined);
+  const submit = useSubmit();
+  const deliver = useSecretAnswer();
   const saving = useSaveSyncKey();
   const [saved, setSaved] = useState(false);
-  useSecretView(true, left, onClose);
+  const left = secondsLeft(now, shown?.at);
+  useSecretView(shown !== undefined, left, onClose);
+  const ask = async (typed?: string) => {
+    const answer = await submit.run(() =>
+      backend.dispatch(
+        typed === undefined
+          ? { command: "sync_key_reveal", reason: t("sync.recoveryKey.reason") }
+          : { command: "sync_key_reveal", password: typed },
+      ),
+    );
+    setPassword("");
+    if (answer !== undefined)
+      deliver(() => setShown({ syncKey: answer.sync_key, password: typed, at: Date.now() }));
+  };
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (password === "") return;
+    await ask(password);
+  };
+  if (shown === undefined) {
+    return (
+      <Dialog
+        open
+        title={t("sync.recoveryKey.title")}
+        onClose={onClose}
+        width={440}
+        actions={
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              type="submit"
+              form={formId}
+              loading={submit.busy}
+              disabled={password === ""}>
+              {t("sync.recoveryKey.submit")}
+            </Button>
+          </>
+        }>
+        <form id={formId} onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-3">
+          <p>
+            {t(biometric === null ? "sync.recoveryKey.prompt" : "sync.recoveryKey.promptBiometric")}
+          </p>
+          {biometric !== null && (
+            <Button
+              variant="outline"
+              icon="fingerprint"
+              className="self-start"
+              loading={submit.busy}
+              onClick={() => void ask()}>
+              {t(`sync.invite.verifyWith.${biometric}`)}
+            </Button>
+          )}
+          <PasswordField
+            label={t("sync.masterPassword")}
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            error={submit.error === undefined ? undefined : errorText(t, submit.error)}
+            data-autofocus
+          />
+        </form>
+      </Dialog>
+    );
+  }
   const save = async () => {
-    if ((await saving.save(password)) === true) setSaved(true);
+    if ((await saving.save(shown.password)) === true) setSaved(true);
   };
   const kept = async () => {
     await backend.dispatch({ command: "sync_key_acknowledge" }).catch(() => undefined);
@@ -103,30 +169,31 @@ export function SyncKeyDialog({
   return (
     <Dialog
       open
-      title={t("sync.created.title")}
+      title={t("sync.recoveryKey.title")}
       onClose={onClose}
       width={560}
-      hint={<span data-testid="sync-key-countdown">{t("sync.created.hideIn", { s: left })}</span>}
+      hint={
+        <span data-testid="sync-key-countdown">{t("sync.recoveryKey.hideIn", { s: left })}</span>
+      }
       actions={
         <>
           <Button variant="ghost" icon="download" onClick={() => void save()} loading={saving.busy}>
-            {t("sync.created.save")}
+            {t("sync.recoveryKey.save")}
           </Button>
           <Button variant="primary" onClick={() => void kept()} data-autofocus>
-            {t("sync.created.done")}
+            {t("sync.recoveryKey.done")}
           </Button>
         </>
       }>
-      <div className="flex flex-col gap-3" data-testid="sync-created">
+      <div className="flex flex-col gap-3" data-testid="sync-recovery-key">
         <Banner tone="warn" marker="icon">
-          {t("sync.created.body")}
+          {t("sync.recoveryKey.body")}
         </Banner>
-        <div className="text-[12px] text-fg-muted">{t("sync.created.key")}</div>
-        <SyncKeyText value={syncKey} />
-        <p className="text-[12px] text-fg-subtle">{t("sync.created.again")}</p>
+        <div className="text-[12px] text-fg-muted">{t("sync.recoveryKey.key")}</div>
+        <SyncKeyText value={shown.syncKey} />
         {saved && (
           <p className="text-[12px] text-ok" role="status" data-testid="sync-key-saved">
-            {t("sync.created.savedTo")}
+            {t("sync.recoveryKey.savedTo")}
           </p>
         )}
         {saving.error !== undefined && (
@@ -144,13 +211,16 @@ export function SyncKeyDialog({
 export function InviteDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const { backend } = useBackend();
-  const { platform, lock, sync } = useUiState();
+  const { platform, lock } = useUiState();
   const biometric = unlockBiometric(lock);
   const formId = useId();
   const now = useClock();
   const [password, setPassword] = useState("");
   const [invite, setInvite] = useState<{ answer: SyncInvite; at: number } | undefined>(undefined);
+  const [cantScan, setCantScan] = useState(false);
+  const [copied, setCopied] = useState(false);
   const submit = useSubmit();
+  const copying = useSubmit();
   const deliver = useSecretAnswer();
   const left = secondsLeft(now, invite?.at);
   useSecretView(invite !== undefined, left, onClose);
@@ -217,12 +287,19 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
     );
   }
   const { answer } = invite;
+  const copy = async () => {
+    setCopied(false);
+    const done = await copying.run(() =>
+      backend.dispatch({ command: "sync_invite_copy", text: answer.shared_text }),
+    );
+    if (done !== undefined) setCopied(true);
+  };
   return (
     <Dialog
       open
       title={t("sync.invite.open")}
       onClose={onClose}
-      width={640}
+      width={600}
       hint={<span data-testid="invite-countdown">{t("sync.invite.hideIn", { s: left })}</span>}
       actions={
         <Button variant="primary" onClick={onClose}>
@@ -231,13 +308,7 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
       }>
       <div className="flex flex-col gap-4" data-testid="sync-invite">
         <Banner tone="warn" marker="icon">
-          {t(
-            sync.space?.storage.kind === "relay"
-              ? "sync.invite.warningRelay"
-              : answer.includes_storage
-                ? "sync.invite.warning"
-                : "sync.invite.warningKeyOnly",
-          )}
+          {t("sync.invite.warning")}
         </Banner>
         {!answer.includes_storage && (
           <p className="text-[13px] text-fg-muted" data-testid="invite-key-only">
@@ -248,27 +319,47 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
           <QrView svg={answer.svg} label={t("ui.a11y.qr")} size={220} />
           <div className="flex min-w-0 flex-1 flex-col gap-3">
             <p className="text-[13px] text-fg">{t("sync.invite.body")}</p>
-            <div>
-              <div className="text-[12px] text-fg-muted">{t("sync.invite.text")}</div>
-              <div
-                className="mono max-h-28 overflow-auto text-[11px] break-all text-fg-muted select-all"
-                data-testid="invite-text">
-                {answer.shared_text}
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={cantScan ? "chevronDown" : "chevronRight"}
+              aria-expanded={cantScan}
+              onClick={() => setCantScan((open) => !open)}
+              className="self-start">
+              {t("sync.invite.cantScan")}
+            </Button>
+            {cantScan && (
+              <div className="flex flex-col gap-3" data-testid="invite-send">
+                <p className="text-[12px] text-fg-muted">{t("sync.invite.cantScanBody")}</p>
+                <Button
+                  variant="outline"
+                  icon="copy"
+                  loading={copying.busy}
+                  onClick={() => void copy()}
+                  className="self-start">
+                  {t("sync.invite.copy")}
+                </Button>
+                {copied && (
+                  <p role="status" className="text-[12px] text-fg-muted">
+                    {t("sync.invite.copied")}
+                  </p>
+                )}
+                {copying.error !== undefined && (
+                  <p role="alert" className="text-[12px] text-danger">
+                    {errorText(t, copying.error)}
+                  </p>
+                )}
+                <div>
+                  <div className="text-[12px] text-fg-muted">{t("sync.invite.code")}</div>
+                  <div
+                    className="mono text-[18px] tracking-wide text-fg select-all"
+                    data-testid="invite-code">
+                    {answer.code}
+                  </div>
+                  <p className="text-[12px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-[12px] text-fg-muted">{t("sync.invite.code")}</div>
-              <div
-                className="mono text-[18px] tracking-wide text-fg select-all"
-                data-testid="invite-code">
-                {answer.code}
-              </div>
-              <p className="text-[12px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
-            </div>
-            <div>
-              <div className="text-[12px] text-fg-muted">{t("sync.created.key")}</div>
-              <SyncKeyText value={answer.sync_key} />
-            </div>
+            )}
             {platform === "linux" && (
               <p className="text-[12px] text-fg-subtle">{t("entry.linuxCapture")}</p>
             )}

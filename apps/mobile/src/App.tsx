@@ -160,7 +160,7 @@ function Pages() {
     case "syncSetup":
       return <SyncSetup />;
     case "syncKey":
-      return <SyncKey syncKey={route.syncKey} password={route.password} />;
+      return <SyncKey />;
     case "syncJoin":
       return <SyncJoin />;
     case "syncInvite":

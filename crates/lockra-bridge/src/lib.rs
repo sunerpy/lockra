@@ -227,6 +227,16 @@ pub enum UiCommand {
     },
     /// The user saved or wrote down the sync key: the reminder goes.
     SyncKeyAcknowledge,
+    /// The sync key (the recovery key); answers with it (a secret). Without a password the
+    /// biometric check that unlocks this vault proves the user is there.
+    SyncKeyReveal {
+        /// The master password.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The words of the biometric prompt.
+        #[serde(default)]
+        reason: Option<String>,
+    },
     /// New storage settings for the space (an address, new credentials).
     SyncSetStorage {
         /// Where the space is now, with the credentials.
@@ -252,7 +262,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 46] = [
+pub const COMMANDS: [&str; 47] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -294,6 +304,7 @@ pub const COMMANDS: [&str; 46] = [
     "sync_invite",
     "sync_invite_copy",
     "sync_key_acknowledge",
+    "sync_key_reveal",
     "sync_set_storage",
     "sync_rename_device",
     "sync_remove_device",
@@ -335,7 +346,7 @@ pub const PHONE_COMMANDS: [&str; 11] = [
 impl UiCommand {
     /// Whether the answer carries a secret (the shell turns screen-capture protection on).
     pub fn shows_secret(&self) -> bool {
-        matches!(self, Self::EntryReveal { .. } | Self::ExportStart { .. } | Self::SyncCreate { .. } | Self::SyncInvite { .. })
+        matches!(self, Self::EntryReveal { .. } | Self::ExportStart { .. } | Self::SyncInvite { .. } | Self::SyncKeyReveal { .. })
     }
 
     /// Whether the command ends every secret view (the shell turns the protection off).
@@ -398,11 +409,13 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         }
         UiCommand::UpdateCheck => unit(core.update_check())?,
         UiCommand::UpdateInstall => unit(core.update_install())?,
-        UiCommand::SyncCreate { storage, password, device_name } => json!(core.sync_create(storage, password, device_name).await?),
+        // The key is not shown here: Settings › Sync reminds of it, and shows it on `sync_key_reveal`.
+        UiCommand::SyncCreate { storage, password, device_name } => unit(core.sync_create(storage, password, device_name).await.map(|_| ()))?,
         UiCommand::SyncJoin { source, password, device_name, space_password } => unit(core.sync_join(source, password, device_name, space_password).await)?,
         UiCommand::SyncInvite { password, reason } => json!(core.sync_invite(password, reason).await?),
         UiCommand::SyncInviteCopy { text } => unit(core.sync_invite_copy(&text))?,
         UiCommand::SyncKeyAcknowledge => unit(core.sync_key_acknowledge())?,
+        UiCommand::SyncKeyReveal { password, reason } => json!(core.sync_key_reveal(password, reason).await?),
         UiCommand::SyncSetStorage { storage, password } => unit(core.sync_set_storage(storage, password).await)?,
         UiCommand::SyncRenameDevice { name } => unit(core.sync_rename_device(&name))?,
         UiCommand::SyncRemoveDevice { tag } => unit(core.sync_remove_device(&tag).await)?,

@@ -3,6 +3,7 @@ import {
   MOCK_PASSWORD,
   MOCK_STORAGE_SECRET,
   MOCK_SYNC_FOLDER,
+  MOCK_OLD_INVITE,
   MOCK_SYNC_KEY,
   MockBackend,
   fakeCode,
@@ -479,9 +480,15 @@ describe("MockBackend", () => {
     expect(await errorCode(create(s3(MOCK_STORAGE_SECRET), "wrong password"))).toBe(
       "wrong_password",
     );
-    expect(await create(s3(MOCK_STORAGE_SECRET, "http://127.0.0.1:9000"))).toEqual({
-      sync_key: MOCK_SYNC_KEY,
-    });
+    // Setting up shows no key: Settings › Sync reminds of it, and shows it on request.
+    expect(await create(s3(MOCK_STORAGE_SECRET, "http://127.0.0.1:9000"))).toBeNull();
+    expect((await backend.getState()).sync.space?.key_saved).toBe(false);
+    expect(
+      await errorCode(backend.dispatch({ command: "sync_key_reveal", password: "wrong password" })),
+    ).toBe("wrong_password");
+    expect(await backend.dispatch({ command: "sync_key_reveal", password: MOCK_PASSWORD })).toEqual(
+      { sync_key: MOCK_SYNC_KEY },
+    );
     let space = (await backend.getState()).sync.space;
     expect(space?.status.state).toBe("synced");
     expect(space?.device_name).toBe("Work laptop");
@@ -490,6 +497,7 @@ describe("MockBackend", () => {
 
     const invite = await backend.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
     expect(invite.invite).toMatch(/^lockra-invite:1:/);
+    expect(invite).not.toHaveProperty("sync_key");
     backend.simulateSync({ state: "failed", code: "sync_network", at_ms: 1 });
     expect((await backend.getState()).sync.space?.status.state).toBe("failed");
     await backend.dispatch({ command: "sync_now" });
@@ -579,12 +587,9 @@ describe("MockBackend", () => {
 
     const unlocked = new MockBackend({ entries: [mockEntry("Bank", "card")] });
     const invite: JoinSource = { type: "invite", text: "lockra-invite:1:abc" };
-    // This vault's own master password is checked; the space's devices may use another one.
+    // An invitation hands the space over: this vault's own master password is all it checks.
     expect(await errorCode(join(unlocked, invite, "a wrong password"))).toBe("wrong_password");
-    expect(await errorCode(join(unlocked, invite, MOCK_PASSWORD, "a wrong password"))).toBe(
-      "sync_wrong_credentials",
-    );
-    await join(unlocked, invite, MOCK_PASSWORD, MOCK_PASSWORD);
+    await join(unlocked, invite);
     expect((await unlocked.getState()).entries.map((e) => e.issuer)).toEqual(["Bank"]);
     expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
       "sync_already_on",
@@ -593,6 +598,29 @@ describe("MockBackend", () => {
     expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
       "locked",
     );
+  });
+
+  it("joins from an invitation under a new device's own master password", async () => {
+    const join = (backend: MockBackend, text: string, password: string) =>
+      backend.dispatch({
+        command: "sync_join",
+        source: { type: "invite", text },
+        password,
+        device_name: "Phone",
+      });
+    const phone = new MockBackend({ phase: "no_vault" });
+    // An invitation of Lockra up to 0.8.2 carries no key: the inviting device updates first.
+    expect(await errorCode(join(phone, MOCK_OLD_INVITE, "the phone's password"))).toBe(
+      "sync_invite_outdated",
+    );
+    expect(await errorCode(join(phone, "lockra-invite:1:abc", "short"))).toBe("password_too_short");
+    await join(phone, "lockra-invite:1:abc", "the phone's password");
+    await phone.dispatch({ command: "vault_lock" });
+    expect(
+      await errorCode(phone.dispatch({ command: "vault_unlock", password: MOCK_PASSWORD })),
+    ).toBe("wrong_password");
+    await phone.dispatch({ command: "vault_unlock", password: "the phone's password" });
+    expect((await phone.getState()).sync.space?.devices).toHaveLength(2);
   });
 
   it("keeps a space in the folder its dialog chose and invites with the sync key alone", async () => {

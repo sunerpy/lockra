@@ -114,6 +114,10 @@ export const MOCK_SYNC_FOLDER = "/Users/me/Dropbox/Lockra";
 const KEY_ONLY = "mock-key-only-invite";
 /** What a mock invitation to a relay holds before the relay's address. */
 const RELAY_INVITE = "mock-relay-invite|";
+/** What a mock invitation of Lockra up to 0.8.2 holds: no data key. */
+const OLD_INVITE = "mock-old-invite";
+/** An invitation of Lockra up to 0.8.2, which the mock refuses as the core does. */
+export const MOCK_OLD_INVITE = `lockra-invite:1:${btoa(OLD_INVITE)}`;
 /** The one-time code of the mock's sealed invitation. */
 export const MOCK_INVITE_CODE = "7K2QM-XW4FD";
 /** The sync key of the mock's spaces. */
@@ -977,6 +981,10 @@ export class MockBackend implements Backend {
       case "sync_key_acknowledge":
         this.setSpace({ ...this.requireSpace(), key_saved: true });
         return null;
+      case "sync_key_reveal":
+        this.requireSpace();
+        this.confirmPresence(command.password, command.reason);
+        return { sync_key: MOCK_SYNC_KEY };
       case "sync_set_storage": {
         const space = this.requireSpace();
         this.checkPassword(command.password);
@@ -1075,19 +1083,15 @@ export class MockBackend implements Backend {
     });
   }
 
-  private syncCreate(
-    storage: StorageConfig,
-    password: string,
-    deviceName: string,
-  ): { sync_key: string } {
+  private syncCreate(storage: StorageConfig, password: string, deviceName: string): null {
     this.requireUnlocked();
     if (this.space !== null) throw new LockraError("sync_already_on");
     checkStorage(storage, this.chosenFolder);
     this.checkPassword(password);
     this.newSpace(storage, deviceName, []);
-    // The key is shown once now; Settings › Sync reminds of it until it is saved.
+    // Settings › Sync reminds of the key until it is saved.
     this.setSpace({ ...this.requireSpace(), key_saved: false });
-    return { sync_key: MOCK_SYNC_KEY };
+    return null;
   }
 
   private syncJoin(
@@ -1103,6 +1107,8 @@ export class MockBackend implements Backend {
         throw new LockraError("sync_invite_code_wrong");
     } else if (source.type === "invite" && !text.startsWith("lockra-invite:1:"))
       throw new LockraError("sync_invite_invalid");
+    if (source.type === "invite" && held(text).startsWith(OLD_INVITE))
+      throw new LockraError("sync_invite_outdated");
     if (source.type === "invite" && source.storage === undefined && keyOnly(text))
       throw new LockraError("sync_invite_needs_storage");
     if (
@@ -1130,16 +1136,19 @@ export class MockBackend implements Backend {
                 password: MOCK_STORAGE_SECRET,
               }));
     checkStorage(storage, this.chosenFolder);
-    // The space's device uses the mock's master password. A vault of its own whose password is
-    // another asks for the space's first, as the core does.
-    if (
-      this.state.phase === "unlocked" &&
-      spacePassword === undefined &&
-      password !== MOCK_PASSWORD
-    )
-      throw new LockraError("sync_space_password_needed");
-    if ((spacePassword ?? password) !== MOCK_PASSWORD)
-      throw new LockraError("sync_wrong_credentials");
+    // An invitation hands the space over. A recovery opens it with a master password of its
+    // devices (the mock's): a vault of its own whose password is another asks for theirs first,
+    // as the core does.
+    if (source.type === "manual") {
+      if (
+        this.state.phase === "unlocked" &&
+        spacePassword === undefined &&
+        password !== MOCK_PASSWORD
+      )
+        throw new LockraError("sync_space_password_needed");
+      if ((spacePassword ?? password) !== MOCK_PASSWORD)
+        throw new LockraError("sync_wrong_credentials");
+    }
     const others = [
       { tag: mockTag("Pixel 8"), name: "Pixel 8", written_at_ms: this.now(), this_device: false },
     ];
@@ -1172,7 +1181,6 @@ export class MockBackend implements Backend {
       svg: placeholderSvg("invite"),
       shared_text: `lockra-invite:2:${btoa(`${inside}:${this.now()}`)}`,
       code: MOCK_INVITE_CODE,
-      sync_key: MOCK_SYNC_KEY,
       includes_storage: includes,
     };
   }

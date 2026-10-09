@@ -13,7 +13,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 root=$(pwd)
 out=${1:-docs/acceptance/screens/sync}
-for tool in Xvfb xdpyinfo xdotool tauri-driver WebKitWebDriver python3 cargo pnpm curl docker; do
+for tool in Xvfb xdpyinfo xdotool xclip tauri-driver WebKitWebDriver python3 cargo pnpm curl docker; do
   command -v "$tool" >/dev/null || { echo "smoke-sync: $tool not installed"; exit 2; }
 done
 s3_image=${LOCKRA_IT_S3_IMAGE:-versity/versitygw:v1.8.0}

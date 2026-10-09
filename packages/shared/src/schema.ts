@@ -305,6 +305,7 @@ export const ERROR_CODES = [
   "sync_invite_code_wrong",
   "sync_space_password_needed",
   "sync_invite_needs_storage",
+  "sync_invite_outdated",
   "sync_folder_not_chosen",
   "sync_folder_missing",
   "sync_data_corrupted",
@@ -605,9 +606,10 @@ export const importOutcomeSchema = z.object({
 });
 export type ImportOutcome = z.infer<typeof importOutcomeSchema>;
 
-/** The answer to `sync_create`: the new space's sync key, shown once. */
-export const syncCreatedSchema = z.object({ sync_key: z.string() });
-export type SyncCreated = z.infer<typeof syncCreatedSchema>;
+/** The answer to `sync_key_reveal`: the space's sync key, which the interface calls the recovery
+ *  key. */
+export const syncKeyViewSchema = z.object({ sync_key: z.string() });
+export type SyncKeyView = z.infer<typeof syncKeyViewSchema>;
 
 /** The answer to `sync_invite`: what another device scans or pastes to join. */
 export const syncInviteSchema = z.object({
@@ -617,7 +619,6 @@ export const syncInviteSchema = z.object({
   shared_text: z.string(),
   /** The one-time code of `shared_text`, shown on the screen only. */
   code: z.string(),
-  sync_key: z.string(),
   /** The invitation carries the storage; not for a space in a folder of this computer, where the
    *  other device says how it reaches the space. */
   includes_storage: z.boolean(),
@@ -736,6 +737,13 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   /** The sealed invitation (`shared_text`) onto the clipboard, for a device that scans nothing. */
   z.object({ command: z.literal("sync_invite_copy"), text: z.string() }),
   z.object({ command: z.literal("sync_key_acknowledge") }),
+  /** The recovery key; without a password, the biometric check that unlocks this vault proves
+   *  presence. */
+  z.object({
+    command: z.literal("sync_key_reveal"),
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
   z.object({ command: z.literal("sync_set_storage"), storage: storageConfigSchema, password }),
   z.object({ command: z.literal("sync_rename_device"), name: z.string() }),
   z.object({ command: z.literal("sync_remove_device"), tag: z.string() }),
@@ -787,7 +795,7 @@ export interface CommandResults {
   import_commit: ImportOutcome;
   export_start: ExportStarted;
   export_page: ExportPage;
-  sync_create: SyncCreated;
+  sync_key_reveal: SyncKeyView;
   sync_invite: SyncInvite;
 }
 export type ResultOf<C extends CommandName> = C extends keyof CommandResults
@@ -802,7 +810,7 @@ export const RESULT_SCHEMAS: { [C in keyof CommandResults]: z.ZodType<CommandRes
   import_commit: importOutcomeSchema,
   export_start: exportStartedSchema,
   export_page: exportPageSchema,
-  sync_create: syncCreatedSchema,
+  sync_key_reveal: syncKeyViewSchema,
   sync_invite: syncInviteSchema,
 };
 

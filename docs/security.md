@@ -118,8 +118,9 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 - What the webview receives is entry metadata and current codes. Four answers carry a secret, all
   behind the master password entered again: _reveal_ (the secret, its URI and QR code), an
   _export_ (QR codes; a plain otpauth file asks for the password before the save dialog opens),
-  the new sync key when a sync space is created (`sync_create`), and a sync invitation
-  (`sync_invite`, which also accepts the biometric check that unlocks the vault). Saving the sync
+  the space's sync key, which the interface calls the recovery key (`sync_key_reveal`), and a sync
+  invitation (`sync_invite`); the last two also accept the biometric check that unlocks the vault.
+  Setting up a space (`sync_create`) answers nothing. Saving the sync
   key to a file (`sync_key_save`, the same proof) answers no secret: the core puts the key in the
   interface's words in Rust and writes the file where the user chose, readable by its owner only
   on the desktop. The IPC contract test asserts that the known secrets of its fixtures, the sync
@@ -155,7 +156,7 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   data extraction rules): the vault leaves the phone only in Lockra's own encrypted backups. The
   camera's page is `FLAG_SECURE` too, and what it reads, like the photos and files picked, goes to
   the import preview in Rust and never to the webview; an invitation it reads (the storage's
-  credentials and the sync key) goes the same way into joining its space. A backup leaves
+  credentials and the space's keys) goes the same way into joining its space. A backup leaves
   encrypted, written where the user picks, and a plain otpauth list only after the master password
   and the user's acknowledgement that it is plaintext.
   Leaving the app from the camera's page locks the vault at once; the system photo picker runs in
@@ -235,13 +236,13 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   associated data, padded to 4 KiB so that its size says little about the number of accounts. The
   names say nothing but the number of devices: device names, times and sequence numbers are inside
   the ciphertext, and a keyring's header names no device and no time.
-- **Two secrets open a space.** Every snapshot carries its device's keyring: the data key wrapped
-  under HKDF(Argon2id(that device's master password) ‖ sync key), with a fresh salt, so that two
-  devices with the same password carry keyrings that do not read alike. The sync key is 256
-  random bits shown once, when the space is created, to be kept with the master password; it also
-  names the space. The storage's contents and a master password open nothing without it, and with
-  it every guess of a password still costs an Argon2id run. A device keeps the data key in its
-  vault's encrypted local part and needs neither secret again.
+- **From the storage, two secrets open a space.** Every snapshot carries its device's keyring: the
+  data key wrapped under HKDF(Argon2id(that device's master password) ‖ sync key), with a fresh
+  salt, so that two devices with the same password carry keyrings that do not read alike. The sync
+  key (the recovery key, to the user) is 256 random bits, kept apart from the master password and
+  shown only on request; it also names the space. The storage's contents and a master password
+  open nothing without it, and with it every guess of a password still costs an Argon2id run. A
+  device keeps the data key in its vault's encrypted local part and needs neither secret again.
 - **No object has two writers.** A device writes only its own snapshot, its keyring inside, so
   runs on different devices never write the same object: no lock and no conditional write is
   needed, and S3 and WebDAV (which has no conditional writes) behave alike. What the space holds is
@@ -249,24 +250,31 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   two devices are both kept. Another device only ever deletes a snapshot (removing a device); a
   device still in use writes it again on its next run.
 - **Joining.** Another device shows an invitation: the storage settings with their credentials
-  (for a relay, its address alone) and the sync key, everything but a master password, which the joining device asks for: that of
-  any device in the space. The QR code carries it as it is, to be scanned on the user's own
-  devices only. The text to send is sealed under a one-time code shown only beside it (50 bits,
-  stretched with Argon2id; `docs/formats.md`): sent through a chat or a mail, it is of no use
-  without the code, which is to travel another way. For a computer, which scans nothing, the
+  (for a relay, its address alone), the sync key and the space's data key. It hands the space
+  over: the joining device asks no other device's master password, checks that a snapshot of the
+  space opens under the data key, and seals its own keyring under its own master password (a new
+  one, on a device with no vault yet). An invitation is therefore worth a device of the space: it
+  is shown only after the master password or the biometric check that unlocks the vault, hides
+  after two minutes, and is excluded from screen capture where the system allows. The QR code
+  carries it as it is, to be scanned on the user's own devices only. The text to send is sealed
+  under a one-time code shown only beside it (50 bits, stretched with Argon2id;
+  `docs/formats.md`): sent through a chat or a mail, it is of no use without the code, which is
+  to travel another way. For a computer, which scans nothing, the
   phone copies that sealed text (`sync_invite_copy`): the core puts it on the clipboard marked as
   excluded from history and cloud sync, and clears it after the clipboard time, as a code; the
   plain invitation, which opens without a code, is never copied.
-  A space in a cloud drive's folder invites with the sync key alone: the folder is of no use on
+  A space in a cloud drive's folder invites with the keys alone: the folder is of no use on
   another device, and no path is taken from an invitation. The joining device reaches the space its
   own way (the same drive's folder on a computer, its WebDAV on a phone) and checks it is that
-  space, as when the storage settings change.
-  Without another device, the storage settings and the sync key typed in do the same. A device
-  with no vault yet becomes one, under that password. A device with a vault checks its own master
+  space, as when the storage settings change. An invitation of Lockra up to 0.8.2, which carries
+  no data key, is refused with a word to update the device that shows it.
+  Without another device, a recovery: the storage settings and the sync key typed in, with the
+  master password of a device in the space, which opens that device's keyring. A device with no
+  vault yet becomes one, under that password. A device with a vault checks its own master
   password first, and opens the space with it; only when that opens nothing does it ask for
   another device's. Either way
-  the joining device's keyring goes in under its own master password, so the passwords that open
-  a space are those of its devices, no other.
+  the joining device's keyring goes in under its own master password, so the passwords that
+  recover a space are those of its devices, no other.
 - **Altered, moved and older objects are refused; deletion is not prevented.** Every object
   authenticates and is bound to its space and its device's name: an altered or moved snapshot is
   reported as unreadable. An older snapshot of a device than one already seen is refused, and the
@@ -354,9 +362,11 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   its state as soon as the core has them, but a compromised webview process could read them.
 - Memory is not locked (`mlock`); decrypted entries could reach swap or a crash dump.
 - A forgotten master password cannot be recovered; _reset_ keeps the old file but cannot open it.
-- Sync: whoever holds the storage's contents and the sync key (an invitation photographed, for
-  instance) can try master passwords offline at Argon2id's cost, against the keyring of every
-  device: the weakest master password among the space's devices is the last line. The storage's
+- Sync: whoever holds an invitation (its QR code photographed, or the sealed text together with
+  its code) holds the space, as a device does, with no password to guess. Whoever holds the
+  storage's contents and the sync key can try master passwords offline at Argon2id's cost,
+  against the keyring of every device: the weakest master password among the space's devices is
+  the last line. The storage's
   operator sees when devices write and how many there are, and can delete the space. Removing a
   device deletes its snapshot and its keyring but revokes nothing: the device keeps the data key,
   and a copy of the storage taken earlier keeps its keyring (a cloud drive's version history is

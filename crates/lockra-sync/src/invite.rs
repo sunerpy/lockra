@@ -1,9 +1,10 @@
-//! The invitation one device of a space shows another: the storage, its credentials and the sync
-//! key, as one text (and the QR code of that text). It holds everything but a master password,
-//! so the device that scans it still needs the master password of a device in the space to open
-//! that device's keyring. A space in a folder of the inviting computer invites with the sync key
+//! The invitation one device of a space shows another: the storage, its credentials, the sync key
+//! and the space's data key, as one text (and the QR code of that text). It hands the space over:
+//! the device that scans it joins without any other device's master password, sealing its own
+//! keyring under its own. A space in a folder of the inviting computer invites with the keys
 //! alone: the folder is of no use elsewhere, and the joining device says how it reaches the space
-//! (the same cloud drive's folder, or its WebDAV).
+//! (the same cloud drive's folder, or its WebDAV). Lockra up to 0.8.2 invited without the data
+//! key; such an invitation still reads, with [`Invite::keys`] empty.
 //!
 //! The QR code carries the invitation as it is (`lockra-invite:1:`): it never leaves the screen.
 //! The text to send through a chat or a mail is sealed (`lockra-invite:2:`) under a one-time code
@@ -20,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 use crate::frame::{NONCE_LEN, b64, cipher, header_bytes, hkdf32, parse, random};
-use crate::{StorageConfig, SyncError, SyncKey};
+use crate::{SpaceKeys, StorageConfig, SyncError, SyncKey};
 
 const INVITE_PREFIX: &str = "lockra-invite:1:";
 const SHARED_PREFIX: &str = "lockra-invite:2:";
@@ -41,7 +42,7 @@ struct SharedHeader {
     nonce: [u8; NONCE_LEN],
 }
 
-/// What a device needs, besides the master password, to join a space.
+/// What a device needs to join a space.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Invite {
     /// Where the space is stored; none when the inviting device keeps it in a folder of its own
@@ -49,15 +50,21 @@ pub struct Invite {
     pub storage: Option<StorageConfig>,
     /// The space's sync key (it names the space too, [`SyncKey::space_id`]).
     pub sync_key: SyncKey,
+    /// The space's data key, which the joining device takes as it is; none in an invitation of
+    /// Lockra up to 0.8.2, which needed the master password of a device in the space instead.
+    pub keys: Option<SpaceKeys>,
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Wire {
-    /// Absent in an invitation with the sync key alone; as in 0.7 otherwise.
+    /// Absent in an invitation with the keys alone; as in 0.7 otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     storage: Option<StorageConfig>,
     sync_key: Zeroizing<String>,
+    /// The data key, Base64 ([`SpaceKeys::data_key_text`]); absent up to 0.8.2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    data_key: Option<Zeroizing<String>>,
 }
 
 impl Invite {
@@ -90,7 +97,11 @@ impl Invite {
 
     /// What the text carries: never a folder.
     fn wire(&self) -> Wire {
-        Wire { storage: self.storage.clone().filter(|storage| !storage.is_folder()), sync_key: self.sync_key.to_text() }
+        Wire {
+            storage: self.storage.clone().filter(|storage| !storage.is_folder()),
+            sync_key: self.sync_key.to_text(),
+            data_key: self.keys.as_ref().map(SpaceKeys::data_key_text),
+        }
     }
 
     fn from_json(json: &[u8]) -> Result<Self, SyncError> {
@@ -100,7 +111,8 @@ impl Invite {
             return Err(SyncError::BadInvite);
         }
         let sync_key = SyncKey::from_text(&wire.sync_key).map_err(|_| SyncError::BadInvite)?;
-        Ok(Self { storage: wire.storage, sync_key })
+        let keys = wire.data_key.map(|text| SpaceKeys::from_parts(sync_key.space_id(), &text).map_err(|_| SyncError::BadInvite)).transpose()?;
+        Ok(Self { storage: wire.storage, sync_key, keys })
     }
 
     /// The invitation sealed for sending (`lockra-invite:2:…`) and the one-time code that opens
@@ -209,6 +221,7 @@ mod tests {
     use super::*;
 
     fn invite() -> Invite {
+        let sync_key = SyncKey::generate().unwrap();
         Invite {
             storage: Some(StorageConfig::Webdav {
                 url: "https://dav.example.com/dav/".into(),
@@ -216,8 +229,15 @@ mod tests {
                 username: "me".into(),
                 password: Zeroizing::new("app password".into()),
             }),
-            sync_key: SyncKey::generate().unwrap(),
+            keys: Some(SpaceKeys::generate(sync_key.space_id()).unwrap()),
+            sync_key,
         }
+    }
+
+    /// An invitation of `storage` with a new space's keys.
+    fn invite_to(storage: Option<StorageConfig>) -> Invite {
+        let sync_key = SyncKey::generate().unwrap();
+        Invite { storage, keys: Some(SpaceKeys::generate(sync_key.space_id()).unwrap()), sync_key }
     }
 
     fn json_of(text: &str) -> serde_json::Value {
@@ -226,12 +246,11 @@ mod tests {
 
     #[test]
     fn an_invitation_to_a_relay_carries_its_address_and_the_sync_key() {
-        let relay =
-            Invite { storage: Some(StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() }), sync_key: SyncKey::generate().unwrap() };
+        let relay = invite_to(Some(StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() }));
         let text = relay.to_text();
         let json = json_of(&text);
         assert_eq!(json["storage"], serde_json::json!({ "kind": "relay", "url": "https://lockra-relay.onethinker.top" }));
-        assert_eq!(json.as_object().unwrap().len(), 2);
+        assert_eq!(json.as_object().unwrap().len(), 3);
         let back = Invite::from_text(&text).unwrap();
         assert!(back == relay);
         // Sealed for sending as well.
@@ -240,19 +259,46 @@ mod tests {
     }
 
     #[test]
-    fn an_invitation_with_its_storage_reads_as_before() {
-        // The fields of 0.7: an older Lockra reads it.
-        let json = json_of(&invite().to_text());
-        let keys: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
-        assert_eq!(keys, ["storage", "sync_key"]);
+    fn an_invitation_hands_over_the_space_key_with_the_storage_and_the_sync_key() {
+        let original = invite();
+        let text = original.to_text();
+        let json = json_of(&text);
+        let fields: Vec<&str> = json.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(fields, ["data_key", "storage", "sync_key"]);
+        let back = Invite::from_text(&text).unwrap();
+        let keys = back.keys.as_ref().expect("the space's key comes with it");
+        assert_eq!(keys.space_id(), back.sync_key.space_id());
+        assert_eq!(Some(keys), original.keys.as_ref());
+        // Sealed for sending, the key goes the same way.
+        let (shared, code) = original.to_shared_text(KdfCost::FAST_INSECURE).unwrap();
+        assert_eq!(Invite::from_any_text(&shared, Some(&code)).unwrap().keys, original.keys);
     }
 
     #[test]
-    fn an_invitation_without_storage_carries_the_sync_key_only() {
-        let original = Invite { storage: None, sync_key: SyncKey::generate().unwrap() };
+    fn an_invitation_of_lockra_up_to_0_8_2_reads_without_the_space_key() {
+        // Its fields: the storage and the sync key, the joining device needing a master password
+        // of the space's. It still reads, so the joining device can say where it comes from.
+        let key = SyncKey::generate().unwrap();
+        let json = serde_json::json!({ "storage": { "kind": "relay", "url": "https://relay.example.com" }, "sync_key": key.to_text().as_str() });
+        let text = format!("{INVITE_PREFIX}{}", BASE64URL_NOPAD.encode(json.to_string().as_bytes()));
+        let old = Invite::from_text(&text).unwrap();
+        assert_eq!(old.keys, None);
+        assert_eq!(old.sync_key, key);
+        // A key that is not one is no invitation.
+        let (short, unpadded) = (data_encoding::BASE64.encode(&[7u8; 16]), BASE64URL_NOPAD.encode(&[7u8; 32]));
+        for data_key in ["", "not base64!", short.as_str(), unpadded.as_str()] {
+            let json = serde_json::json!({ "sync_key": key.to_text().as_str(), "data_key": data_key });
+            let text = format!("{INVITE_PREFIX}{}", BASE64URL_NOPAD.encode(json.to_string().as_bytes()));
+            assert_eq!(Invite::from_text(&text).err(), Some(SyncError::BadInvite), "{data_key:?}");
+        }
+    }
+
+    #[test]
+    fn an_invitation_without_storage_carries_the_keys_only() {
+        let original = invite_to(None);
         let text = original.to_text();
         let keys: Vec<String> = json_of(&text).as_object().unwrap().keys().cloned().collect();
-        assert_eq!(keys, ["sync_key"]);
+        assert_eq!(keys, ["data_key", "sync_key"]);
         assert_eq!(Invite::from_text(&text).unwrap(), original);
         let (shared, code) = original.to_shared_text(KdfCost::FAST_INSECURE).unwrap();
         assert_eq!(Invite::from_any_text(&shared, Some(&code)).unwrap(), original);
@@ -267,7 +313,7 @@ mod tests {
         let json = serde_json::json!({ "storage": folder, "sync_key": key.to_text().as_str() });
         let text = format!("{INVITE_PREFIX}{}", BASE64URL_NOPAD.encode(json.to_string().as_bytes()));
         assert_eq!(Invite::from_text(&text).err(), Some(SyncError::BadInvite));
-        let leaving = Invite { storage: Some(StorageConfig::Folder { path: std::env::temp_dir() }), sync_key: key };
+        let leaving = Invite { storage: Some(StorageConfig::Folder { path: std::env::temp_dir() }), sync_key: key, keys: None };
         assert_eq!(json_of(&leaving.to_text()).get("storage"), None, "a folder's space invites with its key only");
     }
 
@@ -281,7 +327,8 @@ mod tests {
         assert_eq!(back, original);
         assert_eq!(back.sync_key.space_id(), original.sync_key.space_id());
         let debug = format!("{back:?}");
-        assert!(!debug.contains("app password") && !debug.contains(back.sync_key.to_text().as_str()), "{debug}");
+        let data_key = back.keys.as_ref().unwrap().data_key_text();
+        assert!(!debug.contains("app password") && !debug.contains(back.sync_key.to_text().as_str()) && !debug.contains(data_key.as_str()), "{debug}");
     }
 
     #[test]
