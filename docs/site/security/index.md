@@ -111,7 +111,9 @@ Sync (from version 0.4.0) is off until you set it up, on storage of your own or 
 encrypted on the device, and from the storage the key that encrypts it opens only with both the
 master password of a device in the space and the recovery key. An invitation carries that key
 itself, so a device that has one joins without a password: Lockra shows it only after the master
-password or Touch ID, Windows Hello or the fingerprint, and hides it after two minutes. Each device
+password or Touch ID, Windows Hello or the fingerprint, and hides it after two minutes. A space on
+a relay copies a pairing link that does not expire, and a device that has it joins without a
+password too. Each device
 writes only its own file, so devices never overwrite each other's changes; a file that was altered
 or put back to an older version is refused. The storage's credentials and the recovery key are kept
 in the encrypted vault and never in a backup.
@@ -135,8 +137,9 @@ unavailable; the devices keep every account either way
   password.
 - With **Remember on this device** on, the vault is as safe as your account on the computer.
 - A forgotten master password cannot be recovered, by anyone.
-- With sync on, someone who photographs an invitation, or gets its text and its code, joins the
-  space. Someone who has both the storage's contents and the recovery key can try master passwords
+- With sync on, someone who photographs an invitation, gets a relay space's pairing link, or gets
+  an invitation's text and its code, joins the space; a pairing link works until you start a new
+  sync space. Someone who has both the storage's contents and the recovery key can try master passwords
   on their own computer, against every device's; a long master password on every device is the
   defence. Whoever can write to the storage can
   delete the space, which stops sync but not your vaults. Removing a device does not revoke it.
