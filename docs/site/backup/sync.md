@@ -107,7 +107,7 @@ invitation, or typing the storage settings and the sync key, works as on a compu
 
 ### Adding a computer from a phone
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.8.2.
 
 A computer scans nothing, so when the space started on the phone, the phone sends it the invitation
 as text. On the phone, open **Settings › Sync › Invite another device** and choose **Copy the
