@@ -613,12 +613,13 @@ export type SyncKeyView = z.infer<typeof syncKeyViewSchema>;
 
 /** The answer to `sync_invite`: what another device scans or pastes to join. */
 export const syncInviteSchema = z.object({
+  /** The invitation; for a space on a relay also the pairing link, copied and sent as it is (it
+   *  opens alone, for good). */
   invite: z.string(),
   svg: z.string(),
-  /** The invitation sealed for sending; it opens only with `code`. */
-  shared_text: z.string(),
-  /** The one-time code of `shared_text`, shown on the screen only. */
-  code: z.string(),
+  /** The invitation sealed for sending, which opens only with `code`, shown on the screen only;
+   *  none for a space on a relay. */
+  shared: z.object({ text: z.string(), code: z.string() }).nullable(),
   /** The invitation carries the storage; not for a space in a folder of this computer, where the
    *  other device says how it reaches the space. */
   includes_storage: z.boolean(),
@@ -734,7 +735,8 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
     password: password.optional(),
     reason: z.string().optional(),
   }),
-  /** The sealed invitation (`shared_text`) onto the clipboard, for a device that scans nothing. */
+  /** The sealed invitation (`shared.text`), or a relay space's own pairing link, onto the
+   *  clipboard, for a device that scans nothing. */
   z.object({ command: z.literal("sync_invite_copy"), text: z.string() }),
   z.object({ command: z.literal("sync_key_acknowledge") }),
   /** The recovery key; without a password, the biometric check that unlocks this vault proves

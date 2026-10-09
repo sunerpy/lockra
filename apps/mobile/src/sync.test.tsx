@@ -142,16 +142,25 @@ describe("sync on the phone", () => {
     await user.click(form.getByRole("button", { name: "扫码加入" }));
     expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
     expect(screen.getByText("Lockra 中继 · lockra-relay.onethinker.top")).toBeInTheDocument();
-    // The phone's own invitation: its QR code, and the warning that it hands the space over.
+    // The phone's own invitation: its QR code and the pairing link a computer pastes, with the
+    // warning that the link hands the space over for good; no code.
     await user.click(screen.getByTestId("sync-invite-open"));
     const page = within(await screen.findByTestId("page-sync-invite"));
     await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
     expect(await page.findByRole("img", { name: "二维码" })).toBeInTheDocument();
     expect(
       page.getByText(
-        "拿到邀请码的设备无需其他密码就能加入同步空间、读取你的账号。只在你自己的设备上使用。",
+        "配对链接长期有效：拿到它的人无需任何密码就能加入同步空间、读取你的所有账号，直到你开始新的同步空间。只发给你自己的设备。",
       ),
     ).toBeInTheDocument();
+    expect(page.queryByRole("button", { name: "无法扫码？" })).not.toBeInTheDocument();
+    await user.click(page.getByRole("button", { name: "复制配对链接" }));
+    expect(
+      await page.findByText("已复制：在另一台设备的「加入已有的同步」中粘贴即可。"),
+    ).toHaveAttribute("role", "status");
+    expect(backend.clipboardText).toMatch(/^lockra-invite:1:/);
+    expect(page.queryByText(/lockra-invite:/)).not.toBeInTheDocument();
+    expect(page.queryByTestId("invite-code")).not.toBeInTheDocument();
   });
 
   it("asks for this phone's own storage when the invitation carries none", async () => {
@@ -185,8 +194,8 @@ describe("sync on the phone", () => {
     await openSync(user);
     await user.click(screen.getByTestId("sync-join-open"));
     const form = within(await screen.findByTestId("sync-join"));
-    await user.click(form.getByRole("radio", { name: "邀请码" }));
-    await user.type(form.getByLabelText("邀请码"), "  lockra-invite:1:bW9jaw  ");
+    await user.click(form.getByRole("radio", { name: "配对链接" }));
+    await user.type(form.getByLabelText("配对链接或邀请码"), "  lockra-invite:1:bW9jaw  ");
     await user.type(form.getByLabelText("这台设备的主密码"), "this phone's password");
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
@@ -410,8 +419,8 @@ describe("sync on the phone", () => {
     await openSync(user);
     await user.click(screen.getByTestId("sync-join-open"));
     const form = within(await screen.findByTestId("sync-join"));
-    await user.click(form.getByRole("radio", { name: "邀请码" }));
-    await user.type(form.getByLabelText("邀请码"), "lockra-invite:2:TEtTSU5WVDI");
+    await user.click(form.getByRole("radio", { name: "配对链接" }));
+    await user.type(form.getByLabelText("配对链接或邀请码"), "lockra-invite:2:TEtTSU5WVDI");
     await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
     expect(form.getByRole("button", { name: "加入" })).toBeDisabled();
     await user.type(form.getByLabelText("口令"), "AAAAA-BBBBB");

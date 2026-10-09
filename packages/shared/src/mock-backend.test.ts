@@ -661,7 +661,12 @@ describe("MockBackend", () => {
     // The sealed text holds the key alone too.
     const mac = new MockBackend({ phase: "no_vault", folder: null });
     expect(await mac.pickSyncFolder()).toBeNull();
-    const sealed: JoinSource = { type: "invite", text: invite.shared_text, code: invite.code };
+    expect(invite.shared).not.toBeNull();
+    const sealed: JoinSource = {
+      type: "invite",
+      text: invite.shared?.text ?? "",
+      code: invite.shared?.code,
+    };
     const joinMac = (source: JoinSource) =>
       mac.dispatch({ command: "sync_join", source, password: MOCK_PASSWORD, device_name: "Mac" });
     expect(await errorCode(joinMac(sealed))).toBe("sync_invite_needs_storage");
@@ -695,7 +700,9 @@ describe("MockBackend", () => {
     });
     const invite = await desktop.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
     expect(invite.includes_storage).toBe(true);
-    // The phone scans it and is on the same relay; the sealed text names the relay too.
+    // On a relay nothing is sealed: the invitation is also the pairing link, sent as it is.
+    expect(invite.shared).toBeNull();
+    // The phone scans it and is on the same relay; the tablet pastes the link, with no code.
     const phone = new MockBackend({ phase: "no_vault", scan: invite.invite });
     expect(
       await phone.scanJoin(
@@ -710,7 +717,7 @@ describe("MockBackend", () => {
     const tablet = new MockBackend({ phase: "no_vault" });
     await tablet.dispatch({
       command: "sync_join",
-      source: { type: "invite", text: invite.shared_text, code: invite.code },
+      source: { type: "invite", text: invite.invite },
       password: MOCK_PASSWORD,
       device_name: "Tablet",
     });
@@ -721,16 +728,36 @@ describe("MockBackend", () => {
     const backend = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace() });
     const invite = await backend.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
     const copy = (text: string) => backend.dispatch({ command: "sync_invite_copy", text });
-    // The plain invitation opens without a code: only the sealed text is handed on.
+    const sealed = invite.shared?.text ?? "";
+    expect(sealed).toMatch(/^lockra-invite:2:/);
+    // The plain invitation carries the storage's credentials: only the sealed text is handed on.
     expect(await errorCode(copy(invite.invite))).toBe("sync_invite_invalid");
     expect(await errorCode(copy("a note to self"))).toBe("sync_invite_invalid");
     expect(backend.clipboardText).toBeUndefined();
-    expect(await copy(invite.shared_text)).toBeNull();
-    expect(backend.clipboardText).toBe(invite.shared_text);
+    expect(await copy(sealed)).toBeNull();
+    expect(backend.clipboardText).toBe(sealed);
     const alone = new MockBackend({ entries: sampleEntries() });
-    expect(
-      await errorCode(alone.dispatch({ command: "sync_invite_copy", text: invite.shared_text })),
-    ).toBe("sync_off");
+    expect(await errorCode(alone.dispatch({ command: "sync_invite_copy", text: sealed }))).toBe(
+      "sync_off",
+    );
+  });
+
+  it("puts a relay space's pairing link on the clipboard as it is, and no other", async () => {
+    const relay = { kind: "relay", url: "https://lockra-relay.onethinker.top" } as const;
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace({ storage: relay }),
+    });
+    const invite = await backend.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
+    const copy = (text: string) => backend.dispatch({ command: "sync_invite_copy", text });
+    expect(invite.shared).toBeNull();
+    // Another relay's link, or anything else, is not this space's.
+    const elsewhere = `lockra-invite:1:${btoa("mock-relay-invite|https://relay.example.com\n:1")}`;
+    for (const text of ["a note to self", elsewhere])
+      expect(await errorCode(copy(text))).toBe("sync_invite_invalid");
+    expect(backend.clipboardText).toBeUndefined();
+    expect(await copy(`  ${invite.invite}\n`)).toBeNull();
+    expect(backend.clipboardText).toBe(invite.invite);
   });
 
   it("starts with a space when told to", async () => {

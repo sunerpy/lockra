@@ -113,7 +113,11 @@ describe("IPC fixtures", () => {
     expect(codesFrameSchema.parse(r.codes_frame).codes[1]?.next_code).toBeNull();
     expect(codesFrameSchema.parse(r.codes_frame_locked).codes).toEqual([]);
     expect(syncKeyViewSchema.parse(r.sync_key_reveal).sync_key).toMatch(/^LKS1-/);
-    expect(syncInviteSchema.parse(r.sync_invite).invite).toMatch(/^lockra-invite:1:/);
+    const sealed = syncInviteSchema.parse(r.sync_invite);
+    expect(sealed.invite).toMatch(/^lockra-invite:1:/);
+    expect(sealed.shared).toEqual({ text: "lockra-invite:2:TEtTSU5WVDI", code: "7K2QM-XW4FD" });
+    // A space on a relay: nothing sealed, the invitation is the pairing link.
+    expect(syncInviteSchema.parse(r.sync_invite_relay).shared).toBeNull();
     const errors = r.errors.map((e) => coreErrorSchema.parse(e));
     expect(errors[1]).toEqual({ code: "rate_limited", retry_at_ms: 1_790_000_004_000 });
   });

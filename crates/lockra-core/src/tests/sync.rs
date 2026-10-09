@@ -211,18 +211,23 @@ async fn a_shared_invitation_joins_with_its_code_and_the_biometric_check_can_sho
     desktop.core.enable_device_biometric(None).await.unwrap();
     let invite = desktop.core.sync_invite(None, Some("show the invitation".into())).await.unwrap();
     assert_eq!(desktop.biometrics.reasons(), ["unlock Lockra".to_owned(), "show the invitation".to_owned()]);
-    assert!(invite.shared_text.starts_with("lockra-invite:2:") && !invite.shared_text.contains(STORAGE_SECRET));
-    assert_eq!(invite.code.len(), 11);
+    let shared = invite.shared.clone().expect("a space on S3 seals its invitation for sending");
+    assert!(shared.text.starts_with("lockra-invite:2:") && !shared.text.contains(STORAGE_SECRET));
+    assert_eq!(shared.code.len(), 11);
+    // The plain invitation carries the storage's credentials: only the sealed text is copied.
+    assert_eq!(code_err(desktop.core.sync_invite_copy(&invite.invite)), ErrorCode::SyncInviteInvalid);
+    desktop.core.sync_invite_copy(&shared.text).unwrap();
+    assert_eq!(desktop.clipboard.current().as_deref(), Some(shared.text.as_str()));
     desktop.biometrics.answer(Err(crate::ports::BiometricError::Cancelled));
     assert_eq!(code_err(desktop.core.sync_invite(None, None).await), ErrorCode::BiometricCancelled);
 
-    let sealed = |code: Option<&str>| JoinSource::Invite { text: pw(&invite.shared_text), code: code.map(pw), storage: None };
+    let sealed = |code: Option<&str>| JoinSource::Invite { text: pw(&shared.text), code: code.map(pw), storage: None };
     let phone = device(&transport);
     for wrong in [None, Some("ABCDE-FGHJK")] {
         assert_eq!(code_err(phone.core.sync_join(sealed(wrong), pw(MASTER), "Phone".into(), None).await), ErrorCode::SyncInviteCodeWrong);
     }
     assert_eq!(phone.core.state().phase, Phase::NoVault);
-    phone.core.sync_join(sealed(Some(&invite.code.to_lowercase())), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(sealed(Some(&shared.code.to_lowercase())), pw(MASTER), "Phone".into(), None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["GitHub"]);
 }
@@ -1192,16 +1197,22 @@ async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktop
 }
 
 #[tokio::test(start_paused = true)]
-async fn the_phone_copies_the_sealed_invitation_for_a_computer_and_the_clipboard_forgets_it() {
+async fn a_relay_space_copies_its_pairing_link_as_it_is_and_the_clipboard_forgets_it() {
     let transport = Arc::new(FakeTransport::default());
     let (phone, _) = first_device(&transport, relay()).await;
     let invite = phone.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
-    // Only the text to send: never the plain invitation (it opens without a code), nor anything else.
-    assert_eq!(code_err(phone.core.sync_invite_copy(&invite.invite)), ErrorCode::SyncInviteInvalid);
-    assert_eq!(code_err(phone.core.sync_invite_copy("a note to self")), ErrorCode::SyncInviteInvalid);
+    // On a relay nothing is sealed: the invitation is the pairing link, which opens alone.
+    assert_eq!(invite.shared, None);
+    assert!(invite.invite.starts_with("lockra-invite:1:"));
+    // Only this space's own link: not a note, nor another space's link.
+    let (other, _) = first_device(&Arc::new(FakeTransport::default()), relay()).await;
+    let elsewhere = other.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    for wrong in ["a note to self", elsewhere.invite.as_str()] {
+        assert_eq!(code_err(phone.core.sync_invite_copy(wrong)), ErrorCode::SyncInviteInvalid);
+    }
     assert_eq!(phone.clipboard.current(), None);
-    phone.core.sync_invite_copy(&invite.shared_text).unwrap();
-    assert_eq!(phone.clipboard.current().as_deref(), Some(invite.shared_text.as_str()));
+    phone.core.sync_invite_copy(&format!("  {}\n", invite.invite)).unwrap();
+    assert_eq!(phone.clipboard.current().as_deref(), Some(invite.invite.as_str()));
     assert_eq!(phone.clipboard.secret_writes.load(Ordering::SeqCst), 1, "excluded from history and cloud sync");
     // Cleared after the clipboard time, as a code is.
     advance(Duration::from_secs(29)).await;
@@ -1209,22 +1220,18 @@ async fn the_phone_copies_the_sealed_invitation_for_a_computer_and_the_clipboard
     advance(Duration::from_secs(1)).await;
     assert_eq!(phone.clipboard.current(), None);
 
-    // The computer pastes it and joins with the code shown on the phone.
+    // The computer pastes it and joins under its own master password, with no code.
     let computer = device(&transport);
-    computer
-        .core
-        .sync_join(JoinSource::Invite { text: pw(&invite.shared_text), code: Some(pw(&invite.code)), storage: None }, pw(MASTER), "Desktop".into(), None)
-        .await
-        .unwrap();
+    computer.core.sync_join(JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None }, pw(MASTER), "Desktop".into(), None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&computer), ["GitHub"]);
     assert_eq!(space(&computer).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
 
     // Nothing to copy while locked, nor without a space.
     phone.core.lock_vault();
-    assert_eq!(code_err(phone.core.sync_invite_copy(&invite.shared_text)), ErrorCode::Locked);
+    assert_eq!(code_err(phone.core.sync_invite_copy(&invite.invite)), ErrorCode::Locked);
     let alone = Harness::unlocked().await;
-    assert_eq!(code_err(alone.core.sync_invite_copy(&invite.shared_text)), ErrorCode::SyncOff);
+    assert_eq!(code_err(alone.core.sync_invite_copy(&invite.invite)), ErrorCode::SyncOff);
 }
 
 #[tokio::test(start_paused = true)]

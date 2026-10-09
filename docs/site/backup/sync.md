@@ -143,6 +143,30 @@ Because an invitation hands the space over, a device that holds one joins withou
 use it on your own devices only. Versions up to 0.8.2 cannot read these invitations, and this
 version refuses theirs: update every device first.
 
+## Pairing links
+
+<StatusTag status="building" /> In development, not released yet.
+
+From the next version, a sync space on a Lockra relay (the built-in relay or one of your own)
+adds a device with one pairing link, and no code:
+
+1. On a device that syncs, open **Settings › Sync › Invite another device** and enter the master
+   password, or verify with Touch ID, Windows Hello or the fingerprint.
+2. Scan the QR code on the new device, or choose **Copy the pairing link** and send it to the new
+   device by chat or mail.
+3. On the new device, paste the pairing link in **Join an existing sync** (or **Join sync…** on the
+   welcome screen), enter the new device's own master password, and choose **Join**.
+
+The pairing link is the same invitation as the QR code: the relay's address and the space's keys,
+with no storage credentials. It does not expire: whoever has it joins the space and reads all your
+accounts without any password, until you start a new sync space. Send it to your own devices only.
+If others may have seen it (in a chat other people can read, for example), turn off sync on every
+device, start a new sync space, and add the devices to it.
+
+A device with version 0.8.3 can already join by pasting a pairing link. Sync spaces on
+S3-compatible storage, WebDAV or a cloud drive folder do not change: their invitation carries the
+storage credentials, so the invitation you send still needs its code.
+
 ## Through a cloud drive folder
 
 <StatusTag status="available" /> Available from version 0.7.4.

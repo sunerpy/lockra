@@ -196,7 +196,7 @@ export const en: Messages = {
     },
     join: {
       title: "Join from sync",
-      body: "Already syncing Lockra on other devices? Join with an invitation, or recover with the recovery key, and this computer gets the same accounts.",
+      body: "Already syncing Lockra on other devices? Join with a pairing link or an invitation, or recover with the recovery key, and this computer gets the same accounts.",
       open: "Join sync…",
     },
   },
@@ -613,7 +613,7 @@ export const en: Messages = {
       createSubmit: "Start syncing",
       joinTitle: "Join an existing sync",
       joinBody:
-        "Scan or paste another device's invitation; with no other device, recover with the storage settings and the recovery key.",
+        "Scan another device's QR code, or paste its pairing link or invitation; with no other device, recover with the storage settings and the recovery key.",
     },
     storage: {
       kind: "Storage",
@@ -720,9 +720,9 @@ export const en: Messages = {
     spacePasswordHint:
       "The master password of any device in the space; it becomes this device's too.",
     join: {
-      fromInvite: "Invitation",
+      fromInvite: "Pairing link",
       fromKey: "Recovery key",
-      invite: "Invitation",
+      invite: "Pairing link or invitation",
       inviteHint: "From Settings › Sync › Invite another device, on a device of the space.",
       needsStorage:
         "This invitation carries no storage settings: the space is in a cloud drive folder on that computer. Choose how this computer reaches it: the same drive's folder, or that drive's WebDAV.",
@@ -835,6 +835,12 @@ export const en: Messages = {
       codeHint:
         "Tell it in person or by phone, never through the channel that carried the invitation.",
       hideIn: "The invitation hides in {s} s",
+      bodyLink:
+        "On the new device, scan this QR code, or copy the pairing link, send it there and paste it; then enter that device's own master password. No code needed.",
+      linkWarning:
+        "The pairing link does not expire: whoever has it joins the sync space and reads all your accounts without any password, until you start a new sync space. Send it to your own devices only.",
+      copyLink: "Copy the pairing link",
+      copiedLink: "Copied: paste it on the other device, under Join an existing sync.",
     },
     disable: {
       open: "Turn off sync on this device",

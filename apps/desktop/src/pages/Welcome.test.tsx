@@ -17,7 +17,7 @@ describe("Welcome", () => {
     ).toBeInTheDocument();
     // No other device's password: this computer's own, typed twice like any new vault's.
     expect(join.queryByLabelText("同步空间的主密码")).not.toBeInTheDocument();
-    await user.type(join.getByLabelText("邀请码"), "not an invitation");
+    await user.type(join.getByLabelText("配对链接或邀请码"), "not an invitation");
     await user.type(join.getByLabelText("为这台设备设置主密码"), "a password of its own");
     await user.type(join.getByLabelText("再输入一次"), "a password of its owm");
     expect(join.getByText("两次输入的密码不一致")).toBeInTheDocument();
@@ -28,8 +28,8 @@ describe("Welcome", () => {
     expect(await join.findByText("不是有效的 Lockra 同步邀请")).toBeInTheDocument();
     // Passwords go after each attempt, as everywhere.
     expect(join.getByLabelText("为这台设备设置主密码")).toHaveValue("");
-    await user.clear(join.getByLabelText("邀请码"));
-    await user.type(join.getByLabelText("邀请码"), "lockra-invite:1:abc");
+    await user.clear(join.getByLabelText("配对链接或邀请码"));
+    await user.type(join.getByLabelText("配对链接或邀请码"), "lockra-invite:1:abc");
     await user.type(join.getByLabelText("为这台设备设置主密码"), "a password of its own");
     await user.type(join.getByLabelText("再输入一次"), "a password of its own");
     await user.click(join.getByRole("button", { name: "加入" }));

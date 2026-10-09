@@ -207,7 +207,8 @@ export function RecoveryKeyDialog({ onClose }: { onClose: () => void }) {
 }
 
 /** An invitation for another device, once the user proved to be here: the biometric check that
- *  unlocks this vault, or the master password. */
+ *  unlocks this vault, or the master password. A space on a relay offers its pairing link to copy
+ *  beside the QR code; elsewhere the text to send is sealed, behind "Can't scan?", with its code. */
 export function InviteDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
   const { backend } = useBackend();
@@ -287,13 +288,37 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
     );
   }
   const { answer } = invite;
+  // On a relay nothing is sealed: the invitation itself is the pairing link to copy and send.
+  const shared = answer.shared;
   const copy = async () => {
     setCopied(false);
     const done = await copying.run(() =>
-      backend.dispatch({ command: "sync_invite_copy", text: answer.shared_text }),
+      backend.dispatch({ command: "sync_invite_copy", text: shared?.text ?? answer.invite }),
     );
     if (done !== undefined) setCopied(true);
   };
+  const copyControls = (label: string, done: string) => (
+    <>
+      <Button
+        variant="outline"
+        icon="copy"
+        loading={copying.busy}
+        onClick={() => void copy()}
+        className="self-start">
+        {label}
+      </Button>
+      {copied && (
+        <p role="status" className="text-[12px] text-fg-muted">
+          {done}
+        </p>
+      )}
+      {copying.error !== undefined && (
+        <p role="alert" className="text-[12px] text-danger">
+          {errorText(t, copying.error)}
+        </p>
+      )}
+    </>
+  );
   return (
     <Dialog
       open
@@ -308,7 +333,7 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
       }>
       <div className="flex flex-col gap-4" data-testid="sync-invite">
         <Banner tone="warn" marker="icon">
-          {t("sync.invite.warning")}
+          {t(shared === null ? "sync.invite.linkWarning" : "sync.invite.warning")}
         </Banner>
         {!answer.includes_storage && (
           <p className="text-[13px] text-fg-muted" data-testid="invite-key-only">
@@ -318,47 +343,40 @@ export function InviteDialog({ onClose }: { onClose: () => void }) {
         <div className="flex gap-5">
           <QrView svg={answer.svg} label={t("ui.a11y.qr")} size={220} />
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            <p className="text-[13px] text-fg">{t("sync.invite.body")}</p>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={cantScan ? "chevronDown" : "chevronRight"}
-              aria-expanded={cantScan}
-              onClick={() => setCantScan((open) => !open)}
-              className="self-start">
-              {t("sync.invite.cantScan")}
-            </Button>
-            {cantScan && (
-              <div className="flex flex-col gap-3" data-testid="invite-send">
-                <p className="text-[12px] text-fg-muted">{t("sync.invite.cantScanBody")}</p>
-                <Button
-                  variant="outline"
-                  icon="copy"
-                  loading={copying.busy}
-                  onClick={() => void copy()}
-                  className="self-start">
-                  {t("sync.invite.copy")}
-                </Button>
-                {copied && (
-                  <p role="status" className="text-[12px] text-fg-muted">
-                    {t("sync.invite.copied")}
-                  </p>
-                )}
-                {copying.error !== undefined && (
-                  <p role="alert" className="text-[12px] text-danger">
-                    {errorText(t, copying.error)}
-                  </p>
-                )}
-                <div>
-                  <div className="text-[12px] text-fg-muted">{t("sync.invite.code")}</div>
-                  <div
-                    className="mono text-[18px] tracking-wide text-fg select-all"
-                    data-testid="invite-code">
-                    {answer.code}
-                  </div>
-                  <p className="text-[12px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
-                </div>
+            <p className="text-[13px] text-fg">
+              {t(shared === null ? "sync.invite.bodyLink" : "sync.invite.body")}
+            </p>
+            {shared === null ? (
+              <div className="flex flex-col gap-3" data-testid="invite-link">
+                {copyControls(t("sync.invite.copyLink"), t("sync.invite.copiedLink"))}
               </div>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={cantScan ? "chevronDown" : "chevronRight"}
+                  aria-expanded={cantScan}
+                  onClick={() => setCantScan((open) => !open)}
+                  className="self-start">
+                  {t("sync.invite.cantScan")}
+                </Button>
+                {cantScan && (
+                  <div className="flex flex-col gap-3" data-testid="invite-send">
+                    <p className="text-[12px] text-fg-muted">{t("sync.invite.cantScanBody")}</p>
+                    {copyControls(t("sync.invite.copy"), t("sync.invite.copied"))}
+                    <div>
+                      <div className="text-[12px] text-fg-muted">{t("sync.invite.code")}</div>
+                      <div
+                        className="mono text-[18px] tracking-wide text-fg select-all"
+                        data-testid="invite-code">
+                        {shared.code}
+                      </div>
+                      <p className="text-[12px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             {platform === "linux" && (
               <p className="text-[12px] text-fg-subtle">{t("entry.linuxCapture")}</p>

@@ -972,10 +972,16 @@ export class MockBackend implements Backend {
       case "sync_invite":
         return this.syncInvite(command.password, command.reason);
       case "sync_invite_copy": {
-        this.requireSpace();
-        // As the core: the sealed text alone, never the plain invitation.
-        if (!isSealedInvite(command.text)) throw new LockraError("sync_invite_invalid");
-        this.clipboard = command.text.trim();
+        const { storage } = this.requireSpace();
+        // As the core: a sealed text, or a relay space's own pairing link; never an invitation
+        // that carries storage credentials.
+        const text = command.text.trim();
+        const ownLink =
+          storage.kind === "relay" &&
+          text.startsWith("lockra-invite:1:") &&
+          invitedRelay(text) === storage.url;
+        if (!isSealedInvite(text) && !ownLink) throw new LockraError("sync_invite_invalid");
+        this.clipboard = text;
         return null;
       }
       case "sync_key_acknowledge":
@@ -1179,8 +1185,11 @@ export class MockBackend implements Backend {
     return {
       invite: `lockra-invite:1:${btoa(`${inside}:${this.now()}`)}`,
       svg: placeholderSvg("invite"),
-      shared_text: `lockra-invite:2:${btoa(`${inside}:${this.now()}`)}`,
-      code: MOCK_INVITE_CODE,
+      // On a relay nothing is sealed: the invitation is the pairing link, sent as it is.
+      shared:
+        storage.kind === "relay"
+          ? null
+          : { text: `lockra-invite:2:${btoa(`${inside}:${this.now()}`)}`, code: MOCK_INVITE_CODE },
       includes_storage: includes,
     };
   }

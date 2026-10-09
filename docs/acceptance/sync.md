@@ -198,7 +198,7 @@ To check on real devices:
    other within seconds while both are unlocked.
 2. A vault on a relay opened with 0.8.0: the accounts are there and sync is off.
 
-## Simpler pairing (next release)
+## Simpler pairing (0.8.3)
 
 The invitation hands the space's data key over, so joining asks only for the joining device's own
 master password; the sync key is the recovery key, shown on request only.
@@ -246,6 +246,46 @@ To check on real devices:
 1. A phone joins a computer's space by scanning, under a master password of its own; both see each
    other's new accounts.
 2. A 0.8.2 device shows an invitation to the new version: refused with the word to update it.
+
+## Pairing links for relay spaces (next release)
+
+A space on a relay copies its invitation as it is, the pairing link: no sealed text and no code.
+The user chose a link that opens alone and does not expire; other storage keeps the sealed text
+and its code.
+
+Automated:
+
+- `crates/lockra-core/src/tests/sync.rs`: a relay space's invitation has nothing sealed; its own
+  link goes to the clipboard (excluded from history, cleared after the clipboard time), a note or
+  another space's link does not; a computer joins from the pasted link with no code. On S3 the
+  plain invitation is still refused and the sealed text copied.
+- `crates/lockra-bridge/tests/contract.rs` and the fixtures: `sync_invite` with a sealed text and
+  its code, and a relay space's with none.
+- Web: the relay invitation shows the QR code, **Copy the pairing link** and the warning that the
+  link does not expire, and no "Can't scan?" or code (desktop and phone); S3's still has them;
+  the join form's field is "Pairing link or invitation".
+
+Run here, 2026-10-09: `make smoke-sync`, the real app on S3 and on `lockra-relay`.
+
+```text
+smoke-sync: C set up a space on its relay (1 snapshot, nothing readable, only the token's SHA-256)
+smoke-sync: C copied the pairing link of its relay space (no code) and kept it
+smoke-sync: D joined from C's pairing link under its own password, got C's accounts, and added one
+smoke-sync: C has D's new account through the relay, and lists both devices
+smoke-sync: passed
+```
+
+Device C's pairing link went to the X clipboard through **Copy the pairing link** and was read back
+with `xclip` as `lockra-invite:1:`; the link never showed on screen, and neither "Can't scan?" nor
+a code did. Device D pasted it with no code field. Screenshots: `sync-relay-invite-light` (the QR
+code beside **Copy the pairing link**, the warning that the link does not expire),
+`sync-relay-join-light` (device D's welcome screen with the pairing link pasted).
+
+To check on real devices:
+
+1. The Android app on the built-in relay copies its pairing link; a computer pastes it into
+   **Join an existing sync** with nothing else but its own master password.
+2. A 0.8.3 computer pastes the pairing link of the new version and joins.
 
 ## Not verified here
 
