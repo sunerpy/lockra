@@ -89,8 +89,8 @@ the same settings are the lines `LOCKRA_RELAY_BIND` and `LOCKRA_RELAY_TRUST_PROX
 
 On the first device, open **Settings › Sync**, choose **Start syncing**, keep **Lockra relay**,
 choose **A relay of your own**, and enter the relay's address in **Relay address**, for example
-`https://relay.example.com`. The invitation carries the address, so the other devices join by
-scanning it, as with the built-in relay. A space that already syncs elsewhere moves to your relay
+`https://relay.example.com`. The invitation and the pairing link carry the address, so the other
+devices join by scanning the QR code or pasting the pairing link, as with the built-in relay. A space that already syncs elsewhere moves to your relay
 with **Change storage settings** on each device.
 
 ## Settings

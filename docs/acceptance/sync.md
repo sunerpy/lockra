@@ -247,7 +247,7 @@ To check on real devices:
    other's new accounts.
 2. A 0.8.2 device shows an invitation to the new version: refused with the word to update it.
 
-## Pairing links for relay spaces (next release)
+## Pairing links for relay spaces (0.8.4)
 
 A space on a relay copies its invitation as it is, the pairing link: no sealed text and no code.
 The user chose a link that opens alone and does not expire; other storage keeps the sealed text

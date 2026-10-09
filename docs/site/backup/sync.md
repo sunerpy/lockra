@@ -68,7 +68,8 @@ On a device that syncs, open **Settings › Sync**, choose **Invite another devi
 master password. Lockra shows a QR code for two minutes. The invitation hands the space over: a
 device that holds it joins without any other password, so use it on your own devices only.
 
-On the new device, scan the QR code or paste the invitation (below, **Can't scan?**):
+On the new device, scan the QR code, or paste the pairing link (a space on a relay, below,
+[Pairing links](#pairing-links)) or the invitation (other storage, below, **Can't scan?**):
 
 - **No vault yet**: on the welcome screen, choose **Join sync…**, enter a name for the device,
   choose its master password in **Choose a master password for this device** and type it again,
@@ -78,7 +79,7 @@ On the new device, scan the QR code or paste the invitation (below, **Can't scan
   master password**. The vault's accounts join the space, and the vault keeps its own master
   password.
 
-Without another device, recover the space: choose **Recovery key** instead of **Invitation**,
+Without another device, recover the space: choose **Recovery key** instead of **Pairing link**,
 fill in the storage settings and the recovery key, and enter the master password of any device in
 the space. If this device's vault uses another master password, Lockra asks for one of theirs in
 **The sync space's master password** too.
@@ -93,7 +94,7 @@ a recovery from that device's next sync.
 <StatusTag status="available" /> Available from version 0.7.3.
 
 - **Show the invitation with Touch ID, Windows Hello or the fingerprint**: on a device that unlocks with one of them, **Invite another device** accepts it instead of the master password.
-- **An invitation you can send**: under **Can't scan?**, **Copy the invitation** and a 10-character code. Send the invitation to the new device by chat or mail, and tell the code another way, in person or by phone; the new device pastes the invitation and enters the code. Scanning the QR code needs no code.
+- **An invitation you can send**: under **Can't scan?**, **Copy the invitation** and a 10-character code. Send the invitation to the new device by chat or mail, and tell the code another way, in person or by phone; the new device pastes the invitation and enters the code. Scanning the QR code needs no code. From version 0.8.4, a space on a relay sends a [pairing link](#pairing-links) instead, with no code.
 - **Save the recovery key**: **Save to a file…** writes it to a file you choose. Until you save it or choose **I have kept it**, **Settings › Sync** reminds you.
 
 ## Adding a phone
@@ -104,18 +105,20 @@ The Android app syncs like a computer. Show an invitation on a device of the spa
 Sync › Invite another device**), then on the phone choose **Settings › Sync › Join an existing
 sync › Scan to join**, or **Join from sync** on the welcome screen of a new install, and scan it.
 The invitation goes from the camera to Lockra and is not shown on the phone. Pasting the
-invitation, or recovering with the storage settings and the recovery key, works as on a computer.
+pairing link or the invitation, or recovering with the storage settings and the recovery key, works
+as on a computer.
 
 ### Adding a computer from a phone
 
 <StatusTag status="available" /> Available from version 0.8.2.
 
 A computer scans nothing, so when the space started on the phone, the phone sends it the invitation
-as text. On the phone, open **Settings › Sync › Invite another device**, choose **Can't scan?**
-and then **Copy the invitation**: the text goes to the clipboard, kept out of clipboard history, and is cleared after
-the time set in **Settings › Security › Clear clipboard**. Send it to the computer by chat or mail,
-paste it there in **Join an existing sync** (or **Join sync…** on the welcome screen), and enter the
-code the phone shows beside it.
+as text. On the phone, open **Settings › Sync › Invite another device**: for a space on a relay,
+choose **Copy the pairing link**; on other storage, choose **Can't scan?** and then **Copy the
+invitation**. The text goes to the clipboard, kept out of clipboard history, and is cleared after
+the time set in **Settings › Security › Clear clipboard**. Send it to the computer by chat or mail
+and paste it there in **Join an existing sync** (or **Join sync…** on the welcome screen); an
+invitation also needs the code the phone shows beside it.
 
 The devices of a space are equal: whichever started it, every change syncs both ways. When the
 accounts are on the phone and the computer is new, the computer can as well start syncing and show
@@ -132,7 +135,8 @@ From this version, adding a device asks for less:
   asks for no other device's master password. On a device with no vault yet, you choose its master
   password while joining, typed twice; it may be the same as the other devices' or another one.
 - **The QR code first.** **Invite another device** shows the QR code; the text to send and its code
-  appear under **Can't scan?**, with **Copy the invitation**.
+  appear under **Can't scan?**, with **Copy the invitation**. From version 0.8.4, a space on a relay
+  offers **Copy the pairing link** beside the QR code instead (below).
 - **The recovery key.** The sync key is called the recovery key, and neither starting to sync nor
   inviting a device shows it: **Settings › Sync › Show the recovery key…** shows it after the master
   password, and Lockra reminds you until you save it or choose **I have kept it**. You need it only
@@ -145,10 +149,10 @@ version refuses theirs: update every device first.
 
 ## Pairing links
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.8.4.
 
-From the next version, a sync space on a Lockra relay (the built-in relay or one of your own)
-adds a device with one pairing link, and no code:
+A sync space on a Lockra relay (the built-in relay or one of your own) adds a device with one
+pairing link, and no code:
 
 1. On a device that syncs, open **Settings › Sync › Invite another device** and enter the master
    password, or verify with Touch ID, Windows Hello or the fingerprint.
@@ -222,11 +226,13 @@ write the same encrypted files there as anywhere else, and the relay can open no
 2. Check **This device's name**, enter the master password, and choose **Start syncing**.
 3. Save the recovery key **Settings › Sync** reminds you of, as for any storage.
 
-The invitation of such a space holds the relay's address and the space's keys. To add a phone, show the
+The invitation of such a space, which is also its pairing link, holds the relay's address and the
+space's keys. To add a phone, show the
 invitation on the computer (**Invite another device**) and scan its QR code on the phone
 (**Settings › Sync › Join an existing sync › Scan to join**, or **Join from sync** on the welcome
-screen): the phone needs no storage settings, only a master password. Pasting the
-invitation and entering the code shown beside it works too, on a phone or a computer. Without
+screen): the phone needs no storage settings, only a master password. **Copy the
+pairing link** and pasting it works too, on a phone or a computer, with no code
+([Pairing links](#pairing-links)). Without
 another device at hand, choose **Recovery key**, keep **Lockra relay**, and enter the recovery key.
 
 While the vault is unlocked, a device keeps one request waiting at the relay, which answers it when
@@ -310,7 +316,8 @@ the other devices go on. You can join again later with an invitation or the reco
 - **An invitation opens the space by itself.** It holds the space's key, so a device that has it
   joins with no password: Lockra shows it only after the master password (or Touch ID, Windows
   Hello or the fingerprint), hides it after two minutes and keeps it out of screenshots where the
-  system allows; the text to send needs its code.
+  system allows. A space on a relay copies a pairing link that does not expire and needs no code:
+  send it to your own devices only. On other storage, the invitation you send needs its code.
 - **Devices never overwrite each other.** Each device writes only its own file, so devices that
   sync at the same moment keep each other's changes, on S3 and WebDAV alike.
 - **Changes are detected.** A file that was altered, moved from another device or space, or put
@@ -319,7 +326,8 @@ the other devices go on. You can join again later with an invitation or the reco
 - **Deleting is not prevented.** Whoever can write to the storage can delete the space. That stops
   sync, not your vaults: every device keeps its accounts.
 - **Removing a device does not revoke it.** A removed device still has the space's key. To shut
-  out a lost device, someone who saw an invitation, or someone who has the recovery key and an old
+  out a lost device, someone who saw an invitation or a pairing link, or someone who has the
+  recovery key and an old
   master password, turn off sync on
   every device, start a new sync space and add the devices to it.
 - **Backups leave sync out.** The storage settings, their credentials and the recovery key are kept in
