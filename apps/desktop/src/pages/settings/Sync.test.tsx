@@ -93,27 +93,29 @@ describe("Settings › Sync", () => {
     expect(backend.calls.find((c) => c.command === "sync_create")).toMatchObject({
       storage: { kind: "relay", url: "https://lockra-relay.onethinker.top" },
     });
-    // The invitation: its QR code first, and the warning that it hands the space over.
+    // The invitation: its QR code and the pairing link beside it, with the warning that the link
+    // hands the space over for good.
     await user.click(pane.getByTestId("sync-invite-open"));
     const prompt = await screen.findByRole("dialog", { name: "邀请其他设备" });
     await user.type(within(prompt).getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
     const invite = await screen.findByTestId("sync-invite");
     expect(invite).toHaveTextContent(
-      "拿到邀请码的设备无需其他密码就能加入同步空间、读取你的账号。只在你自己的设备上使用。",
+      "配对链接长期有效：拿到它的人无需任何密码就能加入同步空间、读取你的所有账号，直到你开始新的同步空间。只发给你自己的设备。",
     );
     expect(within(invite).getByRole("img", { name: "二维码" })).toBeInTheDocument();
     expect(within(invite).queryByTestId("invite-key-only")).not.toBeInTheDocument();
-    // The text to send and its code wait behind "Can't scan?"; the recovery key is not here.
+    // No code and nothing behind "Can't scan?"; the recovery key is not here either.
+    expect(within(invite).queryByRole("button", { name: "无法扫码？" })).not.toBeInTheDocument();
     expect(within(invite).queryByTestId("invite-code")).not.toBeInTheDocument();
     expect(within(invite).queryByTestId("sync-key")).not.toBeInTheDocument();
-    await user.click(within(invite).getByRole("button", { name: "无法扫码？" }));
-    expect(within(invite).getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
-    await user.click(within(invite).getByRole("button", { name: "复制邀请码" }));
+    await user.click(within(invite).getByRole("button", { name: "复制配对链接" }));
     expect(
-      await within(invite).findByText("已复制：在另一台设备上粘贴，再输入下方的口令。"),
-    ).toBeInTheDocument();
-    expect(backend.clipboardText).toMatch(/^lockra-invite:2:/);
+      await within(invite).findByText("已复制：在另一台设备的「加入已有的同步」中粘贴即可。"),
+    ).toHaveAttribute("role", "status");
+    expect(backend.clipboardText).toMatch(/^lockra-invite:1:/);
+    // The link goes to the clipboard, never onto the screen.
+    expect(invite).not.toHaveTextContent("lockra-invite:");
   });
 
   it("joins from an invitation with this vault's own master password alone", async () => {
@@ -123,7 +125,7 @@ describe("Settings › Sync", () => {
     const pane = await openSync(user);
     await user.click(pane.getByTestId("sync-join-open"));
     const form = within(pane.getByTestId("sync-join"));
-    await user.type(form.getByLabelText("邀请码"), "lockra-invite:1:abc");
+    await user.type(form.getByLabelText("配对链接或邀请码"), "lockra-invite:1:abc");
     await user.type(form.getByLabelText("这台设备的主密码"), "a wrong password");
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(await form.findByText("密码错误")).toBeInTheDocument();
@@ -144,7 +146,7 @@ describe("Settings › Sync", () => {
     const pane = await openSync(user);
     await user.click(pane.getByTestId("sync-join-open"));
     const form = within(pane.getByTestId("sync-join"));
-    await user.type(form.getByLabelText("邀请码"), MOCK_OLD_INVITE);
+    await user.type(form.getByLabelText("配对链接或邀请码"), MOCK_OLD_INVITE);
     await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "加入" }));
     expect(
@@ -484,7 +486,7 @@ describe("Settings › Sync", () => {
     await user.click(pane.getByTestId("sync-join-open"));
     const form = within(pane.getByTestId("sync-join"));
     const text = `lockra-invite:1:${btoa("mock-key-only-invite:1")}`;
-    await user.type(form.getByLabelText("邀请码"), text);
+    await user.type(form.getByLabelText("配对链接或邀请码"), text);
     await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "加入" }));
     // Asked how this computer reaches the space: the same drive's folder first.
@@ -508,7 +510,7 @@ describe("Settings › Sync", () => {
     await user.click(pane.getByTestId("sync-join-open"));
     const form = within(pane.getByTestId("sync-join"));
     expect(form.queryByLabelText("口令")).not.toBeInTheDocument();
-    await user.type(form.getByLabelText("邀请码"), "lockra-invite:2:TEtTSU5WVDI");
+    await user.type(form.getByLabelText("配对链接或邀请码"), "lockra-invite:2:TEtTSU5WVDI");
     await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
     // A sealed text needs its code before it can join.
     expect(form.getByRole("button", { name: "加入" })).toBeDisabled();

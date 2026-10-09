@@ -15,11 +15,11 @@ one phase per app start:
 Then the same through a Lockra relay (lockra-relay on 127.0.0.1, its data folder read back):
 
   r1 device C: the storage form starts on Lockra's built-in relay; C sets up a space on a relay of
-     its own instead, and shows an invitation: its QR code, and behind "Can't scan?" the sealed
-     text, copied to the X clipboard, and its code (both kept for device D). The relay holds one
-     snapshot, nothing readable, and the SHA-256 of the access token derived from the sync key
-     (computed here apart), never the sync key.
-  r2 device D, no vault: the welcome screen's "join sync" with C's invitation and code alone (no
+     its own instead, and shows an invitation: its QR code and "Copy the pairing link", which puts
+     the plain invitation on the X clipboard (kept for device D); no "Can't scan?" and no code. The
+     relay holds one snapshot, nothing readable, and the SHA-256 of the access token derived from
+     the sync key (computed here apart), never the sync key.
+  r2 device D, no vault: the welcome screen's "join sync" with C's pairing link alone (no code, no
      storage settings) under a master password of D's own; C's accounts arrive; D adds one, and
      its vault opens with its own password.
   r3 device C again: unlock, D's account arrives, both devices are listed.
@@ -418,27 +418,28 @@ class Phase:
         self.fill("主密码", PASSWORD, dialog)
         web.click(self.button("显示邀请码", dialog))
         invite = web.wait(css="[data-testid=sync-invite]")
-        if "无需其他密码" not in web.text(invite):
-            sys.exit(f"smoke-sync: the invitation does not say it hands the space over: {web.text(invite)[:80]}")
+        if "无需任何密码" not in web.text(invite) or "长期有效" not in web.text(invite):
+            sys.exit(f"smoke-sync: the invitation does not say its link hands the space over for good: {web.text(invite)[:80]}")
         if web.find(css="[data-testid=sync-invite] [data-testid=sync-key]") is not None:
             sys.exit("smoke-sync: the invitation shows the recovery key")
-        # Behind "Can't scan?": the sealed text, copied by the core to the X clipboard, and its code.
-        web.click(self.button("无法扫码？", dialog))
-        web.click(self.button("复制邀请码", dialog))
+        if web.find(css="[data-testid=sync-invite] [data-testid=invite-code]") is not None:
+            sys.exit("smoke-sync: a relay space's invitation shows a code")
+        if web.find(xpath=f"{dialog}//button[normalize-space()='无法扫码？']") is not None:
+            sys.exit("smoke-sync: a relay space's invitation hides its link behind \"Can't scan?\"")
+        # The pairing link: the plain invitation, copied by the core to the X clipboard.
+        web.click(self.button("复制配对链接", dialog))
         web.wait(xpath=f"{dialog}//*[@role='status'][contains(normalize-space(), '已复制')]")
         clipboard = lambda: subprocess.run(["xclip", "-o", "-selection", "clipboard"], capture_output=True, text=True, timeout=10).stdout.strip()
-        text = until("the sealed invitation on the clipboard", lambda: (lambda t: t if t.startswith("lockra-invite:2:") else None)(clipboard()))
-        code = web.text(web.wait(css="[data-testid=sync-invite] [data-testid=invite-code]")).strip()
+        text = until("the pairing link on the clipboard", lambda: (lambda t: t if t.startswith("lockra-invite:1:") else None)(clipboard()))
         if text in web.text(invite):
-            sys.exit("smoke-sync: the text to send is on screen")
-        for name, value in [("relay-invite", text), ("relay-code", code)]:
-            with open(os.path.join(self.args.work, name), "w") as f:
-                os.chmod(f.name, 0o600)
-                f.write(value)
+            sys.exit("smoke-sync: the pairing link is on screen")
+        with open(os.path.join(self.args.work, "relay-invite"), "w") as f:
+            os.chmod(f.name, 0o600)
+            f.write(text)
         self.shot("sync-relay-invite-light")
         web.click(self.button("完成", dialog))
         web.gone("[data-testid=sync-invite]")
-        print("smoke-sync: C showed a sealed invitation for its relay space and kept it with its code")
+        print("smoke-sync: C copied the pairing link of its relay space (no code) and kept it")
         web.quit()
 
     def r2(self):
@@ -446,14 +447,13 @@ class Phase:
         until("the first state", self.state, timeout=60)
         with open(os.path.join(self.args.work, "relay-invite")) as f:
             text = f.read().strip()
-        with open(os.path.join(self.args.work, "relay-code")) as f:
-            code = f.read().strip()
         web.wait(css="[data-testid=page-welcome]")
         web.click(web.wait(css="[data-testid=welcome-join-open]"))
         scope = "//*[@data-testid='welcome-join']"
-        # The invitation and its code: no storage settings to type, and no other device's password.
-        self.fill("邀请码", text, scope)
-        self.fill("口令", code, scope)
+        # The pairing link alone: no code, no storage settings to type, no other device's password.
+        self.fill("配对链接或邀请码", text, scope)
+        if web.find(xpath=f"{scope}//label[normalize-space()='口令']") is not None:
+            sys.exit("smoke-sync: joining from a pairing link asks for a code")
         self.fill("这台设备的名称", "笔记本", scope)
         if web.find(xpath=f"{scope}//label[normalize-space()='同步空间的主密码']") is not None:
             sys.exit("smoke-sync: joining from an invitation asks for the space's master password")
@@ -480,7 +480,7 @@ class Phase:
         web.invoke({"command": "vault_unlock", "password": PASSWORD_D})
         if self.state()["phase"] != "unlocked":
             sys.exit("smoke-sync: D's vault does not open with D's own password")
-        print("smoke-sync: D joined from C's invitation and code under its own password, got C's accounts, and added one")
+        print("smoke-sync: D joined from C's pairing link under its own password, got C's accounts, and added one")
         web.quit()
 
     def r3(self):

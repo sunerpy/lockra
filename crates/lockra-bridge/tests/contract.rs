@@ -16,7 +16,8 @@ use lockra_core::settings::{AccentId, AutoBackup, DefaultUnlock, Density, Locale
 use lockra_core::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded,
     ExportPage, ExportStarted, ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView,
-    Revealed, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    Revealed, SharedInvite, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus,
+    UpdateView,
 };
 use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
@@ -468,8 +469,14 @@ fn response_fixtures() {
             "sync_invite": SyncInvite {
                 invite: "lockra-invite:1:eyJzdG9yYWdlIjp7fX0".into(),
                 svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
-                shared_text: "lockra-invite:2:TEtTSU5WVDI".into(),
-                code: "7K2QM-XW4FD".into(),
+                shared: Some(SharedInvite { text: "lockra-invite:2:TEtTSU5WVDI".into(), code: "7K2QM-XW4FD".into() }),
+                includes_storage: true,
+            },
+            // A space on a relay: its invitation is the pairing link, sent as it is.
+            "sync_invite_relay": SyncInvite {
+                invite: "lockra-invite:1:eyJzdG9yYWdlIjp7fX0".into(),
+                svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
+                shared: None,
                 includes_storage: true,
             },
             "codes_frame": codes,
@@ -661,7 +668,7 @@ async fn dispatch_answers_and_leaks_nothing() {
     assert!(clipboard.current().is_some_and(|c| c.len() == 6));
     // The remaining commands, each through `dispatch` once. The sealed invitation goes to the
     // clipboard and nothing comes back.
-    let sealed = invite["shared_text"].as_str().unwrap();
+    let sealed = invite["shared"]["text"].as_str().unwrap();
     assert_eq!(run(json!({"command": "sync_invite_copy", "text": sealed})).await.unwrap(), Value::Null);
     assert_eq!(clipboard.current().as_deref(), Some(sealed));
     assert_eq!(run(json!({"command": "sync_invite_copy", "text": invite["invite"]})).await.unwrap_err().code, ErrorCode::SyncInviteInvalid);

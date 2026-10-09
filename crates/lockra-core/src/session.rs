@@ -38,8 +38,8 @@ use crate::sync::{
 };
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
-    InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent,
-    UiState, UpdateStatus, UpdateView,
+    InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus,
+    SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
 
@@ -1667,8 +1667,9 @@ impl Core {
 
     /// The invitation for another device, once the user proved to be at this one (the master
     /// password, or without it the biometric check that unlocks this vault): the storage, its
-    /// credentials and the sync key, as the QR code's text, and sealed under a one-time code for
-    /// sending.
+    /// credentials, the sync key and the space's data key, as the QR code's text, and sealed under
+    /// a one-time code for sending. On a relay nothing is sealed: the text carries no credentials
+    /// and is itself the pairing link to send, which opens alone (the user's choice over a code).
     pub async fn sync_invite(&self, password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<SyncInvite> {
         let (storage, sync_key, keys) = {
             let st = self.lock();
@@ -1682,11 +1683,17 @@ impl Core {
             let sync_key = SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?;
             // A folder of this computer is of no use elsewhere: the keys go alone.
             let includes_storage = !storage.is_folder();
+            let relay = storage.is_relay();
             let invite = Invite { storage: includes_storage.then_some(storage), sync_key, keys: Some(keys) };
             let text = invite.to_text();
             let svg = qr::svg(&text).map_err(|_| ErrorCode::Internal)?;
-            let (shared, code) = invite.to_shared_text(cost).map_err(|e| sync_error(&e))?;
-            Ok(SyncInvite { invite: text.to_string(), svg: svg.to_string(), shared_text: shared.to_string(), code: code.to_string(), includes_storage })
+            let shared = if relay {
+                None
+            } else {
+                let (shared, code) = invite.to_shared_text(cost).map_err(|e| sync_error(&e))?;
+                Some(SharedInvite { text: shared.to_string(), code: code.to_string() })
+            };
+            Ok(SyncInvite { invite: text.to_string(), svg: svg.to_string(), shared, includes_storage })
         })
         .await
     }
@@ -1704,15 +1711,27 @@ impl Core {
         Ok(SyncKeyView { sync_key: sync_key.to_string() })
     }
 
-    /// Put the sealed invitation shown beside its code on the clipboard, to be sent to a device
-    /// that scans nothing (a computer): marked as excluded from history and cloud sync, and cleared
-    /// after the clipboard time, as a code is. Only a sealed text: it opens with its code alone,
-    /// which stays on the screen and travels another way.
+    /// Put the invitation to send on the clipboard, for a device that scans nothing (a computer):
+    /// marked as excluded from history and cloud sync, and cleared after the clipboard time, as a
+    /// code is. A sealed text, which opens with its code alone (on the screen, to travel another
+    /// way); or, for a space on a relay, this space's own invitation, its pairing link, rebuilt from
+    /// the vault and compared. Never an invitation with storage credentials, nor anything else.
     pub fn sync_invite_copy(&self, text: &str) -> CoreResult<()> {
         let mut st = self.lock();
         let clear_seconds = st.settings.clipboard_clear_seconds;
-        unlocked(&st)?.data.sync().ok_or(ErrorCode::SyncOff)?;
-        if !Invite::is_sealed(text) {
+        let sync = unlocked(&st)?.data.sync().ok_or(ErrorCode::SyncOff)?;
+        let own_link = || -> CoreResult<bool> {
+            if !sync.storage.is_relay() {
+                return Ok(false);
+            }
+            let sync_key = SyncKey::from_text(&sync.sync_key).map_err(|e| sync_error(&e))?;
+            let keys = sync.keys().map_err(|e| sync_error(&e))?;
+            let invite = Invite { storage: Some(sync.storage.clone()), sync_key, keys: Some(keys) };
+            // Compared without stopping at the first difference, as the relay compares tokens.
+            let (own, given) = (invite.to_text(), text.trim());
+            Ok(own.len() == given.len() && own.bytes().zip(given.bytes()).fold(0u8, |diff, (a, b)| diff | (a ^ b)) == 0)
+        };
+        if !Invite::is_sealed(text) && !own_link()? {
             return Err(ErrorCode::SyncInviteInvalid.into());
         }
         let text = Zeroizing::new(text.trim().to_owned());

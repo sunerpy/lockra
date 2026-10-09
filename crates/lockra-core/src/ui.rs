@@ -213,18 +213,27 @@ pub struct SyncKeyView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SyncInvite {
     /// The invitation text (`lockra-invite:1:…`): the storage, its credentials, the sync key and
-    /// the space's data key.
+    /// the space's data key. For a space on a relay it is also the pairing link the user copies
+    /// and sends as it is (the relay's address and the keys, no credentials): it opens alone and
+    /// for good, which the user chose over a code.
     pub invite: String,
     /// The invitation as a QR code (SVG).
     pub svg: String,
-    /// The invitation sealed for sending through a chat or a mail (`lockra-invite:2:…`): it opens
-    /// only with `code`.
-    pub shared_text: String,
-    /// The one-time code of `shared_text` (`ABCDE-FGHJK`), shown on the screen only.
-    pub code: String,
+    /// The invitation sealed for sending through a chat or a mail, with its code; none for a space
+    /// on a relay, whose pairing link is sent instead.
+    pub shared: Option<SharedInvite>,
     /// The invitation carries the storage; not for a space in a folder of this computer, where
     /// the other device says how it reaches the space (the same drive's folder, its WebDAV).
     pub includes_storage: bool,
+}
+
+/// An invitation sealed for sending, and what opens it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SharedInvite {
+    /// `lockra-invite:2:…`: it opens only with `code`.
+    pub text: String,
+    /// The one-time code of `text` (`ABCDE-FGHJK`), shown on the screen only.
+    pub code: String,
 }
 
 /// How a device joins a space.

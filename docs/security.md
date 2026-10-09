@@ -256,13 +256,18 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   one, on a device with no vault yet). An invitation is therefore worth a device of the space: it
   is shown only after the master password or the biometric check that unlocks the vault, hides
   after two minutes, and is excluded from screen capture where the system allows. The QR code
-  carries it as it is, to be scanned on the user's own devices only. The text to send is sealed
-  under a one-time code shown only beside it (50 bits, stretched with Argon2id;
-  `docs/formats.md`): sent through a chat or a mail, it is of no use without the code, which is
-  to travel another way. For a computer, which scans nothing, the
-  phone copies that sealed text (`sync_invite_copy`): the core puts it on the clipboard marked as
-  excluded from history and cloud sync, and clears it after the clipboard time, as a code; the
-  plain invitation, which opens without a code, is never copied.
+  carries it as it is, to be scanned on the user's own devices only. For a space on a relay the
+  same text is also the pairing link the user copies and sends: it carries the relay's address and
+  the keys, no credentials, and it opens the space alone and for good. That is a choice of
+  convenience over a code (the user's, for one link and nothing else to type): a link left in a
+  chat's history, a synced clipboard or a screenshot is worth a device of the space until a new
+  space is started. On other storage the text to send is sealed under a one-time code shown only
+  beside it (50 bits, stretched with Argon2id; `docs/formats.md`): sent through a chat or a mail,
+  it is of no use without the code, which is to travel another way. For a computer, which scans
+  nothing, the other device copies that text (`sync_invite_copy`): the core puts it on the
+  clipboard marked as excluded from history and cloud sync, and clears it after the clipboard
+  time, as a code. It copies a sealed text, or on a relay this space's own invitation (rebuilt
+  from the vault and compared); an invitation that carries storage credentials is never copied.
   A space in a cloud drive's folder invites with the keys alone: the folder is of no use on
   another device, and no path is taken from an invitation. The joining device reaches the space its
   own way (the same drive's folder on a computer, its WebDAV on a phone) and checks it is that
@@ -362,8 +367,9 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   its state as soon as the core has them, but a compromised webview process could read them.
 - Memory is not locked (`mlock`); decrypted entries could reach swap or a crash dump.
 - A forgotten master password cannot be recovered; _reset_ keeps the old file but cannot open it.
-- Sync: whoever holds an invitation (its QR code photographed, or the sealed text together with
-  its code) holds the space, as a device does, with no password to guess. Whoever holds the
+- Sync: whoever holds an invitation (its QR code photographed, a relay space's pairing link, or
+  the sealed text together with its code) holds the space, as a device does, with no password to
+  guess; a pairing link does not expire. Whoever holds the
   storage's contents and the sync key can try master passwords offline at Argon2id's cost,
   against the keyring of every device: the weakest master password among the space's devices is
   the last line. The storage's

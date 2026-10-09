@@ -285,13 +285,15 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   `{storage, sync_key, data_key}`: the storage settings with their credentials (a relay's are its
   address, `{kind: "relay", url}`), the sync key text, and the space's data key (standard Base64
   of its 32 bytes). It hands the space over: the joining device needs no other device's master
-  password. The QR code carries it so. A space in a folder invites with `{sync_key, data_key}`
+  password. The QR code carries it so, and so does the pairing link of a space on a relay, which
+  is this text, copied and sent as it is. A space in a folder invites with `{sync_key, data_key}`
   alone: a folder is of no use on another device, and its path is never taken from an invitation
   (one naming a folder is refused); the joining device says how it reaches the space. An
   invitation of Lockra up to 0.8.2 carries no `data_key`; Lockra refuses it
   (`sync_invite_outdated`), and Lockra up to 0.8.2 reads no invitation with one. Lockra up to
   0.7.3 reads only invitations with their storage.
-- **A sealed invitation**, the text to send, is `lockra-invite:2:` and Base64url (no padding) of an
+- **A sealed invitation**, the text to send for a space not on a relay, is `lockra-invite:2:` and
+  Base64url (no padding) of an
   object framed like the others: magic `LKSINVT2`, the header `{format: 2, kdf, nonce}`, then
   XChaCha20-Poly1305 of the plain invitation's JSON, the header bytes as associated data. The key
   is HKDF-SHA256(Argon2id(code, salt), info `lockra-sync v1 shared invitation`) at the vault's
