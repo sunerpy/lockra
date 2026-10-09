@@ -224,6 +224,10 @@
       "password": "a new password"
     },
     {
+      "command": "sync_invite_copy",
+      "text": "lockra-invite:2:TEtTSU5WVDI"
+    },
+    {
       "command": "sync_key_acknowledge"
     },
     {

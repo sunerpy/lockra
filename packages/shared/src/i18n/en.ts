@@ -820,6 +820,8 @@ export const en: Messages = {
       keyOnly:
         "This space is in a cloud drive folder on this computer, so the invitation carries the sync key alone. The other device chooses how it reaches the same folder: a computer, the same drive's folder; a phone, that drive's WebDAV.",
       text: "Invitation to send",
+      copy: "Copy the invitation",
+      copied: "Copied: paste it on the other device, then enter the code below.",
       code: "Code",
       codeHint:
         "Tell it in person or by phone, never through the channel that carried the invitation.",

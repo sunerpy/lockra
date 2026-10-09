@@ -50,6 +50,7 @@ import {
   defaultSettings,
 } from "./schema";
 import { MIN_PASSWORD } from "./password";
+import { isSealedInvite } from "./storage-form";
 
 export interface MockEntry {
   view: EntryView;
@@ -639,6 +640,11 @@ export class MockBackend implements Backend {
     this.clipboard = text;
   }
 
+  /** Test hook: what was last put on the clipboard (`sync_invite_copy`). */
+  get clipboardText(): string | undefined {
+    return this.clipboard;
+  }
+
   async openRelease(): Promise<string | null> {
     if (this.releasePageOpens) return null;
     const status = this.state.update.status;
@@ -961,6 +967,13 @@ export class MockBackend implements Backend {
         );
       case "sync_invite":
         return this.syncInvite(command.password, command.reason);
+      case "sync_invite_copy": {
+        this.requireSpace();
+        // As the core: the sealed text alone, never the plain invitation.
+        if (!isSealedInvite(command.text)) throw new LockraError("sync_invite_invalid");
+        this.clipboard = command.text.trim();
+        return null;
+      }
       case "sync_key_acknowledge":
         this.setSpace({ ...this.requireSpace(), key_saved: true });
         return null;

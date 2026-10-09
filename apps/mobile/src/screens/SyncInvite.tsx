@@ -1,7 +1,7 @@
 // An invitation for another device, once the user proved to be here (the fingerprint that unlocks
 // this vault, or the master password): the QR code the other device scans, the sealed text to
-// send it instead with its code apart, and the sync key alone. They hide after REVEAL_SECONDS
-// like any secret (app/secret-page.ts).
+// send it instead with its code apart (copied by the core for a computer, which scans nothing),
+// and the sync key alone. They hide after REVEAL_SECONDS like any secret (app/secret-page.ts).
 import { type SyncInvite as Invite, errorText } from "@lockra/shared";
 import {
   Banner,
@@ -29,6 +29,8 @@ export function SyncInvite() {
   const [password, setPassword] = useState("");
   const [invite, setInvite] = useState<{ answer: Invite; at: number } | undefined>(undefined);
   const submit = useSubmit();
+  const copying = useSubmit();
+  const [copied, setCopied] = useState(false);
   const deliver = useSecretAnswer();
   const left = useSecretPage(invite?.at);
   const ask = async (typed?: string) => {
@@ -86,6 +88,13 @@ export function SyncInvite() {
     );
   }
   const { answer } = invite;
+  const copy = async () => {
+    setCopied(false);
+    const done = await copying.run(() =>
+      backend.dispatch({ command: "sync_invite_copy", text: answer.shared_text }),
+    );
+    if (done !== undefined) setCopied(true);
+  };
   return (
     <Page title={t("sync.invite.open")} testId="page-sync-invite">
       <div className="flex flex-col gap-4" data-testid="sync-invite">
@@ -107,6 +116,25 @@ export function SyncInvite() {
             data-testid="invite-text">
             {answer.shared_text}
           </div>
+          <Button
+            variant="outline"
+            size="lg"
+            icon="copy"
+            loading={copying.busy}
+            onClick={() => void copy()}
+            className="self-start">
+            {t("sync.invite.copy")}
+          </Button>
+          {copied && (
+            <p role="status" className="text-[13px] text-fg-muted">
+              {t("sync.invite.copied")}
+            </p>
+          )}
+          {copying.error !== undefined && (
+            <p role="alert" className="text-[13px] text-danger">
+              {errorText(t, copying.error)}
+            </p>
+          )}
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-[13px] text-fg-muted">{t("sync.invite.code")}</span>

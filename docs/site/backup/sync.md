@@ -105,6 +105,22 @@ sync › Scan to join**, or **Join from sync** on the welcome screen of a new in
 The invitation goes from the camera to Lockra and is not shown on the phone. Pasting the
 invitation, or typing the storage settings and the sync key, works as on a computer.
 
+### Adding a computer from a phone
+
+<StatusTag status="building" /> In development, not released yet.
+
+A computer scans nothing, so when the space started on the phone, the phone sends it the invitation
+as text. On the phone, open **Settings › Sync › Invite another device** and choose **Copy the
+invitation**: the text goes to the clipboard, kept out of clipboard history, and is cleared after
+the time set in **Settings › Security › Clear clipboard**. Send it to the computer by chat or mail,
+paste it there in **Join an existing sync** (or **Join sync…** on the welcome screen), and enter the
+code the phone shows beside it.
+
+The devices of a space are equal: whichever started it, every change syncs both ways. When the
+accounts are on the phone and the computer is new, the computer can as well start syncing and show
+its QR code; the phone joins with its own vault, and its accounts join the space and reach the
+computer.
+
 ## Through a cloud drive folder
 
 <StatusTag status="available" /> Available from version 0.7.4.
@@ -214,8 +230,10 @@ The status line shows **Synced** and when, or why the last run failed; the next 
   says so and names the devices the changes came from, for example "Synced from Pixel 8: 2 added,
   1 changed".
 
-When the same account was changed on two devices, the later change wins on every device. A
-deletion removes the account on every device, unless the account was changed after the deletion.
+Accounts added on several devices at the same time are all kept, on every device. When the same
+account was changed on two devices, the later change wins on every device. A deletion removes the
+account on every device, unless the account was changed after the deletion. The same account added
+apart on two devices (its QR code scanned on both) shows twice: delete one, and the deletion syncs.
 The order of recently used accounts stays on each device.
 
 ## Devices

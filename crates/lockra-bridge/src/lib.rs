@@ -219,6 +219,12 @@ pub enum UiCommand {
         #[serde(default)]
         reason: Option<String>,
     },
+    /// Put the sealed invitation (the text to send, `lockra-invite:2:…`) on the clipboard, for a
+    /// device that scans nothing; it is cleared after the clipboard time.
+    SyncInviteCopy {
+        /// The sealed text `sync_invite` answered with.
+        text: Zeroizing<String>,
+    },
     /// The user saved or wrote down the sync key: the reminder goes.
     SyncKeyAcknowledge,
     /// New storage settings for the space (an address, new credentials).
@@ -246,7 +252,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 45] = [
+pub const COMMANDS: [&str; 46] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -286,6 +292,7 @@ pub const COMMANDS: [&str; 45] = [
     "sync_create",
     "sync_join",
     "sync_invite",
+    "sync_invite_copy",
     "sync_key_acknowledge",
     "sync_set_storage",
     "sync_rename_device",
@@ -394,6 +401,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::SyncCreate { storage, password, device_name } => json!(core.sync_create(storage, password, device_name).await?),
         UiCommand::SyncJoin { source, password, device_name, space_password } => unit(core.sync_join(source, password, device_name, space_password).await)?,
         UiCommand::SyncInvite { password, reason } => json!(core.sync_invite(password, reason).await?),
+        UiCommand::SyncInviteCopy { text } => unit(core.sync_invite_copy(&text))?,
         UiCommand::SyncKeyAcknowledge => unit(core.sync_key_acknowledge())?,
         UiCommand::SyncSetStorage { storage, password } => unit(core.sync_set_storage(storage, password).await)?,
         UiCommand::SyncRenameDevice { name } => unit(core.sync_rename_device(&name))?,
