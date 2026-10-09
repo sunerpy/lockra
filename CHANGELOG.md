@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.3](https://github.com/sunerpy/lockra/compare/v0.8.2...v0.8.3) (2026-10-09)
+
+
+### Features
+
+* **sync:** 简化配对：加入只需本机主密码，恢复密钥按需显示 ([#96](https://github.com/sunerpy/lockra/issues/96)) ([723962b](https://github.com/sunerpy/lockra/commit/723962b9ad53c30d28af5016ff79068162da6e56))
+
 ## [0.8.2](https://github.com/sunerpy/lockra/compare/v0.8.1...v0.8.2) (2026-10-09)
 
 
