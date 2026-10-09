@@ -1,5 +1,6 @@
 import {
   MOCK_INVITE_CODE,
+  MOCK_OLD_INVITE,
   MOCK_PASSWORD,
   MOCK_STORAGE_SECRET,
   MOCK_SYNC_FOLDER,
@@ -20,7 +21,7 @@ async function openSync(user: ReturnType<typeof renderApp>["user"]) {
 }
 
 describe("Settings › Sync", () => {
-  it("sets up a space on S3 and shows the sync key once, as a secret view", async () => {
+  it("sets up a space on S3 and reminds of the recovery key rather than showing it", async () => {
     const { user, backend } = renderApp();
     await ready();
     const pane = await openSync(user);
@@ -44,8 +45,11 @@ describe("Settings › Sync", () => {
     await user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
     await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(submit);
-    const created = await screen.findByTestId("sync-created");
-    expect(within(created).getByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
+    // No key on screen: the reminder stands in Settings › Sync until the key is saved.
+    const reminder = await pane.findByTestId("sync-key-reminder");
+    expect(reminder).toHaveTextContent("恢复密钥还没有保存");
+    expect(document.body.textContent).not.toContain(MOCK_SYNC_KEY);
+    expect(backend.calls.some((c) => c.command === "secret_view_closed")).toBe(false);
     expect(
       backend.calls.find(
         (c) =>
@@ -62,12 +66,6 @@ describe("Settings › Sync", () => {
       },
       device_name: "Linux 电脑",
     });
-    await user.click(screen.getByRole("button", { name: "我已保存" }));
-    expect(screen.queryByTestId("sync-created")).not.toBeInTheDocument();
-    expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
-    // "I have kept it" says so to the core: no reminder follows.
-    expect(backend.calls).toContainEqual({ command: "sync_key_acknowledge" });
-    expect(pane.queryByTestId("sync-key-reminder")).not.toBeInTheDocument();
     // The space: synced, this device listed, the storage shown without its secret.
     expect(pane.getByTestId("sync-status")).toHaveTextContent("已同步");
     expect(pane.getByTestId("sync-storage")).toHaveTextContent(
@@ -89,37 +87,84 @@ describe("Settings › Sync", () => {
     );
     await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "开始同步" }));
-    expect(await screen.findByTestId("sync-created")).toBeInTheDocument();
+    expect(await pane.findByTestId("sync-storage")).toHaveTextContent(
+      "Lockra 中继 · lockra-relay.onethinker.top",
+    );
     expect(backend.calls.find((c) => c.command === "sync_create")).toMatchObject({
       storage: { kind: "relay", url: "https://lockra-relay.onethinker.top" },
     });
-    await user.click(screen.getByRole("button", { name: "我已保存" }));
-    expect(pane.getByTestId("sync-storage")).toHaveTextContent(
-      "Lockra 中继 · lockra-relay.onethinker.top",
-    );
-    // The invitation holds the relay's address and the sync key: no storage credentials.
+    // The invitation: its QR code first, and the warning that it hands the space over.
     await user.click(pane.getByTestId("sync-invite-open"));
     const prompt = await screen.findByRole("dialog", { name: "邀请其他设备" });
     await user.type(within(prompt).getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
     const invite = await screen.findByTestId("sync-invite");
-    expect(invite).toHaveTextContent("邀请码包含中继地址和同步密钥，只能在你自己的设备上使用。");
+    expect(invite).toHaveTextContent(
+      "拿到邀请码的设备无需其他密码就能加入同步空间、读取你的账号。只在你自己的设备上使用。",
+    );
+    expect(within(invite).getByRole("img", { name: "二维码" })).toBeInTheDocument();
     expect(within(invite).queryByTestId("invite-key-only")).not.toBeInTheDocument();
+    // The text to send and its code wait behind "Can't scan?"; the recovery key is not here.
+    expect(within(invite).queryByTestId("invite-code")).not.toBeInTheDocument();
+    expect(within(invite).queryByTestId("sync-key")).not.toBeInTheDocument();
+    await user.click(within(invite).getByRole("button", { name: "无法扫码？" }));
+    expect(within(invite).getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
+    await user.click(within(invite).getByRole("button", { name: "复制邀请码" }));
+    expect(
+      await within(invite).findByText("已复制：在另一台设备上粘贴，再输入下方的口令。"),
+    ).toBeInTheDocument();
+    expect(backend.clipboardText).toMatch(/^lockra-invite:2:/);
   });
 
-  it("joins a space with the storage settings and the sync key", async () => {
+  it("joins from an invitation with this vault's own master password alone", async () => {
+    // This vault's master password is not the one the space's devices use: no matter.
+    const { user, backend } = renderApp({ mock: { password: "this vault's password" } });
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-join-open"));
+    const form = within(pane.getByTestId("sync-join"));
+    await user.type(form.getByLabelText("邀请码"), "lockra-invite:1:abc");
+    await user.type(form.getByLabelText("这台设备的主密码"), "a wrong password");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await form.findByText("密码错误")).toBeInTheDocument();
+    await user.type(form.getByLabelText("这台设备的主密码"), "this vault's password");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await pane.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(backend.calls.filter((c) => c.command === "sync_join").at(-1)).toEqual({
+      command: "sync_join",
+      source: { type: "invite", text: "lockra-invite:1:abc" },
+      password: "this vault's password",
+      device_name: "Linux 电脑",
+    });
+  });
+
+  it("says an invitation from an older Lockra needs that device updated", async () => {
+    const { user } = renderApp();
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-join-open"));
+    const form = within(pane.getByTestId("sync-join"));
+    await user.type(form.getByLabelText("邀请码"), MOCK_OLD_INVITE);
+    await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(
+      await form.findByText("这份邀请来自旧版本的 Lockra，请先把显示邀请的设备更新到最新版本"),
+    ).toBeInTheDocument();
+  });
+
+  it("recovers a space with the storage settings and the recovery key", async () => {
     // This vault's master password is not the one the space's devices use.
     const { user, backend } = renderApp({ mock: { password: "this vault's password" } });
     await ready();
     const pane = await openSync(user);
     await user.click(pane.getByTestId("sync-join-open"));
     const form = within(pane.getByTestId("sync-join"));
-    await user.click(form.getByRole("radio", { name: "同步密钥" }));
+    await user.click(form.getByRole("radio", { name: "恢复密钥" }));
     await user.click(form.getByRole("radio", { name: "WebDAV" }));
     await user.type(form.getByLabelText("WebDAV 地址"), "https://dav.example.com/dav/");
     await user.type(form.getByLabelText("用户名"), "me");
     await user.type(form.getByLabelText("密码"), MOCK_STORAGE_SECRET);
-    await user.type(form.getByLabelText("同步密钥"), MOCK_SYNC_KEY);
+    await user.type(form.getByLabelText("恢复密钥"), MOCK_SYNC_KEY);
     // This vault's master password is checked first.
     await user.type(form.getByLabelText("这台设备的主密码"), "a wrong password");
     await user.click(form.getByRole("button", { name: "加入" }));
@@ -135,7 +180,7 @@ describe("Settings › Sync", () => {
     await user.type(form.getByLabelText("这台设备的主密码"), "this vault's password");
     await user.type(form.getByLabelText("同步空间的主密码"), "a wrong password");
     await user.click(form.getByRole("button", { name: "加入" }));
-    expect(await form.findByText("主密码或同步密钥不正确")).toBeInTheDocument();
+    expect(await form.findByText("主密码或恢复密钥不正确")).toBeInTheDocument();
     await user.type(form.getByLabelText("这台设备的主密码"), "this vault's password");
     await user.type(form.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "加入" }));
@@ -222,10 +267,11 @@ describe("Settings › Sync", () => {
       await user.type(within(prompt).getByLabelText("主密码"), MOCK_PASSWORD);
       await user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
       const invite = await screen.findByTestId("sync-invite");
-      // The text to send is sealed; its code is shown apart, for another channel.
-      expect(within(invite).getByTestId("invite-text")).toHaveTextContent(/^lockra-invite:2:/);
+      // The text to send goes by the clipboard, sealed; its code is shown apart, for another
+      // channel.
+      await user.click(within(invite).getByRole("button", { name: "无法扫码？" }));
       expect(within(invite).getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
-      expect(within(invite).getByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
+      expect(invite).not.toHaveTextContent("lockra-invite:");
       expect(screen.getByTestId("invite-countdown")).toHaveTextContent("120");
       // It hides itself after two minutes, and the secret view ends.
       await act(async () => {
@@ -273,7 +319,7 @@ describe("Settings › Sync", () => {
       constructor(private readonly slow: CommandName) {
         super({
           entries: sampleEntries(),
-          sync: slow === "sync_invite" ? mockSyncSpace() : null,
+          sync: mockSyncSpace(),
           settings: { locale: "zh-cn" },
         });
       }
@@ -303,74 +349,80 @@ describe("Settings › Sync", () => {
     ]);
     first.unmount();
 
-    // The new space's sync key.
-    const creating = new SlowBackend("sync_create");
-    const second = renderApp({ backend: creating });
+    // The recovery key.
+    const revealing = new SlowBackend("sync_key_reveal");
+    const second = renderApp({ backend: revealing });
     await ready();
     pane = await openSync(second.user);
-    await second.user.click(pane.getByTestId("sync-create-open"));
-    const form = within(pane.getByTestId("sync-create"));
-    await second.user.click(form.getByRole("radio", { name: "S3 兼容" }));
-    await second.user.type(form.getByLabelText("服务地址"), "https://s3.example.com");
-    await second.user.type(form.getByLabelText("区域"), "auto");
-    await second.user.type(form.getByLabelText("存储桶"), "b");
-    await second.user.type(form.getByLabelText("访问密钥 ID"), "a");
-    await second.user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
-    await second.user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
-    await second.user.click(form.getByRole("button", { name: "开始同步" }));
+    await second.user.click(pane.getByRole("button", { name: "显示恢复密钥…" }));
+    const asked = await screen.findByRole("dialog", { name: "恢复密钥" });
+    await second.user.type(within(asked).getByLabelText("主密码"), MOCK_PASSWORD);
+    await second.user.click(within(asked).getByRole("button", { name: "显示恢复密钥" }));
+    await second.user.keyboard("{Escape}");
     await second.user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await act(async () => creating.go());
-    expect(creating.calls.map((c) => c.command).slice(-2)).toEqual([
-      "sync_create",
+    await act(async () => revealing.go());
+    expect(revealing.calls.map((c) => c.command).slice(-2)).toEqual([
+      "sync_key_reveal",
       "secret_view_closed",
     ]);
-    expect(screen.queryByTestId("sync-created")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("sync-key")).not.toBeInTheDocument();
   });
 
-  it("saves the new key with the password just typed, and reminds of a key left unsaved", async () => {
-    const { user, backend } = renderApp();
+  it("shows the recovery key behind the master password, saves it with that password", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace({ key_saved: false }),
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
     await ready();
-    let pane = await openSync(user);
-    const create = async () => {
-      await user.click(pane.getByTestId("sync-create-open"));
-      const form = within(pane.getByTestId("sync-create"));
-      await user.click(form.getByRole("radio", { name: "S3 兼容" }));
-      await user.selectOptions(form.getByLabelText("服务商"), "aws");
-      await user.type(form.getByLabelText("区域"), "eu-central-1");
-      await user.type(form.getByLabelText("存储桶"), "b");
-      await user.type(form.getByLabelText("访问密钥 ID"), "a");
-      await user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
-      await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
-      await user.click(form.getByRole("button", { name: "开始同步" }));
-      return screen.findByTestId("sync-created");
-    };
-    await create();
-    await user.click(screen.getByRole("button", { name: "保存到文件…" }));
-    expect(await screen.findByTestId("sync-key-saved")).toHaveTextContent("同步密钥已保存到文件。");
+    const pane = await openSync(user);
+    const reminder = within(pane.getByTestId("sync-key-reminder"));
+    await user.click(reminder.getByRole("button", { name: "显示恢复密钥…" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "恢复密钥" }));
+    await user.type(dialog.getByLabelText("主密码"), "wrong password");
+    await user.click(dialog.getByRole("button", { name: "显示恢复密钥" }));
+    expect(await dialog.findByText("密码错误")).toBeInTheDocument();
+    await user.type(dialog.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(dialog.getByRole("button", { name: "显示恢复密钥" }));
+    expect(await dialog.findByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
+    expect(dialog.getByTestId("sync-key-countdown")).toHaveTextContent("120");
+    await user.click(dialog.getByRole("button", { name: "保存到文件…" }));
+    expect(await dialog.findByTestId("sync-key-saved")).toHaveTextContent("恢复密钥已保存到文件。");
     expect(backend.savedSyncKeys).toEqual([
-      { fileName: "Lockra 同步密钥.txt", text: expect.stringContaining(MOCK_SYNC_KEY) as string },
+      { fileName: "Lockra 恢复密钥.txt", text: expect.stringContaining(MOCK_SYNC_KEY) as string },
     ]);
-    // Saved with the master password typed for the space: no other prompt.
+    // Saved with the master password typed to show it: no other prompt.
     expect(backend.biometricReasons).toEqual([]);
     await user.keyboard("{Escape}");
+    expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
     expect(pane.queryByTestId("sync-key-reminder")).not.toBeInTheDocument();
+  });
 
-    // Made again and closed without saving: Settings › Sync reminds of the key.
-    await user.click(pane.getByTestId("sync-disable-open"));
-    await user.click(
-      within(await screen.findByRole("dialog", { name: "关闭这台设备的同步？" })).getByRole(
-        "button",
-        { name: "关闭同步" },
-      ),
-    );
-    pane = within(await screen.findByRole("dialog", { name: "设置" }));
-    await create();
-    await user.keyboard("{Escape}");
-    const reminder = await pane.findByTestId("sync-key-reminder");
-    expect(reminder).toHaveTextContent("同步密钥还没有保存");
-    await user.click(pane.getByRole("button", { name: "我已记下" }));
+  it("ends the reminder once the key shown is kept, and shows it again from its row", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace({ key_saved: false }),
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openSync(user);
+    const row = within(pane.getByTestId("sync-recovery-row"));
+    expect(
+      row.getByText("所有设备都丢失时用来恢复同步空间。添加设备不需要它。"),
+    ).toBeInTheDocument();
+    await user.click(row.getByRole("button", { name: "显示恢复密钥…" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "恢复密钥" }));
+    await user.type(dialog.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    expect(await dialog.findByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
+    await user.click(dialog.getByRole("button", { name: "我已记下" }));
+    expect(screen.queryByRole("dialog", { name: "恢复密钥" })).not.toBeInTheDocument();
+    expect(backend.calls).toContainEqual({ command: "sync_key_acknowledge" });
     expect(pane.queryByTestId("sync-key-reminder")).not.toBeInTheDocument();
+    // The row stays, for a key saved long ago.
+    expect(pane.getByTestId("sync-recovery-row")).toBeInTheDocument();
   });
 
   it("shows the invitation after the biometric check that unlocks the vault", async () => {
@@ -397,7 +449,7 @@ describe("Settings › Sync", () => {
     });
   });
 
-  it("keeps a space in a cloud drive's folder and invites with the sync key alone", async () => {
+  it("keeps a space in a cloud drive's folder and invites without its storage", async () => {
     const { user, backend } = renderApp();
     await ready();
     const pane = await openSync(user);
@@ -410,23 +462,22 @@ describe("Settings › Sync", () => {
     await user.click(form.getByRole("button", { name: "选择文件夹…" }));
     expect(form.getByTestId("storage-folder-path")).toHaveTextContent(MOCK_SYNC_FOLDER);
     await user.click(submit);
-    await screen.findByTestId("sync-created");
+    expect(await pane.findByTestId("sync-storage")).toHaveTextContent(
+      `网盘文件夹 · ${MOCK_SYNC_FOLDER}`,
+    );
     // No path from the webview: the core takes the folder its dialog chose.
     expect(backend.calls.find((c) => c.command === "sync_create")).toMatchObject({
       storage: { kind: "folder" },
     });
-    await user.click(screen.getByRole("button", { name: "我已保存" }));
-    expect(pane.getByTestId("sync-storage")).toHaveTextContent(`网盘文件夹 · ${MOCK_SYNC_FOLDER}`);
     await user.click(pane.getByTestId("sync-invite-open"));
     const prompt = await screen.findByRole("dialog", { name: "邀请其他设备" });
     await user.type(within(prompt).getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
     const invite = await screen.findByTestId("sync-invite");
-    expect(within(invite).getByTestId("invite-key-only")).toHaveTextContent("邀请只带同步密钥");
-    expect(invite).toHaveTextContent("邀请码包含同步密钥，只能在你自己的设备上使用。");
+    expect(within(invite).getByTestId("invite-key-only")).toHaveTextContent("邀请不带存储设置");
   });
 
-  it("joins from an invitation with the sync key alone through this computer's folder", async () => {
+  it("joins from an invitation without storage through this computer's folder", async () => {
     const { user, backend } = renderApp();
     await ready();
     const pane = await openSync(user);

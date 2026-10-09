@@ -130,7 +130,7 @@ impl fmt::Debug for SpaceAccess {
 }
 
 /// A sync space as every one of its devices holds it: its id and its data key.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SpaceKeys {
     space_id: Uuid,
     dek: Zeroizing<[u8; KEY_LEN]>,

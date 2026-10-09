@@ -24,12 +24,14 @@ import { useSubmit } from "../../app/dispatch";
 
 type Mode = "invite" | "key";
 
-/** Joining a space: another device's invitation (a sealed one with its code), or the storage and
- *  the sync key typed in. On the welcome screen (`newVault`) the master password of a device in
- *  the space becomes this vault's; with a vault, its own master password is checked and opens the
- *  space, and only when the space's devices use another one does the form ask for that too. An
- *  invitation with the sync key alone (a space in a cloud drive folder of the other computer)
- *  asks how this computer reaches the space: the same drive's folder, or its WebDAV. */
+/** Joining a space: another device's invitation (a sealed one with its code), which hands the
+ *  space over, or a recovery with the storage and the recovery key typed in. An invitation needs
+ *  this computer's own master password alone: on the welcome screen (`newVault`) a new one, typed
+ *  twice; with a vault, the vault's. A recovery opens the space with the master password of a
+ *  device in it: on the welcome screen it becomes this vault's; with a vault, its own is tried
+ *  first, and only when the space's devices use another one does the form ask for that too. An
+ *  invitation without storage (a space in a cloud drive folder of the other computer) asks how
+ *  this computer reaches the space: the same drive's folder, or its WebDAV. */
 export function JoinForm({
   newVault = false,
   onCancel,
@@ -50,6 +52,7 @@ export function JoinForm({
   const [storage, setStorage] = useState(emptyStorageForm);
   const [syncKey, setSyncKey] = useState("");
   const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
   const [spacePassword, setSpacePassword] = useState("");
   const [deviceName, setDeviceName] = useState(() => t(`sync.platformDevice.${platform}`));
   const submit = useSubmit();
@@ -60,7 +63,12 @@ export function JoinForm({
       ? invite.trim() !== "" && (!sealed || code.trim() !== "")
       : syncKey.trim() !== "") &&
     (!withStorage || storageComplete(storage));
-  const ready = sourceReady && password !== "";
+  // A new vault's own password, typed twice: an invitation asks no other.
+  const choosing = newVault && mode === "invite";
+  const mismatch = choosing && repeat !== "" && repeat !== password;
+  const ready = sourceReady && password !== "" && (!choosing || repeat === password);
+  // A recovery whose space's devices use another password asks for it too.
+  const showSpace = !newVault && askSpace && mode === "key";
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!ready) return;
@@ -73,7 +81,7 @@ export function JoinForm({
             storage: askStorage ? storageConfig(storage) : undefined,
           }
         : { type: "manual", storage: storageConfig(storage), sync_key: syncKey.trim() };
-    const space_password = newVault || spacePassword === "" ? undefined : spacePassword;
+    const space_password = showSpace && spacePassword !== "" ? spacePassword : undefined;
     await submit.run(async () => {
       try {
         return await backend.dispatch({
@@ -95,6 +103,7 @@ export function JoinForm({
       }
     });
     setPassword("");
+    setRepeat("");
     setSpacePassword("");
   };
   // Asked for this computer's storage, the section that asks says why.
@@ -102,7 +111,6 @@ export function JoinForm({
     submit.error === undefined || submit.error === "sync_invite_needs_storage"
       ? undefined
       : errorText(t, submit.error);
-  const showSpace = !newVault && askSpace;
   // What the space's password is asked for, or refused for, shows under it.
   const spaceError =
     showSpace &&
@@ -188,17 +196,38 @@ export function JoinForm({
           onChange={(e) => setDeviceName(e.target.value)}
           help={t("sync.deviceNameHint")}
           maxLength={64}
-          // Asked for the space's password too, the two passwords share the next row.
-          className={showSpace ? "sm:col-span-2" : undefined}
+          // Two passwords share the next row: the space's besides this vault's, or a new one twice.
+          className={showSpace || choosing ? "sm:col-span-2" : undefined}
         />
         <PasswordField
-          label={t(newVault ? "sync.spacePassword" : "sync.join.vaultPassword")}
+          label={t(
+            choosing
+              ? "sync.join.newPassword"
+              : newVault
+                ? "sync.spacePassword"
+                : "sync.join.vaultPassword",
+          )}
           value={password}
           onChange={setPassword}
-          help={t(newVault ? "sync.spacePasswordHint" : "sync.join.vaultPasswordHint")}
-          autoComplete="current-password"
+          help={t(
+            choosing
+              ? "sync.join.newPasswordHint"
+              : newVault
+                ? "sync.spacePasswordHint"
+                : "sync.join.vaultPasswordHint",
+          )}
+          autoComplete={choosing ? "new-password" : "current-password"}
           error={spaceError || codeError ? undefined : error}
         />
+        {choosing && (
+          <PasswordField
+            label={t("welcome.create.repeat")}
+            value={repeat}
+            onChange={setRepeat}
+            autoComplete="new-password"
+            error={mismatch ? t("welcome.create.mismatch") : undefined}
+          />
+        )}
         {showSpace && (
           <PasswordField
             label={t("sync.join.otherPassword")}

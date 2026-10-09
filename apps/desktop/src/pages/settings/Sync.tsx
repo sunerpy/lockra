@@ -32,37 +32,21 @@ import {
 import { type SubmitEvent, useState } from "react";
 import { useDispatch, useSubmit } from "../../app/dispatch";
 import { JoinForm } from "../../features/sync/JoinForm";
-import { InviteDialog, SyncKeyDialog, useSecretAnswer } from "../../features/sync/SecretDialogs";
+import { InviteDialog, RecoveryKeyDialog } from "../../features/sync/SecretDialogs";
 
 /** Settings › Sync: set up a space on storage of the user's own or join one; with a space, its
- *  status, storage, devices, invitations, and turning it off here. */
+ *  status, storage, recovery key, devices, invitations, and turning it off here. */
 export function Sync() {
   const t = useT();
   const { sync } = useUiState();
-  // Above the switch between the two panes: creating a space switches to the second one. The
-  // password typed for it stays with the key's dialog, which saves the key with it, and goes
-  // with the dialog.
-  const [created, setCreated] = useState<{ syncKey: string; password: string } | undefined>(
-    undefined,
-  );
-  const deliver = useSecretAnswer();
-  const onCreated = (syncKey: string, password: string) =>
-    deliver(() => setCreated({ syncKey, password }));
   return (
     <SettingsPane title={t("settings.section.sync")} lede={t("sync.lede")}>
-      {sync.space === null ? <SyncOff onCreated={onCreated} /> : <SyncOn space={sync.space} />}
-      {created !== undefined && (
-        <SyncKeyDialog
-          syncKey={created.syncKey}
-          password={created.password}
-          onClose={() => setCreated(undefined)}
-        />
-      )}
+      {sync.space === null ? <SyncOff /> : <SyncOn space={sync.space} />}
     </SettingsPane>
   );
 }
 
-function SyncOff({ onCreated }: { onCreated: (syncKey: string, password: string) => void }) {
+function SyncOff() {
   const t = useT();
   const [open, setOpen] = useState<"create" | "join" | null>(null);
   return (
@@ -72,7 +56,7 @@ function SyncOff({ onCreated }: { onCreated: (syncKey: string, password: string)
         description={t("sync.off.createBody")}
         data-testid="sync-create-section">
         {open === "create" ? (
-          <CreateForm onCreated={onCreated} onCancel={() => setOpen(null)} />
+          <CreateForm onCancel={() => setOpen(null)} />
         ) : (
           <Button
             variant="primary"
@@ -104,13 +88,9 @@ function SyncOff({ onCreated }: { onCreated: (syncKey: string, password: string)
   );
 }
 
-function CreateForm({
-  onCreated,
-  onCancel,
-}: {
-  onCreated: (syncKey: string, password: string) => void;
-  onCancel: () => void;
-}) {
+/** Starting to sync: the storage, this device's name and the master password. The space's
+ *  recovery key is not shown here: Settings › Sync reminds of it until it is saved. */
+function CreateForm({ onCancel }: { onCancel: () => void }) {
   const t = useT();
   const { backend } = useBackend();
   const { platform } = useUiState();
@@ -122,7 +102,7 @@ function CreateForm({
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!ready) return;
-    const answer = await submit.run(() =>
+    await submit.run(() =>
       backend.dispatch({
         command: "sync_create",
         storage: storageConfig(storage),
@@ -131,7 +111,6 @@ function CreateForm({
       }),
     );
     setPassword("");
-    if (answer !== undefined) onCreated(answer.sync_key, password);
   };
   return (
     <form
@@ -186,7 +165,9 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
   const t = useT();
   const now = useClock();
   const dispatch = useDispatch();
-  const [dialog, setDialog] = useState<"invite" | "disable" | { remove: string } | null>(null);
+  const [dialog, setDialog] = useState<"invite" | "key" | "disable" | { remove: string } | null>(
+    null,
+  );
   const line = syncStatusLine(space.status, t, now);
   const syncing = space.status.state === "syncing";
   const removing =
@@ -195,7 +176,7 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
       : undefined;
   return (
     <>
-      <SyncKeyReminder />
+      <SyncKeyReminder onShow={() => setDialog("key")} />
       <SettingsRows>
         <StatusRow
           label={t("sync.status.label")}
@@ -221,6 +202,14 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
           </div>
         </StatusRow>
         <StorageRow space={space} />
+        <StatusRow
+          label={t("sync.recoveryKey.row")}
+          help={t("sync.recoveryKey.rowHint")}
+          data-testid="sync-recovery-row">
+          <Button size="sm" variant="ghost" icon="key" onClick={() => setDialog("key")}>
+            {t("sync.recoveryKey.open")}
+          </Button>
+        </StatusRow>
         <DeviceNameRow space={space} />
       </SettingsRows>
       {space.rolled_back.length > 0 && (
@@ -300,6 +289,7 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
         </Button>
       </div>
       {dialog === "invite" && <InviteDialog onClose={() => setDialog(null)} />}
+      {dialog === "key" && <RecoveryKeyDialog onClose={() => setDialog(null)} />}
       {dialog === "disable" && (
         <Dialog
           open

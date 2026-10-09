@@ -200,18 +200,20 @@ pub enum SyncStatus {
     },
 }
 
-/// The answer to `sync_create`: the new space's sync key, shown once.
+/// A space's sync key (`LKS1-…`), which the interface calls the recovery key: the answer to
+/// `sync_key_reveal`, and what `Core::sync_create` made.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct SyncCreated {
+pub struct SyncKeyView {
     /// `LKS1-…`.
     pub sync_key: String,
 }
 
-/// The answer to `sync_invite`: what another device scans or pastes to join, with the master
+/// The answer to `sync_invite`: what another device scans or pastes to join, under its own master
 /// password.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SyncInvite {
-    /// The invitation text (`lockra-invite:1:…`): the storage, its credentials and the sync key.
+    /// The invitation text (`lockra-invite:1:…`): the storage, its credentials, the sync key and
+    /// the space's data key.
     pub invite: String,
     /// The invitation as a QR code (SVG).
     pub svg: String,
@@ -220,8 +222,6 @@ pub struct SyncInvite {
     pub shared_text: String,
     /// The one-time code of `shared_text` (`ABCDE-FGHJK`), shown on the screen only.
     pub code: String,
-    /// The sync key alone, for writing down.
-    pub sync_key: String,
     /// The invitation carries the storage; not for a space in a folder of this computer, where
     /// the other device says how it reaches the space (the same drive's folder, its WebDAV).
     pub includes_storage: bool,

@@ -7,7 +7,7 @@ function noVault() {
 }
 
 describe("Welcome", () => {
-  it("joins a sync space from an invitation, which makes the vault", async () => {
+  it("joins a sync space from an invitation under a new master password of its own", async () => {
     const { user, backend } = renderApp({ backend: noVault() });
     await ready();
     const join = within(screen.getByTestId("welcome-join"));
@@ -15,22 +15,43 @@ describe("Welcome", () => {
     expect(
       join.getByText("这台电脑上还没有保险库，加入后会用这个主密码创建一个。"),
     ).toBeInTheDocument();
+    // No other device's password: this computer's own, typed twice like any new vault's.
+    expect(join.queryByLabelText("同步空间的主密码")).not.toBeInTheDocument();
     await user.type(join.getByLabelText("邀请码"), "not an invitation");
-    await user.type(join.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
+    await user.type(join.getByLabelText("为这台设备设置主密码"), "a password of its own");
+    await user.type(join.getByLabelText("再输入一次"), "a password of its owm");
+    expect(join.getByText("两次输入的密码不一致")).toBeInTheDocument();
+    expect(join.getByRole("button", { name: "加入" })).toBeDisabled();
+    await user.clear(join.getByLabelText("再输入一次"));
+    await user.type(join.getByLabelText("再输入一次"), "a password of its own");
     await user.click(join.getByRole("button", { name: "加入" }));
     expect(await join.findByText("不是有效的 Lockra 同步邀请")).toBeInTheDocument();
+    // Passwords go after each attempt, as everywhere.
+    expect(join.getByLabelText("为这台设备设置主密码")).toHaveValue("");
     await user.clear(join.getByLabelText("邀请码"));
     await user.type(join.getByLabelText("邀请码"), "lockra-invite:1:abc");
-    await user.type(join.getByLabelText("同步空间的主密码"), MOCK_PASSWORD);
+    await user.type(join.getByLabelText("为这台设备设置主密码"), "a password of its own");
+    await user.type(join.getByLabelText("再输入一次"), "a password of its own");
     await user.click(join.getByRole("button", { name: "加入" }));
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
     expect(backend.calls).toContainEqual({
       command: "sync_join",
       source: { type: "invite", text: "lockra-invite:1:abc" },
-      password: MOCK_PASSWORD,
+      password: "a password of its own",
       device_name: "Linux 电脑",
     });
     expect((await backend.getState()).sync.space?.devices[0]?.name).toBe("Linux 电脑");
+  });
+
+  it("recovers a sync space with the recovery key under a master password of the space's", async () => {
+    const { user } = renderApp({ backend: noVault() });
+    await ready();
+    const join = within(screen.getByTestId("welcome-join"));
+    await user.click(join.getByTestId("welcome-join-open"));
+    await user.click(join.getByRole("radio", { name: "恢复密钥" }));
+    expect(join.queryByLabelText("为这台设备设置主密码")).not.toBeInTheDocument();
+    expect(join.getByLabelText("同步空间的主密码")).toBeInTheDocument();
+    expect(join.queryByLabelText("再输入一次")).not.toBeInTheDocument();
   });
 
   it("the join form closes again", async () => {

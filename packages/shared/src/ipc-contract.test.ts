@@ -14,7 +14,7 @@ import {
   exportStartedSchema,
   importOutcomeSchema,
   revealedSchema,
-  syncCreatedSchema,
+  syncKeyViewSchema,
   syncInviteSchema,
   syncViewSchema,
   uiCommandSchema,
@@ -112,7 +112,7 @@ describe("IPC fixtures", () => {
     });
     expect(codesFrameSchema.parse(r.codes_frame).codes[1]?.next_code).toBeNull();
     expect(codesFrameSchema.parse(r.codes_frame_locked).codes).toEqual([]);
-    expect(syncCreatedSchema.parse(r.sync_created).sync_key).toMatch(/^LKS1-/);
+    expect(syncKeyViewSchema.parse(r.sync_key_reveal).sync_key).toMatch(/^LKS1-/);
     expect(syncInviteSchema.parse(r.sync_invite).invite).toMatch(/^lockra-invite:1:/);
     const errors = r.errors.map((e) => coreErrorSchema.parse(e));
     expect(errors[1]).toEqual({ code: "rate_limited", retry_at_ms: 1_790_000_004_000 });
@@ -140,7 +140,7 @@ describe("IPC fixtures", () => {
         import_commit: ipcFixtures.responses.import_outcome,
         export_start: ipcFixtures.responses.export_started,
         export_page: ipcFixtures.responses.export_page,
-        sync_create: ipcFixtures.responses.sync_created,
+        sync_key_reveal: ipcFixtures.responses.sync_key_reveal,
         sync_invite: ipcFixtures.responses.sync_invite,
       };
       const { transport, calls } = recordingTransport(answers[command.command] ?? null);

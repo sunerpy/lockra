@@ -152,7 +152,7 @@ a blocking thread; its answers stay in Rust:
 
 The sync storage is lockra-remote's, as on the desktop (the phone chooses no folder: a space in a
 computer's cloud drive folder is reached over the same drive's WebDAV, `sync_scan_join` carrying
-that storage when the invitation holds the sync key alone; a relay is waited on as on the desktop),
+that storage when the invitation holds no storage; a relay is waited on as on the desktop),
 except for the certificate authorities:
 on Android they are read from the files the system keeps them in (the platform verifier would need
 JNI glue in unsafe code; docs/security.md, "Sync"). The updater is `src/updater.rs`: it reads the

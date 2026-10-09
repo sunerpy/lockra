@@ -38,7 +38,7 @@ use crate::sync::{
 };
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
-    InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncCreated, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent,
+    InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent,
     UiState, UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
@@ -1474,10 +1474,11 @@ impl Core {
     // ---- sync -----------------------------------------------------------------------------
 
     /// Set up sync on a new space at `storage` (Settings › Sync), after the master password was
-    /// entered again: a new sync key, which the answer carries to be shown once, and this
-    /// device's keyring under the master password. The first run happens here, so a storage that
-    /// refuses the snapshot fails the setup with its reason.
-    pub async fn sync_create(&self, storage: StorageConfig, password: Zeroizing<String>, device: String) -> CoreResult<SyncCreated> {
+    /// entered again: a new sync key (the recovery key, which Settings › Sync reminds of until it is
+    /// saved, and shows on `sync_key_reveal`), and this device's keyring under the master password.
+    /// The first run happens here, so a storage that refuses the snapshot fails the setup with its
+    /// reason.
+    pub async fn sync_create(&self, storage: StorageConfig, password: Zeroizing<String>, device: String) -> CoreResult<SyncKeyView> {
         let storage = self.resolve_storage(storage)?;
         storage.validate().map_err(config_error)?;
         let (sealed, mut working, number) = {
@@ -1502,7 +1503,7 @@ impl Core {
         // Opened once the space has its key: a relay is shown the space's access.
         let remote = self.open_storage(&storage, &SpaceAccess::of(&sync_key))?;
         let mut space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
-        // The key is shown once now; Settings › Sync reminds of it until it is saved.
+        // Settings › Sync reminds of the key until it is saved.
         space.key_saved = false;
         let first = Space { prefix: space.storage.prefix(), keys: &keys, device: number, device_name: &space.device_name, keyring: &keyring };
         step(&*remote, &first, &mut space.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
@@ -1510,14 +1511,16 @@ impl Core {
         space.last_sync_ms = Some(self.now_ms());
         let text = sync_key.to_text();
         self.join_space(vault_id, space, remote)?;
-        Ok(SyncCreated { sync_key: text.to_string() })
+        Ok(SyncKeyView { sync_key: text.to_string() })
     }
 
     /// Join an existing space, from another device's invitation or from the storage and the sync
-    /// key typed in. `password` is this device's master password: unlocked, it must be the vault's,
-    /// and the vault's accounts join the space; with no vault yet, a new vault is made under it.
-    /// The space opens with the master password of any of its devices: `space_password` when
-    /// theirs is not `password`. This device's keyring goes in under `password`.
+    /// key typed in (a recovery). `password` is this device's master password: unlocked, it must
+    /// be the vault's, and the vault's accounts join the space; with no vault yet, a new vault is
+    /// made under it. An invitation hands the space's data key over, so it needs no other
+    /// password; it is taken where one of the space's snapshots opens under it. A recovery opens
+    /// the space with the master password of any of its devices: `space_password` when theirs is
+    /// not `password` (an invitation ignores it). This device's keyring goes in under `password`.
     pub async fn sync_join(
         &self,
         source: JoinSource,
@@ -1525,35 +1528,37 @@ impl Core {
         device: String,
         space_password: Option<Zeroizing<String>>,
     ) -> CoreResult<()> {
-        let (storage, sync_key) = match source {
+        let (storage, sync_key, handed) = match source {
             JoinSource::Invite { text, code, storage } => {
                 // A sealed text costs an Argon2id derivation to open.
                 let invite = blocking(move || Invite::from_any_text(&text, code.as_ref().map(|c| c.as_str())).map_err(|e| sync_error(&e))).await?;
-                // This device's own way to the space first; an invitation with the sync key alone
+                // Lockra up to 0.8.2 invited without the data key.
+                let keys = invite.keys.ok_or(ErrorCode::SyncInviteOutdated)?;
+                // This device's own way to the space first; an invitation with the keys alone
                 // (a space in the other computer's folder) needs one.
                 let storage = match (storage, invite.storage) {
                     (Some(own), _) => self.resolve_storage(own)?,
                     (None, Some(theirs)) => theirs,
                     (None, None) => return Err(ErrorCode::SyncInviteNeedsStorage.into()),
                 };
-                (storage, invite.sync_key)
+                (storage, invite.sync_key, Some(keys))
             }
-            JoinSource::Manual { storage, sync_key } => (self.resolve_storage(storage)?, SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?),
+            JoinSource::Manual { storage, sync_key } => (self.resolve_storage(storage)?, SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?, None),
         };
         storage.validate().map_err(config_error)?;
-        let existing = {
+        let (existing, number) = {
             let st = self.lock();
             match &st.phase {
                 PhaseState::Locked => return Err(ErrorCode::Locked.into()),
                 PhaseState::NoVault => {
                     check_password(&password)?;
-                    None
+                    (None, 0)
                 }
                 PhaseState::Unlocked(session) => {
                     if session.data.sync().is_some() {
                         return Err(ErrorCode::SyncAlreadyOn.into());
                     }
-                    Some(session.sealed.clone())
+                    (Some(session.sealed.clone()), session.data.device())
                 }
             }
         };
@@ -1563,23 +1568,36 @@ impl Core {
         }
         let remote = self.open_storage(&storage, &SpaceAccess::of(&sync_key))?;
         let space_id = sync_key.space_id();
-        // Without a password of its own, a space whose devices use another one asks for it, rather
-        // than calling this vault's (verified) password wrong.
-        let ask_for_space_password = existing.is_some() && space_password.is_none();
-        let opening = space_password.unwrap_or_else(|| password.clone());
-        let keys = open_space(&*remote, storage.prefix(), space_id, |keyring| {
-            let (sync_key, opening) = (sync_key.clone(), opening.clone());
-            async move {
-                tokio::task::spawn_blocking(move || open_keyring(&keyring, space_id, &sync_key, opening.as_bytes()))
-                    .await
-                    .map_err(|_| SyncError::Interrupted)?
+        let keys = match handed {
+            // The invitation's key, where a snapshot of the space opens under it: one that opens
+            // none is no invitation to this space.
+            Some(keys) => {
+                find_space(&*remote, storage.prefix(), &keys, number).await.map_err(|e| match e {
+                    SyncError::Corrupted => CoreError::from(ErrorCode::SyncInviteInvalid),
+                    other => sync_error(&other),
+                })?;
+                keys
             }
-        })
-        .await
-        .map_err(|e| match e {
-            SyncError::WrongCredentials if ask_for_space_password => CoreError::from(ErrorCode::SyncSpacePasswordNeeded),
-            other => sync_error(&other),
-        })?;
+            None => {
+                // Without a password of its own, a space whose devices use another one asks for
+                // it, rather than calling this vault's (verified) password wrong.
+                let ask_for_space_password = existing.is_some() && space_password.is_none();
+                let opening = space_password.unwrap_or_else(|| password.clone());
+                open_space(&*remote, storage.prefix(), space_id, |keyring| {
+                    let (sync_key, opening) = (sync_key.clone(), opening.clone());
+                    async move {
+                        tokio::task::spawn_blocking(move || open_keyring(&keyring, space_id, &sync_key, opening.as_bytes()))
+                            .await
+                            .map_err(|_| SyncError::Interrupted)?
+                    }
+                })
+                .await
+                .map_err(|e| match e {
+                    SyncError::WrongCredentials if ask_for_space_password => CoreError::from(ErrorCode::SyncSpacePasswordNeeded),
+                    other => sync_error(&other),
+                })?
+            }
+        };
         let (cost, now, data_dir) = (self.shared.config.kdf, self.now_ms(), self.shared.config.data_dir.clone());
         let create = existing.is_none();
         let (keys, sealed, sync_key, keyring) = blocking(move || {
@@ -1652,32 +1670,38 @@ impl Core {
     /// credentials and the sync key, as the QR code's text, and sealed under a one-time code for
     /// sending.
     pub async fn sync_invite(&self, password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<SyncInvite> {
-        let (storage, sync_key) = {
+        let (storage, sync_key, keys) = {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (sync.storage.clone(), sync.sync_key.clone())
+            (sync.storage.clone(), sync.sync_key.clone(), sync.keys().map_err(|e| sync_error(&e))?)
         };
         self.confirm_presence(password, reason).await?;
         let cost = self.shared.config.kdf;
         blocking(move || {
             let sync_key = SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?;
-            // A folder of this computer is of no use elsewhere: the sync key goes alone.
+            // A folder of this computer is of no use elsewhere: the keys go alone.
             let includes_storage = !storage.is_folder();
-            let invite = Invite { storage: includes_storage.then_some(storage), sync_key: sync_key.clone() };
+            let invite = Invite { storage: includes_storage.then_some(storage), sync_key, keys: Some(keys) };
             let text = invite.to_text();
             let svg = qr::svg(&text).map_err(|_| ErrorCode::Internal)?;
             let (shared, code) = invite.to_shared_text(cost).map_err(|e| sync_error(&e))?;
-            Ok(SyncInvite {
-                invite: text.to_string(),
-                svg: svg.to_string(),
-                shared_text: shared.to_string(),
-                code: code.to_string(),
-                sync_key: sync_key.to_text().to_string(),
-                includes_storage,
-            })
+            Ok(SyncInvite { invite: text.to_string(), svg: svg.to_string(), shared_text: shared.to_string(), code: code.to_string(), includes_storage })
         })
         .await
+    }
+
+    /// The space's sync key (the recovery key the interface shows), once the user proved to be at
+    /// this device (the master password, or without it the biometric check that unlocks this
+    /// vault). With the storage and any device's master password it recovers the space when no
+    /// device is left; no invitation shows it.
+    pub async fn sync_key_reveal(&self, password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<SyncKeyView> {
+        let sync_key = {
+            let st = self.lock();
+            unlocked(&st)?.data.sync().ok_or(ErrorCode::SyncOff)?.sync_key.clone()
+        };
+        self.confirm_presence(password, reason).await?;
+        Ok(SyncKeyView { sync_key: sync_key.to_string() })
     }
 
     /// Put the sealed invitation shown beside its code on the clipboard, to be sent to a device

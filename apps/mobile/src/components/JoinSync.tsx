@@ -1,10 +1,12 @@
 // Joining a sync space on the phone: the invitation another device shows, scanned with the camera
 // (its text goes from the camera to the core and never through here) or pasted (a sealed one with
-// its code), or the storage and the sync key typed in. On the welcome screen (`newVault`) the
-// master password of the space's devices becomes this phone's; with a vault, its own master
-// password is checked and opens the space, and only when the space's devices use another one does
-// the form ask for that too. An invitation with the sync key alone (a space in a computer's cloud
-// drive folder) asks for the storage this phone reaches the same folder at, such as its WebDAV.
+// its code), which hands the space over; or a recovery with the storage and the recovery key typed
+// in. An invitation needs this phone's own master password alone: on the welcome screen
+// (`newVault`) a new one, typed twice; with a vault, the vault's. A recovery opens the space with
+// the master password of a device in it: on the welcome screen it becomes this phone's; with a
+// vault, its own is tried first, and only when the space's devices use another one does the form
+// ask for that too. An invitation without storage (a space in a computer's cloud drive folder)
+// asks for the storage this phone reaches the same folder at, such as its WebDAV.
 import {
   type JoinSource,
   emptyStorageForm,
@@ -50,6 +52,7 @@ export function JoinSync({
   const [storage, setStorage] = useState(emptyStorageForm);
   const [syncKey, setSyncKey] = useState("");
   const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
   const [spacePassword, setSpacePassword] = useState("");
   const [deviceName, setDeviceName] = useState(() => t("sync.platformDevice.android"));
   const submit = useSubmit();
@@ -62,10 +65,16 @@ export function JoinSync({
         : syncKey.trim() !== "")) &&
     (!withStorage || storageComplete(storage));
   const ownStorage = askStorage ? storageConfig(storage) : undefined;
-  const ready = sourceReady && password !== "";
-  const space_password = newVault || spacePassword === "" ? undefined : spacePassword;
+  // A new vault's own password, typed twice: an invitation asks no other.
+  const choosing = newVault && mode !== "key";
+  const mismatch = choosing && repeat !== "" && repeat !== password;
+  const ready = sourceReady && password !== "" && (!choosing || repeat === password);
+  // A recovery whose space's devices use another password asks for it too.
+  const showSpace = !newVault && askSpace && mode === "key";
+  const space_password = showSpace && spacePassword !== "" ? spacePassword : undefined;
   const forget = () => {
     setPassword("");
+    setRepeat("");
     setSpacePassword("");
   };
   /** Asked for the space's password, the form shows its field. */
@@ -217,14 +226,36 @@ export function JoinSync({
       />
       <PasswordField
         size="lg"
-        label={t(newVault ? "sync.spacePassword" : "sync.join.vaultPassword")}
+        label={t(
+          choosing
+            ? "sync.join.newPassword"
+            : newVault
+              ? "sync.spacePassword"
+              : "sync.join.vaultPassword",
+        )}
         value={password}
         onChange={setPassword}
-        help={t(newVault ? "sync.spacePasswordHint" : "sync.join.vaultPasswordHint")}
-        autoComplete="current-password"
+        help={t(
+          choosing
+            ? "sync.join.newPasswordHint"
+            : newVault
+              ? "sync.spacePasswordHint"
+              : "sync.join.vaultPasswordHint",
+        )}
+        autoComplete={choosing ? "new-password" : "current-password"}
       />
+      {choosing && (
+        <PasswordField
+          size="lg"
+          label={t("welcome.create.repeat")}
+          value={repeat}
+          onChange={setRepeat}
+          autoComplete="new-password"
+          error={mismatch ? t("welcome.create.mismatch") : undefined}
+        />
+      )}
       {newVault && <p className="text-[13px] text-fg-muted">{t("mobile.sync.newVault")}</p>}
-      {!newVault && askSpace && (
+      {showSpace && (
         <PasswordField
           size="lg"
           label={t("sync.join.otherPassword")}

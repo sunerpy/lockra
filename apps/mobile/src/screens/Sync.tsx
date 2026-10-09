@@ -89,7 +89,7 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
   const close = () => setDialog(null);
   return (
     <div className="flex flex-col gap-5">
-      <SyncKeyReminder size="lg" />
+      <SyncKeyReminder size="lg" onShow={() => nav.open({ name: "syncKey" })} />
       <Card className="flex flex-col gap-3">
         <LampText tone={line.tone} pulse={syncing}>
           <span data-testid="sync-status">{line.text}</span>
@@ -149,6 +149,19 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
           />
         </div>
       </Section>
+      <div data-testid="sync-recovery-row">
+        <Section title={t("sync.recoveryKey.row")}>
+          <p className="px-4 pt-3 text-[13px] text-fg-muted">{t("sync.recoveryKey.rowHint")}</p>
+          <div className="p-1">
+            <ActionRow
+              icon="key"
+              label={t("sync.recoveryKey.open")}
+              opensPage
+              onClick={() => nav.open({ name: "syncKey" })}
+            />
+          </div>
+        </Section>
+      </div>
       <Section title={t("sync.device.label")}>
         <p className="px-4 py-3 text-[15px] text-fg" data-testid="sync-device-name">
           {space.device_name}

@@ -16,7 +16,7 @@ use lockra_core::settings::{AccentId, AutoBackup, DefaultUnlock, Density, Locale
 use lockra_core::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded,
     ExportPage, ExportStarted, ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView,
-    Revealed, StorageView, SyncCreated, SyncDeviceView, SyncInvite, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    Revealed, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
@@ -348,6 +348,7 @@ fn commands() -> Vec<Value> {
         json!({"command": "sync_invite", "password": "a new password"}),
         json!({"command": "sync_invite_copy", "text": "lockra-invite:2:TEtTSU5WVDI"}),
         json!({"command": "sync_key_acknowledge"}),
+        json!({"command": "sync_key_reveal", "password": "a new password"}),
         // A cloud drive's folder, as the interface names it: "the folder chosen", no path.
         json!({"command": "sync_set_storage", "storage": {"kind": "folder"}, "password": "a new password"}),
         json!({"command": "sync_rename_device", "name": "Work desktop"}),
@@ -463,13 +464,12 @@ fn response_fixtures() {
                 svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
             },
             "import_outcome": Outcome { added: 3, replaced: 1, skipped: 2 },
-            "sync_created": SyncCreated { sync_key: SYNC_KEY.into() },
+            "sync_key_reveal": SyncKeyView { sync_key: SYNC_KEY.into() },
             "sync_invite": SyncInvite {
                 invite: "lockra-invite:1:eyJzdG9yYWdlIjp7fX0".into(),
                 svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
                 shared_text: "lockra-invite:2:TEtTSU5WVDI".into(),
                 code: "7K2QM-XW4FD".into(),
-                sync_key: SYNC_KEY.into(),
                 includes_storage: true,
             },
             "codes_frame": codes,
@@ -505,10 +505,13 @@ fn secret_views_are_flagged_for_the_shell() {
     let parse = |v: Value| serde_json::from_value::<UiCommand>(v).unwrap();
     assert!(parse(json!({"command": "entry_reveal", "id": id(1), "password": "x"})).shows_secret());
     assert!(parse(json!({"command": "export_start", "target": "microsoft", "entry_ids": [], "password": "x"})).shows_secret());
-    assert!(parse(json!({"command": "sync_create", "storage": s3_storage(), "password": "x", "device_name": "d"})).shows_secret());
+    // Setting up shows nothing: the key is shown on its own command.
+    assert!(!parse(json!({"command": "sync_create", "storage": s3_storage(), "password": "x", "device_name": "d"})).shows_secret());
     assert!(parse(json!({"command": "sync_invite", "password": "x"})).shows_secret());
+    assert!(parse(json!({"command": "sync_key_reveal", "password": "x"})).shows_secret());
     // Without a password the biometric check proves presence; the answer is the same secret.
     assert!(parse(json!({"command": "sync_invite", "reason": "show the invitation"})).shows_secret());
+    assert!(parse(json!({"command": "sync_key_reveal", "reason": "show the recovery key"})).shows_secret());
     assert!(!parse(json!({"command": "sync_now"})).shows_secret());
     assert!(!parse(json!({"command": "app_state"})).shows_secret());
     for command in [json!({"command": "secret_view_closed"}), json!({"command": "export_close", "session": id(1)}), json!({"command": "vault_lock"})] {
@@ -610,13 +613,15 @@ async fn dispatch_answers_and_leaks_nothing() {
         "kind": "s3", "endpoint": "https://s3.example.com", "region": "us-east-1", "bucket": "lockra", "prefix": "",
         "access_key_id": "AKIDLOCKRA", "secret_access_key": FakeTransport::SECRET, "path_style": false
     });
-    let created = run(json!({"command": "sync_create", "storage": storage, "password": "correct horse battery", "device_name": "Desktop"})).await.unwrap();
-    let sync_key = created["sync_key"].as_str().unwrap().to_owned();
+    ok(run(json!({"command": "sync_create", "storage": storage, "password": "correct horse battery", "device_name": "Desktop"})).await, &mut answers);
     for _ in 0..50 {
         tokio::task::yield_now().await;
     }
+    let revealed = run(json!({"command": "sync_key_reveal", "password": "correct horse battery"})).await.unwrap();
+    let sync_key = revealed["sync_key"].as_str().unwrap().to_owned();
+    assert!(sync_key.starts_with("LKS1-"));
     let invite = run(json!({"command": "sync_invite", "password": "correct horse battery"})).await.unwrap();
-    assert!(invite["invite"].as_str().unwrap().starts_with("lockra-invite:1:") && invite["sync_key"] == sync_key.as_str());
+    assert!(invite["invite"].as_str().unwrap().starts_with("lockra-invite:1:") && invite.get("sync_key").is_none());
     ok(run(json!({"command": "sync_now"})).await, &mut answers);
     ok(run(json!({"command": "sync_rename_device", "name": "Work desktop"})).await, &mut answers);
     ok(run(json!({"command": "sync_set_storage", "storage": storage, "password": "correct horse battery"})).await, &mut answers);

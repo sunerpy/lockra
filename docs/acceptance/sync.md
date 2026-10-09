@@ -198,6 +198,55 @@ To check on real devices:
    other within seconds while both are unlocked.
 2. A vault on a relay opened with 0.8.0: the accounts are there and sync is off.
 
+## Simpler pairing (next release)
+
+The invitation hands the space's data key over, so joining asks only for the joining device's own
+master password; the sync key is the recovery key, shown on request only.
+
+Automated:
+
+- `crates/lockra-sync/src/invite.rs`: an invitation carries the data key besides the storage and
+  the sync key, plain and sealed; one of 0.8.2 (no data key) reads with none; a data key that is
+  not 32 bytes of standard Base64 is no invitation.
+- `crates/lockra-core/src/tests/sync.rs`: a vault joins from an invitation under its own master
+  password alone (no other device's, though the space's devices use another), and its keyring then
+  recovers the space; a new device joins under a password of its own, held to the new-vault rule,
+  and its vault opens with it; an invitation without the data key is refused as outdated, one with
+  another key as invalid, with no vault made and nothing written; `sync_key_reveal` asks the master
+  password or the biometric check, and nothing while locked or without a space. The recovery path
+  (storage and sync key) still asks the space's password apart.
+- `crates/lockra-bridge/tests/contract.rs`: `sync_create` answers nothing and is no secret view;
+  `sync_key_reveal` is one; the dispatch run finds the sync key in no other answer.
+- Web: setting up shows no key, the reminder shows it behind the master password and ends with
+  "I have kept it"; the invitation shows its QR code, the text to send and its code behind "Can't
+  scan?"; joining from an invitation asks no space password, a new vault's password twice; an
+  invitation of 0.8.2 says to update its device (desktop and phone).
+
+Run here, 2026-10-09: `make smoke-sync`, the real app on S3 and on `lockra-relay`.
+
+```text
+smoke-sync: A set up the space (1 object, nothing readable) and kept the recovery key it showed
+smoke-sync: B recovered with the recovery key, got A's accounts, and renamed, deleted and added one
+smoke-sync: A has B's rename, deletion and new account, and lists both devices
+smoke-sync: A refused B's older snapshot, kept its accounts and named B in the banner
+smoke-sync: C set up a space on its relay (1 snapshot, nothing readable, only the token's SHA-256)
+smoke-sync: C showed a sealed invitation for its relay space and kept it with its code
+smoke-sync: D joined from C's invitation and code under its own password, got C's accounts, and added one
+smoke-sync: C has D's new account through the relay, and lists both devices
+smoke-sync: passed
+```
+
+Device C's invitation went to the X clipboard through **Copy the invitation** and was read back
+with `xclip`; the text never showed on screen. Screenshots: `sync-key-light` (the recovery key's
+dialog over its reminder), `sync-relay-invite-light` (the QR code, "Can't scan?" open),
+`sync-relay-join-light` (device D choosing its own password, typed twice).
+
+To check on real devices:
+
+1. A phone joins a computer's space by scanning, under a master password of its own; both see each
+   other's new accounts.
+2. A 0.8.2 device shows an invitation to the new version: refused with the word to update it.
+
 ## Not verified here
 
 Real services: AWS S3, Cloudflare R2, Backblaze B2, Alibaba Cloud OSS, MinIO, Nextcloud,

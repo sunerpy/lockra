@@ -1,7 +1,7 @@
 // An invitation for another device, once the user proved to be here (the fingerprint that unlocks
-// this vault, or the master password): the QR code the other device scans, the sealed text to
-// send it instead with its code apart (copied by the core for a computer, which scans nothing),
-// and the sync key alone. They hide after REVEAL_SECONDS like any secret (app/secret-page.ts).
+// this vault, or the master password): the QR code the other device scans and, behind "Can't
+// scan?", the sealed text to send instead (copied by the core for a computer, which scans nothing)
+// with its code apart. It hides after REVEAL_SECONDS like any secret (app/secret-page.ts).
 import { type SyncInvite as Invite, errorText } from "@lockra/shared";
 import {
   Banner,
@@ -18,19 +18,19 @@ import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
 import { useSecretAnswer, useSecretPage } from "../app/secret-page";
 import { Page } from "../components/Page";
-import { SyncKeyText } from "../components/SyncKeyText";
 
 export function SyncInvite() {
   const t = useT();
   const nav = useNav();
   const { backend } = useBackend();
-  const { lock, sync } = useUiState();
+  const { lock } = useUiState();
   const biometric = unlockBiometric(lock);
   const [password, setPassword] = useState("");
   const [invite, setInvite] = useState<{ answer: Invite; at: number } | undefined>(undefined);
   const submit = useSubmit();
   const copying = useSubmit();
   const [copied, setCopied] = useState(false);
+  const [cantScan, setCantScan] = useState(false);
   const deliver = useSecretAnswer();
   const left = useSecretPage(invite?.at);
   const ask = async (typed?: string) => {
@@ -99,56 +99,53 @@ export function SyncInvite() {
     <Page title={t("sync.invite.open")} testId="page-sync-invite">
       <div className="flex flex-col gap-4" data-testid="sync-invite">
         <Banner tone="warn" marker="icon">
-          {t(
-            sync.space?.storage.kind === "relay"
-              ? "sync.invite.warningRelay"
-              : "sync.invite.warning",
-          )}
+          {t("sync.invite.warning")}
         </Banner>
         <div className="self-center">
           <QrView svg={answer.svg} label={t("ui.a11y.qr")} size={260} />
         </div>
         <p className="text-[14px] text-fg">{t("sync.invite.body")}</p>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] text-fg-muted">{t("sync.invite.text")}</span>
-          <div
-            className="mono max-h-32 overflow-y-auto text-[12px] break-all text-fg-muted select-all"
-            data-testid="invite-text">
-            {answer.shared_text}
+        <Button
+          variant="ghost"
+          size="lg"
+          icon={cantScan ? "chevronDown" : "chevronRight"}
+          aria-expanded={cantScan}
+          onClick={() => setCantScan((open) => !open)}
+          className="self-start">
+          {t("sync.invite.cantScan")}
+        </Button>
+        {cantScan && (
+          <div className="flex flex-col gap-3" data-testid="invite-send">
+            <p className="text-[13px] text-fg-muted">{t("sync.invite.cantScanBody")}</p>
+            <Button
+              variant="outline"
+              size="lg"
+              icon="copy"
+              loading={copying.busy}
+              onClick={() => void copy()}>
+              {t("sync.invite.copy")}
+            </Button>
+            {copied && (
+              <p role="status" className="text-[13px] text-fg-muted">
+                {t("sync.invite.copied")}
+              </p>
+            )}
+            {copying.error !== undefined && (
+              <p role="alert" className="text-[13px] text-danger">
+                {errorText(t, copying.error)}
+              </p>
+            )}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[13px] text-fg-muted">{t("sync.invite.code")}</span>
+              <div
+                className="mono text-[20px] tracking-wide text-fg select-all"
+                data-testid="invite-code">
+                {answer.code}
+              </div>
+              <p className="text-[13px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
+            </div>
           </div>
-          <Button
-            variant="outline"
-            size="lg"
-            icon="copy"
-            loading={copying.busy}
-            onClick={() => void copy()}
-            className="self-start">
-            {t("sync.invite.copy")}
-          </Button>
-          {copied && (
-            <p role="status" className="text-[13px] text-fg-muted">
-              {t("sync.invite.copied")}
-            </p>
-          )}
-          {copying.error !== undefined && (
-            <p role="alert" className="text-[13px] text-danger">
-              {errorText(t, copying.error)}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] text-fg-muted">{t("sync.invite.code")}</span>
-          <div
-            className="mono text-[20px] tracking-wide text-fg select-all"
-            data-testid="invite-code">
-            {answer.code}
-          </div>
-          <p className="text-[13px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] text-fg-muted">{t("sync.created.key")}</span>
-          <SyncKeyText value={answer.sync_key} />
-        </div>
+        )}
         <p className="text-[13px] text-fg-subtle" data-testid="invite-countdown">
           {t("sync.invite.hideIn", { s: left })}
         </p>

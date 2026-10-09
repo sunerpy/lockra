@@ -158,9 +158,9 @@ export const en: Messages = {
       scan: "Scan to join",
       scanPrompt: "Point the camera at the invitation on the other device",
       scanHint:
-        "Show the invitation on the other device (Settings › Sync › Invite another device), enter the master password, then scan it.",
+        "Show the QR code on the other device (Settings › Sync › Invite another device), enter this phone's master password, then scan it.",
       needsStorage:
-        "This invitation carries the sync key alone: the space is in a cloud drive folder on that computer. Fill in the storage this phone reaches the same folder at, such as that drive's WebDAV, then scan again.",
+        "This invitation carries no storage settings: the space is in a cloud drive folder on that computer. Fill in the storage this phone reaches the same folder at, such as that drive's WebDAV, then scan again.",
       newVault:
         "There is no vault on this phone yet: joining creates one under this master password.",
       welcomeBody:
@@ -196,7 +196,7 @@ export const en: Messages = {
     },
     join: {
       title: "Join from sync",
-      body: "Already syncing Lockra on other devices? Join with an invitation or the sync key, and this computer gets the same accounts.",
+      body: "Already syncing Lockra on other devices? Join with an invitation, or recover with the recovery key, and this computer gets the same accounts.",
       open: "Join sync…",
     },
   },
@@ -609,11 +609,11 @@ export const en: Messages = {
     off: {
       createTitle: "Start syncing from this device",
       createBody:
-        "The sync space goes on a Lockra relay (no storage of your own needed), or into your S3-compatible bucket or WebDAV folder. Its sync key is shown when it is ready: keep it safe, apart from the master password.",
+        "The sync space goes on a Lockra relay (no storage of your own needed), or into your S3-compatible bucket or WebDAV folder. Then save its recovery key: if every device is lost, it recovers the space.",
       createSubmit: "Start syncing",
       joinTitle: "Join an existing sync",
       joinBody:
-        "Scan or paste another device's invitation; with no other device, recover with the storage settings and the sync key.",
+        "Scan or paste another device's invitation; with no other device, recover with the storage settings and the recovery key.",
     },
     storage: {
       kind: "Storage",
@@ -673,7 +673,7 @@ export const en: Messages = {
       },
       presetHints: {
         "relay-hosted":
-          "The relay Lockra runs; nothing to fill in. It keeps the snapshots as the devices encrypted them and, without the data key or the sync key, opens none of them; it sees when devices sync and from which addresses.",
+          "The relay Lockra runs; nothing to fill in. It keeps the snapshots as the devices encrypted them and opens none of them; it sees when devices sync and from which addresses.",
         "relay-custom":
           "A lockra-relay you run yourself, behind HTTPS. Like the built-in one, it keeps ciphertext only.",
         aws: "For the China regions (Beijing, Ningxia), choose AWS S3 (China regions): their accounts and keys are separate.",
@@ -717,49 +717,59 @@ export const en: Messages = {
     deviceNameHint: "The other devices list it under this name.",
     masterPassword: "Master password",
     spacePassword: "The sync space's master password",
-    spacePasswordHint: "The master password of any device in the space.",
+    spacePasswordHint:
+      "The master password of any device in the space; it becomes this device's too.",
     join: {
       fromInvite: "Invitation",
-      fromKey: "Sync key",
+      fromKey: "Recovery key",
       invite: "Invitation",
       inviteHint: "From Settings › Sync › Invite another device, on a device of the space.",
       needsStorage:
-        "This invitation carries the sync key alone: the space is in a cloud drive folder on that computer. Choose how this computer reaches it: the same drive's folder, or that drive's WebDAV.",
-      syncKey: "Sync key",
+        "This invitation carries no storage settings: the space is in a cloud drive folder on that computer. Choose how this computer reaches it: the same drive's folder, or that drive's WebDAV.",
+      syncKey: "Recovery key",
       submit: "Join",
       newVault:
         "There is no vault on this computer yet: joining creates one under this master password.",
+      newPassword: "Choose a master password for this device",
+      newPasswordHint:
+        "At least 8 characters. It may be the same as the other devices' or another one.",
       vaultPassword: "This device's master password",
       vaultPasswordHint:
-        "Checked against this vault; from then on it opens the sync space as well.",
+        "Once checked, this device's accounts join the sync space; the vault keeps its own master password.",
       otherPassword: "The sync space's master password",
       otherPasswordHint:
         "The space's devices use another master password: enter that of any of them.",
       code: "Code",
       codeHint: "This invitation needs its code: enter the code shown on the inviting device.",
     },
-    created: {
-      title: "Keep your sync key",
-      body: "Joining a new device or recovering the space takes both the sync key and the master password. Write the sync key down or keep it in a password manager, not next to the master password.",
-      key: "Sync key",
-      again: "You can see it again under Invite another device.",
-      hideIn: "The sync key hides in {s} s",
+    recoveryKey: {
+      row: "Recovery key",
+      rowHint: "Recovers the sync space if every device is lost. Adding a device does not need it.",
+      open: "Show the recovery key…",
+      title: "Recovery key",
+      prompt: "Enter the master password to show the recovery key.",
+      promptBiometric: "Verify to show the recovery key, or enter the master password.",
+      reason: "show the recovery key",
+      submit: "Show recovery key",
+      body: "If every device is lost, the space's storage settings, this recovery key and the master password of any device recover the accounts. Write it down or keep it in a password manager, not next to the master password.",
+      key: "Recovery key",
+      hideIn: "The recovery key hides in {s} s",
       done: "I have kept it",
       save: "Save to a file…",
-      savedTo: "The sync key was saved to a file.",
+      savedTo: "The recovery key was saved to a file.",
     },
     keyReminder: {
-      body: "The sync key is not saved yet. Adding a device with no other one at hand, or recovering the accounts after losing every device, needs it and a master password.",
-      save: "Save the sync key…",
-      done: "I wrote it down",
-      password: "Enter the master password to save the sync key",
+      body: "The recovery key is not saved yet. If every device is lost, recovering the accounts needs it and the master password of any device.",
+      show: "Show the recovery key…",
+      save: "Save to a file…",
+      password: "Enter the master password to save the recovery key",
       submit: "Save",
     },
     keyFile: {
-      name: "Lockra sync key.txt",
-      heading: "Lockra sync key",
-      body: "Adding a device with no other one at hand, or recovering the accounts after losing every device, needs this sync key and the master password of a device in the sync space. Keep it apart from the master password and do not send it to anyone.",
-      reason: "save the sync key",
+      name: "Lockra recovery key.txt",
+      heading: "Lockra recovery key",
+      body: "If every device is lost, the sync space's storage settings, this recovery key and the master password of any device in the space recover the accounts. Keep it apart from the master password and do not send it to anyone.",
+      reason: "save the recovery key",
     },
     status: {
       label: "Status",
@@ -769,7 +779,7 @@ export const en: Messages = {
       failed: "Sync failed: {error}",
       now: "Sync now",
       keyringPending:
-        "This device's new master password reaches the sync space on the next sync; until then, joining a device takes the old one or another device's.",
+        "This device's new master password reaches the sync space on the next sync; until then, recovering with the recovery key takes the old one or another device's.",
     },
     storageRow: "Storage",
     storageEdit: "Change storage settings",
@@ -811,15 +821,14 @@ export const en: Messages = {
       },
       reason: "show the sync invitation",
       submit: "Show invitation",
-      body: "On the new device, scan the QR code. Where scanning is awkward, send the invitation below to the new device and paste it there with its code. Then enter the master password.",
+      body: "On the new device, scan this QR code, then enter that device's own master password.",
       warning:
-        "The invitation holds the storage's credentials and the sync key: use it on your own devices only.",
-      warningKeyOnly: "The invitation holds the sync key: use it on your own devices only.",
-      warningRelay:
-        "The invitation holds the relay's address and the sync key: use it on your own devices only.",
+        "A device with the invitation joins the sync space and reads your accounts without any other password: use it on your own devices only.",
       keyOnly:
-        "This space is in a cloud drive folder on this computer, so the invitation carries the sync key alone. The other device chooses how it reaches the same folder: a computer, the same drive's folder; a phone, that drive's WebDAV.",
-      text: "Invitation to send",
+        "This space is in a cloud drive folder on this computer, so the invitation carries no storage settings. The other device chooses how it reaches the same folder: a computer, the same drive's folder; a phone, that drive's WebDAV.",
+      cantScan: "Can't scan?",
+      cantScanBody:
+        "Copy the invitation, send it to the other device by chat or mail, paste it there, and enter the code below.",
       copy: "Copy the invitation",
       copied: "Copied: paste it on the other device, then enter the code below.",
       code: "Code",
@@ -898,15 +907,17 @@ export const en: Messages = {
     sync_denied: "The storage refused access; check the access key or password",
     sync_storage_failed:
       "The storage answered with an error; check that the bucket or folder exists",
-    sync_space_not_found: "There is no sync space for this sync key on that storage",
-    sync_wrong_credentials: "The master password or the sync key is wrong",
-    sync_key_invalid: "The sync key is mistyped",
+    sync_space_not_found: "That storage holds no such sync space",
+    sync_wrong_credentials: "The master password or the recovery key is wrong",
+    sync_key_invalid: "The recovery key is mistyped",
     sync_invite_invalid: "This is not a Lockra sync invitation",
     sync_invite_code_wrong: "The code is not right: check the code shown next to the invitation",
     sync_space_password_needed:
       "This device's master password does not open the sync space: also enter the master password of a device in the space",
     sync_invite_needs_storage:
-      "This invitation carries the sync key alone: the space is in a cloud drive folder on that computer, so choose how this device reaches the same folder",
+      "This invitation carries no storage settings: the space is in a cloud drive folder on that computer, so choose how this device reaches the same folder",
+    sync_invite_outdated:
+      "This invitation comes from an older Lockra: update the device that shows it first",
     sync_folder_not_chosen: "Choose the folder first",
     sync_folder_missing:
       "The sync folder is missing: the cloud drive's app may not be running, or the folder was moved or deleted",

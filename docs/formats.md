@@ -252,9 +252,11 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   `kdf`) ‖ sync key, info `lockra-sync v1 keyring`). It is sealed when the device creates or joins
   the space and again under a new master password, each time with a fresh salt and nonce; its
   header names no device and no time. A keyring asking for more than the container's KDF limits is
-  refused before any work. Joining reads the space's snapshots (at most 32) and tries their
-  keyrings with the password typed in; the first that opens gives the data key, and the joining
-  device seals its own keyring under its own master password.
+  refused before any work. A device joining from an invitation takes the data key it carries,
+  once one of the space's snapshots opens under it, and seals its own keyring under its own
+  master password. A recovery (the storage settings and the sync key typed in) reads the space's
+  snapshots (at most 32) and tries their keyrings with the password typed in; the first that opens
+  gives the data key.
 - **Snapshots** are encrypted under HKDF(salt = space id, ikm = data key, info
   `lockra-sync v1 snapshot`), XChaCha20-Poly1305.
 - **Names.** The space id is derived from the sync key (HKDF, info `lockra-sync v1 space id`, as a
@@ -277,12 +279,18 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   idempotent.
 - **The sync key** is `LKS1-` and 14 groups of four Base32 characters: the 32-byte key and three
   bytes of its SHA-256, so a mistyped character is caught. Case, spaces and dashes do not matter.
+  The interface calls it the recovery key: it is shown only on `sync_key_reveal`, after the
+  master password or the biometric check, and no invitation shows it.
 - **An invitation** is `lockra-invite:1:` and Base64url (no padding) of
-  `{storage, sync_key}`: the storage settings with their credentials (a relay's are its address,
-  `{kind: "relay", url}`), and the sync key text. The QR code carries it so. A space in a folder invites with `{sync_key}` alone: a folder is of no use on
-  another device, and its path is never taken from an invitation (one naming a folder is refused);
-  the joining device says how it reaches the space. Lockra up to 0.7.3 reads only invitations
-  with their storage.
+  `{storage, sync_key, data_key}`: the storage settings with their credentials (a relay's are its
+  address, `{kind: "relay", url}`), the sync key text, and the space's data key (standard Base64
+  of its 32 bytes). It hands the space over: the joining device needs no other device's master
+  password. The QR code carries it so. A space in a folder invites with `{sync_key, data_key}`
+  alone: a folder is of no use on another device, and its path is never taken from an invitation
+  (one naming a folder is refused); the joining device says how it reaches the space. An
+  invitation of Lockra up to 0.8.2 carries no `data_key`; Lockra refuses it
+  (`sync_invite_outdated`), and Lockra up to 0.8.2 reads no invitation with one. Lockra up to
+  0.7.3 reads only invitations with their storage.
 - **A sealed invitation**, the text to send, is `lockra-invite:2:` and Base64url (no padding) of an
   object framed like the others: magic `LKSINVT2`, the header `{format: 2, kdf, nonce}`, then
   XChaCha20-Poly1305 of the plain invitation's JSON, the header bytes as associated data. The key

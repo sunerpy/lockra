@@ -1,5 +1,6 @@
-// Set up sync from this phone: a new space at storage of the user's own (an S3-compatible bucket
-// or a WebDAV folder). Made, the page gives way to the space's sync key, shown once.
+// Set up sync from this phone: a new space on a Lockra relay or storage of the user's own (an
+// S3-compatible bucket or a WebDAV folder). Made, the page goes back to Settings › Sync, which
+// reminds of the space's recovery key until it is saved.
 import { emptyStorageForm, errorText, storageComplete, storageConfig } from "@lockra/shared";
 import {
   Button,
@@ -12,7 +13,6 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
-import { useSecretAnswer } from "../app/secret-page";
 import { Page } from "../components/Page";
 
 export function SyncSetup() {
@@ -23,12 +23,11 @@ export function SyncSetup() {
   const [deviceName, setDeviceName] = useState(() => t("sync.platformDevice.android"));
   const [password, setPassword] = useState("");
   const submit = useSubmit();
-  const deliver = useSecretAnswer();
   const ready = storageComplete(storage) && password !== "";
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!ready) return;
-    const answer = await submit.run(() =>
+    const made = await submit.run(() =>
       backend.dispatch({
         command: "sync_create",
         storage: storageConfig(storage),
@@ -37,8 +36,7 @@ export function SyncSetup() {
       }),
     );
     setPassword("");
-    if (answer !== undefined)
-      deliver(() => nav.replace({ name: "syncKey", syncKey: answer.sync_key, password }));
+    if (made !== undefined) nav.back();
   };
   return (
     <Page title={t("sync.off.createTitle")} testId="page-sync-setup">

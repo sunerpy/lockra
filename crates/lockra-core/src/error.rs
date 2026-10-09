@@ -125,6 +125,9 @@ pub enum ErrorCode {
     /// The invitation carries the sync key alone (its space is in a folder of the computer that
     /// invites): this device says how it reaches the space.
     SyncInviteNeedsStorage,
+    /// The invitation comes from Lockra up to 0.8.2, without the space's data key: the inviting
+    /// device updates first.
+    SyncInviteOutdated,
     /// A folder was asked for before the dialog chose one.
     SyncFolderNotChosen,
     /// The folder the space is kept in is not there: moved, deleted, or its drive not connected.
