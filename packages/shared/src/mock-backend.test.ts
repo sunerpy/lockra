@@ -689,6 +689,22 @@ describe("MockBackend", () => {
     expect((await tablet.getState()).sync.space?.storage.kind).toBe("relay");
   });
 
+  it("puts the sealed invitation on the clipboard, and nothing else", async () => {
+    const backend = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace() });
+    const invite = await backend.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
+    const copy = (text: string) => backend.dispatch({ command: "sync_invite_copy", text });
+    // The plain invitation opens without a code: only the sealed text is handed on.
+    expect(await errorCode(copy(invite.invite))).toBe("sync_invite_invalid");
+    expect(await errorCode(copy("a note to self"))).toBe("sync_invite_invalid");
+    expect(backend.clipboardText).toBeUndefined();
+    expect(await copy(invite.shared_text)).toBeNull();
+    expect(backend.clipboardText).toBe(invite.shared_text);
+    const alone = new MockBackend({ entries: sampleEntries() });
+    expect(
+      await errorCode(alone.dispatch({ command: "sync_invite_copy", text: invite.shared_text })),
+    ).toBe("sync_off");
+  });
+
   it("starts with a space when told to", async () => {
     const backend = new MockBackend({ entries: sampleEntries(), sync: mockSyncSpace() });
     expect((await backend.getState()).sync.space?.devices).toHaveLength(2);

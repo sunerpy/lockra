@@ -1680,6 +1680,26 @@ impl Core {
         .await
     }
 
+    /// Put the sealed invitation shown beside its code on the clipboard, to be sent to a device
+    /// that scans nothing (a computer): marked as excluded from history and cloud sync, and cleared
+    /// after the clipboard time, as a code is. Only a sealed text: it opens with its code alone,
+    /// which stays on the screen and travels another way.
+    pub fn sync_invite_copy(&self, text: &str) -> CoreResult<()> {
+        let mut st = self.lock();
+        let clear_seconds = st.settings.clipboard_clear_seconds;
+        unlocked(&st)?.data.sync().ok_or(ErrorCode::SyncOff)?;
+        if !Invite::is_sealed(text) {
+            return Err(ErrorCode::SyncInviteInvalid.into());
+        }
+        let text = Zeroizing::new(text.trim().to_owned());
+        self.shared.ports.clipboard.set_secret_text(&text).map_err(|_| ErrorCode::ClipboardFailed)?;
+        st.clipboard = (clear_seconds > 0).then(|| (text, Instant::now() + Duration::from_secs(u64::from(clear_seconds))));
+        st.last_activity = Instant::now();
+        drop(st);
+        self.changed();
+        Ok(())
+    }
+
     /// The user is at this device: `password` is the vault's master password, or, without one,
     /// the biometric check passes, where it is what unlocks this vault (Touch ID, Windows Hello,
     /// the fingerprint). It proves presence only: nothing is sealed under it.

@@ -253,7 +253,10 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   any device in the space. The QR code carries it as it is, to be scanned on the user's own
   devices only. The text to send is sealed under a one-time code shown only beside it (50 bits,
   stretched with Argon2id; `docs/formats.md`): sent through a chat or a mail, it is of no use
-  without the code, which is to travel another way.
+  without the code, which is to travel another way. For a computer, which scans nothing, the
+  phone copies that sealed text (`sync_invite_copy`): the core puts it on the clipboard marked as
+  excluded from history and cloud sync, and clears it after the clipboard time, as a code; the
+  plain invitation, which opens without a code, is never copied.
   A space in a cloud drive's folder invites with the sync key alone: the folder is of no use on
   another device, and no path is taken from an invitation. The joining device reaches the space its
   own way (the same drive's folder on a computer, its WebDAV on a phone) and checks it is that

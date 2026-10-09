@@ -146,6 +146,12 @@ impl Invite {
     pub fn is_shared_text(text: &str) -> bool {
         text.trim().starts_with(SHARED_PREFIX)
     }
+
+    /// Whether `text` is a sealed invitation, its framing checked (nothing opened: that takes its
+    /// code), so that only the text to send, and nothing else, is handed on.
+    pub fn is_sealed(text: &str) -> bool {
+        text.trim().strip_prefix(SHARED_PREFIX).is_some_and(|body| sealed_object(body).is_ok())
+    }
 }
 
 /// The sealed object of a shared text's `body`, its framing checked (nothing opened yet).
@@ -276,6 +282,25 @@ mod tests {
         assert_eq!(back.sync_key.space_id(), original.sync_key.space_id());
         let debug = format!("{back:?}");
         assert!(!debug.contains("app password") && !debug.contains(back.sync_key.to_text().as_str()), "{debug}");
+    }
+
+    #[test]
+    fn a_sealed_text_is_told_apart_by_its_framing_without_its_code() {
+        let original = invite();
+        let (text, _code) = original.to_shared_text(KdfCost::FAST_INSECURE).unwrap();
+        assert!(Invite::is_sealed(&text));
+        assert!(Invite::is_sealed(&format!(" {}\n", text.as_str())));
+        assert!(!Invite::is_sealed(&original.to_text()), "the plain invitation opens without a code: it is not the text to send");
+        for bad in [
+            String::new(),
+            SHARED_PREFIX.to_owned(),
+            format!("{SHARED_PREFIX}not base64!"),
+            format!("{SHARED_PREFIX}{}", BASE64URL_NOPAD.encode(b"LKSKEYR1junk")),
+            format!("{SHARED_PREFIX}{}", "A".repeat(MAX_SHARED_TEXT + 1)),
+            "a note to self".to_owned(),
+        ] {
+            assert!(!Invite::is_sealed(&bad), "{bad:.40}");
+        }
     }
 
     #[test]

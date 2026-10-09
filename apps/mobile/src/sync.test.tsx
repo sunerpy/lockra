@@ -289,6 +289,27 @@ describe("sync on the phone", () => {
     expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
   });
 
+  it("copies the sealed invitation for a computer, which scans nothing", async () => {
+    const backend = inSpace();
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-invite-open"));
+    const page = within(await screen.findByTestId("page-sync-invite"));
+    await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    const text = (await page.findByTestId("invite-text")).textContent ?? "";
+    expect(text).toMatch(/^lockra-invite:2:/);
+    await user.click(page.getByRole("button", { name: "复制邀请码" }));
+    expect(await page.findByText("已复制：在另一台设备上粘贴，再输入下方的口令。")).toHaveAttribute(
+      "role",
+      "status",
+    );
+    expect(backend.calls).toContainEqual({ command: "sync_invite_copy", text });
+    expect(backend.clipboardText).toBe(text);
+    // The code stays on the screen, to travel another way.
+    expect(page.getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
+  });
+
   it("turns sync off on this phone, keeping its accounts", async () => {
     const backend = inSpace();
     const { user } = renderApp({ backend });

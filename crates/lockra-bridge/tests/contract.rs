@@ -346,6 +346,7 @@ fn commands() -> Vec<Value> {
             "password": "a new password", "device_name": "Pixel 8", "space_password": "another device's password"
         }),
         json!({"command": "sync_invite", "password": "a new password"}),
+        json!({"command": "sync_invite_copy", "text": "lockra-invite:2:TEtTSU5WVDI"}),
         json!({"command": "sync_key_acknowledge"}),
         // A cloud drive's folder, as the interface names it: "the folder chosen", no path.
         json!({"command": "sync_set_storage", "storage": {"kind": "folder"}, "password": "a new password"}),
@@ -653,7 +654,12 @@ async fn dispatch_answers_and_leaks_nothing() {
         }
     }
     assert!(clipboard.current().is_some_and(|c| c.len() == 6));
-    // The remaining commands, each through `dispatch` once.
+    // The remaining commands, each through `dispatch` once. The sealed invitation goes to the
+    // clipboard and nothing comes back.
+    let sealed = invite["shared_text"].as_str().unwrap();
+    assert_eq!(run(json!({"command": "sync_invite_copy", "text": sealed})).await.unwrap(), Value::Null);
+    assert_eq!(clipboard.current().as_deref(), Some(sealed));
+    assert_eq!(run(json!({"command": "sync_invite_copy", "text": invite["invite"]})).await.unwrap_err().code, ErrorCode::SyncInviteInvalid);
     let bank = run(json!({"command": "app_state"})).await.unwrap()["entries"].as_array().unwrap().iter().find(|e| e["issuer"] == "Bank").unwrap()["id"].clone();
     ok(run(json!({"command": "entry_hotp_next", "id": bank})).await, &mut Vec::new());
     ok(run(json!({"command": "entry_delete", "id": bank})).await, &mut Vec::new());

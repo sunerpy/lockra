@@ -733,6 +733,8 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
     password: password.optional(),
     reason: z.string().optional(),
   }),
+  /** The sealed invitation (`shared_text`) onto the clipboard, for a device that scans nothing. */
+  z.object({ command: z.literal("sync_invite_copy"), text: z.string() }),
   z.object({ command: z.literal("sync_key_acknowledge") }),
   z.object({ command: z.literal("sync_set_storage"), storage: storageConfigSchema, password }),
   z.object({ command: z.literal("sync_rename_device"), name: z.string() }),

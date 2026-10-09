@@ -1141,6 +1141,42 @@ async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktop
 }
 
 #[tokio::test(start_paused = true)]
+async fn the_phone_copies_the_sealed_invitation_for_a_computer_and_the_clipboard_forgets_it() {
+    let transport = Arc::new(FakeTransport::default());
+    let (phone, _) = first_device(&transport, relay()).await;
+    let invite = phone.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    // Only the text to send: never the plain invitation (it opens without a code), nor anything else.
+    assert_eq!(code_err(phone.core.sync_invite_copy(&invite.invite)), ErrorCode::SyncInviteInvalid);
+    assert_eq!(code_err(phone.core.sync_invite_copy("a note to self")), ErrorCode::SyncInviteInvalid);
+    assert_eq!(phone.clipboard.current(), None);
+    phone.core.sync_invite_copy(&invite.shared_text).unwrap();
+    assert_eq!(phone.clipboard.current().as_deref(), Some(invite.shared_text.as_str()));
+    assert_eq!(phone.clipboard.secret_writes.load(Ordering::SeqCst), 1, "excluded from history and cloud sync");
+    // Cleared after the clipboard time, as a code is.
+    advance(Duration::from_secs(29)).await;
+    assert!(phone.clipboard.current().is_some());
+    advance(Duration::from_secs(1)).await;
+    assert_eq!(phone.clipboard.current(), None);
+
+    // The computer pastes it and joins with the code shown on the phone.
+    let computer = device(&transport);
+    computer
+        .core
+        .sync_join(JoinSource::Invite { text: pw(&invite.shared_text), code: Some(pw(&invite.code)), storage: None }, pw(MASTER), "Desktop".into(), None)
+        .await
+        .unwrap();
+    settle().await;
+    assert_eq!(issuers(&computer), ["GitHub"]);
+    assert_eq!(space(&computer).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
+
+    // Nothing to copy while locked, nor without a space.
+    phone.core.lock_vault();
+    assert_eq!(code_err(phone.core.sync_invite_copy(&invite.shared_text)), ErrorCode::Locked);
+    let alone = Harness::unlocked().await;
+    assert_eq!(code_err(alone.core.sync_invite_copy(&invite.shared_text)), ErrorCode::SyncOff);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_space_moves_to_a_relay_that_keeps_nothing_of_it_yet() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, webdav()).await;
