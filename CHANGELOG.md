@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.4](https://github.com/sunerpy/lockra/compare/v0.8.3...v0.8.4) (2026-10-09)
+
+
+### Features
+
+* **sync:** 中继同步空间改用可直接发送的配对链接 ([#99](https://github.com/sunerpy/lockra/issues/99)) ([31a2116](https://github.com/sunerpy/lockra/commit/31a21161e36857a17de309293e9d56f799152ad7))
+
 ## [0.8.3](https://github.com/sunerpy/lockra/compare/v0.8.2...v0.8.3) (2026-10-09)
 
 
