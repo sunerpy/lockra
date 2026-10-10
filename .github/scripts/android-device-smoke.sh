@@ -357,9 +357,8 @@ fi
 # Who installed the app reaches the Rust side after it starts (UpdatePlugin.kt names it,
 # src/updater.rs logs it). The same build installed again naming an installer: the app
 # itself first, a package always visible to it, so the name must arrive; then, where the image has
-# Google Play, Play, whose copy shows the Play row and no check. Without Play the system records the
-# name but shows the app none, and the app rightly looks for releases on GitHub (google_apis): the
-# log says the Play row was not checked.
+# Google Play (CI's does), Play, whose copy shows the Play row and no check. An image without Play
+# skips that part, and the log says the Play row was not checked.
 reinstall_from() {
   adb install -r -g -i "$1" "$apk" >"$out/install-$1.txt" 2>&1 || fail "the APK did not install from $1: $(tail -3 "$out/install-$1.txt")"
   # What the system recorded, to tell its side from the app's when the name does not arrive.
