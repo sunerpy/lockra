@@ -3,6 +3,7 @@ package dev.lockra.mobile
 import android.os.Build
 import android.os.Bundle
 import android.system.Os
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import androidx.activity.enableEdgeToEdge
@@ -18,7 +19,11 @@ class MainActivity : TauriActivity() {
     // Who installed this copy, for the in-app update (src/updater.rs): Google Play updates what it
     // installed. Named before super.onCreate, which starts the Rust side that reads it once; set
     // once a process, as a recreated activity must not write the environment Rust is reading.
-    if (Os.getenv(INSTALLER_ENV) == null) Os.setenv(INSTALLER_ENV, installer() ?: "", true)
+    if (Os.getenv(INSTALLER_ENV) == null) {
+      val installer = installer()
+      Log.i(TAG, "installer: ${installer ?: "none"}")
+      Os.setenv(INSTALLER_ENV, installer ?: "", true)
+    }
     // Codes and secrets never reach a screenshot, a screen recording or the recent apps' preview.
     window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
     // The web app pads itself with env(safe-area-inset-*) (src/screens).
@@ -47,5 +52,6 @@ class MainActivity : TauriActivity() {
 
   private companion object {
     const val INSTALLER_ENV = "LOCKRA_INSTALLER"
+    const val TAG = "Lockra"
   }
 }

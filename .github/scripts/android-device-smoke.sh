@@ -362,12 +362,14 @@ fi
 # #102's first run): the log says the Play row was not checked.
 reinstall_from() {
   adb install -r -g -i "$1" "$apk" >"$out/install-$1.txt" 2>&1 || fail "the APK did not install from $1: $(tail -3 "$out/install-$1.txt")"
+  # What the system recorded, to tell its side from the app's when the name does not arrive.
+  adb shell dumpsys package "$package" | grep -iE 'installer|initiat|originat' >"$out/installer-$1.txt" 2>&1 || true
   adb logcat -c
   adb shell am start -W -n "$package/.MainActivity" >/dev/null 2>&1 || fail "the activity did not start after the install from $1"
   local deadline=$((SECONDS + 60))
   until adb logcat -d -s RustStdoutStderr:I | grep -qE "install source.*\"$1\""; do
     running || fail "the app closed after the install from $1"
-    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not read $1 as its installer"
+    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not read $1 as its installer; the system recorded: $(tr -d '\r' <"$out/installer-$1.txt" | tr -s ' ' | paste -sd ';'); MainActivity read: $(adb logcat -d -s Lockra:I | tr -d '\r' | tail -1)"
     sleep 1
   done
 }
