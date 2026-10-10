@@ -356,9 +356,12 @@ fi
 
 # A copy Google Play installed is updated by Play: the same build installed again, with Play named
 # as its installer, shows the Play row and no check (MainActivity.kt reads the installer before any
-# Rust runs). An image without Google Play has no installer of that name to record: then it is said.
-play_row="the Play row was not checked: this image has no Google Play to name as the installer"
-if adb install -r -g -i com.android.vending "$apk" >"$out/install-play.txt" 2>&1; then
+# Rust runs). Only where the image has Google Play: without it the system keeps the name but shows
+# the app none (package visibility), and the app rightly looks for releases on GitHub (google_apis,
+# PR #102's first run). The log says which.
+play_row="the Play row was not checked: this image has no Google Play"
+if adb shell pm path com.android.vending >/dev/null 2>&1; then
+  adb install -r -g -i com.android.vending "$apk" >"$out/install-play.txt" 2>&1 || fail "the APK did not install from Play: $(tail -3 "$out/install-play.txt")"
   adb shell am start -W -n "$package/.MainActivity" >/dev/null 2>&1 || fail "the activity did not start after the Play install"
   showing 'The vault is locked|保险库已锁定' 120
   type_into "$password" 'Master password' '主密码'
@@ -373,6 +376,6 @@ if adb install -r -g -i com.android.vending "$apk" >"$out/install-play.txt" 2>&1
   running || fail "the app closed after the Play install"
   play_row="a Play install showed the Play row"
 else
-  echo "android-device-smoke: $play_row ($(tail -1 "$out/install-play.txt"))"
+  echo "android-device-smoke: $play_row"
 fi
 echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code, heard from the camera's page, reached S3 over HTTPS and checked for updates; $play_row ($(basename "$apk"))"
