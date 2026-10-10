@@ -354,15 +354,27 @@ if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || 
   fail "the app logged a fatal error although it is still running"
 fi
 
-# A copy Google Play installed is updated by Play: the same build installed again, with Play named
-# as its installer, shows the Play row and no check (MainActivity.kt reads the installer before any
-# Rust runs). Only where the image has Google Play: without it the system keeps the name but shows
-# the app none (package visibility), and the app rightly looks for releases on GitHub (google_apis,
-# PR #102's first run). The log says which.
+# Who installed the app reaches the Rust side as it starts (MainActivity.kt hands it over in
+# LOCKRA_INSTALLER, src/lib.rs logs it). The same build installed again naming an installer: the app
+# itself first, a package always visible to it, so the name must arrive; then, where the image has
+# Google Play, Play, whose copy shows the Play row and no check. Without Play the system records the
+# name but shows the app none, and the app rightly looks for releases on GitHub (google_apis, PR
+# #102's first run): the log says the Play row was not checked.
+reinstall_from() {
+  adb install -r -g -i "$1" "$apk" >"$out/install-$1.txt" 2>&1 || fail "the APK did not install from $1: $(tail -3 "$out/install-$1.txt")"
+  adb logcat -c
+  adb shell am start -W -n "$package/.MainActivity" >/dev/null 2>&1 || fail "the activity did not start after the install from $1"
+  local deadline=$((SECONDS + 60))
+  until adb logcat -d -s RustStdoutStderr:I | grep -qE "install source.*\"$1\""; do
+    running || fail "the app closed after the install from $1"
+    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not read $1 as its installer"
+    sleep 1
+  done
+}
+reinstall_from "$package"
 play_row="the Play row was not checked: this image has no Google Play"
 if adb shell pm path com.android.vending >/dev/null 2>&1; then
-  adb install -r -g -i com.android.vending "$apk" >"$out/install-play.txt" 2>&1 || fail "the APK did not install from Play: $(tail -3 "$out/install-play.txt")"
-  adb shell am start -W -n "$package/.MainActivity" >/dev/null 2>&1 || fail "the activity did not start after the Play install"
+  reinstall_from com.android.vending
   showing 'The vault is locked|保险库已锁定' 120
   type_into "$password" 'Master password' '主密码'
   tap 'Unlock' '解锁'
