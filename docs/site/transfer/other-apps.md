@@ -30,5 +30,6 @@ other ways to restore.
 
 **Export › otpauth list file** writes the chosen accounts to a text file, one link per line, which
 most authenticators can import. The file is **not encrypted**: anyone who reads it can generate the
-codes. Lockra asks for the master password and a confirmation, and the file should be deleted once
+codes. Lockra asks for the master password (or, on a phone with fingerprint unlock on, the
+fingerprint) and a confirmation, and the file should be deleted once
 it has been imported elsewhere. For keeping accounts safe, use a [backup](/backup/) instead.

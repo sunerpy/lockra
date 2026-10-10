@@ -80,7 +80,7 @@ of their groups. **Done**, or Esc, leaves without changing anything.
 
 ## Choosing a group
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.8.6.
 
 The **Group** field of **Edit…**, of adding an account by hand and of **Move to group…** lists the
 groups in use under it: typing filters them, a new name offers **New group “name”**, and **No
@@ -93,7 +93,7 @@ that sheet, not the page under it.
 
 ## Reordering
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.8.6.
 
 Click **Reorder** beside the sort menu: a handle appears on the right of each group's heading and of
 each row. Drag a handle up or down, or focus it and press the up and down arrow keys, to change the
@@ -123,7 +123,7 @@ The ⋯ button at the end of a row offers:
 
 - **Pin to top** (or **Unpin**): keep the account at the top.
 - **Edit…**: change the service, the account name and the group.
-- **Show secret…**: the secret, its otpauth link and QR code, after the master password (see
-  [Security](/security/#secrets-on-screen)).
+- **Show secret…**: the secret, its otpauth link and QR code, after the master password, or on a
+  phone with fingerprint unlock on, the fingerprint (see [Security](/security/#secrets-on-screen)).
 - **Delete…**: remove the account. Turn off two-factor sign-in at the service first, or move it to
   another authenticator, or you may lose access to it.

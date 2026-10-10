@@ -73,7 +73,8 @@ your browser.
 ## The clipboard and the screen
 
 Copied codes go to the system clipboard, where other apps can read them until Lockra clears it.
-Secrets and export codes appear on screen only after the master password; see
+Secrets and export codes appear on screen only after the master password (or, on the phone, the
+fingerprint); see
 [How Lockra protects your accounts](/security/).
 
 ## Contact

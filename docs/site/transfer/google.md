@@ -43,7 +43,8 @@ Lockra lists them as unsupported.
 1. Open **Export** and choose **Google Authenticator**.
 2. Tick the accounts to move. Accounts Google Authenticator cannot take are greyed out, with the
    reason.
-3. Enter the master password and choose **Show QR codes**.
+3. Enter the master password and choose **Show QR codes**. On a phone with fingerprint unlock
+   on, leave the master password empty and verify your fingerprint instead.
 4. On the phone, tap **⋮ › Transfer accounts › Import accounts** and scan each code.
 
 Beside each code Lockra shows the current code of every account on it: after scanning, the phone

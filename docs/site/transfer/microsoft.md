@@ -39,7 +39,8 @@ Microsoft Authenticator imports one account per QR code.
 1. Open **Export** and choose **Microsoft Authenticator**.
 2. Tick the accounts. Microsoft Authenticator takes only accounts with SHA1, 6 digits and a
    30-second period; the others are greyed out, with the reason.
-3. Enter the master password and choose **Show QR codes**.
+3. Enter the master password and choose **Show QR codes**. On a phone with fingerprint unlock
+   on, leave the master password empty and verify your fingerprint instead.
 4. On the phone, tap **+ › Other account (Google, Facebook, etc.)** and scan the first code; use
    **Next** in Lockra for the following ones.
 

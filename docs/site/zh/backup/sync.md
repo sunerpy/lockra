@@ -70,7 +70,7 @@ Android 应用的同步方式与电脑相同。先在同步空间中的一台设
 
 ### 在手机上用指纹代替主密码
 
-<StatusTag status="building" />
+<StatusTag status="available" /> 自 0.8.6 版起提供。
 
 在开启了「使用指纹解锁」的手机上，同步中需要主密码的地方都可以改用指纹验证：
 

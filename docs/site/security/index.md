@@ -84,7 +84,7 @@ this phone does not ask again, and the switch stays in **Settings › Security**
 
 ### The fingerprint instead of the master password
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.8.6.
 
 With **Unlock with fingerprint** on, the phone takes the fingerprint wherever it asked for the
 master password again: showing a secret (**Show secret…**), exporting accounts, showing the
@@ -118,7 +118,9 @@ respect.
 ## Secrets on screen
 
 Showing an account's secret (**Show secret…**) and showing export codes both ask for the master
-password again, and both hide after two minutes. While they are shown, Windows and macOS exclude
+password again (on a phone with fingerprint unlock on, the fingerprint will do: see
+[The fingerprint instead of the master password](#the-fingerprint-instead-of-the-master-password)),
+and both hide after two minutes. While they are shown, Windows and macOS exclude
 the window from screenshots and screen recording. Linux has no such control: the reveal view says
 so, so mind screen sharing.
 

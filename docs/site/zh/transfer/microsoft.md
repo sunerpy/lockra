@@ -31,7 +31,7 @@ Microsoft Authenticator 每个二维码导入一个账号。
 
 1. 打开「导出」，选择「Microsoft Authenticator」。
 2. 勾选账号。Microsoft Authenticator 只接收 SHA1、6 位、30 秒周期的账号；其他账号显示为灰色，并说明原因。
-3. 输入主密码，选择「生成二维码」。
+3. 输入主密码，选择「生成二维码」。手机上开启了指纹解锁时，主密码可以留空，改用指纹验证。
 4. 在手机上轻点「+ › 其他账户（Google、Facebook 等）」并扫描第一个二维码；之后在 Lockra 中选择「下一张」继续。
 
 请核对手机上显示的验证码是否与 Lockra 在每个二维码旁显示的一致。
