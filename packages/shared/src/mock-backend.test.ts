@@ -273,6 +273,19 @@ describe("MockBackend", () => {
     expect(await noBrowser.openRelease()).toBe("https://github.com/sunerpy/lockra/releases/latest");
   });
 
+  it("leaves a phone from Google Play to Play: no check, and its listing opens", async () => {
+    const release = { version: "0.7.0", notes: null, date: null, size: 1 };
+    const backend = new MockBackend({ phase: "unlocked", updateMethod: "play", release });
+    for (const command of ["update_check", "update_install"] as const)
+      expect(await errorCode(backend.dispatch({ command }))).toBe("update_unavailable");
+    expect((await backend.getState()).update.status).toEqual({ state: "idle" });
+    expect(await backend.openRelease()).toBeNull();
+    const noStore = new MockBackend({ updateMethod: "play", releasePageOpens: false });
+    expect(await noStore.openRelease()).toBe(
+      "https://play.google.com/store/apps/details?id=dev.lockra.mobile",
+    );
+  });
+
   it("backs up and restores", async () => {
     const backend = new MockBackend({ entries: sampleEntries().slice(0, 2) });
     const { notices } = recorder(backend);

@@ -1374,8 +1374,9 @@ impl Core {
     /// One run at a time, in the background.
     fn start_update(&self, run: UpdateRun) -> CoreResult<()> {
         let Some(method) = self.shared.ports.updater.method() else { return Err(ErrorCode::UpdateUnavailable.into()) };
-        // The phone checks only: a newer release opens its page.
-        if run != UpdateRun::Check && !method.installs() {
+        // The phone checks only: a newer release opens its page. A copy from Google Play does not
+        // even check: Play updates it.
+        if !method.checks() || (run != UpdateRun::Check && !method.installs()) {
             return Err(ErrorCode::UpdateUnavailable.into());
         }
         {

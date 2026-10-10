@@ -129,6 +129,26 @@ async fn the_phone_only_checks_and_never_on_its_own() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_phone_installed_from_google_play_leaves_updates_to_it_and_never_goes_online() {
+    // Google Play updates what it installed: the copy says so, and asks GitHub nothing.
+    let updater = FakeUpdater::installed(InstallMethod::Play);
+    *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));
+    let h = harness_with(updater);
+    let state = h.core.state();
+    assert_eq!((state.update.method, state.update.status), (Some(InstallMethod::Play), UpdateStatus::Idle));
+    assert_eq!(code_err(h.core.update_check()), ErrorCode::UpdateUnavailable);
+    assert_eq!(code_err(h.core.update_install()), ErrorCode::UpdateUnavailable);
+    assert!(h.updater.calls().is_empty(), "{:?}", h.updater.calls());
+    // Nor with automatic updates turned on.
+    let h = harness();
+    let updater = release_out(InstallMethod::Play, "0.2.0");
+    let core = start_automatic(&h, &updater);
+    advance(STARTUP_CHECK_DELAY * 10).await;
+    assert!(updater.calls().is_empty(), "{:?}", updater.calls());
+    assert_eq!(status(&core), UpdateStatus::Idle);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_copy_that_cannot_update_itself_refuses_and_never_goes_online() {
     let h = harness();
     let state = h.core.state();

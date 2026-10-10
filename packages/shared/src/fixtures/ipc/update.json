@@ -57,21 +57,21 @@
     }
   },
   {
-    "method": null,
+    "method": "play",
     "status": {
       "state": "ready",
       "version": "0.2.0"
     }
   },
   {
-    "method": "deb",
+    "method": null,
     "status": {
       "state": "installing",
       "version": "0.2.0"
     }
   },
   {
-    "method": "rpm",
+    "method": "deb",
     "status": {
       "state": "failed",
       "code": "update_signature",
@@ -79,7 +79,7 @@
     }
   },
   {
-    "method": "appimage",
+    "method": "rpm",
     "status": {
       "state": "failed",
       "code": "update_keychain",

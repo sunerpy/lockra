@@ -651,6 +651,8 @@ export class MockBackend implements Backend {
 
   async openRelease(): Promise<string | null> {
     if (this.releasePageOpens) return null;
+    if (this.state.update.method === "play")
+      return "https://play.google.com/store/apps/details?id=dev.lockra.mobile";
     const status = this.state.update.status;
     const releases = "https://github.com/sunerpy/lockra/releases";
     return status.state === "available"
@@ -1227,6 +1229,8 @@ export class MockBackend implements Backend {
    *  stops at `ready`. */
   private runUpdate(run: "check" | "install" | "auto"): null {
     if (this.state.update.method === null) throw new LockraError("update_unavailable");
+    // A phone from Google Play is updated by Play: nothing is even checked.
+    if (this.state.update.method === "play") throw new LockraError("update_unavailable");
     // The phone checks only: a newer release opens its page.
     if (this.state.update.method === "android" && run !== "check")
       throw new LockraError("update_unavailable");

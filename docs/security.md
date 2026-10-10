@@ -204,8 +204,11 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   and refuses to download or install. A newer release opens its page in the phone's browser: the
   address is made in Rust from the version found, and the browser plugin refuses any address
   outside Lockra's releases. The APK there is signed with the same Android key, so it installs
-  over the app and keeps the vault (`docs/release.md`, "Android"); a copy from Google Play updates
-  through the store.
+  over the app and keeps the vault (`docs/release.md`, "Android"). A copy Google Play installed
+  (the system names `com.android.vending` as its installer) asks GitHub nothing: the core refuses
+  its check, and the button opens Lockra's Play listing, the one other address the browser plugin
+  accepts. The installer is not a secret and cannot widen anything: a wrong one only picks which of
+  the two pages opens.
 
 ## Sync
 

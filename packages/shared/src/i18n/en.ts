@@ -150,6 +150,9 @@ export const en: Messages = {
       open: "Open the release page",
       address: "No browser could open it: {url}",
       hint: "A check reads the newest version number from GitHub and sends nothing of your accounts or your vault. A Lockra installed from Google Play updates through the store.",
+      openStore: "Open in Google Play",
+      storeHint:
+        "This copy of Lockra came from Google Play, which updates it; it asks GitHub nothing.",
     },
     sync: {
       rowOff: "Set up sync",
@@ -1019,6 +1022,7 @@ export const en: Messages = {
       app: "Replaces the app, then restarts.",
       android:
         "Download the newer version from its release page and install it over this one; the vault stays.",
+      play: "Google Play installs and updates it.",
     },
     status: {
       idle: "Not checked for updates yet",
@@ -1029,6 +1033,7 @@ export const en: Messages = {
       ready: "{version} is downloaded · applies after a restart",
       installing: "Installing {version}…",
       failed: "The update failed · {error}",
+      play: "Updated by Google Play · current {version}",
       unavailable:
         "This copy cannot update itself: it was not installed from a package. Update it with the install script or a package",
     },

@@ -157,8 +157,12 @@ except for the certificate authorities:
 on Android they are read from the files the system keeps them in (the platform verifier would need
 JNI glue in unsafe code; docs/security.md, "Sync"). The updater is `src/updater.rs`: it reads the
 release manifest with the same client when the user checks, and is `InstallMethod::Android`, for
-which the core only checks; `update_open_release` opens the page of the release found through
-`BrowserPlugin.kt` (`src/browser.rs`), and answers with the address where no browser opens it.
+which the core only checks, or `InstallMethod::Play` for a copy Google Play installed, for which it
+does not even check. `MainActivity.kt` names the installer before any Rust runs (the
+`LOCKRA_INSTALLER` environment variable, set once a process), because the core asks the method from
+its first moment and a plugin call cannot be made on the setup thread. `update_open_release` opens
+the page of the release found, or the Play listing (in the Play app first), through
+`BrowserPlugin.kt` (`src/browser.rs`), and answers with the address where nothing opens it.
 `MainActivity.kt` keeps the window `FLAG_SECURE` and draws it edge to edge (the webview pads with
 `env(safe-area-inset-*)`); edge to edge the window no longer shrinks for the keyboard, so the
 content takes the keyboard's height as bottom padding and the field being typed in stays above it

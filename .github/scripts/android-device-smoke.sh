@@ -353,4 +353,26 @@ adb logcat -d --pid="$pid" >"$out/app-logcat.txt" 2>&1 || true
 if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || grep -q "$package" "$out/crash.txt"; then
   fail "the app logged a fatal error although it is still running"
 fi
-echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code, heard from the camera's page, reached S3 over HTTPS and checked for updates ($(basename "$apk"))"
+
+# A copy Google Play installed is updated by Play: the same build installed again, with Play named
+# as its installer, shows the Play row and no check (MainActivity.kt reads the installer before any
+# Rust runs). An image without Google Play has no installer of that name to record: then it is said.
+play_row="the Play row was not checked: this image has no Google Play to name as the installer"
+if adb install -r -g -i com.android.vending "$apk" >"$out/install-play.txt" 2>&1; then
+  adb shell am start -W -n "$package/.MainActivity" >/dev/null 2>&1 || fail "the activity did not start after the Play install"
+  showing 'The vault is locked|保险库已锁定' 120
+  type_into "$password" 'Master password' '主密码'
+  tap 'Unlock' '解锁'
+  showing 'Example' 120
+  tap 'Settings' '设置'
+  showing 'Updated by Google Play|由 Google Play 更新' 30
+  if grep -qE '(text|content-desc)="(Check for updates|检查更新)"' "$out/ui.xml"; then
+    fail "a copy from Google Play still offers to check GitHub for updates"
+  fi
+  showing 'Open in Google Play|在 Google Play 中打开' 30
+  running || fail "the app closed after the Play install"
+  play_row="a Play install showed the Play row"
+else
+  echo "android-device-smoke: $play_row ($(tail -1 "$out/install-play.txt"))"
+fi
+echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code, heard from the camera's page, reached S3 over HTTPS and checked for updates; $play_row ($(basename "$apk"))"

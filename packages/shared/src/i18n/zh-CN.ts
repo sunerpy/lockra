@@ -141,6 +141,8 @@ export const zhCN = {
       open: "前往发布页",
       address: "无法打开浏览器，请访问：{url}",
       hint: "检查更新时只连接 GitHub 读取最新的版本号，不发送账号或保险库中的任何内容。从 Google Play 安装的 Lockra 由商店更新。",
+      openStore: "在 Google Play 中打开",
+      storeHint: "这份 Lockra 从 Google Play 安装，由 Google Play 更新，不向 GitHub 查询新版本。",
     },
     sync: {
       rowOff: "设置同步",
@@ -960,6 +962,7 @@ export const zhCN = {
       msi: "安装程序会关闭 Lockra，安装完成后重新打开。",
       app: "替换应用后自动重启。",
       android: "在发布页下载新版本，覆盖安装即可，保险库会保留。",
+      play: "由 Google Play 安装和更新。",
     },
     status: {
       idle: "尚未检查更新",
@@ -970,6 +973,7 @@ export const zhCN = {
       ready: "{version} 已下载 · 重启后生效",
       installing: "正在安装 {version}…",
       failed: "更新失败 · {error}",
+      play: "由 Google Play 更新 · 当前 {version}",
       unavailable: "此副本无法自行更新：它不是通过安装包安装的，请使用一键安装脚本或安装包更新",
     },
     badge: {

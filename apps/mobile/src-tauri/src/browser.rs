@@ -1,6 +1,7 @@
-//! The phone's browser for one page, a Lockra release's, through `BrowserPlugin.kt` on Android (an
-//! `ACTION_VIEW` intent): Rust names the address, the webview cannot. Other builds of this crate
-//! (the host tests) have no browser and say so.
+//! The phone's browser for one page, a Lockra release's or Lockra's Play listing (which opens in the
+//! Play app), through `BrowserPlugin.kt` on Android (an `ACTION_VIEW` intent): Rust names the
+//! address, the webview cannot. Other builds of this crate (the host tests) have no browser and say
+//! so.
 
 use lockra_core::ports::PortError;
 use tauri::{AppHandle, Runtime};

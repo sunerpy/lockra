@@ -75,6 +75,34 @@ describe("updates on the phone", () => {
     );
   });
 
+  it("a copy from Google Play opens its Play listing and checks nothing", async () => {
+    const backend = phone({
+      updateMethod: "play",
+      release: { version: "0.7.0", notes: null, date: null, size: 1 },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const row = await about(user);
+    expect(row.getByTestId("update-status")).toHaveTextContent("由 Google Play 更新 · 当前 0.1.0");
+    expect(row.getByText(/由 Google Play 更新，不向 GitHub 查询/)).toBeInTheDocument();
+    expect(row.queryByRole("button", { name: "检查更新" })).not.toBeInTheDocument();
+    await user.click(row.getByRole("button", { name: "在 Google Play 中打开" }));
+    expect(row.queryByTestId("update-address")).not.toBeInTheDocument();
+    expect(backend.calls.some((c) => c.command === "update_check")).toBe(false);
+  });
+
+  it("shows the Play listing's address where nothing opens it", async () => {
+    const { user } = renderApp({
+      backend: phone({ updateMethod: "play", releasePageOpens: false }),
+    });
+    await ready();
+    const row = await about(user);
+    await user.click(row.getByRole("button", { name: "在 Google Play 中打开" }));
+    expect(await row.findByTestId("update-address")).toHaveTextContent(
+      "https://play.google.com/store/apps/details?id=dev.lockra.mobile",
+    );
+  });
+
   it("offers no check where this build has none", async () => {
     const { user } = renderApp({ backend: phone({ updateMethod: null }) });
     await ready();
