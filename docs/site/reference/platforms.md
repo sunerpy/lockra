@@ -72,4 +72,6 @@ asked once after the restart.
   paste preview leave them out.
 - **Backups** are saved and restored where the system's file picker says; there are no automatic
   backups. Android's own backup and device transfer leave Lockra out, so keep a Lockra backup.
-- **Updates**: **Settings › About › Check for updates**; a newer release opens its page.
+- **Updates**: installed from the APK on the release page, **Settings › About › Check for
+  updates**, and a newer release opens its page; installed from Google Play, Google Play updates it,
+  and **Open in Google Play** opens Lockra's page there.

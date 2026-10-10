@@ -67,18 +67,19 @@ set up, Lockra makes no network connections.
 
 <StatusTag status="available" /> Available from version 0.7.0.
 
-The Android app does not update itself. **Settings › About › Check for updates** asks GitHub for
+The Android app installed from the APK on the release page does not update itself. **Settings ›
+About › Check for updates** asks GitHub for
 the newest version when you tap it; when a newer one is out, **Open the release page** opens it in
 the phone's browser, and the APK there installs over the app and keeps the vault. The phone never
 checks on its own. Uninstalling the app deletes its vault, so save a backup first.
 
 #### Installed from Google Play
 
-<StatusTag status="building" /> In development, not released yet.
+<StatusTag status="available" /> Available from version 0.8.5.
 
-From the next version, a Lockra installed from Google Play is updated by Google Play: **Settings ›
-About** says **Updated by Google Play**, and **Open in Google Play** opens Lockra's page in Google
-Play, where you update it. Such a copy asks GitHub nothing. A Lockra installed from the APK on the
+A Lockra installed from Google Play is updated by Google Play: **Settings › About** says **Updated
+by Google Play**, and **Open in Google Play** opens Lockra's page in Google Play, where you update
+it. Such a copy asks GitHub nothing. A Lockra installed from the APK on the
 release page checks for updates as above.
 
 ## Where the files are
