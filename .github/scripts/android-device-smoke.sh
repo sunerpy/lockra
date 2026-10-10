@@ -354,12 +354,12 @@ if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || 
   fail "the app logged a fatal error although it is still running"
 fi
 
-# Who installed the app reaches the Rust side as it starts (MainActivity.kt hands it over in
-# LOCKRA_INSTALLER, src/lib.rs logs it). The same build installed again naming an installer: the app
+# Who installed the app reaches the Rust side after it starts (UpdatePlugin.kt names it,
+# src/updater.rs logs it). The same build installed again naming an installer: the app
 # itself first, a package always visible to it, so the name must arrive; then, where the image has
 # Google Play, Play, whose copy shows the Play row and no check. Without Play the system records the
-# name but shows the app none, and the app rightly looks for releases on GitHub (google_apis, PR
-# #102's first run): the log says the Play row was not checked.
+# name but shows the app none, and the app rightly looks for releases on GitHub (google_apis): the
+# log says the Play row was not checked.
 reinstall_from() {
   adb install -r -g -i "$1" "$apk" >"$out/install-$1.txt" 2>&1 || fail "the APK did not install from $1: $(tail -3 "$out/install-$1.txt")"
   # What the system recorded, to tell its side from the app's when the name does not arrive.
@@ -369,7 +369,7 @@ reinstall_from() {
   local deadline=$((SECONDS + 60))
   until adb logcat -d -s RustStdoutStderr:I | grep -qE "install source.*\"$1\""; do
     running || fail "the app closed after the install from $1"
-    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not read $1 as its installer; the system recorded: $(tr -d '\r' <"$out/installer-$1.txt" | tr -s ' ' | paste -sd ';'); MainActivity read: $(adb logcat -d -s Lockra:I | tr -d '\r' | tail -1)"
+    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not read $1 as its installer; the system recorded: $(grep -i 'installerPackageName' "$out/installer-$1.txt" | tr -d '\r' | tr -s ' ')"
     sleep 1
   done
 }

@@ -259,6 +259,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
         .plugin(scanner::init())
         .plugin(biometrics::init())
         .plugin(browser::init())
+        .plugin(updater::init())
         .invoke_handler(tauri::generate_handler![
             lockra_dispatch,
             codes_subscribe,
@@ -288,16 +289,15 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let config =
                 CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
             let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::Storages));
-            let updater: Arc<dyn Updater> = options.updater.clone().unwrap_or_else(|| {
-                // Who installed this copy: MainActivity.kt names it before any Rust runs.
-                let installer = std::env::var(updater::INSTALLER_ENV).ok().filter(|name| !name.is_empty());
-                tracing::info!(installer = installer.as_deref().unwrap_or("none"), "install source");
-                Arc::new(updater::PhoneUpdater::new(&app.package_info().version.to_string(), installer.as_deref()))
-            });
+            let phone = Arc::new(updater::PhoneUpdater::new(&app.package_info().version.to_string()));
+            let updater: Arc<dyn Updater> = options.updater.clone().unwrap_or_else(|| phone.clone());
             let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());
+            if options.updater.is_none() {
+                updater::read_installer(app.handle().clone(), phone, core.clone());
+            }
             tauri::async_runtime::spawn(forward_events(app.handle().clone(), core));
             Ok(())
         })

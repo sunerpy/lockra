@@ -158,9 +158,11 @@ on Android they are read from the files the system keeps them in (the platform v
 JNI glue in unsafe code; docs/security.md, "Sync"). The updater is `src/updater.rs`: it reads the
 release manifest with the same client when the user checks, and is `InstallMethod::Android`, for
 which the core only checks, or `InstallMethod::Play` for a copy Google Play installed, for which it
-does not even check. `MainActivity.kt` names the installer before any Rust runs (the
-`LOCKRA_INSTALLER` environment variable, set once a process), because the core asks the method from
-its first moment and a plugin call cannot be made on the setup thread. `update_open_release` opens
+does not even check. Who installed the app is asked of `UpdatePlugin.kt` once after start, off the
+setup thread (a plugin call waits for the main thread setup holds); until it answers the copy counts
+as a GitHub one, and when it names Google Play the core republishes its state
+(`Core::refresh_update`). The environment cannot carry it from `MainActivity.kt`: an arm64 app
+translated on an x86 device has a libc of its own (PR #102's emulator runs). `update_open_release` opens
 the page of the release found, or the Play listing (in the Play app first), through
 `BrowserPlugin.kt` (`src/browser.rs`), and answers with the address where nothing opens it.
 `MainActivity.kt` keeps the window `FLAG_SECURE` and draws it edge to edge (the webview pads with

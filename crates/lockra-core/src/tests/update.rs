@@ -149,6 +149,22 @@ async fn a_phone_installed_from_google_play_leaves_updates_to_it_and_never_goes_
 }
 
 #[tokio::test(start_paused = true)]
+async fn the_shell_republishes_the_update_view_once_it_learns_how_this_copy_installs() {
+    // The phone learns who installed it shortly after start: the update view follows at once.
+    let mut h = settled(FakeUpdater::installed(InstallMethod::Android)).await;
+    *h.updater.method.lock() = Some(InstallMethod::Play);
+    h.core.refresh_update();
+    let mut methods = Vec::new();
+    while let Ok(event) = h.events.try_recv() {
+        if let UiEvent::State { state } = event {
+            methods.push(state.update.method);
+        }
+    }
+    assert_eq!(methods, [Some(InstallMethod::Play)]);
+    assert_eq!(code_err(h.core.update_check()), ErrorCode::UpdateUnavailable);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_copy_that_cannot_update_itself_refuses_and_never_goes_online() {
     let h = harness();
     let state = h.core.state();

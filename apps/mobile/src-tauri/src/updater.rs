@@ -7,13 +7,21 @@
 //! (`update_open_release`). The phone installs nothing itself: the core refuses to download or
 //! install for either, never checks on its own, and does not check at all for a Play copy.
 //!
-//! Who installed the app is read by `MainActivity.kt` before any Rust runs and handed over in
-//! [`INSTALLER_ENV`]: the core asks [`Updater::method`] from its first moment, and a plugin call
-//! cannot be made from the setup thread (it waits for the main thread setup holds).
+//! Who installed the app is asked of `UpdatePlugin.kt` once, after start and off the setup thread
+//! (a plugin call waits for the main thread, which setup holds), as Voltip does: until it answers
+//! the copy counts as a GitHub one, and once it names Google Play the core republishes its state
+//! (`Core::refresh_update`). The environment cannot carry it from `MainActivity.kt`: an arm64 app
+//! translated on an x86 device (the CI emulator, a Chromebook) has a libc of its own, which does
+//! not see what the Java side set (PR #102).
 
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use lockra_core::Core;
 use lockra_core::ports::{Release, UpdateFailure, UpdateFuture, UpdateProgress, Updater};
 use lockra_core::ui::{InstallMethod, UpdateStatus};
 use serde::Deserialize;
+use tauri::{AppHandle, Runtime};
 
 /// The release manifest: the newest published release's (`plugins.updater.endpoints` of the
 /// desktop's tauri.conf.json).
@@ -22,43 +30,94 @@ pub const MANIFEST_URL: &str = "https://github.com/sunerpy/lockra/releases/lates
 pub const RELEASES_URL: &str = "https://github.com/sunerpy/lockra/releases";
 /// The most of a manifest that is read: a few kilobytes with the release notes.
 pub const MAX_MANIFEST_BYTES: usize = 256 * 1024;
-/// The environment variable `MainActivity.kt` names the installer in (empty when none is on record).
-pub const INSTALLER_ENV: &str = "LOCKRA_INSTALLER";
 /// The installer that is Google Play.
 pub const PLAY_STORE: &str = "com.android.vending";
 /// This app's Google Play listing (`identifier` in tauri.conf.json), which the Play app opens.
 pub const PLAY_LISTING: &str = "https://play.google.com/store/apps/details?id=dev.lockra.mobile";
 
-/// Who updates this copy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Source {
-    /// Google Play, which installed it.
-    Play,
-    /// Lockra's GitHub releases: an APK opened from the browser or a file manager, adb, anything else.
-    Direct,
-}
-
 /// The phone's update source.
 pub struct PhoneUpdater {
     current: semver::Version,
     manifest: String,
-    source: Source,
+    /// Google Play installed this copy and updates it; until the system says so, a GitHub copy.
+    play: AtomicBool,
 }
 
 impl PhoneUpdater {
-    /// The source for this copy, `current` being its version and `installer` the package the system
-    /// says installed it.
-    pub fn new(current: &str, installer: Option<&str>) -> Self {
-        let source = if installer == Some(PLAY_STORE) { Source::Play } else { Source::Direct };
-        Self { source, ..Self::with_manifest(current, MANIFEST_URL) }
+    /// The source for this copy, `current` being its version.
+    pub fn new(current: &str) -> Self {
+        Self::with_manifest(current, MANIFEST_URL)
     }
 
-    /// The source of a copy from a GitHub release reading the manifest at `manifest` (the tests'
-    /// server on this computer). A version that does not read (none in a build) counts as older
-    /// than any release.
+    /// The source reading the manifest at `manifest` (the tests' server on this computer). A
+    /// version that does not read (none in a build) counts as older than any release.
     pub fn with_manifest(current: &str, manifest: &str) -> Self {
-        Self { current: semver::Version::parse(current).unwrap_or(semver::Version::new(0, 0, 0)), manifest: manifest.to_owned(), source: Source::Direct }
+        Self { current: semver::Version::parse(current).unwrap_or(semver::Version::new(0, 0, 0)), manifest: manifest.to_owned(), play: AtomicBool::new(false) }
     }
+
+    /// The package the system says installed this copy; `true` when that changes how it updates
+    /// (Google Play's), for the state to go out again.
+    pub fn note_installer(&self, installer: Option<&str>) -> bool {
+        let play = installer == Some(PLAY_STORE);
+        self.play.swap(play, Ordering::SeqCst) != play
+    }
+
+    fn play(&self) -> bool {
+        self.play.load(Ordering::SeqCst)
+    }
+}
+
+/// The Android plugin that names the installer (`UpdatePlugin.kt`).
+#[cfg(target_os = "android")]
+struct InstallSourcePlugin<R: Runtime>(tauri::plugin::PluginHandle<R>);
+
+/// Registers the Android plugin; a no-op elsewhere.
+pub fn init<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::new("lockra-update")
+        .setup(|_app, _api| {
+            #[cfg(target_os = "android")]
+            {
+                use tauri::Manager as _;
+                let handle = _api.register_android_plugin("dev.lockra.mobile", "UpdatePlugin")?;
+                _app.manage(InstallSourcePlugin(handle));
+            }
+            Ok(())
+        })
+        .build()
+}
+
+/// The installer package the system recorded; `None` when it recorded none, and off Android. It
+/// waits for the activity's thread, so it is run off the async runtime and off the setup thread.
+fn installer<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager as _;
+        let plugin = app.try_state::<InstallSourcePlugin<R>>()?;
+        match plugin.0.run_mobile_plugin::<serde_json::Value>("installSource", ()) {
+            Ok(answer) => answer.get("installer").and_then(serde_json::Value::as_str).map(str::to_owned),
+            Err(error) => {
+                tracing::warn!(%error, "install source unknown; looking for releases on GitHub");
+                None
+            }
+        }
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        None
+    }
+}
+
+/// Ask the system who installed this copy, once, in the background; when it is Google Play, the
+/// core republishes its state with the Play row.
+pub fn read_installer<R: Runtime>(app: AppHandle<R>, updater: Arc<PhoneUpdater>, core: Core) {
+    tauri::async_runtime::spawn(async move {
+        let installer = tauri::async_runtime::spawn_blocking(move || installer(&app)).await.ok().flatten();
+        tracing::info!(installer = installer.as_deref().unwrap_or("none"), "install source");
+        if updater.note_installer(installer.as_deref()) {
+            core.refresh_update();
+        }
+    });
 }
 
 /// What the phone reads of the manifest; the desktop's packages under `platforms` are left alone.
@@ -95,16 +154,13 @@ async fn fetch(url: &str) -> Result<Vec<u8>, UpdateFailure> {
 
 impl Updater for PhoneUpdater {
     fn method(&self) -> Option<InstallMethod> {
-        Some(match self.source {
-            Source::Play => InstallMethod::Play,
-            Source::Direct => InstallMethod::Android,
-        })
+        Some(if self.play() { InstallMethod::Play } else { InstallMethod::Android })
     }
 
     fn check(&self) -> UpdateFuture<'_, Option<Release>> {
         Box::pin(async move {
             // Not asked for a Play copy (InstallMethod::checks); were it, nothing goes out.
-            if self.source == Source::Play {
+            if self.play() {
                 return Ok(None);
             }
             let body = fetch(&self.manifest).await?;
@@ -194,7 +250,7 @@ mod tests {
 
     #[tokio::test]
     async fn the_phone_installs_nothing_itself() {
-        let updater = PhoneUpdater::new("0.6.0", None);
+        let updater = PhoneUpdater::new("0.6.0");
         assert_eq!(updater.method(), Some(InstallMethod::Android));
         assert_eq!(updater.download(Box::new(|_, _| {})).await, Err(UpdateFailure::Install));
         assert_eq!(updater.install().await, Err(UpdateFailure::Install));
@@ -202,14 +258,22 @@ mod tests {
 
     #[tokio::test]
     async fn a_copy_from_google_play_is_updated_by_play_and_any_other_by_its_github_release() {
-        assert_eq!(PhoneUpdater::new("0.8.4", Some("com.android.vending")).method(), Some(InstallMethod::Play));
+        // A GitHub copy until the system names Google Play; only that change is news.
+        let updater = PhoneUpdater::new("0.8.4");
+        assert_eq!(updater.method(), Some(InstallMethod::Android));
+        assert!(updater.note_installer(Some("com.android.vending")));
+        assert_eq!(updater.method(), Some(InstallMethod::Play));
+        assert!(!updater.note_installer(Some("com.android.vending")));
         // The browser or file manager that opened a GitHub APK, adb, nothing on record.
         for installer in [Some("com.android.chrome"), Some("com.google.android.packageinstaller"), Some(""), None] {
-            assert_eq!(PhoneUpdater::new("0.8.4", installer).method(), Some(InstallMethod::Android), "{installer:?}");
+            let other = PhoneUpdater::new("0.8.4");
+            assert!(!other.note_installer(installer), "{installer:?}");
+            assert_eq!(other.method(), Some(InstallMethod::Android), "{installer:?}");
         }
         // Never asked (the core does not check for a Play copy), and even then nothing goes out.
         let url = serve("200 OK", MANIFEST.into()).await;
-        let play = PhoneUpdater { source: Source::Play, ..PhoneUpdater::with_manifest("0.6.0", &url) };
+        let play = PhoneUpdater::with_manifest("0.6.0", &url);
+        play.note_installer(Some(PLAY_STORE));
         assert_eq!(play.check().await, Ok(None));
     }
 

@@ -257,7 +257,8 @@ fn the_phone_checks_for_updates_and_opens_the_release_page_rather_than_installin
 
 #[test]
 fn a_phone_from_google_play_opens_its_listing_and_asks_github_nothing() {
-    let play = updater::PhoneUpdater::new("0.8.4", Some(updater::PLAY_STORE));
+    let play = updater::PhoneUpdater::new("0.8.4");
+    assert!(play.note_installer(Some(updater::PLAY_STORE)));
     let shell = shell_with(ShellOptions { updater: Some(Arc::new(play)), ..ShellOptions::default() });
     assert_eq!(shell.dispatch(json!({ "command": "app_state" })).unwrap()["update"]["method"], "play");
     for command in ["update_check", "update_install"] {
