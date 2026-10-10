@@ -110,7 +110,7 @@ as on a computer.
 
 ### The fingerprint instead of the master password on the phone
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.8.6.
 
 On a phone with **Unlock with fingerprint** on, the fingerprint can stand in for the master
 password wherever sync asks for it:

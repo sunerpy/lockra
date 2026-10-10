@@ -119,7 +119,7 @@ home:
             status: available
             link: /security/#locking
           - title: Secrets out of sight
-            body: Showing a secret or an export code asks for the master password again and hides it after two minutes. On Windows and macOS, screenshots show the window black meanwhile.
+            body: Showing a secret or an export code asks for the master password again (or, on the phone, the fingerprint) and hides it after two minutes. On Windows and macOS, screenshots show the window black meanwhile.
             status: available
             link: /security/#secrets-on-screen
           - title: Signed updates
@@ -270,7 +270,7 @@ Restoring merges a backup into your accounts through the same preview as an impo
 
 ## Built to keep secrets
 
-The vault is one encrypted file. Without the master password it is unreadable, and changing a single byte of it is detected. Lockra locks itself when idle, clears the codes it copied, and shows a secret only after you enter the master password again.
+The vault is one encrypted file. Without the master password it is unreadable, and changing a single byte of it is detected. Lockra locks itself when idle, clears the codes it copied, and shows a secret only after you enter the master password again (or, on the phone, verify your fingerprint).
 
 [How Lockra protects your accounts](/security/) · [Privacy](/privacy)
 
