@@ -78,6 +78,35 @@ all** for every account the search and the group menu show. **Move to group…**
 accounts in one group in a single step: type a group or pick one, or leave it empty to take them out
 of their groups. **Done**, or Esc, leaves without changing anything.
 
+## Choosing a group
+
+<StatusTag status="building" />
+
+The **Group** field of **Edit…**, of adding an account by hand and of **Move to group…** lists the
+groups in use under it: typing filters them, a new name offers **New group “name”**, and **No
+group** takes the account out of its group. The up and down arrow keys move through the list, Enter
+picks, and Esc closes it.
+
+On the phone, tapping **Group** opens **Choose a group** from the bottom of the screen: tap a group
+or **No group**, or type a name under **New group** and tap **Use**. The back gesture closes only
+that sheet, not the page under it.
+
+## Reordering
+
+<StatusTag status="building" />
+
+Click **Reorder** beside the sort menu: a handle appears on the right of each group's heading and of
+each row. Drag a handle up or down, or focus it and press the up and down arrow keys, to change the
+order of the accounts and of the groups; **Done** ends it. While you reorder, the search field and
+the group menu are off.
+
+Once the accounts are reordered, the sort menu reads **Manual**, and accounts added later go to the
+end. Pinned accounts still come first and **No group** stays last. The order is kept in the vault,
+on this device only: it does not sync to your other devices.
+
+On the phone, tap the **Reorder** button at the top of the codes page, then drag the handle on the
+right of a row up or down.
+
 ## Order
 
 The sort menu orders the list by name, by the most recently added, or by the most recently used.

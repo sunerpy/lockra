@@ -101,6 +101,20 @@
       ]
     },
     {
+      "command": "view_order_entries",
+      "ids": [
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000002",
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+      ]
+    },
+    {
+      "command": "view_order_groups",
+      "groups": [
+        "Work",
+        "Money"
+      ]
+    },
+    {
       "command": "import_text",
       "text": "otpauth://totp/A:b?secret=GEZDGNBV"
     },
@@ -132,7 +146,7 @@
       "entry_ids": [
         "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
       ],
-      "password": "a new password",
+      "reason": "export the accounts",
       "target": "google"
     },
     {
@@ -236,7 +250,7 @@
     },
     {
       "command": "sync_set_storage",
-      "password": "a new password",
+      "reason": "change the storage settings",
       "storage": {
         "kind": "folder"
       }

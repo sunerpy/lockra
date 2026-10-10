@@ -179,7 +179,13 @@ The phone app (`apps/mobile/src`) uses `@lockra/ui` and `@lockra/shared` as the 
 both need lives there: the codes list's logic (sorting, filtering, group sections) and a form's kind
 in `packages/shared/src/entries.ts`, the import preview's choices in `import-preview.ts`, the colour
 and avatar text editor in `@lockra/ui`, the sync storage's form in `storage-form.ts` and
-`StorageFields`. The unlocked vault's pages lie over the codes
+`StorageFields`, the dragged order (`sortEntries` and `groupSections` with this device's
+`entry_order` and `group_order`, `moveItem`) and its list (`ReorderList` on `Sortable`, @dnd-kit,
+with ArrowUp and ArrowDown on a handle). The desktop picks a group with `GroupCombobox`; the phone
+with a sheet from the bottom (`components/BottomSheet.tsx`), which holds a history entry of its own
+above its page's, so the back gesture closes the sheet first. The phone's pages that prove presence
+take the fingerprint that unlocks the vault (`app/presence.ts`): asked by itself where it is the
+default unlock and the page asks nothing else, else with the password left empty. The unlocked vault's pages lie over the codes
 (`app/nav.tsx`): each page opened adds a history entry that records its depth, so the phone's back
 gesture (wry goes back in the webview's history) and a page's own back button close the top page
 alike; leaving the import preview discards the import, leaving the restore ends it, and locking

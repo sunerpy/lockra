@@ -31,7 +31,7 @@ export const LOCALE_SETTINGS = ["system", "zh-cn", "en"] as const;
 export const localeSettingSchema = z.enum(LOCALE_SETTINGS);
 export type LocaleSetting = z.infer<typeof localeSettingSchema>;
 
-export const SORT_ORDERS = ["name", "added", "recent"] as const;
+export const SORT_ORDERS = ["name", "added", "recent", "manual"] as const;
 export const sortOrderSchema = z.enum(SORT_ORDERS);
 export type SortOrder = z.infer<typeof sortOrderSchema>;
 
@@ -455,6 +455,9 @@ export const syncSpaceViewSchema = z.object({
   rolled_back: z.array(z.string()),
   unreadable: z.array(z.string()),
   keyring_pending: z.boolean(),
+  /** This device joined by the biometric check: its master password recovers the space only once
+   *  it was typed here again (the next unlock with it seals its keyring). */
+  keyring_unsealed: z.boolean(),
   /** The sync key was saved or written down; until then Settings › Sync reminds of it. */
   key_saved: z.boolean(),
 });
@@ -511,6 +514,10 @@ export const uiStateSchema = z.object({
   entries: z.array(entryViewSchema),
   /** The groups folded in the code list ("" for the accounts in no group); empty unless unlocked. */
   collapsed_groups: z.array(z.string()),
+  /** The accounts in the order they were dragged into (`manual` order); this device's. */
+  entry_order: z.array(idSchema),
+  /** The groups in the order they were dragged into; this device's. */
+  group_order: z.array(z.string()),
   settings: settingsSchema,
   import: importViewSchema.nullable(),
   backup: backupViewSchema,
@@ -696,8 +703,18 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("entries_set_group"), ids: z.array(idSchema), group: z.string() }),
   z.object({ command: z.literal("entry_hotp_next"), id: idSchema }),
   z.object({ command: z.literal("entry_copy"), id: idSchema }),
-  z.object({ command: z.literal("entry_reveal"), id: idSchema, password }),
+  /** Without a password, the biometric check that unlocks this vault proves presence. */
+  z.object({
+    command: z.literal("entry_reveal"),
+    id: idSchema,
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
   z.object({ command: z.literal("view_collapse_groups"), groups: z.array(z.string()) }),
+  /** The accounts in the order they were dragged into; the code order becomes manual. */
+  z.object({ command: z.literal("view_order_entries"), ids: z.array(idSchema) }),
+  /** The groups in the order they were dragged into. */
+  z.object({ command: z.literal("view_order_groups"), groups: z.array(z.string()) }),
   z.object({ command: z.literal("import_text"), text: z.string() }),
   z.object({ command: z.literal("import_clipboard") }),
   z.object({ command: z.literal("import_backup_password"), password }),
@@ -707,7 +724,9 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
     command: z.literal("export_start"),
     target: exportTargetSchema,
     entry_ids: z.array(idSchema),
-    password,
+    /** Without it, the biometric check that unlocks this vault proves presence. */
+    password: password.optional(),
+    reason: z.string().optional(),
   }),
   z.object({
     command: z.literal("export_page"),
@@ -732,11 +751,13 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({
     command: z.literal("sync_join"),
     source: joinSourceSchema,
-    /** This device's master password: the vault's, or the new vault's. */
-    password,
+    /** This device's master password: the vault's, or the new vault's. An unlocked vault may
+     *  leave it out: the biometric check that unlocks it proves presence then. */
+    password: password.optional(),
     device_name: z.string(),
     /** The master password of a device in the space, when it is not `password`. */
     space_password: password.optional(),
+    reason: z.string().optional(),
   }),
   /** Without a password, the biometric check that unlocks this vault proves presence. */
   z.object({
@@ -755,7 +776,13 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
     password: password.optional(),
     reason: z.string().optional(),
   }),
-  z.object({ command: z.literal("sync_set_storage"), storage: storageConfigSchema, password }),
+  /** Without a password, the biometric check that unlocks this vault proves presence. */
+  z.object({
+    command: z.literal("sync_set_storage"),
+    storage: storageConfigSchema,
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
   z.object({ command: z.literal("sync_rename_device"), name: z.string() }),
   z.object({ command: z.literal("sync_remove_device"), tag: z.string() }),
   z.object({ command: z.literal("sync_now") }),

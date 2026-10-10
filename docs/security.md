@@ -116,10 +116,11 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   permission — only Lockra's own commands and the title bar's window buttons
   (`apps/desktop/src-tauri/tests/ipc.rs`, `apps/desktop/src/window-config.test.ts`).
 - What the webview receives is entry metadata and current codes. Four answers carry a secret, all
-  behind the master password entered again: _reveal_ (the secret, its URI and QR code), an
-  _export_ (QR codes; a plain otpauth file asks for the password before the save dialog opens),
-  the space's sync key, which the interface calls the recovery key (`sync_key_reveal`), and a sync
-  invitation (`sync_invite`); the last two also accept the biometric check that unlocks the vault.
+  behind the master password entered again or the biometric check that unlocks the vault (Touch
+  ID, Windows Hello, the fingerprint; the phone offers it for all four, the desktop for the last
+  two): _reveal_ (the secret, its URI and QR code), an _export_ (QR codes; a plain otpauth file
+  asks for the proof before the save dialog opens), the space's sync key, which the interface
+  calls the recovery key (`sync_key_reveal`), and a sync invitation (`sync_invite`).
   Setting up a space (`sync_create`) answers nothing. Saving the sync
   key to a file (`sync_key_save`, the same proof) answers no secret: the core puts the key in the
   interface's words in Rust and writes the file where the user chose, readable by its owner only
@@ -223,11 +224,17 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   second after the operating system says a snapshot in it changed (the space's own folder only,
   while the vault is unlocked). A relay is asked, one request at a time while the vault is
   unlocked, to hold the space's listing back until a snapshot in it changes; a run follows a second
-  after it answers with a change. Setting up, joining and moving the storage
-  settings ask for the master password again. Showing an invitation and saving the sync key to a
-  file accept instead the biometric check that unlocks this vault (Touch ID, Windows Hello, the
-  fingerprint): it proves the user is at the device, and nothing is sealed under it, whereas
-  setting up and joining seal this device's keyring under its master password.
+  after it answers with a change. Setting up asks for the master password again: the space's
+  first keyring is sealed under it. Moving the storage settings, showing an invitation and saving
+  the sync key to a file accept instead the biometric check that unlocks this vault (Touch ID,
+  Windows Hello, the fingerprint): it proves the user is at the device, and nothing is sealed
+  under it. Joining from an invitation accepts it too where a vault is unlocked (the phone offers
+  it): this device's keyring is then sealed, at the usual Argon2id cost, under a random password
+  of 244 bits kept nowhere, so that the storage cannot tell it apart and it opens nothing, until
+  the next unlock with the master password seals it under that password (`keyring_unsealed`; the
+  next run writes it, as after a new password). Until then this device's password recovers
+  nothing from the storage, the other devices' passwords do. A recovery, and a device with no
+  vault yet, need a password.
 - **The storage sees ciphertext.** A space is one snapshot per device under
   `lockra-sync-v1/<space id>/devices/` (`docs/formats.md` §9), and nothing else; in a cloud drive's
   folder, the drive carries those same files. There Lockra reaches nothing outside the folder: its
@@ -256,7 +263,8 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   (for a relay, its address alone), the sync key and the space's data key. It hands the space
   over: the joining device asks no other device's master password, checks that a snapshot of the
   space opens under the data key, and seals its own keyring under its own master password (a new
-  one, on a device with no vault yet). An invitation is therefore worth a device of the space: it
+  one, on a device with no vault yet; joined by the biometric check, under a random one until the
+  next unlock with the master password). An invitation is therefore worth a device of the space: it
   is shown only after the master password or the biometric check that unlocks the vault, hides
   after two minutes, and is excluded from screen capture where the system allows. The QR code
   carries it as it is, to be scanned on the user's own devices only. For a space on a relay the
@@ -369,6 +377,10 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
 - The master password and secrets typed by hand pass through the webview; Lockra drops them from
   its state as soon as the core has them, but a compromised webview process could read them.
 - Memory is not locked (`mlock`); decrypted entries could reach swap or a crash dump.
+- On the phone, the fingerprint that unlocks the vault also shows secrets, exports the accounts
+  and joins the vault to a sync space: whoever passes the check (any finger enrolled on the phone)
+  can take every account off it, as whoever knows the master password can. The check proves that
+  an enrolled finger is there, nothing more.
 - A forgotten master password cannot be recovered; _reset_ keeps the old file but cannot open it.
 - Sync: whoever holds an invitation (its QR code photographed, a relay space's pairing link, or
   the sealed text together with its code) holds the space, as a device does, with no password to

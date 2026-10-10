@@ -10,6 +10,13 @@ afterEach(async () => {
   });
 });
 
+/** The fingerprint unlocks the vault. */
+const FINGERPRINT = {
+  biometric: "fingerprint",
+  biometricUnlock: true,
+  deviceUnlock: true,
+} as const;
+
 async function openExport(user: ReturnType<typeof renderApp>["user"]) {
   await user.click(screen.getByTestId("codes-settings"));
   await user.click(await screen.findByTestId("settings-export"));
@@ -77,6 +84,31 @@ describe("exporting on the phone", () => {
     await user.click(save);
     expect(await screen.findByRole("status")).toHaveTextContent("已保存：lockra-export.txt");
     expect(screen.getByTestId("page-export")).toBeInTheDocument();
+  });
+
+  it("takes the fingerprint for the password left empty", async () => {
+    const { user, backend } = renderApp({ mock: FINGERPRINT });
+    await ready();
+    await openExport(user);
+    // Nothing asked by itself: the page is a form.
+    expect(backend.biometricReasons).toEqual([]);
+    expect(screen.getByText("留空则用指纹验证。")).toBeInTheDocument();
+    await user.click(screen.getByTestId("export-start"));
+    expect(await screen.findByTestId("page-export-view")).toBeInTheDocument();
+    expect(backend.biometricReasons).toEqual(["导出账号"]);
+    expect(backend.calls.find((c) => c.command === "export_start")).not.toHaveProperty("password");
+    await user.click(screen.getByTestId("export-finish"));
+    expect(await screen.findByTestId("page-export")).toBeInTheDocument();
+    // The plain list the same way, once acknowledged.
+    await user.click(
+      within(screen.getByRole("radiogroup", { name: "导出到" })).getByRole("radio", {
+        name: /otpauth 列表文件/,
+      }),
+    );
+    await user.click(within(screen.getByTestId("export-plain-ok")).getByRole("switch"));
+    await user.click(screen.getByTestId("export-start"));
+    expect(await screen.findByRole("status")).toHaveTextContent("已保存：lockra-export.txt");
+    expect(backend.biometricReasons).toEqual(["导出账号", "导出账号"]);
   });
 
   it("lists the accounts a target cannot take, unticked, with the reason", async () => {

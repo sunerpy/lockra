@@ -89,10 +89,13 @@ deletion), so that a deletion reaches the other devices of a sync space. Replaci
 secret through an import gives it a new id (the old id is tombstoned), so its HOTP counter starts
 again with the new secret. `local` is this device's own part and never leaves the vault file (no
 backup, no sync): `clock` (its device number and the latest stamp), `view` (the groups folded in
-the code list, `{collapsed_groups}`, "" for the accounts in no group: group names stay inside the
-encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and
-credentials, the space id, its data key, the sync key, this device's name, its keyring and what
-the runs remember). A `sync` this version cannot read (one kept by an earlier build, or by a later
+the code list, `{collapsed_groups}`, "" for the accounts in no group, and the order the accounts
+and the groups were dragged into on this device, `{entry_order}` (ids) and `{group_order}`
+(names); each is left out while empty: group names stay inside the encrypted file, never in
+`settings.json`) and, with sync on, `sync` (the storage settings and credentials, the space id, its
+data key, the sync key, this device's name, its keyring and what the runs remember, among it
+`keyring_unsealed`: the keyring was sealed under random bytes by a join with the biometric check,
+and waits for the next unlock with the master password). A `sync` this version cannot read (one kept by an earlier build, or by a later
 Lockra: to 0.7.3, a space in a cloud drive's folder, `{kind: "folder", path}`; to 0.8.0, a space on
 a relay, `{kind: "relay", url}`) is left out and the vault opens without it: sync is off on that
 device until it is set up again.
@@ -109,7 +112,8 @@ with it) and starts over; nothing is deleted.
 `settings.json` in the app config directory, plain JSON without secrets: theme, follow the system
 theme, accent, density, font size (12–18 px), reduce motion, locale (`system`, `zh-cn`, `en`),
 auto-lock minutes (0 = never; default 5), clipboard clearing seconds (0 = never; default 30), hide
-codes, code order (`name`, `added`, `recent`), automatic backup `{enabled, dir, keep}` (keep
+codes, code order (`name`, `added`, `recent`, `manual`: the order of the local part's
+`view.entry_order`, accounts never dragged after it, oldest first), automatic backup `{enabled, dir, keep}` (keep
 3–50, default 10) and automatic updates (`auto_update`, default off). From 0.3.2 the file also carries `schema: 2`;
 a file without it (0.2.0 to 0.3.1) has `auto_update` read as off, because 0.3.0 could have carried
 0.2.0's check-only `auto_check_updates` over into it, and 0.2.0's field itself is not read. Unknown or missing fields take their defaults.
@@ -251,7 +255,9 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   key wrapped under HKDF-SHA256(salt = space id, ikm = Argon2id(that device's master password,
   `kdf`) ‖ sync key, info `lockra-sync v1 keyring`). It is sealed when the device creates or joins
   the space and again under a new master password, each time with a fresh salt and nonce; its
-  header names no device and no time. A keyring asking for more than the container's KDF limits is
+  header names no device and no time. A join by the biometric check seals it under a random
+  password kept nowhere, at the same cost, and the next unlock with the master password seals it
+  again under that password. A keyring asking for more than the container's KDF limits is
   refused before any work. A device joining from an invitation takes the data key it carries,
   once one of the space's snapshots opens under it, and seals its own keyring under its own
   master password. A recovery (the storage settings and the sync key typed in) reads the space's

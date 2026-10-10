@@ -80,6 +80,9 @@ pub enum SortOrder {
     Added,
     /// Most recently copied first.
     Recent,
+    /// The order the accounts were dragged into on this device (kept in the vault); accounts never
+    /// dragged come after, oldest first.
+    Manual,
 }
 
 /// Where automatic backups go and how many are kept.

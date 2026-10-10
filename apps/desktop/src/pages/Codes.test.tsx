@@ -379,3 +379,43 @@ describe("Codes · selecting several accounts", () => {
     expect(screen.getByText("已选择 1 个账号")).toBeInTheDocument();
   });
 });
+
+describe("Codes · reordering", () => {
+  it("moves accounts and groups with their handles, keeps the order and makes it manual", async () => {
+    const backend = new MockBackend({
+      entries: [
+        mockEntry("GitHub", "me", { group: "Work", at: 1 }),
+        mockEntry("Jira", "me", { group: "Work", at: 2 }),
+        mockEntry("Bank", "me", { group: "Money", at: 3 }),
+      ],
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.click(screen.getByTestId("codes-reorder"));
+    expect(screen.getByTestId("codes-search")).toBeDisabled();
+    expect(screen.queryByTestId("entry-row")).toBeNull();
+    const handle = (name: string) =>
+      screen.getByRole("button", { name: `移动「${name}」：拖动，或按上下方向键` });
+    // Work above Money, then Jira above GitHub.
+    handle("Work").focus();
+    await user.keyboard("{ArrowUp}");
+    const last = (command: string) => backend.calls.filter((c) => c.command === command).at(-1);
+    expect(last("view_order_groups")).toEqual({
+      command: "view_order_groups",
+      groups: ["Work", "Money"],
+    });
+    handle("Jira").focus();
+    await user.keyboard("{ArrowUp}");
+    const id = async (issuer: string) =>
+      (await backend.getState()).entries.find((e) => e.issuer === issuer)?.id;
+    expect(last("view_order_entries")).toEqual({
+      command: "view_order_entries",
+      ids: [await id("Bank"), await id("Jira"), await id("GitHub")],
+    });
+    await user.click(screen.getByTestId("codes-reorder-done"));
+    // The list as dragged: Work first, Jira before GitHub; the order is manual now.
+    expect(names()).toEqual(["Jira", "GitHub", "Bank"]);
+    expect(screen.getByTestId("codes-sort")).toHaveValue("manual");
+  });
+});

@@ -58,7 +58,12 @@ export interface Backend {
   /** Native file picker → a backup opened for restoring. `false` when cancelled. */
   pickRestoreFile(): Promise<boolean>;
   /** Native save dialog → a plain otpauth list. The file name, or `null` when cancelled. */
-  exportOtpauthFile(entryIds: readonly string[], password: string): Promise<string | null>;
+  /** Without a password, the biometric check that unlocks this vault proves presence. */
+  exportOtpauthFile(
+    entryIds: readonly string[],
+    password?: string,
+    reason?: string,
+  ): Promise<string | null>;
   /** The phone's browser → the page of the release an update check found (else the newest
    *  release's), the address named by the shell. `null` once it opened, else the address, to
    *  show (no browser opened it). */
@@ -75,8 +80,10 @@ export interface ScanTexts {
 
 /** What joining from a scanned invitation takes besides it, as `sync_join`. */
 export interface ScanJoin {
-  /** This device's master password (with no vault yet, the new vault's). */
-  password: string;
+  /** This device's master password (with no vault yet, the new vault's); an unlocked vault may
+   *  leave it out, the fingerprint that unlocks it proving presence (`reason` for its prompt). */
+  password?: string;
+  reason?: string;
   /** This device's name in the space. */
   deviceName: string;
   /** The master password of the space's devices, when it is not `password`. */

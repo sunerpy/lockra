@@ -335,17 +335,23 @@ impl Local {
 }
 
 /// How this device shows the code list. In the vault, not in `settings.json`: group names are the
-/// vault's, and the settings file is not encrypted.
+/// vault's, and the settings file is not encrypted. Never synced: each device keeps its own.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct View {
     /// The groups folded in the code list; "" folds the accounts in no group.
     #[serde(default)]
     pub collapsed_groups: Vec<String>,
+    /// The accounts in the order they were dragged into (`SortOrder::Manual`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub entry_order: Vec<Uuid>,
+    /// The groups in the order they were dragged into; groups never dragged come after, by name.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub group_order: Vec<String>,
 }
 
 impl View {
     fn is_empty(&self) -> bool {
-        self.collapsed_groups.is_empty()
+        self.collapsed_groups.is_empty() && self.entry_order.is_empty() && self.group_order.is_empty()
     }
 }
 
@@ -455,6 +461,16 @@ impl VaultData {
     /// The groups folded in this device's code list.
     pub(crate) fn collapsed_groups(&self) -> &[String] {
         self.local.as_ref().map_or(&[], |l| l.view.collapsed_groups.as_slice())
+    }
+
+    /// The accounts in the order they were dragged into on this device.
+    pub(crate) fn entry_order(&self) -> &[Uuid] {
+        self.local.as_ref().map_or(&[], |l| l.view.entry_order.as_slice())
+    }
+
+    /// The groups in the order they were dragged into on this device.
+    pub(crate) fn group_order(&self) -> &[String] {
+        self.local.as_ref().map_or(&[], |l| l.view.group_order.as_slice())
     }
 
     /// The sync space this device belongs to.

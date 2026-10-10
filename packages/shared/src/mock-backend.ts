@@ -317,6 +317,7 @@ export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpace
     rolled_back: [],
     unreadable: [],
     keyring_pending: false,
+    keyring_unsealed: false,
     key_saved: true,
     ...overrides,
   };
@@ -457,6 +458,11 @@ export class MockBackend implements Backend {
   private space: SyncSpaceView | null;
   /** The folded groups, kept here while locked (the core keeps them in the vault). */
   private collapsed: string[];
+  /** The accounts and the groups in the order they were dragged into, as the core keeps them. */
+  private order: string[] = [];
+  private groupOrder: string[] = [];
+  /** The last join was by the fingerprint: the space's keyring waits for the master password. */
+  private joinedUnsealed = false;
   private biometricAnswer: ErrorCode | null;
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
@@ -492,6 +498,8 @@ export class MockBackend implements Backend {
       },
       entries: phase === "unlocked" ? entries.map((e) => e.view) : [],
       collapsed_groups: phase === "unlocked" ? [...this.collapsed] : [],
+      entry_order: [],
+      group_order: [],
       settings: { ...defaultSettings(), ...options.settings },
       import: null,
       backup: { last_backup_ms: null, last_auto_file: null, last_auto_error: null },
@@ -549,6 +557,7 @@ export class MockBackend implements Backend {
       join.password,
       join.deviceName,
       join.spacePassword,
+      join.reason,
     );
     return true;
   }
@@ -631,9 +640,13 @@ export class MockBackend implements Backend {
     return true;
   }
 
-  async exportOtpauthFile(entryIds: readonly string[], password: string): Promise<string | null> {
+  async exportOtpauthFile(
+    entryIds: readonly string[],
+    password?: string,
+    reason?: string,
+  ): Promise<string | null> {
     this.requireUnlocked();
-    this.checkPassword(password);
+    this.confirmPresence(password, reason);
     if (!entryIds.some((id) => this.state.entries.some((e) => e.id === id)))
       throw new LockraError("export_nothing");
     return "lockra-export.txt";
@@ -842,7 +855,7 @@ export class MockBackend implements Backend {
       }
       case "entry_reveal": {
         const entry = this.entry(command.id);
-        this.checkPassword(command.password);
+        this.confirmPresence(command.password, command.reason);
         const secret = this.secrets.get(entry.id) ?? "";
         const revealed: Revealed = {
           entry_id: entry.id,
@@ -862,6 +875,27 @@ export class MockBackend implements Backend {
         // oxlint-disable-next-line unicorn/no-array-sort
         this.collapsed = folded.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
         this.state.collapsed_groups = [...this.collapsed];
+        this.publish();
+        return null;
+      }
+      case "view_order_entries": {
+        this.requireUnlocked();
+        // As the core: accounts that exist, once each; the code order becomes manual.
+        const existing = new Set(this.state.entries.map((e) => e.id));
+        this.order = [...new Set(command.ids)].filter((id) => existing.has(id));
+        this.state.entry_order = [...this.order];
+        this.state.settings = { ...this.state.settings, sort: "manual" };
+        this.publish();
+        return null;
+      }
+      case "view_order_groups": {
+        this.requireUnlocked();
+        // As the core: groups in use, cleaned, once each.
+        const existing = new Set(this.state.entries.map((e) => e.group ?? ""));
+        this.groupOrder = [...new Set(command.groups.map((g) => g.trim()))].filter(
+          (g) => g !== "" && existing.has(g),
+        );
+        this.state.group_order = [...this.groupOrder];
         this.publish();
         return null;
       }
@@ -898,7 +932,12 @@ export class MockBackend implements Backend {
         this.publish();
         return null;
       case "export_start":
-        return this.exportStart(command.target, command.entry_ids, command.password);
+        return this.exportStart(
+          command.target,
+          command.entry_ids,
+          command.password,
+          command.reason,
+        );
       case "export_page": {
         this.requireUnlocked();
         const session = this.exports.get(command.session);
@@ -970,6 +1009,7 @@ export class MockBackend implements Backend {
           command.password,
           command.device_name,
           command.space_password,
+          command.reason,
         );
       case "sync_invite":
         return this.syncInvite(command.password, command.reason);
@@ -995,7 +1035,7 @@ export class MockBackend implements Backend {
         return { sync_key: MOCK_SYNC_KEY };
       case "sync_set_storage": {
         const space = this.requireSpace();
-        this.checkPassword(command.password);
+        this.confirmPresence(command.password, command.reason);
         checkStorage(command.storage, this.chosenFolder);
         this.setSpace({ ...space, storage: storageView(command.storage, this.chosenFolder) });
         return null;
@@ -1087,6 +1127,7 @@ export class MockBackend implements Backend {
       rolled_back: [],
       unreadable: [],
       keyring_pending: false,
+      keyring_unsealed: this.joinedUnsealed,
       key_saved: true,
     });
   }
@@ -1104,9 +1145,10 @@ export class MockBackend implements Backend {
 
   private syncJoin(
     source: JoinSource,
-    password: string,
+    password: string | undefined,
     deviceName: string,
     spacePassword?: string,
+    reason?: string,
   ): null {
     const text = source.type === "invite" ? source.text.trim() : "";
     if (source.type === "invite" && text.startsWith("lockra-invite:2:")) {
@@ -1127,8 +1169,11 @@ export class MockBackend implements Backend {
     if (this.state.phase === "locked") throw new LockraError("locked");
     if (this.state.phase === "unlocked" && this.space !== null)
       throw new LockraError("sync_already_on");
-    if (this.state.phase === "no_vault") this.checkLength(password);
-    else this.checkPassword(password);
+    // A new vault needs its own password; an unlocked one may prove presence by the fingerprint
+    // that unlocks it, its keyring then sealed at the next unlock with the master password.
+    if (this.state.phase === "no_vault") this.checkLength(password ?? "");
+    else this.confirmPresence(password, reason);
+    this.joinedUnsealed = this.state.phase === "unlocked" && password === undefined;
     const relay = source.type === "invite" ? invitedRelay(text) : undefined;
     const storage: StorageConfig =
       source.type === "manual"
@@ -1161,8 +1206,8 @@ export class MockBackend implements Backend {
       { tag: mockTag("Pixel 8"), name: "Pixel 8", written_at_ms: this.now(), this_device: false },
     ];
     if (this.state.phase === "no_vault") {
-      // A new device: the vault comes from the space.
-      this.password = password;
+      // A new device: the vault comes from the space (its password was checked above).
+      this.password = password ?? "";
       const entries = sampleEntries();
       for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
       this.enterUnlocked(entries.map((e) => e.view));
@@ -1311,6 +1356,9 @@ export class MockBackend implements Backend {
       this.publish();
       throw new LockraError("wrong_password", delay > 0 ? this.now() + delay : undefined);
     }
+    // As the core: a keyring left unsealed by a fingerprint join is sealed now, written next run.
+    if (this.space?.keyring_unsealed === true)
+      this.space = { ...this.space, keyring_unsealed: false, keyring_pending: true };
     this.enterUnlocked(this.lockedEntries);
     return null;
   }
@@ -1319,6 +1367,8 @@ export class MockBackend implements Backend {
     this.state.phase = "unlocked";
     this.state.entries = entries;
     this.state.collapsed_groups = [...this.collapsed];
+    this.state.entry_order = [...this.order];
+    this.state.group_order = [...this.groupOrder];
     this.state.sync = { space: this.space };
     this.lockedEntries = [];
     this.state.lock = { ...this.state.lock, failed_attempts: 0, retry_at_ms: null };
@@ -1332,6 +1382,8 @@ export class MockBackend implements Backend {
     this.lockedEntries = this.state.entries;
     this.state.entries = [];
     this.state.collapsed_groups = [];
+    this.state.entry_order = [];
+    this.state.group_order = [];
     this.state.phase = "locked";
     this.state.sync = { space: null };
     this.exports.clear();
@@ -1380,14 +1432,15 @@ export class MockBackend implements Backend {
   private exportStart(
     target: ExportTarget,
     entryIds: readonly string[],
-    password: string,
+    password: string | undefined,
+    reason: string | undefined,
   ): ExportStarted {
     this.requireUnlocked();
     const chosen = entryIds
       .map((id) => this.state.entries.find((e) => e.id === id))
       .filter((e): e is EntryView => e !== undefined);
     if (chosen.length === 0) throw new LockraError("export_nothing");
-    this.checkPassword(password);
+    this.confirmPresence(password, reason);
     const excluded = chosen
       .filter((e) => e.export[target] !== null)
       .map((e) => ({ entry_id: e.id, reason: e.export[target] ?? "too_large" }));

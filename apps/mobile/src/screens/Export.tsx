@@ -1,6 +1,7 @@
 // Send accounts to another authenticator: Google Authenticator's migration codes, one standard
 // code per account for Microsoft Authenticator, or a plain otpauth list file saved where the user
-// picks. Every way out asks for the master password again (as the desktop's Export page).
+// picks. Every way out asks again for the master password (as the desktop's Export page) or, left
+// empty, for the fingerprint that unlocks this vault.
 import {
   type ExportWay,
   entryLabel,
@@ -24,6 +25,7 @@ import {
 import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
 import { overPhoneScreen } from "../app/phone-screen";
+import { shown, useFingerprint } from "../app/presence";
 import { Page } from "../components/Page";
 import { SwitchRow } from "../components/Rows";
 
@@ -41,8 +43,11 @@ export function Export() {
   const [password, setPassword] = useState("");
   const [plainOk, setPlainOk] = useState(false);
   const submit = useSubmit();
+  const fingerprint = useFingerprint();
   const chosen = entries.filter((e) => exportBlocker(e, way) === null && !unticked.has(e.id));
-  const ready = chosen.length > 0 && password !== "" && (way !== "file" || plainOk);
+  const ready =
+    chosen.length > 0 && (password !== "" || fingerprint !== null) && (way !== "file" || plainOk);
+  const failure = shown(submit.error);
   const toggle = (id: string) =>
     setUnticked((current) => {
       const next = new Set(current);
@@ -58,16 +63,23 @@ export function Export() {
     event.preventDefault();
     if (!ready) return;
     const ids = chosen.map((e) => e.id);
+    // Without the password, the fingerprint.
+    const typed = password === "" ? undefined : password;
+    const reason = typed === undefined ? t("export.reason") : undefined;
     if (way === "file") {
       const name = await submit.run(() =>
-        overPhoneScreen(() => backend.exportOtpauthFile(ids, password)),
+        overPhoneScreen(() => backend.exportOtpauthFile(ids, typed, reason)),
       );
       setPassword("");
       if (typeof name === "string") toaster.info(t("export.file.saved", { name }));
       return;
     }
     const started = await submit.run(() =>
-      backend.dispatch({ command: "export_start", target: way, entry_ids: ids, password }),
+      backend.dispatch(
+        typed === undefined
+          ? { command: "export_start", target: way, entry_ids: ids, reason }
+          : { command: "export_start", target: way, entry_ids: ids, password: typed },
+      ),
     );
     setPassword("");
     if (started !== undefined) nav.open({ name: "exportView", started });
@@ -170,7 +182,8 @@ export function Export() {
           value={password}
           onChange={setPassword}
           autoComplete="current-password"
-          error={submit.error === undefined ? undefined : errorText(t, submit.error)}
+          help={fingerprint === null ? undefined : t("mobile.passwordOrFingerprint")}
+          error={failure === undefined ? undefined : errorText(t, failure)}
         />
         <Button
           variant="primary"

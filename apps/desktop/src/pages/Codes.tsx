@@ -2,7 +2,8 @@
 // rows; "/" or Ctrl F searches. Favourites come first, then the chosen order. With groups, the
 // accounts are in sections that fold; a right click (or the context-menu key) opens a row's menu.
 // "Select" ticks several accounts (one by one, a section, or all that the search shows) to move
-// them to a group at once.
+// them to a group at once. "Reorder" shows the whole list with handles: the groups and the accounts
+// inside them move by dragging or with ↑ ↓ on a handle, and the order is this device's.
 import {
   ALL_GROUPS,
   type EntryView,
@@ -29,6 +30,7 @@ import {
   Menu,
   type MenuPoint,
   type MenuSection,
+  ReorderList,
   Select,
   useBackend,
   useClock,
@@ -116,6 +118,7 @@ export function Codes() {
   const [selecting, setSelecting] = useState(false);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [moving, setMoving] = useState(false);
+  const [reordering, setReordering] = useState(false);
   const startSelection = (entry?: EntryView) => {
     setTicked(new Set(entry ? [entry.id] : []));
     setSelecting(true);
@@ -135,13 +138,19 @@ export function Codes() {
       return next;
     });
   const actions = useRowActions(startSelection);
-  const { settings, entries, collapsed_groups: collapsedGroups } = state;
+  const {
+    settings,
+    entries,
+    collapsed_groups: collapsedGroups,
+    entry_order: entryOrder,
+    group_order: groupOrder,
+  } = state;
   const groups = useMemo(() => entryGroups(entries), [entries]);
   // A group that no longer exists (its last account moved) shows everything again.
   const activeGroup = groups.includes(group) ? group : ALL_GROUPS;
   const visible = useMemo(
-    () => filterEntries(sortEntries(entries, settings.sort), query, activeGroup),
-    [entries, settings.sort, query, activeGroup],
+    () => filterEntries(sortEntries(entries, settings.sort, entryOrder), query, activeGroup),
+    [entries, settings.sort, entryOrder, query, activeGroup],
   );
   // What a move takes: the ticked accounts the search and the group above still show.
   const chosen = useMemo(
@@ -152,11 +161,17 @@ export function Codes() {
   const searching = query.trim() !== "";
   const folded = useMemo(() => new Set(collapsedGroups), [collapsedGroups]);
   const sections = useMemo(
-    () => (grouped ? groupSections(visible) : [{ key: NO_GROUP, entries: visible }]),
-    [grouped, visible],
+    () => (grouped ? groupSections(visible, groupOrder) : [{ key: NO_GROUP, entries: visible }]),
+    [grouped, visible, groupOrder],
   );
   // Every section of the whole list, whatever the search or the group chosen above it.
   const allSections = useMemo(() => groupSections(entries).map((s) => s.key), [entries]);
+  const startReorder = () => {
+    stopSelection();
+    setQuery("");
+    setGroup(ALL_GROUPS);
+    setReordering(true);
+  };
   const fold = (keys: readonly string[]) =>
     void dispatch({ command: "view_collapse_groups", groups: [...keys] });
   const toggleFold = (key: string) =>
@@ -279,6 +294,7 @@ export function Codes() {
               placeholder={t("codes.search")}
               aria-label={t("codes.search")}
               className="min-w-[14rem] flex-1"
+              disabled={reordering}
               data-testid="codes-search"
             />
             {groups.length > 0 && (
@@ -286,6 +302,7 @@ export function Codes() {
                 aria-label={t("entry.group")}
                 value={activeGroup}
                 onChange={setGroup}
+                disabled={reordering}
                 options={[
                   { value: ALL_GROUPS, label: t("codes.allGroups") },
                   ...groups.map((g) => ({ value: g, label: g })),
@@ -337,16 +354,45 @@ export function Codes() {
                 </Button>
               </>
             )}
-            {!selecting && (
-              <Button
-                variant="outline"
-                icon="check"
-                onClick={() => startSelection()}
-                data-testid="codes-select">
-                {t("codes.select")}
-              </Button>
+            {!selecting && !reordering && (
+              <>
+                <Button
+                  variant="outline"
+                  icon="check"
+                  onClick={() => startSelection()}
+                  data-testid="codes-select">
+                  {t("codes.select")}
+                </Button>
+                <Button
+                  variant="outline"
+                  icon="drag"
+                  onClick={startReorder}
+                  data-testid="codes-reorder">
+                  {t("codes.reorder.open")}
+                </Button>
+              </>
             )}
           </div>
+          {reordering && (
+            <div
+              role="toolbar"
+              aria-label={t("codes.reorder.open")}
+              onKeyDown={(event) => {
+                if (event.key !== "Escape") return;
+                event.preventDefault();
+                setReordering(false);
+              }}
+              className="flex flex-wrap items-center gap-2 rounded-10 bg-surface px-3 py-2 hairline"
+              data-testid="codes-reordering">
+              <p className="min-w-0 flex-1 text-[13px] text-fg-muted">{t("codes.reorder.hint")}</p>
+              <Button
+                variant="primary"
+                onClick={() => setReordering(false)}
+                data-testid="codes-reorder-done">
+                {t("codes.reorder.done")}
+              </Button>
+            </div>
+          )}
           {selecting && (
             <div
               role="toolbar"
@@ -389,7 +435,24 @@ export function Codes() {
               </Button>
             </div>
           )}
-          {visible.length === 0 ? (
+          {reordering ? (
+            <Card padding="none" className="p-1.5">
+              <ReorderList
+                entries={entries}
+                sort={settings.sort}
+                entryOrder={entryOrder}
+                groupOrder={groupOrder}
+                grouped={grouped}
+                folded={folded}
+                onToggleFold={toggleFold}
+                onOrderEntries={(ids) => void dispatch({ command: "view_order_entries", ids })}
+                onOrderGroups={(order) =>
+                  void dispatch({ command: "view_order_groups", groups: order })
+                }
+                noGroupLabel={t("codes.groupNone")}
+              />
+            </Card>
+          ) : visible.length === 0 ? (
             <Card>
               <EmptyState
                 compact

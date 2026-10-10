@@ -22,6 +22,7 @@ import {
   Button,
   Dialog,
   Icon,
+  GroupCombobox,
   Input,
   PasswordField,
   QrView,
@@ -99,7 +100,8 @@ function FormError({ code }: { code: ErrorCode | undefined }) {
   );
 }
 
-/** A group's name, suggesting the groups the accounts are in. */
+/** A group's name: typed, or picked from the groups the accounts are in (Lockra's own list, not
+ *  the webview's dark datalist popup). */
 export function GroupField({
   value,
   onChange,
@@ -112,23 +114,15 @@ export function GroupField({
 }) {
   const t = useT();
   const { entries } = useUiState();
-  const listId = useId();
   return (
-    <>
-      <Input
-        label={t("entry.group")}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={t("entry.groupPlaceholder")}
-        list={listId}
-        {...(autoFocus ? { "data-autofocus": true } : {})}
-      />
-      <datalist id={listId}>
-        {entryGroups(entries).map((group) => (
-          <option key={group} value={group} />
-        ))}
-      </datalist>
-    </>
+    <GroupCombobox
+      label={t("entry.group")}
+      value={value}
+      onChange={onChange}
+      groups={entryGroups(entries)}
+      placeholder={t("entry.groupPlaceholder")}
+      autoFocus={autoFocus}
+    />
   );
 }
 

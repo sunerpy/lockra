@@ -1,6 +1,7 @@
 // The accounts and their codes: a tap copies the code, a long press or ⋯ opens the account's
 // actions, + adds accounts; with groups, the accounts are in sections that fold; a search shows
-// what it finds in every section, folded or not.
+// what it finds in every section, folded or not. The reorder button shows the list with handles:
+// the groups and the accounts inside them move by dragging the handles, an order this phone keeps.
 import {
   ALL_GROUPS,
   NO_GROUP,
@@ -17,6 +18,7 @@ import {
   Icon,
   IconButton,
   Input,
+  ReorderList,
   motionReduced,
   noteUserLock,
   useClock,
@@ -34,16 +36,25 @@ export function Codes() {
   const dispatch = useDispatch();
   const codes = useCodes();
   const now = useClock();
-  const { settings, entries, collapsed_groups: collapsedGroups } = useUiState();
+  const {
+    settings,
+    entries,
+    collapsed_groups: collapsedGroups,
+    entry_order: entryOrder,
+    group_order: groupOrder,
+  } = useUiState();
   const [query, setQuery] = useState("");
+  const [reordering, setReordering] = useState(false);
   const visible = useMemo(
-    () => filterEntries(sortEntries(entries, settings.sort), query, ALL_GROUPS),
-    [entries, settings.sort, query],
+    () => filterEntries(sortEntries(entries, settings.sort, entryOrder), query, ALL_GROUPS),
+    [entries, settings.sort, entryOrder, query],
   );
   const grouped = settings.group_codes && entryGroups(entries).length > 0;
   const searching = query.trim() !== "";
   const folded = new Set(collapsedGroups);
-  const sections = grouped ? groupSections(visible) : [{ key: NO_GROUP, entries: visible }];
+  const sections = grouped
+    ? groupSections(visible, groupOrder)
+    : [{ key: NO_GROUP, entries: visible }];
   const toggleFold = (key: string) =>
     void dispatch({
       command: "view_collapse_groups",
@@ -53,6 +64,18 @@ export function Codes() {
     <div className="flex h-full flex-col" data-testid="page-codes">
       <header className="flex items-center gap-2 border-b border-border bg-surface px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1">
         <h1 className="flex-1 text-[18px] font-semibold text-fg">{t("codes.title")}</h1>
+        {entries.length > 1 && !reordering && (
+          <IconButton
+            icon="drag"
+            label={t("codes.reorder.open")}
+            size={40}
+            onClick={() => {
+              setQuery("");
+              setReordering(true);
+            }}
+            data-testid="codes-reorder"
+          />
+        )}
         <IconButton
           icon="plus"
           label={t("codes.add.label")}
@@ -95,6 +118,36 @@ export function Codes() {
             }>
             {t("mobile.emptyBody")}
           </EmptyState>
+        ) : reordering ? (
+          <div className="flex flex-col gap-3" data-testid="codes-reordering">
+            <div className="flex items-center gap-3">
+              <p className="min-w-0 flex-1 text-[13px] text-fg-muted">{t("mobile.reorderHint")}</p>
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={() => setReordering(false)}
+                data-testid="codes-reorder-done">
+                {t("codes.reorder.done")}
+              </Button>
+            </div>
+            <Card padding="none" className="p-1.5">
+              <ReorderList
+                size="lg"
+                entries={entries}
+                sort={settings.sort}
+                entryOrder={entryOrder}
+                groupOrder={groupOrder}
+                grouped={grouped}
+                folded={folded}
+                onToggleFold={toggleFold}
+                onOrderEntries={(ids) => void dispatch({ command: "view_order_entries", ids })}
+                onOrderGroups={(order) =>
+                  void dispatch({ command: "view_order_groups", groups: order })
+                }
+                noGroupLabel={t("codes.groupNone")}
+              />
+            </Card>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
             <Input

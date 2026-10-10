@@ -62,6 +62,11 @@ pub(crate) struct SyncLocal {
     /// The storage holds this keyring: a run wrote it, or found it there, since it was sealed.
     #[serde(default)]
     pub keyring_written: bool,
+    /// This device joined by the biometric check, so its keyring is sealed under random bytes that
+    /// open nothing: until the next master password seals its own, the space recovers with the
+    /// other devices' passwords, not this one's.
+    #[serde(default)]
+    pub keyring_unsealed: bool,
     /// When a run last finished without error, Unix milliseconds.
     #[serde(default)]
     pub last_sync_ms: Option<u64>,
@@ -83,6 +88,7 @@ impl fmt::Debug for SyncLocal {
             .field("device_name", &self.device_name)
             .field("state", &self.state)
             .field("keyring_written", &self.keyring_written)
+            .field("keyring_unsealed", &self.keyring_unsealed)
             .field("key_saved", &self.key_saved)
             .finish_non_exhaustive()
     }
@@ -100,6 +106,7 @@ impl SyncLocal {
             state: SyncState::default(),
             keyring: BASE64.encode(keyring),
             keyring_written: false,
+            keyring_unsealed: false,
             last_sync_ms: None,
             key_saved: true,
         }

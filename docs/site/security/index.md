@@ -82,6 +82,25 @@ vault is open turns it on. Turning that switch off leaves it off, and Lockra doe
 existing vault unlocked with the master password asks once whether to turn it on; after **Not now**
 this phone does not ask again, and the switch stays in **Settings › Security**.
 
+### The fingerprint instead of the master password
+
+<StatusTag status="building" />
+
+With **Unlock with fingerprint** on, the phone takes the fingerprint wherever it asked for the
+master password again: showing a secret (**Show secret…**), exporting accounts, showing the
+recovery key, inviting another device, changing the storage settings, and joining a sync space from
+an invitation or a pairing link. With **Default unlock** on **Fingerprint**, the pages that show a
+secret, the recovery key or an invitation ask for the fingerprint as they open; the export, storage
+and join pages have more to fill in, so leave the master password empty there and the fingerprint
+is asked when you submit. After a cancel, type the master password instead.
+
+The fingerprint only confirms that it is you; it changes no encryption. So anyone whose finger is
+enrolled on the phone can show secrets, export the accounts or add the vault to a sync space there:
+enrol only your own fingers. Creating a vault, changing the master password, turning the
+fingerprint off, starting sync and recovering with the recovery key still need the master
+password. Joining a space with the fingerprint has one more thing to know:
+[The fingerprint instead of the master password on the phone](/backup/sync#the-fingerprint-instead-of-the-master-password-on-the-phone).
+
 ## Locking
 
 Lockra locks after five minutes without a key press or click (**Settings › Security › Auto-lock**:

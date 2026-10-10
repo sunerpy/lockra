@@ -38,17 +38,24 @@ impl SyncTransport for Storages {
     }
 }
 
+/// How the joining phone proves the user is there: its master password, or without one the
+/// fingerprint that unlocks its vault (`reason` for the prompt).
+pub struct JoinProof {
+    pub password: Option<Zeroizing<String>>,
+    pub reason: Option<String>,
+}
+
 /// What a scan means for joining: an invitation read joins its space as `sync_join` does, with
-/// `password`, `device`, `space_password` and, for an invitation with the sync key alone, the
+/// `proof`, `device`, `space_password` and, for an invitation with the sync key alone, the
 /// `storage` this phone reaches the space at (`true`); otherwise as [`scanner::read`] (`false`).
 pub async fn join(
     core: &Core,
     scan: Result<Scan, PortError>,
-    password: Zeroizing<String>,
+    proof: JoinProof,
     device: String,
     space_password: Option<Zeroizing<String>>,
     storage: Option<StorageConfig>,
 ) -> Result<bool, CoreError> {
     let Some(text) = scanner::read(core, scan)? else { return Ok(false) };
-    core.sync_join(JoinSource::Invite { text, code: None, storage }, password, device, space_password).await.map(|()| true)
+    core.sync_join(JoinSource::Invite { text, code: None, storage }, proof.password, device, space_password, proof.reason).await.map(|()| true)
 }

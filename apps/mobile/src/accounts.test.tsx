@@ -1,4 +1,4 @@
-import { MOCK_PASSWORD, MockBackend } from "@lockra/shared/mock";
+import { MOCK_PASSWORD, MockBackend, mockEntry } from "@lockra/shared/mock";
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { depthOf } from "./app/nav";
 import { ready, renderApp } from "./test/render";
@@ -7,6 +7,13 @@ const LINKS = [
   "otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example",
   "otpauth://totp/Sample:bob@example.com?secret=KRSXG5CTMVRXEZLU&issuer=Sample",
 ].join("\n");
+
+/** The fingerprint unlocks the vault and is the default unlock (the mock's default settings). */
+const FINGERPRINT = {
+  biometric: "fingerprint",
+  biometricUnlock: true,
+  deviceUnlock: true,
+} as const;
 
 function names(): string[] {
   return screen
@@ -59,9 +66,24 @@ describe("adding accounts on the phone", () => {
     await user.click(
       within(form.getByRole("radiogroup", { name: "位数" })).getByRole("radio", { name: "8" }),
     );
-    // A group in use is a tap away.
-    await user.click(form.getByRole("button", { name: "工作" }));
-    expect(form.getByLabelText("分组")).toHaveValue("工作");
+    // A group in use is a tap away, in a sheet from the bottom; the back gesture closes the sheet
+    // and leaves the page; a new group's name goes in the sheet's field.
+    await user.click(form.getByTestId("group-field"));
+    let sheet = within(await screen.findByTestId("group-sheet"));
+    expect(sheet.getAllByRole("option").map((o) => o.textContent)).toEqual(["不分组", "工作"]);
+    act(() => history.back());
+    await waitFor(() => expect(screen.queryByTestId("group-sheet")).toBeNull());
+    expect(screen.getByTestId("manual-form")).toBeInTheDocument();
+    await user.click(form.getByTestId("group-field"));
+    sheet = within(await screen.findByTestId("group-sheet"));
+    await user.type(sheet.getByLabelText("新建分组"), "个人");
+    await user.click(sheet.getByRole("button", { name: "使用" }));
+    expect(form.getByTestId("group-field")).toHaveTextContent("个人");
+    await user.click(form.getByTestId("group-field"));
+    sheet = within(await screen.findByTestId("group-sheet"));
+    await user.click(sheet.getByRole("option", { name: "工作" }));
+    expect(screen.queryByTestId("group-sheet")).toBeNull();
+    expect(form.getByTestId("group-field")).toHaveTextContent("工作");
     await user.click(add);
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
     expect(backend.calls.at(-1)).toMatchObject({
@@ -226,6 +248,38 @@ describe("an account's actions on the phone", () => {
     expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
   });
 
+  it("show the secret after the fingerprint, asked by itself where it is the default unlock", async () => {
+    const { user, backend } = renderApp({ mock: FINGERPRINT });
+    await ready();
+    await user.click(screen.getAllByTestId("row-more")[0] as HTMLElement);
+    await user.click(await screen.findByTestId("account-reveal"));
+    expect((await screen.findByTestId("revealed-secret")).textContent).toMatch(/^[A-Z2-7 ]+$/);
+    expect(backend.biometricReasons).toEqual(["显示账号的密钥"]);
+    expect(backend.calls.find((c) => c.command === "entry_reveal")).not.toHaveProperty("password");
+    await user.click(screen.getByRole("button", { name: "完成" }));
+    expect(await screen.findByTestId("page-account")).toBeInTheDocument();
+  });
+
+  it("leave the password after a cancelled fingerprint, saying nothing", async () => {
+    const { user, backend } = renderApp({
+      mock: { ...FINGERPRINT, settings: { default_unlock: "password" } },
+    });
+    await ready();
+    await user.click(screen.getAllByTestId("row-more")[0] as HTMLElement);
+    await user.click(await screen.findByTestId("account-reveal"));
+    // The password is the default unlock: the fingerprint waits for its button.
+    expect(await screen.findByText(/验证身份以显示「.+」的密钥和二维码/)).toBeInTheDocument();
+    expect(backend.biometricReasons).toEqual([]);
+    backend.answerBiometric("biometric_cancelled");
+    await user.click(screen.getByRole("button", { name: "使用指纹验证" }));
+    await waitFor(() => expect(backend.biometricReasons).toEqual(["显示账号的密钥"]));
+    expect(screen.queryByText("验证已取消")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    expect(await screen.findByTestId("revealed-secret")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "完成" }));
+    expect(await screen.findByTestId("page-account")).toBeInTheDocument();
+  });
+
   it("closes a page whose account went away", async () => {
     const { user, backend } = renderApp();
     await ready();
@@ -266,5 +320,38 @@ describe("the pages and the back gesture", () => {
     await waitFor(() => expect(depth()).toBe(0));
     await user.type(screen.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
     expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+  });
+});
+
+describe("reordering on the phone", () => {
+  it("moves the accounts and the groups by their handles into an order this phone keeps", async () => {
+    const backend = new MockBackend({
+      entries: [
+        mockEntry("GitHub", "me", { group: "Work", at: 1 }),
+        mockEntry("Jira", "me", { group: "Work", at: 2 }),
+        mockEntry("Bank", "me", { group: "Money", at: 3 }),
+      ],
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.click(screen.getByTestId("codes-reorder"));
+    expect(screen.queryByTestId("codes-search")).toBeNull();
+    const handle = (name: string) =>
+      screen.getByRole("button", { name: `移动「${name}」：拖动，或按上下方向键` });
+    // A 44 px handle for the finger.
+    expect(handle("Jira").className).toContain("size-11");
+    handle("Work").focus();
+    await user.keyboard("{ArrowUp}");
+    handle("Jira").focus();
+    await user.keyboard("{ArrowUp}");
+    const last = (command: string) => backend.calls.filter((c) => c.command === command).at(-1);
+    expect(last("view_order_groups")).toEqual({
+      command: "view_order_groups",
+      groups: ["Work", "Money"],
+    });
+    expect(last("view_order_entries")?.command).toBe("view_order_entries");
+    await user.click(screen.getByTestId("codes-reorder-done"));
+    expect(names()).toEqual(["Jira", "GitHub", "Bank"]);
   });
 });

@@ -287,6 +287,37 @@ To check on real devices:
    **Join an existing sync** with nothing else but its own master password.
 2. A 0.8.3 computer pastes the pairing link of the new version and joins.
 
+## Joining by the fingerprint on the phone (0.8.6)
+
+Asked for on 2026-10-10: the phone should take the fingerprint instead of the master password,
+joining a space and inviting a device among the cases. Inviting and the recovery key took it
+already (0.7.3); joining could not, because a joining device seals its own keyring under its
+master password, and the fingerprint gives none.
+
+A join by the biometric check that unlocks an existing vault seals this device's keyring under a
+random password kept nowhere, at the usual Argon2id cost (the storage cannot tell it apart from
+any other keyring), and records `keyring_unsealed`. The next unlock with the master password seals
+the keyring under it in the background and marks it to be written, as after a new password;
+`change_password` does the same. A recovery without a password needs the space's, and a new
+vault, and setting up a space, still take the password.
+
+- Core: `a_vault_joins_from_an_invitation_by_the_biometric_check_and_seals_its_keyring_at_the_next_password`
+  (the phone's password recovers nothing from the storage until the next unlock with it, and does
+  after), `the_storage_settings_move_on_after_the_biometric_check_too`; the earlier joins with a
+  password behave as before.
+- Bridge: `sync_join`, `sync_set_storage` and `export_start` with an optional password and a
+  reason; `keyring_unsealed` in the space's view.
+- Phone (`apps/mobile/src/sync.test.tsx`): joining from the camera with the password left empty
+  (the hint, the prompt's words, Settings › Sync's note until a password unlock, a fingerprint
+  unlock leaving it), from a pasted invitation (no `password` sent), the recovery key mode keeping
+  the password; the invite and recovery key pages asking by themselves where the fingerprint is
+  the default unlock, waiting for the button where the password is, silent after a cancel, and
+  saying why when the fingerprint cannot be used; the storage settings changed with it.
+
+To check on real devices: on a phone with the fingerprint on, join a desktop's space by scanning
+with the password left empty; Settings › Sync shows the note; lock, unlock with the master
+password, and after the next sync recover the space on a new install with that phone's password.
+
 ## Not verified here
 
 Real services: AWS S3, Cloudflare R2, Backblaze B2, Alibaba Cloud OSS, MinIO, Nextcloud,

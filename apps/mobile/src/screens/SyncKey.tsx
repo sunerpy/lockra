@@ -1,21 +1,21 @@
 // The space's recovery key (its sync key), once the user proved to be here (the fingerprint that
-// unlocks this vault, or the master password): it hides after REVEAL_SECONDS like any secret
-// (app/secret-page.ts). "Save to a file" uses the password typed to show it, or the fingerprint
-// again; "I have kept it" says the key is written down, which ends Settings › Sync's reminder.
+// unlocks this vault, asked by itself where it is the default unlock, or the master password): it
+// hides after REVEAL_SECONDS like any secret (app/secret-page.ts). "Save to a file" uses the
+// password typed to show it, or the fingerprint again; "I have kept it" says the key is written
+// down, which ends Settings › Sync's reminder.
 import { errorText } from "@lockra/shared";
 import {
   Banner,
   Button,
   PasswordField,
-  unlockBiometric,
   useBackend,
   useSaveSyncKey,
   useSubmit,
   useT,
-  useUiState,
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
+import { shown as visible, useAutoFingerprint } from "../app/presence";
 import { useSecretAnswer, useSecretPage } from "../app/secret-page";
 import { Page } from "../components/Page";
 import { SyncKeyText } from "../components/SyncKeyText";
@@ -24,8 +24,6 @@ export function SyncKey() {
   const t = useT();
   const nav = useNav();
   const { backend } = useBackend();
-  const { lock } = useUiState();
-  const biometric = unlockBiometric(lock);
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState<
     { syncKey: string; password: string | undefined; at: number } | undefined
@@ -47,6 +45,8 @@ export function SyncKey() {
     if (answer !== undefined)
       deliver(() => setShown({ syncKey: answer.sync_key, password: typed, at: Date.now() }));
   };
+  const biometric = useAutoFingerprint(() => ask());
+  const failure = visible(submit.error);
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (password === "") return;
@@ -75,7 +75,7 @@ export function SyncKey() {
             value={password}
             onChange={setPassword}
             autoComplete="current-password"
-            error={submit.error === undefined ? undefined : errorText(t, submit.error)}
+            error={failure === undefined ? undefined : errorText(t, failure)}
           />
           <Button
             variant="primary"
