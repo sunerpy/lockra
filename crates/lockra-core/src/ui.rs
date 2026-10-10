@@ -278,15 +278,23 @@ pub enum InstallMethod {
     Msi,
     /// The macOS app, replaced in place.
     App,
-    /// The Android app: a check finds a newer release, whose page the phone opens; nothing is
-    /// downloaded or installed in the app (a copy from Google Play updates through the store).
+    /// The Android app from a GitHub release (or anything but Google Play): a check finds a newer
+    /// release, whose page the phone opens; nothing is downloaded or installed in the app.
     Android,
+    /// The Android app from Google Play, which updates it: the phone opens its Play listing and
+    /// asks GitHub nothing.
+    Play,
 }
 
 impl InstallMethod {
     /// An update downloads and installs in the app (everywhere but the phone).
     pub fn installs(self) -> bool {
-        !matches!(self, Self::Android)
+        !matches!(self, Self::Android | Self::Play)
+    }
+
+    /// The app asks for a newer release (everywhere but a copy from Google Play, which Play updates).
+    pub fn checks(self) -> bool {
+        !matches!(self, Self::Play)
     }
 }
 

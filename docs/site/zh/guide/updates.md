@@ -41,6 +41,12 @@
 
 Android 应用不会自行更新。点按「设置 › 关于 › 检查更新」时，Lockra 向 GitHub 查询最新版本；有新版本时，「前往发布页」会在手机浏览器中打开该版本的页面，那里的 APK 可以覆盖安装，保险库会保留。手机上不会自动检查更新。卸载应用会删除其中的保险库，请先保存备份。
 
+#### 从 Google Play 安装时
+
+<StatusTag status="building" /> 正在开发，尚未发布。
+
+下一个版本起，从 Google Play 安装的 Lockra 由 Google Play 更新：「设置 › 关于」显示「由 Google Play 更新」，选择「在 Google Play 中打开」会在 Google Play 中打开 Lockra 的页面，在那里更新即可。这样的副本不会向 GitHub 查询新版本。从发布页的 APK 安装的 Lockra 仍按上文检查更新。
+
 ## 文件位置
 
 |        | Windows                                      | macOS                                                            | Linux                                            |

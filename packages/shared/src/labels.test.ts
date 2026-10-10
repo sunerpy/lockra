@@ -146,6 +146,11 @@ describe("labels", () => {
     const line = (update: Parameters<typeof updateStatusLine>[0]) =>
       updateStatusLine(update, "0.6.0", zh, "zh-CN");
     expect(line({ method: null, status: { state: "idle" } }).tone).toBe("idle");
+    // Google Play updates a copy it installed: nothing to check.
+    expect(line({ method: "play", status: { state: "idle" } })).toEqual({
+      text: "由 Google Play 更新 · 当前 0.6.0",
+      tone: "idle",
+    });
     expect(line({ method: "android", status: { state: "idle" } })).toEqual({
       text: "尚未检查更新",
       tone: "idle",

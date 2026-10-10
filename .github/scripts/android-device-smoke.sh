@@ -353,4 +353,42 @@ adb logcat -d --pid="$pid" >"$out/app-logcat.txt" 2>&1 || true
 if grep -qE "FATAL EXCEPTION|panicked at|Fatal signal" "$out/app-logcat.txt" || grep -q "$package" "$out/crash.txt"; then
   fail "the app logged a fatal error although it is still running"
 fi
-echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code, heard from the camera's page, reached S3 over HTTPS and checked for updates ($(basename "$apk"))"
+
+# Who installed the app reaches the Rust side after it starts (UpdatePlugin.kt names it,
+# src/updater.rs logs it). The same build installed again naming an installer: the app
+# itself first, a package always visible to it, so the name must arrive; then, where the image has
+# Google Play (CI's does), Play, whose copy shows the Play row and no check. An image without Play
+# skips that part, and the log says the Play row was not checked.
+reinstall_from() {
+  adb install -r -g -i "$1" "$apk" >"$out/install-$1.txt" 2>&1 || fail "the APK did not install from $1: $(tail -3 "$out/install-$1.txt")"
+  # What the system recorded, to tell its side from the app's when the name does not arrive.
+  adb shell dumpsys package "$package" | grep -iE 'installer|initiat|originat' >"$out/installer-$1.txt" 2>&1 || true
+  adb logcat -c
+  adb shell am start -W -n "$package/.MainActivity" >/dev/null 2>&1 || fail "the activity did not start after the install from $1"
+  local deadline=$((SECONDS + 60))
+  until adb logcat -d -s RustStdoutStderr:I | grep -qE "install source.*\"$1\""; do
+    running || fail "the app closed after the install from $1"
+    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not read $1 as its installer; the system recorded: $(grep -i 'installerPackageName' "$out/installer-$1.txt" | tr -d '\r' | tr -s ' ')"
+    sleep 1
+  done
+}
+reinstall_from "$package"
+play_row="the Play row was not checked: this image has no Google Play"
+if adb shell pm path com.android.vending >/dev/null 2>&1; then
+  reinstall_from com.android.vending
+  showing 'The vault is locked|保险库已锁定' 120
+  type_into "$password" 'Master password' '主密码'
+  tap 'Unlock' '解锁'
+  showing 'Example' 120
+  tap 'Settings' '设置'
+  showing 'Updated by Google Play|由 Google Play 更新' 30
+  if grep -qE '(text|content-desc)="(Check for updates|检查更新)"' "$out/ui.xml"; then
+    fail "a copy from Google Play still offers to check GitHub for updates"
+  fi
+  showing 'Open in Google Play|在 Google Play 中打开' 30
+  running || fail "the app closed after the Play install"
+  play_row="a Play install showed the Play row"
+else
+  echo "android-device-smoke: $play_row"
+fi
+echo "android-device-smoke: $package created a vault, locked on leaving, unlocked again, added an account, copied its code, heard from the camera's page, reached S3 over HTTPS and checked for updates; $play_row ($(basename "$apk"))"

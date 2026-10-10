@@ -77,7 +77,7 @@ describe("IPC fixtures", () => {
       ]),
     );
     expect(new Set(views.map((v) => v.method))).toEqual(
-      new Set(["deb", "rpm", "appimage", "nsis", "msi", "app", "android", null]),
+      new Set(["deb", "rpm", "appimage", "nsis", "msi", "app", "android", "play", null]),
     );
     expect(uiStateSchema.parse(ipcFixtures.state.unlocked).update.status.state).toBe("available");
   });

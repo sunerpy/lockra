@@ -1,6 +1,8 @@
-// Settings › About: is there a newer Lockra? Asked only on the button, from the release manifest on
-// GitHub (no account or vault data goes with it); a newer release opens its page in the phone's
-// browser, whose APK installs over this one. A copy from Google Play updates through the store.
+// Settings › About: is there a newer Lockra? A copy from Google Play is updated by Play: the row
+// says so and opens its Play listing, and nothing asks GitHub (after Voltip's 软件更新 card). Any
+// other copy asks only on the button, from the release manifest on GitHub (no account or vault data
+// goes with it); a newer release opens its page in the phone's browser, whose APK installs over
+// this one.
 import { updateStatusLine } from "@lockra/shared";
 import {
   Button,
@@ -23,6 +25,7 @@ export function UpdateRow() {
   const [address, setAddress] = useState<string | null>(null);
   if (update.method === null) return null;
   const line = updateStatusLine(update, version, t, locale);
+  const store = update.method === "play";
   const checking = update.status.state === "checking";
   const open = async () => {
     setAddress((await guarded(() => backend.openRelease())) ?? null);
@@ -33,17 +36,25 @@ export function UpdateRow() {
         <span data-testid="update-status">{line.text}</span>
       </LampText>
       <div className="flex flex-wrap gap-2">
-        <Button
-          size="lg"
-          icon="refresh"
-          loading={checking}
-          onClick={() => void dispatch({ command: "update_check" })}>
-          {t("update.check")}
-        </Button>
-        {update.status.state === "available" && (
+        {store ? (
           <Button variant="primary" size="lg" icon="external" onClick={() => void open()}>
-            {t("mobile.update.open")}
+            {t("mobile.update.openStore")}
           </Button>
+        ) : (
+          <>
+            <Button
+              size="lg"
+              icon="refresh"
+              loading={checking}
+              onClick={() => void dispatch({ command: "update_check" })}>
+              {t("update.check")}
+            </Button>
+            {update.status.state === "available" && (
+              <Button variant="primary" size="lg" icon="external" onClick={() => void open()}>
+                {t("mobile.update.open")}
+              </Button>
+            )}
+          </>
         )}
       </div>
       {address !== null && (
@@ -51,7 +62,9 @@ export function UpdateRow() {
           {t("mobile.update.address", { url: address })}
         </p>
       )}
-      <p className="text-[13px] text-fg-muted">{t("mobile.update.hint")}</p>
+      <p className="text-[13px] text-fg-muted">
+        {t(store ? "mobile.update.storeHint" : "mobile.update.hint")}
+      </p>
     </div>
   );
 }

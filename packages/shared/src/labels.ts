@@ -213,6 +213,9 @@ export function updateStatusLine(
   locale: Locale,
 ): { text: string; tone: "idle" | "accent" | "ok" | "danger" } {
   if (update.method === null) return { text: t("update.status.unavailable"), tone: "idle" };
+  // Google Play updates a copy it installed: there is nothing to check.
+  if (update.method === "play")
+    return { text: t("update.status.play", { version: current }), tone: "idle" };
   const status = update.status;
   switch (status.state) {
     case "idle":

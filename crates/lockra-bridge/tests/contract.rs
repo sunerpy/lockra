@@ -385,8 +385,16 @@ fn state_fixtures() {
 
 #[test]
 fn update_fixtures() {
-    let methods =
-        [InstallMethod::Deb, InstallMethod::Rpm, InstallMethod::Appimage, InstallMethod::Nsis, InstallMethod::Msi, InstallMethod::App, InstallMethod::Android];
+    let methods = [
+        InstallMethod::Deb,
+        InstallMethod::Rpm,
+        InstallMethod::Appimage,
+        InstallMethod::Nsis,
+        InstallMethod::Msi,
+        InstallMethod::App,
+        InstallMethod::Android,
+        InstallMethod::Play,
+    ];
     let views: Vec<UpdateView> = update_statuses()
         .into_iter()
         .zip(methods.iter().copied().map(Some).chain([None]).cycle())

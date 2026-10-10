@@ -211,12 +211,14 @@ async fn sync_scan_join<R: Runtime>(
     sync::join(&core, scan, password, device_name, space_password, storage).await
 }
 
-/// Open the page of the release a check found (else the newest release's) in the phone's browser;
-/// `None` once it opened, else the page's address, for the webview to show (no browser opened it).
-/// The address is the shell's: the webview names none.
+/// Open where this copy updates: a Play copy's Play listing (in the Play app), else the page of the
+/// release a check found (else the newest release's) in the phone's browser; `None` once it opened,
+/// else the page's address, for the webview to show (nothing opened it). The address is the
+/// shell's: the webview names none.
 #[tauri::command]
 async fn update_open_release<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<Option<String>, CoreError> {
-    let url = updater::release_page(&core.state().update.status);
+    let update = core.state().update;
+    let url = updater::update_page(update.method, &update.status);
     let browser = browser::Browser::new(app);
     let page = url.clone();
     let opened = tauri::async_runtime::spawn_blocking(move || browser.open(&page)).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
@@ -257,6 +259,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
         .plugin(scanner::init())
         .plugin(biometrics::init())
         .plugin(browser::init())
+        .plugin(updater::init())
         .invoke_handler(tauri::generate_handler![
             lockra_dispatch,
             codes_subscribe,
@@ -286,12 +289,15 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let config =
                 CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
             let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::Storages));
-            let updater: Arc<dyn Updater> =
-                options.updater.clone().unwrap_or_else(|| Arc::new(updater::PhoneUpdater::new(&app.package_info().version.to_string())));
+            let phone = Arc::new(updater::PhoneUpdater::new(&app.package_info().version.to_string()));
+            let updater: Arc<dyn Updater> = options.updater.clone().unwrap_or_else(|| phone.clone());
             let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());
+            if options.updater.is_none() {
+                updater::read_installer(app.handle().clone(), phone, core.clone());
+            }
             tauri::async_runtime::spawn(forward_events(app.handle().clone(), core));
             Ok(())
         })

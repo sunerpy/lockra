@@ -14,7 +14,7 @@ use lockra_core::ports::{PortError, SyncTransport as _};
 use lockra_core::{Core, ErrorCode, KdfCost, PickedFile, StorageConfig};
 use lockra_mobile_lib::scanner::Scan;
 use lockra_mobile_lib::sync::Storages;
-use lockra_mobile_lib::{COMMANDS, ShellOptions, build_app, files, scanner, sync};
+use lockra_mobile_lib::{COMMANDS, ShellOptions, build_app, files, scanner, sync, updater};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets};
@@ -38,15 +38,19 @@ fn shell() -> Shell {
 
 /// A shell whose sync storage is `transport`'s, which other shells may share.
 fn shell_on(transport: Arc<FakeTransport>) -> Shell {
+    shell_with(ShellOptions { sync: Some(transport), ..ShellOptions::default() })
+}
+
+/// A shell with `options`, in a folder of its own and with the fast key stretching.
+fn shell_with(options: ShellOptions) -> Shell {
     let dir = tempfile::tempdir().unwrap();
     let clipboard = Arc::new(FakeClipboard::default());
     let options = ShellOptions {
         clipboard: Some(clipboard.clone()),
-        sync: Some(transport),
         data_dir: Some(dir.path().join("data")),
         config_dir: Some(dir.path().join("config")),
         kdf: KdfCost::FAST_INSECURE,
-        ..ShellOptions::default()
+        ..options
     };
     let mut app = build_app(mock_builder(), options).build(mock_context(noop_assets())).unwrap();
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
@@ -249,6 +253,18 @@ fn the_phone_checks_for_updates_and_opens_the_release_page_rather_than_installin
     assert_eq!(shell.dispatch(json!({ "command": "update_install" })).unwrap_err(), json!({ "code": "update_unavailable" }));
     // This build has no browser: the command answers with the page's address, to show instead.
     assert_eq!(shell.invoke("update_open_release", json!({})).unwrap(), json!("https://github.com/sunerpy/lockra/releases/latest"));
+}
+
+#[test]
+fn a_phone_from_google_play_opens_its_listing_and_asks_github_nothing() {
+    let play = updater::PhoneUpdater::new("0.8.4");
+    assert!(play.note_installer(Some(updater::PLAY_STORE)));
+    let shell = shell_with(ShellOptions { updater: Some(Arc::new(play)), ..ShellOptions::default() });
+    assert_eq!(shell.dispatch(json!({ "command": "app_state" })).unwrap()["update"]["method"], "play");
+    for command in ["update_check", "update_install"] {
+        assert_eq!(shell.dispatch(json!({ "command": command })).unwrap_err(), json!({ "code": "update_unavailable" }), "{command}");
+    }
+    assert_eq!(shell.invoke("update_open_release", json!({})).unwrap(), json!("https://play.google.com/store/apps/details?id=dev.lockra.mobile"));
 }
 
 #[test]

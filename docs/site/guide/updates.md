@@ -72,6 +72,15 @@ the newest version when you tap it; when a newer one is out, **Open the release 
 the phone's browser, and the APK there installs over the app and keeps the vault. The phone never
 checks on its own. Uninstalling the app deletes its vault, so save a backup first.
 
+#### Installed from Google Play
+
+<StatusTag status="building" /> In development, not released yet.
+
+From the next version, a Lockra installed from Google Play is updated by Google Play: **Settings ›
+About** says **Updated by Google Play**, and **Open in Google Play** opens Lockra's page in Google
+Play, where you update it. Such a copy asks GitHub nothing. A Lockra installed from the APK on the
+release page checks for updates as above.
+
 ## Where the files are
 
 |          | Windows                                      | macOS                                                            | Linux                                            |

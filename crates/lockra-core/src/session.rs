@@ -1345,6 +1345,13 @@ impl Core {
         self.shared.wake.notify_one();
     }
 
+    /// The shell learned how this copy updates after start (on the phone, who installed it, which a
+    /// plugin call off the setup thread tells): the state goes out again with the update view as
+    /// the updater now gives it.
+    pub fn refresh_update(&self) {
+        self.changed();
+    }
+
     /// Stream code frames to `sink` (replacing any previous subscriber); the first frame goes out now.
     pub fn subscribe_codes(&self, sink: Arc<dyn CodeSink>) {
         self.lock().codes = Some(sink);
@@ -1374,8 +1381,9 @@ impl Core {
     /// One run at a time, in the background.
     fn start_update(&self, run: UpdateRun) -> CoreResult<()> {
         let Some(method) = self.shared.ports.updater.method() else { return Err(ErrorCode::UpdateUnavailable.into()) };
-        // The phone checks only: a newer release opens its page.
-        if run != UpdateRun::Check && !method.installs() {
+        // The phone checks only: a newer release opens its page. A copy from Google Play does not
+        // even check: Play updates it.
+        if !method.checks() || (run != UpdateRun::Check && !method.installs()) {
             return Err(ErrorCode::UpdateUnavailable.into());
         }
         {

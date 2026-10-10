@@ -333,7 +333,16 @@ export type RestoreView = z.infer<typeof restoreViewSchema>;
 // ---- the in-app update -----------------------------------------------------------------------
 
 /** How this copy was installed, which is how an update installs (lockra-core `InstallMethod`). */
-export const INSTALL_METHODS = ["deb", "rpm", "appimage", "nsis", "msi", "app", "android"] as const;
+export const INSTALL_METHODS = [
+  "deb",
+  "rpm",
+  "appimage",
+  "nsis",
+  "msi",
+  "app",
+  "android",
+  "play",
+] as const;
 export const installMethodSchema = z.enum(INSTALL_METHODS);
 export type InstallMethod = z.infer<typeof installMethodSchema>;
 
