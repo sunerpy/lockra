@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.6](https://github.com/sunerpy/lockra/compare/v0.8.5...v0.8.6) (2026-10-10)
+
+
+### Features
+
+* 支持拖动排序与新的分组选择器，手机端可用指纹代替主密码 ([#105](https://github.com/sunerpy/lockra/issues/105)) ([4b451cb](https://github.com/sunerpy/lockra/commit/4b451cbdcbc2623dae3e110c012b7abceafbd2db))
+
 ## [0.8.5](https://github.com/sunerpy/lockra/compare/v0.8.4...v0.8.5) (2026-10-10)
 
 
