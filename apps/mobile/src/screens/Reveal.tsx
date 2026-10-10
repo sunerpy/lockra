@@ -1,10 +1,12 @@
-// An account's secret and QR code, behind the master password entered again; they hide after
-// REVEAL_SECONDS like any secret (app/secret-page.ts).
+// An account's secret and QR code, once the user proved to be here: the fingerprint that unlocks
+// this vault (asked by itself where it is the default unlock), or the master password. They hide
+// after REVEAL_SECONDS like any secret (app/secret-page.ts).
 import { type EntryView, type Revealed, entryLabel, errorText } from "@lockra/shared";
 import { Banner, Button, PasswordField, QrView, useBackend, useSubmit, useT } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
-import { useSecretPage } from "../app/secret-page";
+import { shown, useAutoFingerprint } from "../app/presence";
+import { useSecretAnswer, useSecretPage } from "../app/secret-page";
 import { Page } from "../components/Page";
 
 export function Reveal({ entry }: { entry: EntryView }) {
@@ -15,28 +17,55 @@ export function Reveal({ entry }: { entry: EntryView }) {
   const [revealed, setRevealed] = useState<{ answer: Revealed; at: number } | undefined>(undefined);
   const submit = useSubmit();
   const left = useSecretPage(revealed?.at);
+  const deliver = useSecretAnswer();
   const { back } = nav;
-  const onSubmit = async (event: SubmitEvent) => {
-    event.preventDefault();
+  const ask = async (typed?: string) => {
     const answer = await submit.run(() =>
-      backend.dispatch({ command: "entry_reveal", id: entry.id, password }),
+      backend.dispatch(
+        typed === undefined
+          ? { command: "entry_reveal", id: entry.id, reason: t("entry.revealReason") }
+          : { command: "entry_reveal", id: entry.id, password: typed },
+      ),
     );
     setPassword("");
-    if (answer !== undefined) setRevealed({ answer, at: Date.now() });
+    // The fingerprint's prompt may outlast the page: a page gone shows nothing.
+    if (answer !== undefined) deliver(() => setRevealed({ answer, at: Date.now() }));
   };
+  const fingerprint = useAutoFingerprint(() => ask());
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (password === "") return;
+    await ask(password);
+  };
+  const failure = shown(submit.error);
+  const error = failure === undefined ? undefined : errorText(t, failure);
   const name = entryLabel(entry.issuer, entry.account);
   if (revealed === undefined) {
     return (
       <Page title={t("entry.revealTitle")} testId="page-reveal">
         <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-4">
-          <p className="text-[14px] text-fg">{t("entry.revealPrompt", { name })}</p>
+          <p className="text-[14px] text-fg">
+            {t(fingerprint === null ? "entry.revealPrompt" : "entry.revealPromptBiometric", {
+              name,
+            })}
+          </p>
+          {fingerprint !== null && (
+            <Button
+              variant="outline"
+              size="lg"
+              icon="fingerprint"
+              loading={submit.busy}
+              onClick={() => void ask()}>
+              {t("mobile.verifyWith")}
+            </Button>
+          )}
           <PasswordField
             size="lg"
             label={t("unlock.password")}
             value={password}
             onChange={setPassword}
             autoComplete="current-password"
-            error={submit.error === undefined ? undefined : errorText(t, submit.error)}
+            error={error}
           />
           <Button
             variant="primary"

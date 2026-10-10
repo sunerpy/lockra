@@ -34,6 +34,7 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
+      "keyring_unsealed": true,
       "key_saved": false
     }
   },
@@ -72,6 +73,7 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
+      "keyring_unsealed": true,
       "key_saved": false
     }
   },
@@ -111,6 +113,7 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
+      "keyring_unsealed": true,
       "key_saved": false
     }
   },
@@ -151,6 +154,7 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
+      "keyring_unsealed": true,
       "key_saved": false
     }
   },
@@ -180,6 +184,7 @@
       ],
       "unreadable": [],
       "keyring_pending": true,
+      "keyring_unsealed": true,
       "key_saved": false
     }
   },
@@ -215,6 +220,7 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
+      "keyring_unsealed": true,
       "key_saved": false
     }
   },
@@ -249,6 +255,7 @@
         "ffeeddccbbaa99887766554433221100"
       ],
       "keyring_pending": false,
+      "keyring_unsealed": true,
       "key_saved": false
     }
   },

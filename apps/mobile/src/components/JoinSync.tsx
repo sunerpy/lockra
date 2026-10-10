@@ -6,7 +6,9 @@
 // the master password of a device in it: on the welcome screen it becomes this phone's; with a
 // vault, its own is tried first, and only when the space's devices use another one does the form
 // ask for that too. An invitation without storage (a space in a computer's cloud drive folder)
-// asks for the storage this phone reaches the same folder at, such as its WebDAV.
+// asks for the storage this phone reaches the same folder at, such as its WebDAV. With a vault
+// whose fingerprint is on, an invitation may take the fingerprint for the vault's password: this
+// phone's keyring is then sealed under its password at the next unlock with it (the core).
 import {
   type JoinSource,
   emptyStorageForm,
@@ -30,6 +32,7 @@ import {
 } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { overPhoneScreen } from "../app/phone-screen";
+import { shown, useFingerprint } from "../app/presence";
 
 type Mode = "scan" | "invite" | "key";
 
@@ -56,6 +59,9 @@ export function JoinSync({
   const [spacePassword, setSpacePassword] = useState("");
   const [deviceName, setDeviceName] = useState(() => t("sync.platformDevice.android"));
   const submit = useSubmit();
+  const fingerprint = useFingerprint();
+  // An invitation to this unlocked vault: its fingerprint may stand in for its password.
+  const byFingerprint = !newVault && mode !== "key" && fingerprint !== null;
   const sealed = mode === "invite" && isSealedInvite(invite);
   const withStorage = mode === "key" || askStorage;
   const sourceReady =
@@ -68,10 +74,14 @@ export function JoinSync({
   // A new vault's own password, typed twice: an invitation asks no other.
   const choosing = newVault && mode !== "key";
   const mismatch = choosing && repeat !== "" && repeat !== password;
-  const ready = sourceReady && password !== "" && (!choosing || repeat === password);
+  const ready =
+    sourceReady && (password !== "" || byFingerprint) && (!choosing || repeat === password);
+  // Left empty, the fingerprint: no password goes, the core asks for the check.
+  const proof = password === "" ? { reason: t("sync.join.reason") } : { password };
   // A recovery whose space's devices use another password asks for it too.
   const showSpace = !newVault && askSpace && mode === "key";
   const space_password = showSpace && spacePassword !== "" ? spacePassword : undefined;
+  const problem = shown(submit.error);
   const forget = () => {
     setPassword("");
     setRepeat("");
@@ -100,7 +110,7 @@ export function JoinSync({
         overPhoneScreen(() =>
           backend.scanJoin(
             { prompt: t("mobile.sync.scanPrompt"), cancel: t("common.cancel") },
-            { password, deviceName, spacePassword: space_password, storage: ownStorage },
+            { ...proof, deviceName, spacePassword: space_password, storage: ownStorage },
           ),
         ),
       ),
@@ -131,7 +141,7 @@ export function JoinSync({
         backend.dispatch({
           command: "sync_join",
           source,
-          password,
+          ...proof,
           device_name: deviceName,
           space_password,
         }),
@@ -255,6 +265,11 @@ export function JoinSync({
         />
       )}
       {newVault && <p className="text-[13px] text-fg-muted">{t("mobile.sync.newVault")}</p>}
+      {byFingerprint && (
+        <p className="text-[13px] text-fg-muted" data-testid="sync-join-fingerprint">
+          {t("sync.join.biometricHint")}
+        </p>
+      )}
       {showSpace && (
         <PasswordField
           size="lg"
@@ -265,9 +280,9 @@ export function JoinSync({
           autoComplete="off"
         />
       )}
-      {submit.error !== undefined && submit.error !== "sync_invite_needs_storage" && (
+      {problem !== undefined && problem !== "sync_invite_needs_storage" && (
         <p role="alert" className="text-[13px] text-danger">
-          {errorText(t, submit.error)}
+          {errorText(t, problem)}
         </p>
       )}
       <Button

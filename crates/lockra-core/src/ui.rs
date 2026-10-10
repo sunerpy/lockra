@@ -75,6 +75,11 @@ pub struct UiState {
     /// The groups folded in the code list ("" for the accounts in no group); this device's, kept in
     /// the vault, so empty unless unlocked.
     pub collapsed_groups: Vec<String>,
+    /// The accounts in the order they were dragged into (`SortOrder::Manual`); this device's, kept
+    /// in the vault, so empty unless unlocked.
+    pub entry_order: Vec<Uuid>,
+    /// The groups in the order they were dragged into; this device's, kept in the vault.
+    pub group_order: Vec<String>,
     /// The settings.
     pub settings: Settings,
     /// The import being previewed.
@@ -119,6 +124,9 @@ pub struct SyncSpaceView {
     pub unreadable: Vec<String>,
     /// A new master password still has to reach the space's keyring.
     pub keyring_pending: bool,
+    /// This device joined by the biometric check: its master password recovers the space only
+    /// once it was typed here again (the next unlock with it seals its keyring).
+    pub keyring_unsealed: bool,
     /// The sync key was saved or written down (set on the device that made the space once the
     /// user says so); until then Settings › Sync reminds of it.
     pub key_saved: bool,

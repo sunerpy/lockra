@@ -1,22 +1,13 @@
 // An invitation for another device, once the user proved to be here (the fingerprint that unlocks
-// this vault, or the master password): the QR code the other device scans and, for a computer,
-// which scans nothing, the text the core copies: on a relay the pairing link itself, elsewhere,
-// behind "Can't scan?", the sealed text with its code apart. It hides after REVEAL_SECONDS like any
-// secret (app/secret-page.ts).
+// this vault, asked by itself where it is the default unlock, or the master password): the QR code
+// the other device scans and, for a computer, which scans nothing, the text the core copies: on a
+// relay the pairing link itself, elsewhere, behind "Can't scan?", the sealed text with its code
+// apart. It hides after REVEAL_SECONDS like any secret (app/secret-page.ts).
 import { type SyncInvite as Invite, errorText } from "@lockra/shared";
-import {
-  Banner,
-  Button,
-  PasswordField,
-  QrView,
-  unlockBiometric,
-  useBackend,
-  useSubmit,
-  useT,
-  useUiState,
-} from "@lockra/ui";
+import { Banner, Button, PasswordField, QrView, useBackend, useSubmit, useT } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
+import { shown, useAutoFingerprint } from "../app/presence";
 import { useSecretAnswer, useSecretPage } from "../app/secret-page";
 import { Page } from "../components/Page";
 
@@ -24,8 +15,6 @@ export function SyncInvite() {
   const t = useT();
   const nav = useNav();
   const { backend } = useBackend();
-  const { lock } = useUiState();
-  const biometric = unlockBiometric(lock);
   const [password, setPassword] = useState("");
   const [invite, setInvite] = useState<{ answer: Invite; at: number } | undefined>(undefined);
   const submit = useSubmit();
@@ -45,6 +34,8 @@ export function SyncInvite() {
     setPassword("");
     if (answer !== undefined) deliver(() => setInvite({ answer, at: Date.now() }));
   };
+  const biometric = useAutoFingerprint(() => ask());
+  const failure = shown(submit.error);
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (password === "") return;
@@ -73,7 +64,7 @@ export function SyncInvite() {
             value={password}
             onChange={setPassword}
             autoComplete="current-password"
-            error={submit.error === undefined ? undefined : errorText(t, submit.error)}
+            error={failure === undefined ? undefined : errorText(t, failure)}
           />
           <Button
             variant="primary"

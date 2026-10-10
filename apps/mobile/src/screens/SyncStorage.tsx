@@ -1,5 +1,6 @@
 // New storage settings for the space: another access key, password or address. The space must be
-// at the new place already; the secret is typed in again (the core never sends it back).
+// at the new place already; the secret is typed in again (the core never sends it back). The
+// master password confirms the change or, left empty, the fingerprint that unlocks this vault.
 import {
   type SyncSpaceView,
   errorText,
@@ -10,6 +11,7 @@ import {
 import { Button, PasswordField, StorageFields, useBackend, useSubmit, useT } from "@lockra/ui";
 import { type SubmitEvent, useState } from "react";
 import { useNav } from "../app/nav";
+import { shown, useFingerprint } from "../app/presence";
 import { Page } from "../components/Page";
 
 export function SyncStorage({ space }: { space: SyncSpaceView }) {
@@ -19,12 +21,19 @@ export function SyncStorage({ space }: { space: SyncSpaceView }) {
   const [form, setForm] = useState(() => storageFormFrom(space.storage));
   const [password, setPassword] = useState("");
   const submit = useSubmit();
-  const ready = storageComplete(form) && password !== "";
+  const fingerprint = useFingerprint();
+  const ready = storageComplete(form) && (password !== "" || fingerprint !== null);
+  const failure = shown(submit.error);
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!ready) return;
+    const storage = storageConfig(form);
     const done = await submit.run(() =>
-      backend.dispatch({ command: "sync_set_storage", storage: storageConfig(form), password }),
+      backend.dispatch(
+        password === ""
+          ? { command: "sync_set_storage", storage, reason: t("sync.storageReason") }
+          : { command: "sync_set_storage", storage, password },
+      ),
     );
     setPassword("");
     if (done !== undefined) nav.back();
@@ -48,10 +57,11 @@ export function SyncStorage({ space }: { space: SyncSpaceView }) {
           value={password}
           onChange={setPassword}
           autoComplete="current-password"
+          help={fingerprint === null ? undefined : t("mobile.passwordOrFingerprint")}
         />
-        {submit.error !== undefined && (
+        {failure !== undefined && (
           <p role="alert" className="text-[13px] text-danger">
-            {errorText(t, submit.error)}
+            {errorText(t, failure)}
           </p>
         )}
         <Button variant="primary" size="lg" type="submit" loading={submit.busy} disabled={!ready}>

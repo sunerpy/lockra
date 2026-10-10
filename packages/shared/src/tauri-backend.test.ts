@@ -137,6 +137,8 @@ describe("TauriBackend", () => {
     expect(await backend.pickSyncFolder()).toBe("C:\\Users\\me\\OneDrive\\Lockra");
     expect(await backend.pickRestoreFile()).toBe(false);
     expect(await backend.exportOtpauthFile(["a"], "pw")).toBe("x.txt");
+    // Without a password: the fingerprint, with the prompt's words.
+    expect(await backend.exportOtpauthFile(["a"], undefined, "export")).toBe("x.txt");
     const join = { password: "pw", deviceName: "Phone" };
     expect(await backend.scanJoin({ prompt: "Point at it", cancel: "Cancel" }, join)).toBe(true);
     const dav = {
@@ -152,6 +154,12 @@ describe("TauriBackend", () => {
         { ...join, storage: dav },
       ),
     ).toBe(true);
+    expect(
+      await backend.scanJoin(
+        { prompt: "Point at it", cancel: "Cancel" },
+        { deviceName: "Phone", reason: "join" },
+      ),
+    ).toBe(true);
     expect(await backend.openRelease()).toBe(
       "https://github.com/sunerpy/lockra/releases/tag/v0.7.0",
     );
@@ -164,7 +172,8 @@ describe("TauriBackend", () => {
       ["backup_pick_dir", undefined],
       ["sync_pick_folder", undefined],
       ["restore_pick", undefined],
-      ["export_otpauth_file", { entryIds: ["a"], password: "pw" }],
+      ["export_otpauth_file", { entryIds: ["a"], password: "pw", reason: null }],
+      ["export_otpauth_file", { entryIds: ["a"], password: null, reason: "export" }],
       [
         "sync_scan_join",
         {
@@ -174,6 +183,7 @@ describe("TauriBackend", () => {
           deviceName: "Phone",
           spacePassword: null,
           storage: null,
+          reason: null,
         },
       ],
       [
@@ -185,6 +195,19 @@ describe("TauriBackend", () => {
           deviceName: "Phone",
           spacePassword: null,
           storage: dav,
+          reason: null,
+        },
+      ],
+      [
+        "sync_scan_join",
+        {
+          prompt: "Point at it",
+          cancel: "Cancel",
+          password: null,
+          deviceName: "Phone",
+          spacePassword: null,
+          storage: null,
+          reason: "join",
         },
       ],
       ["update_open_release", undefined],

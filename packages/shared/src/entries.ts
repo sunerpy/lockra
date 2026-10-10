@@ -36,14 +36,26 @@ function byName(a: EntryView, b: EntryView): number {
   return nameOf(a).localeCompare(nameOf(b)) || a.account.localeCompare(b.account);
 }
 
-/** Favourites first, then `order`; ties by name. */
-export function sortEntries(entries: readonly EntryView[], order: SortOrder): EntryView[] {
+/** Favourites first, then `order`; ties by name. The `manual` order follows `dragged` (the ids in
+ *  the order they were dragged into); the accounts never dragged come after it, oldest first. */
+export function sortEntries(
+  entries: readonly EntryView[],
+  order: SortOrder,
+  dragged: readonly string[] = [],
+): EntryView[] {
+  const place = new Map(dragged.map((id, at) => [id, at]));
+  // Two accounts never dragged: Infinity − Infinity is NaN, which falls through to the next key.
+  const placed = (a: EntryView, b: EntryView) =>
+    (place.get(a.id) ?? Infinity) - (place.get(b.id) ?? Infinity) ||
+    a.created_at_ms - b.created_at_ms;
   const key: (a: EntryView, b: EntryView) => number =
     order === "added"
       ? (a, b) => b.created_at_ms - a.created_at_ms
       : order === "recent"
         ? (a, b) => (b.last_used_at_ms ?? 0) - (a.last_used_at_ms ?? 0)
-        : byName;
+        : order === "manual"
+          ? placed
+          : byName;
   // A sorted copy: `toSorted` is ES2023 (Safari 16), past the ES2022 lib kept for older macOS.
   // oxlint-disable-next-line unicorn/no-array-sort
   return [...entries].sort(
@@ -71,9 +83,13 @@ export interface GroupSection {
   entries: EntryView[];
 }
 
-/** The accounts in sections: one per group by name, then the accounts in no group; each keeps the
- *  order it is given. */
-export function groupSections(entries: readonly EntryView[]): GroupSection[] {
+/** The accounts in sections: one per group, the groups in `dragged` first in that order and the
+ *  others by name, then the accounts in no group; each keeps the order it is given. */
+export function groupSections(
+  entries: readonly EntryView[],
+  dragged: readonly string[] = [],
+): GroupSection[] {
+  const place = new Map(dragged.map((group, at) => [group, at]));
   const byGroup = new Map<string, EntryView[]>();
   for (const entry of entries) {
     const key = entry.group ?? NO_GROUP;
@@ -84,9 +100,22 @@ export function groupSections(entries: readonly EntryView[]): GroupSection[] {
   const keys = [...byGroup.keys()].filter((key) => key !== NO_GROUP);
   // A sorted copy: `toSorted` is ES2023 (Safari 16), past the ES2022 lib kept for older macOS.
   // oxlint-disable-next-line unicorn/no-array-sort
-  keys.sort((a, b) => a.localeCompare(b));
+  keys.sort(
+    (a, b) => (place.get(a) ?? Infinity) - (place.get(b) ?? Infinity) || a.localeCompare(b),
+  );
   if (byGroup.has(NO_GROUP)) keys.push(NO_GROUP);
   return keys.map((key) => ({ key, entries: byGroup.get(key) ?? [] }));
+}
+
+/** `list` with `item` moved to where `target` is (a drop on it, or one step with the keyboard). */
+export function moveItem<T>(list: readonly T[], item: T, target: T): T[] {
+  const from = list.indexOf(item);
+  const to = list.indexOf(target);
+  const next = [...list];
+  if (from < 0 || to < 0 || from === to) return next;
+  next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
 }
 
 /** The groups the accounts are in, sorted, each once. */

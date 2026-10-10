@@ -94,8 +94,15 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
         <LampText tone={line.tone} pulse={syncing}>
           <span data-testid="sync-status">{line.text}</span>
         </LampText>
-        {space.keyring_pending && (
-          <p className="text-[13px] text-fg-muted">{t("sync.status.keyringPending")}</p>
+        {/* Joined by the fingerprint: the keyring waits for the next unlock with the password. */}
+        {space.keyring_unsealed ? (
+          <p className="text-[13px] text-fg-muted" data-testid="sync-keyring-unsealed">
+            {t("sync.status.keyringUnsealed")}
+          </p>
+        ) : (
+          space.keyring_pending && (
+            <p className="text-[13px] text-fg-muted">{t("sync.status.keyringPending")}</p>
+          )
         )}
         <Button
           size="lg"

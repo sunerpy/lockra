@@ -8,8 +8,8 @@ equals an independent RFC 6238 computation; lock and unlock; Google's export QR 
 (rxing, scripts' decode-qr) back to the same account; then screenshots of every page at three
 window sizes in the light and dark themes, plus the empty, long and 200-account states; Touch ID
 turned on from the unlock screen's pointer and unlocking with it (the debug build's stand-in check);
-an account's colour and avatar text, folded groups, a row's right-click menu, and several accounts
-ticked and moved to a group at once.
+an account's colour and avatar text, folded groups, a row's right-click menu, several accounts
+ticked and moved to a group at once, the group picker's list, and accounts reordered by a handle.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -460,6 +460,63 @@ class Smoke:
         web.gone('[role="dialog"]')
         web.gone('[data-testid="codes-selection"]')
         until("three accounts in Home", lambda: sum(e["group"] == "Home" for e in web.invoke({"command": "app_state"})["entries"]) == 3)
+        # The group picker: Lockra's own list under the field (the webview's <datalist> drew a dark
+        # native box), which Esc closes before the dialog.
+        web.click(web.wait(css='[data-testid="row-edit"]'))
+        web.click(web.wait(xpath=f"{dialog}//label[normalize-space()='分组']/following::input[1]"))
+        web.wait('[data-testid="group-options"]')
+        self.shot("edit-group-1280-light")
+        self.focus()
+        self.x("key", "Escape")
+        web.gone('[data-testid="group-options"]')
+        if not web.find_all('[role="dialog"]'):
+            raise SystemExit("smoke: Esc in the group list closed the dialog as well")
+        self.x("key", "Escape")
+        web.gone('[role="dialog"]')
+        # Reordering: the handles, and an account moved down a place from the keyboard; the code
+        # order turns manual, kept in the vault for this device.
+        sort = web.invoke({"command": "app_state"})["settings"]["sort"]
+        web.click(web.wait(css='[data-testid="codes-reorder"]'))
+        web.wait('[data-testid="codes-reordering"]')
+        handle = web.wait(css='[data-sort-handle]:not([data-sort-handle^="group:"])')
+        web.run("arguments[0].focus()", {ELEMENT: handle})
+        self.focus()
+        self.x("key", "Down")
+        until("the dragged order", lambda: len(web.invoke({"command": "app_state"})["entry_order"]) == len(entries))
+        until("the manual order", lambda: web.invoke({"command": "app_state"})["settings"]["sort"] == "manual")
+        # And by the pointer, X's own: the handle pressed, moved down, let go. The window
+        # is at the screen's origin (`focus`) and draws its own title bar, so the page's
+        # coordinates are the screen's.
+        order = web.invoke({"command": "app_state"})["entry_order"]
+        x, y = (int(v) for v in web.run("const r = arguments[0].getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]", {ELEMENT: handle}))
+        # What the page hears of it, for a failure to say.
+        web.run(
+            "window.lockraPointer = [];"
+            "for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'mousedown', 'mouseup', 'dragstart', 'lostpointercapture'])"
+            "  document.addEventListener(type, (e) => window.lockraPointer.push([type, e.clientX, e.clientY, e.target.closest('[data-sort-handle]')?.dataset.sortHandle ?? e.target.tagName]), true);"
+        )
+        # Each step waits for the page: a burst of moves and the release in a few milliseconds came
+        # before the list knew what the row was over, and the drop changed nothing (one run in two).
+        moved = "return [...document.querySelectorAll('[data-sort-name]')].some((e) => !e.hasAttribute('data-dragging') && Number(/translate3d\\([^,]*,\\s*(-?[\\d.]+)px/.exec(e.style.transform)?.[1] ?? 0) !== 0)"
+        self.x("mousemove", str(x), str(y))
+        self.x("mousedown", "1")
+        self.x("mousemove", str(x), str(y + 8))
+        try:
+            until("the drag under way", lambda: web.find_all("[data-dragging]"), timeout=10)
+            self.x("mousemove", str(x), str(y + 80))
+            until("another account making room", lambda: web.run(moved), timeout=10)
+            self.x("mouseup", "1")
+            until("the order dragged by the pointer", lambda: web.invoke({"command": "app_state"})["entry_order"] != order, timeout=10)
+        except SystemExit:
+            heard = web.run("return window.lockraPointer")
+            at = web.run("const e = document.elementFromPoint(arguments[0], arguments[1]); return e ? e.outerHTML.slice(0, 200) : null", x, y)
+            said = web.run("return [...document.querySelectorAll('[id^=\"DndLiveRegion\"]')].map((e) => e.textContent)")
+            print(f"smoke: the drag from {x},{y}: the page heard {json.dumps(heard)[:1500]}; at that point: {at}; dnd-kit said {said}", flush=True)
+            raise
+        self.shot("codes-reorder-1280-light")
+        web.click(web.wait(css='[data-testid="codes-reorder-done"]'))
+        web.gone('[data-testid="codes-reordering"]')
+        self.settings(sort=sort)
         for entry in web.invoke({"command": "app_state"})["entries"]:
             web.invoke({"command": "entry_update", "id": entry["id"], "patch": {"group": ""}})
 

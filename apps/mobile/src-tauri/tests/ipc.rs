@@ -232,7 +232,7 @@ fn an_invitation_with_the_sync_key_alone_joins_through_this_phones_own_storage()
         tauri::async_runtime::block_on(sync::join(
             &core,
             Ok(Scan::Code(Zeroizing::new(invite.clone()))),
-            Zeroizing::new(PASSWORD.into()),
+            sync::JoinProof { password: Some(Zeroizing::new(PASSWORD.into())), reason: None },
             "Phone".into(),
             None,
             storage,
@@ -278,7 +278,8 @@ fn an_invitation_the_camera_reads_joins_its_space() {
     // A new phone: the master password of the space's devices becomes its vault's.
     let phone = shell_on(transport);
     let core = phone.core();
-    let join = |scan| tauri::async_runtime::block_on(sync::join(&core, scan, Zeroizing::new(PASSWORD.into()), "Phone".into(), None, None));
+    let proof = || sync::JoinProof { password: Some(Zeroizing::new(PASSWORD.into())), reason: None };
+    let join = |scan| tauri::async_runtime::block_on(sync::join(&core, scan, proof(), "Phone".into(), None, None));
     assert!(!join(Ok(Scan::Left)).unwrap());
     let account = "otpauth://totp/Scanned:me?secret=MZXW6YTBOI&issuer=Scanned";
     assert_eq!(join(Ok(Scan::Code(Zeroizing::new(account.into())))).unwrap_err().code, ErrorCode::SyncInviteInvalid);

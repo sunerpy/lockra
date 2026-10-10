@@ -108,6 +108,29 @@ The invitation goes from the camera to Lockra and is not shown on the phone. Pas
 pairing link or the invitation, or recovering with the storage settings and the recovery key, works
 as on a computer.
 
+### The fingerprint instead of the master password on the phone
+
+<StatusTag status="building" />
+
+On a phone with **Unlock with fingerprint** on, the fingerprint can stand in for the master
+password wherever sync asks for it:
+
+- **Invite another device** and **Show the recovery key…**: with **Default unlock** on
+  **Fingerprint**, the page asks for the fingerprint as it opens; after a cancel, type the master
+  password instead.
+- **Join an existing sync**: joining from a scan, a pairing link or an invitation, leave **This
+  device's master password** empty, choose **Scan to join** or **Join**, then verify your
+  fingerprint.
+- **Change storage settings**: leave the master password empty, choose **Save**, then verify your
+  fingerprint.
+
+Joined with the fingerprint, this phone's copy of the space's key cannot be opened with its master
+password yet: the next time you unlock the phone with the master password, Lockra seals it under
+that password and writes it at a following sync. Until then **Settings › Sync** says so; to recover
+the space with the recovery key in the meantime, enter another device's master password. Joining
+with the recovery key, joining into a new vault on the welcome screen, and starting sync still ask
+for the master password.
+
 ### Adding a computer from a phone
 
 <StatusTag status="available" /> Available from version 0.8.2.

@@ -107,16 +107,33 @@ pub enum UiCommand {
         /// Which.
         id: Uuid,
     },
-    /// Show the secret, its URI and its QR code.
+    /// Show the secret, its URI and its QR code. Without a password the biometric check that
+    /// unlocks this vault proves the user is there.
     EntryReveal {
         /// Which.
         id: Uuid,
         /// The master password.
-        password: Zeroizing<String>,
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
     },
     /// Fold these groups of the code list ("" for the accounts in no group), unfold the others.
     ViewCollapseGroups {
         /// The groups folded from now on.
+        #[serde(default)]
+        groups: Vec<String>,
+    },
+    /// The accounts in the order they were dragged into; the code order becomes manual.
+    ViewOrderEntries {
+        /// Every account, in order.
+        #[serde(default)]
+        ids: Vec<Uuid>,
+    },
+    /// The groups in the order they were dragged into.
+    ViewOrderGroups {
+        /// Every group, in order.
         #[serde(default)]
         groups: Vec<String>,
     },
@@ -146,8 +163,12 @@ pub enum UiCommand {
         target: ExportTarget,
         /// Which entries.
         entry_ids: Vec<Uuid>,
-        /// The master password.
-        password: Zeroizing<String>,
+        /// The master password; without it the biometric check that unlocks this vault.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
     },
     /// One code of an export.
     ExportPage {
@@ -196,18 +217,23 @@ pub enum UiCommand {
         device_name: String,
     },
     /// Join a space: an invitation, or the storage and the sync key. With no vault yet, the
-    /// password becomes the new vault's master password.
+    /// password becomes the new vault's master password; an unlocked vault may prove presence by
+    /// the biometric check that unlocks it instead.
     SyncJoin {
         /// How.
         source: JoinSource,
         /// This device's master password (the vault's, or the new vault's); it opens the space
         /// too unless `space_password` is given.
-        password: Zeroizing<String>,
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
         /// This device's name in the space.
         device_name: String,
         /// The master password of a device in the space, when it is not `password`.
         #[serde(default)]
         space_password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
     },
     /// The invitation for another device; answers with it (a secret). Without a password the
     /// biometric check that unlocks this vault proves the user is there.
@@ -241,8 +267,12 @@ pub enum UiCommand {
     SyncSetStorage {
         /// Where the space is now, with the credentials.
         storage: StorageConfig,
-        /// The master password.
-        password: Zeroizing<String>,
+        /// The master password; without it the biometric check that unlocks this vault.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
     },
     /// Rename this device in its space.
     SyncRenameDevice {
@@ -262,7 +292,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 47] = [
+pub const COMMANDS: [&str; 49] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -283,6 +313,8 @@ pub const COMMANDS: [&str; 47] = [
     "entry_copy",
     "entry_reveal",
     "view_collapse_groups",
+    "view_order_entries",
+    "view_order_groups",
     "import_text",
     "import_clipboard",
     "import_backup_password",
@@ -379,8 +411,10 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::EntriesSetGroup { ids, group } => unit(core.set_entries_group(&ids, &group))?,
         UiCommand::EntryHotpNext { id } => unit(core.hotp_next(id))?,
         UiCommand::EntryCopy { id } => unit(core.copy_code(id))?,
-        UiCommand::EntryReveal { id, password } => json!(core.reveal(id, password).await?),
+        UiCommand::EntryReveal { id, password, reason } => json!(core.reveal(id, password, reason).await?),
         UiCommand::ViewCollapseGroups { groups } => unit(core.collapse_groups(groups))?,
+        UiCommand::ViewOrderEntries { ids } => unit(core.order_entries(ids))?,
+        UiCommand::ViewOrderGroups { groups } => unit(core.order_groups(groups))?,
         UiCommand::ImportText { text } => unit(core.import_text(&text))?,
         UiCommand::ImportClipboard => unit(core.import_clipboard().await)?,
         UiCommand::ImportBackupPassword { password } => unit(core.import_backup_password(password).await)?,
@@ -389,7 +423,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
             core.import_cancel();
             Value::Null
         }
-        UiCommand::ExportStart { target, entry_ids, password } => json!(core.export_start(target, &entry_ids, password).await?),
+        UiCommand::ExportStart { target, entry_ids, password, reason } => json!(core.export_start(target, &entry_ids, password, reason).await?),
         UiCommand::ExportPage { session, index } => json!(core.export_page(session, index)?),
         UiCommand::ExportClose { session } => {
             core.export_close(session);
@@ -411,12 +445,14 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::UpdateInstall => unit(core.update_install())?,
         // The key is not shown here: Settings › Sync reminds of it, and shows it on `sync_key_reveal`.
         UiCommand::SyncCreate { storage, password, device_name } => unit(core.sync_create(storage, password, device_name).await.map(|_| ()))?,
-        UiCommand::SyncJoin { source, password, device_name, space_password } => unit(core.sync_join(source, password, device_name, space_password).await)?,
+        UiCommand::SyncJoin { source, password, device_name, space_password, reason } => {
+            unit(core.sync_join(source, password, device_name, space_password, reason).await)?
+        }
         UiCommand::SyncInvite { password, reason } => json!(core.sync_invite(password, reason).await?),
         UiCommand::SyncInviteCopy { text } => unit(core.sync_invite_copy(&text))?,
         UiCommand::SyncKeyAcknowledge => unit(core.sync_key_acknowledge())?,
         UiCommand::SyncKeyReveal { password, reason } => json!(core.sync_key_reveal(password, reason).await?),
-        UiCommand::SyncSetStorage { storage, password } => unit(core.sync_set_storage(storage, password).await)?,
+        UiCommand::SyncSetStorage { storage, password, reason } => unit(core.sync_set_storage(storage, password, reason).await)?,
         UiCommand::SyncRenameDevice { name } => unit(core.sync_rename_device(&name))?,
         UiCommand::SyncRemoveDevice { tag } => unit(core.sync_remove_device(&tag).await)?,
         UiCommand::SyncNow => unit(core.sync_now())?,

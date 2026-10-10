@@ -31,7 +31,7 @@ use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
 use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, StorageWatch, SyncTransport, Updater};
-use crate::settings::{Settings, SettingsStore};
+use crate::settings::{Settings, SettingsStore, SortOrder};
 use crate::sync::{
     Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_FOLDER_SETTLE, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND,
     SyncLocal, Working, config_error, device_name, merge_entries, storage_view, sync_error,
@@ -336,9 +336,14 @@ impl Core {
             }
         }
         let path = self.vault_path();
+        let typed = password.clone();
         let opened = blocking(move || Ok(Sealed::open_with_password(&read_limited(&path)?, password.as_bytes())?)).await;
         match opened {
-            Ok(opened) => self.enter(opened),
+            Ok(opened) => {
+                self.enter(opened)?;
+                self.seal_unsealed_keyring(typed);
+                Ok(())
+            }
             Err(error) if error.code == ErrorCode::WrongPassword => {
                 let retry_at = {
                     let mut st = self.lock();
@@ -582,16 +587,19 @@ impl Core {
             }
             let previous = std::mem::replace(&mut session.sealed, sealed);
             let previous_keyring = match (&keyring, session.data.sync_mut()) {
-                (Some((space_id, keyring)), Some(sync)) if sync.space_id == *space_id => {
-                    Some((std::mem::replace(&mut sync.keyring, BASE64.encode(keyring)), std::mem::replace(&mut sync.keyring_written, false)))
-                }
+                (Some((space_id, keyring)), Some(sync)) if sync.space_id == *space_id => Some((
+                    std::mem::replace(&mut sync.keyring, BASE64.encode(keyring)),
+                    std::mem::replace(&mut sync.keyring_written, false),
+                    std::mem::replace(&mut sync.keyring_unsealed, false),
+                )),
                 _ => None,
             };
             if let Err(error) = self.write_vault(session) {
                 session.sealed = previous;
-                if let (Some((keyring, written)), Some(sync)) = (previous_keyring, session.data.sync_mut()) {
+                if let (Some((keyring, written, unsealed)), Some(sync)) = (previous_keyring, session.data.sync_mut()) {
                     sync.keyring = keyring;
                     sync.keyring_written = written;
+                    sync.keyring_unsealed = unsealed;
                 }
                 return Err(error);
             }
@@ -801,6 +809,48 @@ impl Core {
         Ok(())
     }
 
+    /// The accounts in the order they were dragged into, kept for this device like the folds (no
+    /// backup or sync follows): ids of no account and repeats are dropped. The code order becomes
+    /// manual, which is what showing a dragged order means.
+    pub fn order_entries(&self, ids: Vec<Uuid>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let existing: std::collections::HashSet<Uuid> = session.data.entries.iter().map(|e| e.id).collect();
+            let mut seen = std::collections::HashSet::new();
+            let order: Vec<Uuid> = ids.into_iter().filter(|id| existing.contains(id) && seen.insert(*id)).collect();
+            if session.data.entry_order() != order.as_slice() {
+                let previous = std::mem::replace(&mut session.data.local_mut().view.entry_order, order);
+                self.save(&mut st, false, move |s| s.data.local_mut().view.entry_order = previous)?;
+            }
+        }
+        let settings = self.lock().settings.clone();
+        if settings.sort != SortOrder::Manual {
+            return self.set_settings(Settings { sort: SortOrder::Manual, ..settings });
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// The groups in the order they were dragged into, kept for this device like the folds: groups
+    /// in use, cleaned, once each ("" is no group, whose section stays last).
+    pub fn order_groups(&self, groups: Vec<String>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let existing: std::collections::BTreeSet<String> = session.data.entries.iter().filter_map(|e| e.group.clone()).collect();
+            let mut seen = std::collections::HashSet::new();
+            let order: Vec<String> = groups.iter().map(|g| clean_name(g)).filter(|g| existing.contains(g) && seen.insert(g.clone())).collect();
+            if session.data.group_order() == order.as_slice() {
+                return Ok(());
+            }
+            let previous = std::mem::replace(&mut session.data.local_mut().view.group_order, order);
+            self.save(&mut st, false, move |s| s.data.local_mut().view.group_order = previous)?;
+        }
+        self.changed();
+        Ok(())
+    }
+
     /// Delete an entry.
     pub fn delete_entry(&self, id: Uuid) -> CoreResult<()> {
         let now = self.now_ms();
@@ -867,15 +917,15 @@ impl Core {
         Ok(())
     }
 
-    /// The secret, its URI and its QR code, after the master password was entered again.
-    pub async fn reveal(&self, id: Uuid, password: Zeroizing<String>) -> CoreResult<Revealed> {
-        let (sealed, auth) = {
+    /// The secret, its URI and its QR code, once the user proved to be at this device (the master
+    /// password, or without it the biometric check that unlocks this vault).
+    pub async fn reveal(&self, id: Uuid, password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<Revealed> {
+        let auth = {
             let st = self.lock();
-            let session = unlocked(&st)?;
-            (session.sealed.clone(), session.data.get(id).ok_or(ErrorCode::EntryNotFound)?.to_auth())
+            unlocked(&st)?.data.get(id).ok_or(ErrorCode::EntryNotFound)?.to_auth()
         };
+        self.confirm_presence(password, reason).await?;
         blocking(move || {
-            sealed.verify_password(password.as_bytes())?;
             let uri = auth.to_uri();
             let svg = qr::svg(&uri).map_err(|_| ErrorCode::Internal)?;
             let secret = base32::encode(&auth.secret).as_bytes().chunks(4).map(|c| String::from_utf8_lossy(c).into_owned()).collect::<Vec<_>>().join(" ");
@@ -1066,22 +1116,25 @@ impl Core {
 
     // ---- export ---------------------------------------------------------------------------
 
-    /// Build the QR codes for `entry_ids` after checking the master password again.
-    pub async fn export_start(&self, target: ExportTarget, entry_ids: &[Uuid], password: Zeroizing<String>) -> CoreResult<ExportStarted> {
-        let (sealed, entries) = {
+    /// Build the QR codes for `entry_ids` once the user proved to be at this device (the master
+    /// password, or without it the biometric check that unlocks this vault).
+    pub async fn export_start(
+        &self,
+        target: ExportTarget,
+        entry_ids: &[Uuid],
+        password: Option<Zeroizing<String>>,
+        reason: Option<String>,
+    ) -> CoreResult<ExportStarted> {
+        let entries = {
             let st = self.lock();
             let session = unlocked(&st)?;
-            let entries: Vec<Entry> = entry_ids.iter().filter_map(|id| session.data.get(*id).cloned()).collect();
-            (session.sealed.clone(), entries)
+            entry_ids.iter().filter_map(|id| session.data.get(*id).cloned()).collect::<Vec<Entry>>()
         };
         if entries.is_empty() {
             return Err(ErrorCode::ExportNothing.into());
         }
-        let (pages, excluded) = blocking(move || {
-            sealed.verify_password(password.as_bytes())?;
-            export::build(target, &entries)
-        })
-        .await?;
+        self.confirm_presence(password, reason).await?;
+        let (pages, excluded) = blocking(move || export::build(target, &entries)).await?;
         let id = Uuid::new_v4();
         let total = u32::try_from(pages.len()).unwrap_or(u32::MAX);
         {
@@ -1122,7 +1175,7 @@ impl Core {
 
     /// Write `entry_ids` as a plain `otpauth://` list to `path` (the user confirmed it is plaintext).
     pub async fn export_otpauth_file(&self, entry_ids: &[Uuid], password: Zeroizing<String>, path: PathBuf) -> CoreResult<String> {
-        let list = self.export_otpauth_text(entry_ids, password).await?;
+        let list = self.export_otpauth_text(entry_ids, Some(password), None).await?;
         blocking(move || {
             write_private(&path, list.as_bytes())?;
             Ok(file_name(&path))
@@ -1130,20 +1183,20 @@ impl Core {
         .await
     }
 
-    /// `entry_ids` as a plain `otpauth://` list, after checking the master password, for a shell
+    /// `entry_ids` as a plain `otpauth://` list, once the user proved to be at this device (the
+    /// master password, or without it the biometric check that unlocks this vault), for a shell
     /// that saves files itself (the phone's file picker).
-    pub async fn export_otpauth_text(&self, entry_ids: &[Uuid], password: Zeroizing<String>) -> CoreResult<Zeroizing<String>> {
-        let (sealed, auths) = {
+    pub async fn export_otpauth_text(&self, entry_ids: &[Uuid], password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<Zeroizing<String>> {
+        let auths = {
             let st = self.lock();
             let session = unlocked(&st)?;
-            let auths: Vec<lockra_otp::OtpAuth> = entry_ids.iter().filter_map(|id| session.data.get(*id).map(Entry::to_auth)).collect();
-            (session.sealed.clone(), auths)
+            entry_ids.iter().filter_map(|id| session.data.get(*id).map(Entry::to_auth)).collect::<Vec<lockra_otp::OtpAuth>>()
         };
         if auths.is_empty() {
             return Err(ErrorCode::ExportNothing.into());
         }
+        self.confirm_presence(password, reason).await?;
         blocking(move || {
-            sealed.verify_password(password.as_bytes())?;
             let refs: Vec<&lockra_otp::OtpAuth> = auths.iter().collect();
             Ok(text::write(&refs))
         })
@@ -1523,18 +1576,22 @@ impl Core {
     }
 
     /// Join an existing space, from another device's invitation or from the storage and the sync
-    /// key typed in (a recovery). `password` is this device's master password: unlocked, it must
-    /// be the vault's, and the vault's accounts join the space; with no vault yet, a new vault is
-    /// made under it. An invitation hands the space's data key over, so it needs no other
-    /// password; it is taken where one of the space's snapshots opens under it. A recovery opens
-    /// the space with the master password of any of its devices: `space_password` when theirs is
-    /// not `password` (an invitation ignores it). This device's keyring goes in under `password`.
+    /// key typed in (a recovery); the vault's accounts join the space. With no vault yet, a new
+    /// vault is made under `password`. An unlocked vault proves presence with its own master
+    /// password, or without it with the biometric check that unlocks it (`reason` for the prompt);
+    /// then its keyring is sealed under random bytes until the next unlock with the master password
+    /// seals its own ([`SyncLocal::keyring_unsealed`]). An invitation hands the space's data key
+    /// over, so it needs no other password; it is taken where one of the space's snapshots opens
+    /// under it. A recovery opens the space with the master password of any of its devices:
+    /// `space_password` when theirs is not `password`, or when there is no `password` (an
+    /// invitation ignores it). This device's keyring goes in under `password`.
     pub async fn sync_join(
         &self,
         source: JoinSource,
-        password: Zeroizing<String>,
+        password: Option<Zeroizing<String>>,
         device: String,
         space_password: Option<Zeroizing<String>>,
+        reason: Option<String>,
     ) -> CoreResult<()> {
         let (storage, sync_key, handed) = match source {
             JoinSource::Invite { text, code, storage } => {
@@ -1559,7 +1616,7 @@ impl Core {
             match &st.phase {
                 PhaseState::Locked => return Err(ErrorCode::Locked.into()),
                 PhaseState::NoVault => {
-                    check_password(&password)?;
+                    check_password(password.as_deref().map_or("", |p| p.as_str()))?;
                     (None, 0)
                 }
                 PhaseState::Unlocked(session) => {
@@ -1570,9 +1627,10 @@ impl Core {
                 }
             }
         };
-        if let Some(sealed) = existing.clone() {
-            let checked = password.clone();
-            blocking(move || Ok(sealed.verify_password(checked.as_bytes())?)).await?;
+        match (existing.clone(), password.clone()) {
+            (Some(sealed), Some(checked)) => blocking(move || Ok(sealed.verify_password(checked.as_bytes())?)).await?,
+            (Some(_), None) => self.confirm_presence(None, reason).await?,
+            (None, _) => {}
         }
         let remote = self.open_storage(&storage, &SpaceAccess::of(&sync_key))?;
         let space_id = sync_key.space_id();
@@ -1590,7 +1648,7 @@ impl Core {
                 // Without a password of its own, a space whose devices use another one asks for
                 // it, rather than calling this vault's (verified) password wrong.
                 let ask_for_space_password = existing.is_some() && space_password.is_none();
-                let opening = space_password.unwrap_or_else(|| password.clone());
+                let opening = space_password.or_else(|| password.clone()).ok_or(ErrorCode::SyncSpacePasswordNeeded)?;
                 open_space(&*remote, storage.prefix(), space_id, |keyring| {
                     let (sync_key, opening) = (sync_key.clone(), opening.clone());
                     async move {
@@ -1608,7 +1666,11 @@ impl Core {
         };
         let (cost, now, data_dir) = (self.shared.config.kdf, self.now_ms(), self.shared.config.data_dir.clone());
         let create = existing.is_none();
+        let unsealed = password.is_none();
         let (keys, sealed, sync_key, keyring) = blocking(move || {
+            // Joined by the biometric check: no master password to seal under, so random bytes
+            // that open nothing, at the usual cost (the storage cannot tell it apart).
+            let password = password.unwrap_or_else(|| Zeroizing::new(format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple())));
             let keyring = seal_keyring(&keys, &sync_key, password.as_bytes(), cost).map_err(|e| sync_error(&e))?;
             let sealed = if create {
                 let sealed = Sealed::create(password.as_bytes(), cost, now)?;
@@ -1621,7 +1683,8 @@ impl Core {
             Ok((keys, sealed, sync_key, keyring))
         })
         .await?;
-        let space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
+        let mut space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
+        space.keyring_unsealed = unsealed;
         match (existing.as_ref().map(Sealed::vault_id), sealed) {
             (Some(vault_id), _) => self.join_space(vault_id, space, remote),
             (None, Some(sealed)) => self.create_joined(sealed, space, remote),
@@ -1751,6 +1814,47 @@ impl Core {
         Ok(())
     }
 
+    /// A device that joined by the biometric check has its keyring sealed under random bytes: once
+    /// the master password was typed and checked, its own is sealed in the background (an Argon2id
+    /// run) and the next run writes it, as after a password change.
+    fn seal_unsealed_keyring(&self, password: Zeroizing<String>) {
+        let space = {
+            let st = self.lock();
+            let Ok(session) = unlocked(&st) else { return };
+            match session.data.sync() {
+                Some(sync) if sync.keyring_unsealed => (sync.space_id, sync.keys(), sync.sync_key()),
+                _ => return,
+            }
+        };
+        let (space_id, Ok(keys), Ok(sync_key)) = space else { return };
+        let (core, cost) = (self.clone(), self.shared.config.kdf);
+        tokio::spawn(async move {
+            let Ok(Ok(keyring)) = tokio::task::spawn_blocking(move || seal_keyring(&keys, &sync_key, password.as_bytes(), cost)).await else {
+                tracing::warn!("this device's keyring was not sealed; the next unlock with the master password tries again");
+                return;
+            };
+            {
+                let mut st = core.lock();
+                let Ok(session) = unlocked_mut(&mut st) else { return };
+                let Some(sync) = session.data.sync_mut().filter(|s| s.space_id == space_id && s.keyring_unsealed) else { return };
+                let previous = (std::mem::replace(&mut sync.keyring, BASE64.encode(&keyring)), sync.keyring_written);
+                sync.keyring_written = false;
+                sync.keyring_unsealed = false;
+                let saved = core.save(&mut st, false, move |s| {
+                    if let Some(sync) = s.data.sync_mut() {
+                        (sync.keyring, sync.keyring_written) = previous;
+                        sync.keyring_unsealed = true;
+                    }
+                });
+                if saved.is_err() {
+                    return;
+                }
+                st.sync.at = Some(Instant::now());
+            }
+            core.changed();
+        });
+    }
+
     /// The user is at this device: `password` is the vault's master password, or, without one,
     /// the biometric check passes, where it is what unlocks this vault (Touch ID, Windows Hello,
     /// the fingerprint). It proves presence only: nothing is sealed under it.
@@ -1815,19 +1919,20 @@ impl Core {
         self.sync_key_acknowledge()
     }
 
-    /// Move the space's storage settings on (a new address or new credentials), after the master
-    /// password was entered again; the space must be found there.
-    pub async fn sync_set_storage(&self, storage: StorageConfig, password: Zeroizing<String>) -> CoreResult<()> {
+    /// Move the space's storage settings on (a new address or new credentials), once the user
+    /// proved to be at this device (the master password, or without it the biometric check that
+    /// unlocks this vault); the space must be found there.
+    pub async fn sync_set_storage(&self, storage: StorageConfig, password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<()> {
         let storage = self.resolve_storage(storage)?;
         storage.validate().map_err(config_error)?;
-        let (sealed, keys, access, device) = {
+        let (keys, access, device) = {
             let st = self.lock();
             let session = unlocked(&st)?;
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
-            (session.sealed.clone(), sync.keys().map_err(|e| sync_error(&e))?, sync.access().map_err(|e| sync_error(&e))?, session.data.device())
+            (sync.keys().map_err(|e| sync_error(&e))?, sync.access().map_err(|e| sync_error(&e))?, session.data.device())
         };
         let space_id = keys.space_id();
-        blocking(move || Ok(sealed.verify_password(password.as_bytes())?)).await?;
+        self.confirm_presence(password, reason).await?;
         let remote = self.open_storage(&storage, &access)?;
         // This space, not just objects at its place: one of its snapshots opens under its data key.
         // A relay keeps each space under its own id, which no typo can reach: one that keeps
@@ -2376,13 +2481,13 @@ impl Core {
 
     fn view(&self, st: &State) -> UiState {
         let now = self.now_ms();
-        let (phase, entries, collapsed_groups, import) = match &st.phase {
-            PhaseState::NoVault => (Phase::NoVault, Vec::new(), Vec::new(), None),
-            PhaseState::Locked => (Phase::Locked, Vec::new(), Vec::new(), None),
+        let (phase, entries, (collapsed_groups, entry_order, group_order), import) = match &st.phase {
+            PhaseState::NoVault => (Phase::NoVault, Vec::new(), Default::default(), None),
+            PhaseState::Locked => (Phase::Locked, Vec::new(), Default::default(), None),
             PhaseState::Unlocked(session) => (
                 Phase::Unlocked,
                 session.data.entries.iter().map(Entry::view).collect(),
-                session.data.collapsed_groups().to_vec(),
+                (session.data.collapsed_groups().to_vec(), session.data.entry_order().to_vec(), session.data.group_order().to_vec()),
                 session.import.as_ref().map(|i| i.view(&session.data)),
             ),
         };
@@ -2416,6 +2521,8 @@ impl Core {
             },
             entries,
             collapsed_groups,
+            entry_order,
+            group_order,
             settings: st.settings.clone(),
             import,
             backup: BackupView { last_backup_ms: st.last_backup_ms, last_auto_file: st.last_auto_file.clone(), last_auto_error: st.last_auto_error },
@@ -2745,6 +2852,7 @@ fn sync_view(st: &State) -> SyncView {
             rolled_back: st.sync.rolled_back.clone(),
             unreadable: st.sync.unreadable.clone(),
             keyring_pending: sync.keyring_pending(),
+            keyring_unsealed: sync.keyring_unsealed,
             key_saved: sync.key_saved,
         }
     });

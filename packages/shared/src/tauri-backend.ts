@@ -131,10 +131,11 @@ export class TauriBackend implements Backend {
       await this.call("sync_scan_join", {
         prompt: texts.prompt,
         cancel: texts.cancel,
-        password: join.password,
+        password: join.password ?? null,
         deviceName: join.deviceName,
         spacePassword: join.spacePassword ?? null,
         storage: join.storage ?? null,
+        reason: join.reason ?? null,
       }),
     );
   }
@@ -168,9 +169,17 @@ export class TauriBackend implements Backend {
     return z.boolean().parse(await this.call("restore_pick"));
   }
 
-  async exportOtpauthFile(entryIds: readonly string[], password: string): Promise<string | null> {
+  async exportOtpauthFile(
+    entryIds: readonly string[],
+    password?: string,
+    reason?: string,
+  ): Promise<string | null> {
     return fileNameSchema.parse(
-      await this.call("export_otpauth_file", { entryIds: [...entryIds], password }),
+      await this.call("export_otpauth_file", {
+        entryIds: [...entryIds],
+        password: password ?? null,
+        reason: reason ?? null,
+      }),
     );
   }
 

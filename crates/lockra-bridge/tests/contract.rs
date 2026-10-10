@@ -184,6 +184,7 @@ fn sync_space(status: SyncStatus) -> SyncSpaceView {
         rolled_back: Vec::new(),
         unreadable: vec![ALTERED_TAG.into()],
         keyring_pending: false,
+        keyring_unsealed: true,
         key_saved: false,
     }
 }
@@ -254,6 +255,8 @@ fn state(phase: Phase) -> UiState {
         },
         entries: if unlocked { entries() } else { Vec::new() },
         collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
+        entry_order: if unlocked { vec![id(2), id(1)] } else { Vec::new() },
+        group_order: if unlocked { vec!["Work".into()] } else { Vec::new() },
         settings: if unlocked { settings() } else { Settings::default() },
         import: unlocked.then(import_view),
         backup: BackupView {
@@ -322,12 +325,15 @@ fn commands() -> Vec<Value> {
         json!({"command": "entry_copy", "id": entry_id}),
         json!({"command": "entry_reveal", "id": entry_id, "password": "a new password"}),
         json!({"command": "view_collapse_groups", "groups": ["Work", ""]}),
+        json!({"command": "view_order_entries", "ids": [id(2).to_string(), entry_id]}),
+        json!({"command": "view_order_groups", "groups": ["Work", "Money"]}),
         json!({"command": "import_text", "text": "otpauth://totp/A:b?secret=GEZDGNBV"}),
         json!({"command": "import_clipboard"}),
         json!({"command": "import_backup_password", "password": "backup password"}),
         json!({"command": "import_commit", "choices": [{"id": 2, "action": "replace"}, {"id": 1, "action": "skip"}]}),
         json!({"command": "import_cancel"}),
-        json!({"command": "export_start", "target": "google", "entry_ids": [entry_id], "password": "a new password"}),
+        // Without a password: the biometric check that unlocks the vault, with the prompt's words.
+        json!({"command": "export_start", "target": "google", "entry_ids": [entry_id], "reason": "export the accounts"}),
         json!({"command": "export_page", "session": id(100).to_string(), "index": 0}),
         json!({"command": "export_close", "session": id(100).to_string()}),
         json!({"command": "secret_view_closed"}),
@@ -351,7 +357,7 @@ fn commands() -> Vec<Value> {
         json!({"command": "sync_key_acknowledge"}),
         json!({"command": "sync_key_reveal", "password": "a new password"}),
         // A cloud drive's folder, as the interface names it: "the folder chosen", no path.
-        json!({"command": "sync_set_storage", "storage": {"kind": "folder"}, "password": "a new password"}),
+        json!({"command": "sync_set_storage", "storage": {"kind": "folder"}, "reason": "change the storage settings"}),
         json!({"command": "sync_rename_device", "name": "Work desktop"}),
         json!({"command": "sync_remove_device", "tag": PHONE_TAG}),
         json!({"command": "sync_now"}),

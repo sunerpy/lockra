@@ -62,6 +62,21 @@ export const en: Messages = {
       results: { one: "{n} result", other: "{n} results" },
     },
     banner: { close: "Close" },
+    sortable: {
+      role: "sortable item",
+      handle: "Move “{name}”: drag it, or press the up and down arrow keys",
+      instructions:
+        "Drag the handle to change the order, or focus the handle and press the up and down arrow keys to move one place.",
+      picked: "Picked up “{name}”",
+      over: "Over “{name}”",
+      dropped: "Dropped in the place of “{name}”",
+      cancelled: "Move cancelled",
+    },
+    groupPicker: {
+      none: "No group",
+      create: "New group “{name}”",
+      options: "Groups to choose from",
+    },
     a11y: {
       progress: "Progress",
       countdown: "Time left",
@@ -130,6 +145,16 @@ export const en: Messages = {
       manualHint: "Type in the service's name and secret",
     },
     groupSuggestions: "Groups in use",
+    groupSheet: {
+      title: "Choose a group",
+      newLabel: "New group",
+      newPlaceholder: "Group name",
+      use: "Use",
+    },
+    reorderHint:
+      "Drag the handle on the right up or down to reorder the accounts and groups. The order is kept on this phone only.",
+    verifyWith: "Verify with fingerprint",
+    passwordOrFingerprint: "Leave it empty to verify with your fingerprint.",
     fingerprint: {
       disableTitle: "Turn off fingerprint unlock",
       disablePrompt:
@@ -252,7 +277,12 @@ export const en: Messages = {
     search: "Search accounts…",
     allGroups: "All groups",
     sortLabel: "Order",
-    sort: { name: "By name", added: "Recently added", recent: "Recently used" },
+    sort: { name: "By name", added: "Recently added", recent: "Recently used", manual: "Manual" },
+    reorder: {
+      open: "Reorder",
+      done: "Done",
+      hint: "Drag a handle to reorder the accounts and groups, or focus a handle and press the up and down arrow keys. The order is kept on this device only; pinned accounts still come first.",
+    },
     add: {
       label: "Add",
       image: "Scan an image…",
@@ -344,6 +374,9 @@ export const en: Messages = {
     deleteConfirm: "Delete",
     revealTitle: "Show secret",
     revealPrompt: "Enter the master password to show the secret and QR code of “{name}”.",
+    revealPromptBiometric:
+      "Verify to show the secret and QR code of “{name}”, or enter the master password.",
+    revealReason: "show an account's secret",
     revealSubmit: "Show",
     revealWarning: "Anyone who sees this QR code or secret can generate this account's codes.",
     revealSecret: "Secret",
@@ -439,6 +472,7 @@ export const en: Messages = {
     unavailable: "Cannot export: {reason}",
     passwordPrompt: "Enter the master password to show the codes",
     start: "Show QR codes",
+    reason: "export accounts",
     page: "Code {index} of {total}",
     previous: "Previous",
     next: "Next",
@@ -744,6 +778,9 @@ export const en: Messages = {
         "The space's devices use another master password: enter that of any of them.",
       code: "Code",
       codeHint: "This invitation needs its code: enter the code shown on the inviting device.",
+      reason: "join the sync space",
+      biometricHint:
+        "Leave the master password empty to verify with your fingerprint. Joined that way, this device's master password recovers the space only after the next unlock with it.",
     },
     recoveryKey: {
       row: "Recovery key",
@@ -781,11 +818,14 @@ export const en: Messages = {
       synced: "Synced · {when}",
       failed: "Sync failed: {error}",
       now: "Sync now",
+      keyringUnsealed:
+        "This device joined with the fingerprint: its master password recovers the space after the next unlock with it.",
       keyringPending:
         "This device's new master password reaches the sync space on the next sync; until then, recovering with the recovery key takes the old one or another device's.",
     },
     storageRow: "Storage",
     storageEdit: "Change storage settings",
+    storageReason: "change the sync storage settings",
     storageEditBody:
       "A new access key, password or address. The sync space must already be at the new place, except on a Lockra relay: this device writes the space there on its next sync.",
     device: {

@@ -85,7 +85,7 @@ async fn a_space_created_on_one_device_is_joined_by_a_new_one_and_both_converge(
 
         // A new device without a vault: the storage, the sync key and the master password make one.
         let phone = device(&transport);
-        phone.core.sync_join(manual(storage.clone(), &sync_key), pw(MASTER), " Phone ".into(), None).await.unwrap();
+        phone.core.sync_join(manual(storage.clone(), &sync_key), Some(pw(MASTER)), " Phone ".into(), None, None).await.unwrap();
         assert_eq!(phone.core.state().phase, Phase::Unlocked);
         settle().await;
         assert_eq!(issuers(&phone), ["GitHub"]);
@@ -129,18 +129,18 @@ async fn an_invitation_joins_an_unlocked_vault_under_its_own_master_password() {
     laptop.core.add_uri(&otpauth("Bank", "card", "MZXW6YTBOI")).unwrap();
     let invited = || JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None };
     // This vault's own master password is checked, and is all the join needs: no other device's.
-    assert_eq!(code_err(laptop.core.sync_join(invited(), pw(MASTER), "Laptop".into(), None).await), ErrorCode::WrongPassword);
-    laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), None).await.unwrap();
+    assert_eq!(code_err(laptop.core.sync_join(invited(), Some(pw(MASTER)), "Laptop".into(), None, None).await), ErrorCode::WrongPassword);
+    laptop.core.sync_join(invited(), Some(pw("another password")), "Laptop".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&laptop), ["Bank", "GitHub"]);
     desktop.core.sync_now().unwrap();
     settle().await;
     assert_eq!(issuers(&desktop), ["Bank", "GitHub"]);
-    assert_eq!(code_err(laptop.core.sync_join(invited(), pw("another password"), "Laptop".into(), None).await), ErrorCode::SyncAlreadyOn);
+    assert_eq!(code_err(laptop.core.sync_join(invited(), Some(pw("another password")), "Laptop".into(), None, None).await), ErrorCode::SyncAlreadyOn);
     // The laptop's keyring in the space is under its own password: with the recovery key, that
     // password recovers the space on a device with nothing else.
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("another password"), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw("another password")), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["Bank", "GitHub"]);
 }
@@ -153,9 +153,9 @@ async fn a_new_device_joins_from_an_invitation_under_a_master_password_of_its_ow
     let invited = || JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None };
     let phone = device(&transport);
     // The new vault's password, held to the rule of any new vault.
-    assert_eq!(code_err(phone.core.sync_join(invited(), pw("short"), "Phone".into(), None).await), ErrorCode::PasswordTooShort);
+    assert_eq!(code_err(phone.core.sync_join(invited(), Some(pw("short")), "Phone".into(), None, None).await), ErrorCode::PasswordTooShort);
     assert_eq!(phone.core.state().phase, Phase::NoVault);
-    phone.core.sync_join(invited(), pw("the phone's own password"), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(invited(), Some(pw("the phone's own password")), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["GitHub"]);
     // The phone's vault is under its own password, not the desktop's.
@@ -172,7 +172,7 @@ async fn an_invitation_without_the_spaces_key_or_with_another_one_joins_nothing(
     let key = lockra_sync::SyncKey::from_text(&sync_key).unwrap();
     let phone = device(&transport);
     let join = |invite: lockra_sync::Invite| {
-        phone.core.sync_join(JoinSource::Invite { text: pw(&invite.to_text()), code: None, storage: None }, pw(MASTER), "Phone".into(), None)
+        phone.core.sync_join(JoinSource::Invite { text: pw(&invite.to_text()), code: None, storage: None }, Some(pw(MASTER)), "Phone".into(), None, None)
     };
     // Lockra up to 0.8.2 invited without the data key: the inviting device is to update first.
     let old = lockra_sync::Invite { storage: Some(s3(STORAGE_SECRET)), sync_key: key.clone(), keys: None };
@@ -224,10 +224,10 @@ async fn a_shared_invitation_joins_with_its_code_and_the_biometric_check_can_sho
     let sealed = |code: Option<&str>| JoinSource::Invite { text: pw(&shared.text), code: code.map(pw), storage: None };
     let phone = device(&transport);
     for wrong in [None, Some("ABCDE-FGHJK")] {
-        assert_eq!(code_err(phone.core.sync_join(sealed(wrong), pw(MASTER), "Phone".into(), None).await), ErrorCode::SyncInviteCodeWrong);
+        assert_eq!(code_err(phone.core.sync_join(sealed(wrong), Some(pw(MASTER)), "Phone".into(), None, None).await), ErrorCode::SyncInviteCodeWrong);
     }
     assert_eq!(phone.core.state().phase, Phase::NoVault);
-    phone.core.sync_join(sealed(Some(&shared.code.to_lowercase())), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(sealed(Some(&shared.code.to_lowercase())), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["GitHub"]);
 }
@@ -265,7 +265,7 @@ async fn the_device_that_made_the_space_is_reminded_of_the_key_until_it_is_saved
 
     // A device that joined has nothing to save: the reminder is the maker's.
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     assert!(space(&phone).key_saved);
     // The maker can also just say it wrote the key down.
     let (laptop, _) = first_device(&Arc::new(FakeTransport::default()), webdav()).await;
@@ -284,7 +284,7 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let phone = device(&transport);
-    let join = |source: JoinSource, password: &str| phone.core.sync_join(source, pw(password), "Phone".into(), None);
+    let join = |source: JoinSource, password: &str| phone.core.sync_join(source, Some(pw(password)), "Phone".into(), None, None);
     assert_eq!(code_err(join(manual(s3(STORAGE_SECRET), &sync_key), "wrong password").await), ErrorCode::SyncWrongCredentials);
     assert_eq!(phone.core.state().phase, Phase::NoVault, "no vault is made on a failed join");
     let other_key = lockra_sync::SyncKey::generate().unwrap().to_text();
@@ -319,10 +319,10 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     assert_eq!(code_err(laptop.core.sync_disable()), ErrorCode::SyncOff);
     assert_eq!(code_err(laptop.core.sync_rename_device("x")), ErrorCode::SyncOff);
     assert_eq!(code_err(laptop.core.sync_remove_device("x").await), ErrorCode::SyncOff);
-    assert_eq!(code_err(laptop.core.sync_set_storage(s3(STORAGE_SECRET), pw(MASTER)).await), ErrorCode::SyncOff);
+    assert_eq!(code_err(laptop.core.sync_set_storage(s3(STORAGE_SECRET), Some(pw(MASTER)), None).await), ErrorCode::SyncOff);
     // Locked, nothing goes.
     desktop.core.lock_vault();
-    assert_eq!(code_err(desktop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "x".into(), None).await), ErrorCode::Locked);
+    assert_eq!(code_err(desktop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "x".into(), None, None).await), ErrorCode::Locked);
     assert_eq!(code_err(desktop.core.sync_now()), ErrorCode::Locked);
 }
 
@@ -440,7 +440,7 @@ async fn what_a_run_brings_is_told_with_the_devices_it_came_from() {
 
     // Joining brings the space's accounts.
     let mut phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(brought(&mut phone), [Notice::SyncBrought { added: 3, updated: 0, removed: 0, devices: vec!["Desktop".into()] }]);
 
@@ -530,8 +530,11 @@ async fn a_new_master_password_reaches_the_space_even_after_a_failed_run() {
     assert!(!space(&desktop).keyring_pending);
 
     let phone = device(&transport);
-    assert_eq!(code_err(phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await), ErrorCode::SyncWrongCredentials);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw("a new password"), "Phone".into(), None).await.unwrap();
+    assert_eq!(
+        code_err(phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await),
+        ErrorCode::SyncWrongCredentials
+    );
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw("a new password")), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["GitHub"]);
 }
@@ -573,7 +576,7 @@ async fn devices_are_renamed_and_removed_and_sync_turns_off_here_only() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     phone.core.sync_rename_device("  Pixel 8\n").unwrap();
     settle().await;
@@ -612,7 +615,7 @@ async fn restoring_a_backup_in_place_reaches_the_other_devices() {
     desktop.core.backup_to(path.clone(), None).await.unwrap();
     desktop.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     advance(SYNC_DEBOUNCE).await;
     phone.core.sync_now().unwrap();
     settle().await;
@@ -733,8 +736,8 @@ async fn the_storage_is_opened_once_for_its_settings() {
     let StorageConfig::S3 { region, bucket, prefix, access_key_id, secret_access_key, path_style, .. } = s3(STORAGE_SECRET) else { unreachable!() };
     let moved =
         StorageConfig::S3 { endpoint: "https://s3.example.com".into(), region, bucket, prefix, access_key_id, secret_access_key, path_style: !path_style };
-    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), pw("wrong password")).await), ErrorCode::WrongPassword);
-    desktop.core.sync_set_storage(moved, pw(MASTER)).await.unwrap();
+    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), Some(pw("wrong password")), None).await), ErrorCode::WrongPassword);
+    desktop.core.sync_set_storage(moved, Some(pw(MASTER)), None).await.unwrap();
     settle().await;
     desktop.core.sync_now().unwrap();
     settle().await;
@@ -742,7 +745,7 @@ async fn the_storage_is_opened_once_for_its_settings() {
     // Settings that point where no space is are refused.
     let elsewhere =
         StorageConfig::Webdav { url: "https://dav.example.com/other/".into(), prefix: String::new(), username: "me".into(), password: pw(STORAGE_SECRET) };
-    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, pw(MASTER)).await), ErrorCode::SyncSpaceNotFound);
+    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, Some(pw(MASTER)), None).await), ErrorCode::SyncSpaceNotFound);
     // Locked and unlocked again: the same settings, the same storage.
     desktop.core.lock_vault();
     desktop.core.unlock(pw(MASTER)).await.unwrap();
@@ -755,7 +758,7 @@ async fn every_devices_master_password_opens_the_space_and_a_replaced_one_no_lon
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     let store = transport.store(&s3(STORAGE_SECRET));
     // The desktop changes its password offline: its keyring waits.
@@ -774,7 +777,7 @@ async fn every_devices_master_password_opens_the_space_and_a_replaced_one_no_lon
     let join = |password: &'static str| {
         let laptop = device(&transport);
         let sync_key = sync_key.clone();
-        async move { laptop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(password), "Laptop".into(), None).await.map_err(|e| e.code) }
+        async move { laptop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(password)), "Laptop".into(), None, None).await.map_err(|e| e.code) }
     };
     assert_eq!(join(MASTER).await, Err(ErrorCode::SyncWrongCredentials));
     assert_eq!(join("desktop password").await, Ok(()));
@@ -790,7 +793,7 @@ async fn an_hotp_counter_never_goes_back_when_two_devices_advance_it_apart() {
     let created = desktop.core.sync_create(s3(STORAGE_SECRET), pw(MASTER), "Desktop".into()).await.unwrap();
     settle().await;
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &created.sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &created.sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     let counter = |h: &Harness| match h.core.state().entries[0].kind {
         OtpKind::Hotp { counter } => counter,
@@ -826,9 +829,9 @@ async fn new_storage_settings_must_hold_this_spaces_snapshots() {
     let last = damaged.len() - 1;
     damaged[last] ^= 1;
     there.set_object(&relative, damaged);
-    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), pw(MASTER)).await), ErrorCode::SyncDataCorrupted);
+    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), Some(pw(MASTER)), None).await), ErrorCode::SyncDataCorrupted);
     there.set_object(&relative, original.object(&snapshot).unwrap());
-    desktop.core.sync_set_storage(moved, pw(MASTER)).await.unwrap();
+    desktop.core.sync_set_storage(moved, Some(pw(MASTER)), None).await.unwrap();
     settle().await;
     assert!(matches!(space(&desktop).storage, StorageView::Webdav { .. }));
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
@@ -845,7 +848,7 @@ async fn two_devices_writing_at_once_lose_nothing_on_a_storage_without_condition
     settle().await;
     let desktop_snapshot = gate.remote.paths().pop().unwrap();
     let phone = harness_on(FakeUpdater::default(), Arc::clone(&transport));
-    phone.core.sync_join(manual(webdav(), &created.sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(webdav(), &created.sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
 
     // The desktop's run is held at its write while the phone runs from start to end: both read the
@@ -869,7 +872,7 @@ async fn two_devices_writing_at_once_lose_nothing_on_a_storage_without_condition
     // Both keyrings are there: each new master password opens the space.
     for password in ["desktop password", "phone password"] {
         let laptop = harness_on(FakeUpdater::default(), Arc::clone(&transport));
-        laptop.core.sync_join(manual(webdav(), &created.sync_key), pw(password), "Laptop".into(), None).await.unwrap();
+        laptop.core.sync_join(manual(webdav(), &created.sync_key), Some(pw(password)), "Laptop".into(), None, None).await.unwrap();
         laptop.core.sync_disable().unwrap();
     }
 }
@@ -888,7 +891,7 @@ async fn a_run_stops_before_writing_where_the_space_no_longer_is() {
     desktop.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
     advance(SYNC_DEBOUNCE).await;
     gate.reached.notified().await;
-    desktop.core.sync_set_storage(webdav(), pw(MASTER)).await.unwrap();
+    desktop.core.sync_set_storage(webdav(), Some(pw(MASTER)), None).await.unwrap();
     let calls = gate.remote.calls().len();
     gate.release();
     settle().await;
@@ -903,7 +906,7 @@ async fn a_group_set_on_several_accounts_reaches_the_other_devices() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     let ids: Vec<_> = desktop.core.state().entries.iter().map(|e| e.id).collect();
     desktop.core.set_entries_group(&ids, "Work").unwrap();
@@ -918,7 +921,7 @@ async fn an_accounts_colour_and_mark_reach_the_other_devices() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
     let phone = device(&transport);
-    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     let id = desktop.core.state().entries[0].id;
     let patch = EntryPatch { color: Some(crate::AccountColor::Teal), mark: Some("GH".into()), ..EntryPatch::default() };
@@ -1018,10 +1021,10 @@ async fn a_folder_space_invites_with_its_key_alone_and_each_device_reaches_it_it
     // is checked; then it joins over the drive's WebDAV, which shows the same folder.
     let phone = device(&transport);
     let invited = |storage: Option<StorageConfig>| JoinSource::Invite { text: pw(&invite.invite), code: None, storage };
-    assert_eq!(code_err(phone.core.sync_join(invited(None), pw("any password"), "Phone".into(), None).await), ErrorCode::SyncInviteNeedsStorage);
+    assert_eq!(code_err(phone.core.sync_join(invited(None), Some(pw("any password")), "Phone".into(), None, None).await), ErrorCode::SyncInviteNeedsStorage);
     assert_eq!(phone.core.state().phase, Phase::NoVault);
     transport.share(&webdav(), &StorageConfig::Folder { path: folder.clone() });
-    phone.core.sync_join(invited(Some(webdav())), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(invited(Some(webdav())), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["GitHub"]);
 
@@ -1030,7 +1033,7 @@ async fn a_folder_space_invites_with_its_key_alone_and_each_device_reaches_it_it
     mac.core.create_vault(pw(MASTER)).await.unwrap();
     mac.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
     mac.core.sync_choose_folder(&folder).unwrap();
-    mac.core.sync_join(invited(Some(chosen_folder())), pw(MASTER), "MacBook".into(), None).await.unwrap();
+    mac.core.sync_join(invited(Some(chosen_folder())), Some(pw(MASTER)), "MacBook".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&mac), ["GitHub", "Mail"]);
     phone.core.sync_now().unwrap();
@@ -1086,10 +1089,10 @@ async fn a_space_moves_into_the_drives_folder_that_holds_it() {
     let folder = drive_folder(&desktop, "Nextcloud");
     // The folder holds nothing of the space yet: refused.
     desktop.core.sync_choose_folder(&folder).unwrap();
-    assert_eq!(code_err(desktop.core.sync_set_storage(chosen_folder(), pw(MASTER)).await), ErrorCode::SyncSpaceNotFound);
+    assert_eq!(code_err(desktop.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None).await), ErrorCode::SyncSpaceNotFound);
     // The drive's client brought it down: taken.
     transport.share(&StorageConfig::Folder { path: folder.clone() }, &webdav());
-    desktop.core.sync_set_storage(chosen_folder(), pw(MASTER)).await.unwrap();
+    desktop.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None).await.unwrap();
     settle().await;
     assert_eq!(space(&desktop).storage, StorageView::Folder { path: folder.display().to_string() });
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
@@ -1144,12 +1147,12 @@ async fn the_folder_is_watched_only_while_its_space_is_open_here() {
     assert_eq!(transport.watching(&folder), 1, "watched again once unlocked");
     // Moved to a storage of its own: that one tells nothing, the folder is no longer watched.
     transport.share(&webdav(), &folder);
-    windows.core.sync_set_storage(webdav(), pw(MASTER)).await.unwrap();
+    windows.core.sync_set_storage(webdav(), Some(pw(MASTER)), None).await.unwrap();
     settle().await;
     assert_eq!(transport.watching(&folder), 0);
     // Back into the folder, then sync turned off here.
     windows.core.sync_choose_folder(parent.path()).unwrap();
-    windows.core.sync_set_storage(chosen_folder(), pw(MASTER)).await.unwrap();
+    windows.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None).await.unwrap();
     settle().await;
     assert_eq!(transport.watching(&folder), 1);
     windows.core.sync_disable().unwrap();
@@ -1171,7 +1174,11 @@ async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktop
     let invite = desktop.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
     assert!(invite.includes_storage);
     let phone = device(&transport);
-    phone.core.sync_join(JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None }, pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone
+        .core
+        .sync_join(JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None }, Some(pw(MASTER)), "Phone".into(), None, None)
+        .await
+        .unwrap();
     settle().await;
     phone.core.set_settings(Settings { auto_lock_minutes: 0, ..phone.core.state().settings }).unwrap();
     assert_eq!(issuers(&phone), ["GitHub"]);
@@ -1190,10 +1197,59 @@ async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktop
     // A device with another sync key is refused by the relay, as its space was not made by it.
     let stranger = device(&transport);
     let other = lockra_sync::SyncKey::generate().unwrap().to_text();
-    assert!(stranger.core.sync_join(manual(relay(), &other), pw(MASTER), "Stranger".into(), None).await.is_err());
+    assert!(stranger.core.sync_join(manual(relay(), &other), Some(pw(MASTER)), "Stranger".into(), None, None).await.is_err());
     // Locked: watched no longer.
     desktop.core.lock_vault();
     assert_eq!(transport.watching(&relay()), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_vault_joins_from_an_invitation_by_the_biometric_check_and_seals_its_keyring_at_the_next_password() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    let invite = desktop.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    let source = || JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None };
+    // A new vault needs a master password of its own: no biometric check stands in for one.
+    let fresh = device(&transport);
+    assert_eq!(code_err(fresh.core.sync_join(source(), None, "Tablet".into(), None, None).await), ErrorCode::PasswordTooShort);
+    // A phone with a vault, unlocked by its fingerprint: the check is enough to join.
+    let phone = device(&transport);
+    phone.core.create_vault(pw("the phone's own password")).await.unwrap();
+    assert_eq!(code_err(phone.core.sync_join(source(), None, "Phone".into(), None, None).await), ErrorCode::BiometricUnavailable);
+    phone.core.enable_device_biometric(None).await.unwrap();
+    phone.core.sync_join(source(), None, "Phone".into(), None, Some("join the sync space".into())).await.unwrap();
+    assert_eq!(phone.biometrics.reasons().last().map(String::as_str), Some("join the sync space"));
+    settle().await;
+    assert_eq!(issuers(&phone), ["GitHub"]);
+    // Its keyring opens with no password yet: the phone's password recovers nothing, the desktop's does.
+    assert!(space(&phone).keyring_unsealed);
+    let recover = |password: &str| {
+        let laptop = device(&transport);
+        let password = pw(password);
+        let sync_key = sync_key.clone();
+        async move { laptop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(password), "Laptop".into(), None, None).await }
+    };
+    assert_eq!(code_err(recover("the phone's own password").await), ErrorCode::SyncWrongCredentials);
+    // The next unlock with the master password seals the phone's own, and the next run writes it.
+    phone.core.lock_vault();
+    phone.core.unlock(pw("the phone's own password")).await.unwrap();
+    until("the phone's keyring sealed", || !space(&phone).keyring_unsealed).await;
+    phone.core.sync_now().unwrap();
+    settle().await;
+    until("the phone's keyring written", || !space(&phone).keyring_pending).await;
+    recover("the phone's own password").await.unwrap();
+    recover(MASTER).await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_storage_settings_move_on_after_the_biometric_check_too() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, _) = first_device(&transport, webdav()).await;
+    // Without a password, only the biometric check that unlocks this vault proves presence.
+    assert_eq!(code_err(desktop.core.sync_set_storage(webdav(), None, None).await), ErrorCode::BiometricUnavailable);
+    desktop.core.enable_device_biometric(None).await.unwrap();
+    desktop.core.sync_set_storage(webdav(), None, Some("change the storage".into())).await.unwrap();
+    assert_eq!(desktop.biometrics.reasons().last().map(String::as_str), Some("change the storage"));
 }
 
 #[tokio::test(start_paused = true)]
@@ -1222,7 +1278,11 @@ async fn a_relay_space_copies_its_pairing_link_as_it_is_and_the_clipboard_forget
 
     // The computer pastes it and joins under its own master password, with no code.
     let computer = device(&transport);
-    computer.core.sync_join(JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None }, pw(MASTER), "Desktop".into(), None).await.unwrap();
+    computer
+        .core
+        .sync_join(JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None }, Some(pw(MASTER)), "Desktop".into(), None, None)
+        .await
+        .unwrap();
     settle().await;
     assert_eq!(issuers(&computer), ["GitHub"]);
     assert_eq!(space(&computer).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
@@ -1241,16 +1301,16 @@ async fn a_space_moves_to_a_relay_that_keeps_nothing_of_it_yet() {
     // Another, empty WebDAV place is still refused: it may be a typo.
     let elsewhere =
         StorageConfig::Webdav { url: "https://dav.example.com/other/".into(), prefix: String::new(), username: "me".into(), password: pw(STORAGE_SECRET) };
-    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, pw(MASTER)).await), ErrorCode::SyncSpaceNotFound);
+    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, Some(pw(MASTER)), None).await), ErrorCode::SyncSpaceNotFound);
     // A relay keeps the space under its own id: taken, and the next run writes the space there.
-    desktop.core.sync_set_storage(relay(), pw(MASTER)).await.unwrap();
+    desktop.core.sync_set_storage(relay(), Some(pw(MASTER)), None).await.unwrap();
     settle().await;
     assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
     assert_eq!(transport.store(&relay()).paths().len(), 1);
     // A phone joins it there with the sync key.
     let phone = device(&transport);
-    phone.core.sync_join(manual(relay(), &sync_key), pw(MASTER), "Phone".into(), None).await.unwrap();
+    phone.core.sync_join(manual(relay(), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["GitHub"]);
 }

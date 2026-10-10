@@ -15,7 +15,7 @@ use zeroize::Zeroizing;
 
 use crate::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
 use crate::ports::{BiometricError, ClipboardImage, SecretStore, SyncTransport};
-use crate::settings::{AutoBackup, Settings, ThemeId};
+use crate::settings::{AutoBackup, Settings, SortOrder, ThemeId};
 use crate::ui::{BiometricKind, BiometricView, CandidateAction, CandidateStatus, ExportTarget, ImportSource, Notice, Phase, Platform, UiEvent};
 use crate::{AccountColor, Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, MAX_IMPORT_BYTES, Outcome, PickedFile, Ports, RestoreMode, VAULT_FILE};
 
@@ -485,15 +485,33 @@ async fn an_idle_vault_locks_itself() {
 async fn reveal_needs_the_password_again() {
     let h = Harness::unlocked().await;
     let id = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
-    assert_eq!(code_err(h.core.reveal(id, pw("wrong")).await), ErrorCode::WrongPassword);
-    assert_eq!(code_err(h.core.reveal(Uuid::new_v4(), pw(MASTER)).await), ErrorCode::EntryNotFound);
+    assert_eq!(code_err(h.core.reveal(id, Some(pw("wrong")), None).await), ErrorCode::WrongPassword);
+    assert_eq!(code_err(h.core.reveal(Uuid::new_v4(), Some(pw(MASTER)), None).await), ErrorCode::EntryNotFound);
     assert_eq!(code_err(h.core.verify_password(pw("wrong")).await), ErrorCode::WrongPassword);
     h.core.verify_password(pw(MASTER)).await.unwrap();
-    let revealed = h.core.reveal(id, pw(MASTER)).await.unwrap();
+    let revealed = h.core.reveal(id, Some(pw(MASTER)), None).await.unwrap();
     assert_eq!(revealed.secret, "JBSW Y3DP EHPK 3PXP");
     let back = uri::parse(&revealed.uri).unwrap();
     assert_eq!((back.issuer.as_str(), back.account.as_str()), ("GitHub", "octocat"));
     assert!(revealed.svg.contains("<svg"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_biometric_check_that_unlocks_the_vault_shows_a_secret_and_starts_an_export() {
+    let h = Harness::unlocked().await;
+    let id = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    // Without a password, only the biometric check that unlocks this vault proves presence.
+    assert_eq!(code_err(h.core.reveal(id, None, None).await), ErrorCode::BiometricUnavailable);
+    assert_eq!(code_err(h.core.export_start(ExportTarget::Google, &[id], None, None).await), ErrorCode::BiometricUnavailable);
+    h.core.enable_device_biometric(None).await.unwrap();
+    assert_eq!(h.core.reveal(id, None, Some("show the secret".into())).await.unwrap().secret, "JBSW Y3DP EHPK 3PXP");
+    assert_eq!(h.biometrics.reasons().last().map(String::as_str), Some("show the secret"));
+    let started = h.core.export_start(ExportTarget::Google, &[id], None, Some("export".into())).await.unwrap();
+    assert_eq!(started.pages, 1);
+    // A cancelled check shows nothing; a wrong password still counts as one.
+    h.biometrics.answer(Err(BiometricError::Cancelled));
+    assert_eq!(code_err(h.core.reveal(id, None, None).await), ErrorCode::BiometricCancelled);
+    assert_eq!(code_err(h.core.reveal(id, Some(pw("wrong")), None).await), ErrorCode::WrongPassword);
 }
 
 // ---- import -----------------------------------------------------------------------------------
@@ -694,9 +712,9 @@ async fn export_sessions_need_the_password_and_expire() {
     let b = h.core.add_uri(&otpauth("B", "b", "MZXW6YTBOI")).unwrap();
     let sixty = h.core.add_uri("otpauth://totp/C:c?secret=MFRGGZDF&period=60").unwrap();
     let ids = [a, b, sixty];
-    assert_eq!(code_err(h.core.export_start(ExportTarget::Google, &ids, pw("wrong")).await), ErrorCode::WrongPassword);
-    assert_eq!(code_err(h.core.export_start(ExportTarget::Google, &[Uuid::new_v4()], pw(MASTER)).await), ErrorCode::ExportNothing);
-    let started = h.core.export_start(ExportTarget::Google, &ids, pw(MASTER)).await.unwrap();
+    assert_eq!(code_err(h.core.export_start(ExportTarget::Google, &ids, Some(pw("wrong")), None).await), ErrorCode::WrongPassword);
+    assert_eq!(code_err(h.core.export_start(ExportTarget::Google, &[Uuid::new_v4()], Some(pw(MASTER)), None).await), ErrorCode::ExportNothing);
+    let started = h.core.export_start(ExportTarget::Google, &ids, Some(pw(MASTER)), None).await.unwrap();
     assert_eq!((started.pages, started.excluded.len()), (1, 1));
     assert_eq!(started.excluded[0].entry_id, sixty);
     let page = h.core.export_page(started.session, 0).unwrap();
@@ -711,11 +729,11 @@ async fn export_sessions_need_the_password_and_expire() {
     advance(Duration::from_secs(121)).await;
     assert_eq!(code_err(h.core.export_page(started.session, 0)), ErrorCode::ExportExpired);
     assert!(h.notices().contains(&Notice::ExportExpired { session: started.session }));
-    let microsoft = h.core.export_start(ExportTarget::Microsoft, &ids, pw(MASTER)).await.unwrap();
+    let microsoft = h.core.export_start(ExportTarget::Microsoft, &ids, Some(pw(MASTER)), None).await.unwrap();
     assert_eq!(microsoft.pages, 2);
     h.core.export_close(microsoft.session);
     assert_eq!(code_err(h.core.export_page(microsoft.session, 0)), ErrorCode::ExportExpired);
-    let again = h.core.export_start(ExportTarget::Microsoft, &ids, pw(MASTER)).await.unwrap();
+    let again = h.core.export_start(ExportTarget::Microsoft, &ids, Some(pw(MASTER)), None).await.unwrap();
     h.core.lock_vault();
     h.core.unlock(pw(MASTER)).await.unwrap();
     assert_eq!(code_err(h.core.export_page(again.session, 0)), ErrorCode::ExportExpired, "locking drops every session");
@@ -743,12 +761,12 @@ async fn a_plain_list_export_comes_as_text_where_there_is_no_path() {
     let h = Harness::unlocked().await;
     let a = h.core.add_uri(&otpauth("A", "a", "GEZDGNBV")).unwrap();
     let b = h.core.add_uri(&otpauth("B", "b", "MZXW6YTBOI")).unwrap();
-    assert_eq!(code_err(h.core.export_otpauth_text(&[a], pw("wrong")).await), ErrorCode::WrongPassword);
-    assert_eq!(code_err(h.core.export_otpauth_text(&[], pw(MASTER)).await), ErrorCode::ExportNothing);
-    let text = h.core.export_otpauth_text(&[a, b], pw(MASTER)).await.unwrap();
+    assert_eq!(code_err(h.core.export_otpauth_text(&[a], Some(pw("wrong")), None).await), ErrorCode::WrongPassword);
+    assert_eq!(code_err(h.core.export_otpauth_text(&[], Some(pw(MASTER)), None).await), ErrorCode::ExportNothing);
+    let text = h.core.export_otpauth_text(&[a, b], Some(pw(MASTER)), None).await.unwrap();
     assert!(text.contains("otpauth://totp/A:a?secret=GEZDGNBV") && text.contains("otpauth://totp/B:b?secret=MZXW6YTBOI"), "{}", *text);
     h.core.lock_vault();
-    assert_eq!(code_err(h.core.export_otpauth_text(&[a], pw(MASTER)).await), ErrorCode::Locked);
+    assert_eq!(code_err(h.core.export_otpauth_text(&[a], Some(pw(MASTER)), None).await), ErrorCode::Locked);
 }
 
 // ---- backup and restore -----------------------------------------------------------------------
@@ -1009,6 +1027,48 @@ async fn folded_groups_are_kept_in_the_vault_for_this_device_only() {
     // Unfolding everything.
     h.core.collapse_groups(Vec::new()).unwrap();
     assert!(h.core.state().collapsed_groups.is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_dragged_order_is_kept_for_this_device_and_makes_the_code_order_manual() {
+    let h = Harness::unlocked().await;
+    let mut ids = Vec::new();
+    for (issuer, group, secret) in [("GitHub", Some("Work"), SECRET), ("Bank", Some("Money"), "GEZDGNBV"), ("Mail", None, "MZXW6YTBOI")] {
+        let id = h.core.add_uri(&otpauth(issuer, "me", secret)).unwrap();
+        if let Some(group) = group {
+            h.core.update_entry(id, EntryPatch { group: Some(group.into()), ..EntryPatch::default() }).unwrap();
+        }
+        ids.push(id);
+    }
+    let state = h.core.state();
+    assert!(state.entry_order.is_empty() && state.group_order.is_empty());
+    assert_eq!(state.settings.sort, SortOrder::Name);
+    // The accounts as dragged: unknown ids and repeats dropped; the order becomes manual.
+    let [github, bank, mail] = [ids[0], ids[1], ids[2]];
+    h.core.order_entries(vec![mail, Uuid::new_v4(), github, mail, bank]).unwrap();
+    let state = h.core.state();
+    assert_eq!(state.entry_order, [mail, github, bank]);
+    assert_eq!(state.settings.sort, SortOrder::Manual);
+    // The groups as dragged: those in use, cleaned, once each ("" stays last, it is no group).
+    h.core.order_groups(vec![" Money ".into(), "Gone".into(), String::new(), "Work".into(), "Money".into()]).unwrap();
+    assert_eq!(h.core.state().group_order, ["Money", "Work"]);
+    // In the vault: hidden while locked, back after unlocking and after a restart.
+    h.core.lock_vault();
+    assert!(h.core.state().entry_order.is_empty() && h.core.state().group_order.is_empty());
+    assert_eq!(code_err(h.core.order_entries(Vec::new())), ErrorCode::Locked);
+    assert_eq!(code_err(h.core.order_groups(Vec::new())), ErrorCode::Locked);
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(restarted.state().entry_order, [mail, github, bank]);
+    assert_eq!(restarted.state().group_order, ["Money", "Work"]);
+    // Neither a backup nor the plain settings file carries it, and no backup follows a drag.
+    let file = h.dir.path().join("mine.lockrabackup");
+    restarted.backup_to(file.clone(), None).await.unwrap();
+    let backup = Sealed::open_with_password(&fs::read(&file).unwrap(), MASTER.as_bytes()).unwrap();
+    let payload = String::from_utf8_lossy(&backup.payload).into_owned();
+    assert!(!payload.contains("entry_order") && !payload.contains("group_order"), "{payload}");
+    let plain = fs::read_to_string(h.dir.path().join("config").join("settings.json")).unwrap();
+    assert!(plain.contains("\"manual\"") && !plain.contains("Money") && !plain.contains(&mail.to_string()), "{plain}");
 }
 
 #[test]

@@ -5,6 +5,7 @@ import {
   exportBlocker,
   filterEntries,
   groupSections,
+  moveItem,
   parseKind,
   sortEntries,
 } from "./entries";
@@ -35,6 +36,21 @@ describe("sortEntries / filterEntries", () => {
     ]);
   });
 
+  it("keeps a dragged order, favourites still first, accounts never dragged after it, oldest first", () => {
+    const [beta, alpha, carol] = entries.map((e) => e.id);
+    const names = (order: readonly string[]) =>
+      sortEntries(entries, "manual", order).map((e) => e.issuer || e.account);
+    expect(names([alpha ?? "", beta ?? "", carol ?? ""])).toEqual(["carol", "Alpha", "beta"]);
+    expect(names([beta ?? ""])).toEqual(["carol", "beta", "Alpha"]);
+    expect(names([])).toEqual(["carol", "Alpha", "beta"]);
+    // Another order ignores the dragged one.
+    expect(sortEntries(entries, "name", [beta ?? ""]).map((e) => e.issuer || e.account)).toEqual([
+      "carol",
+      "Alpha",
+      "beta",
+    ]);
+  });
+
   it("matches issuer, account and group, case-insensitively", () => {
     expect(filterEntries(entries, "ALP", "")).toHaveLength(1);
     expect(filterEntries(entries, "home", "")).toHaveLength(1);
@@ -58,6 +74,20 @@ describe("groupSections / entryGroups", () => {
       ["", ["a"]],
     ]);
     expect(groupSections([])).toEqual([]);
+  });
+
+  it("puts dragged groups first in their order, the others after by name, no group last", () => {
+    const keys = (order: readonly string[]) => groupSections(entries, order).map((s) => s.key);
+    expect(keys(["Work"])).toEqual(["Work", "Home", ""]);
+    expect(keys(["Work", "Home", "Gone"])).toEqual(["Work", "Home", ""]);
+    expect(keys([])).toEqual(["Home", "Work", ""]);
+  });
+
+  it("moves one item to another place", () => {
+    expect(moveItem(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "c", "a", "d"]);
+    expect(moveItem(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
+    expect(moveItem(["a", "b"], "a", "a")).toEqual(["a", "b"]);
+    expect(moveItem(["a", "b"], "x", "a")).toEqual(["a", "b"]);
   });
 
   it("lists the groups in use, once each, sorted", () => {

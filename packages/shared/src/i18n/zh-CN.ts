@@ -61,6 +61,20 @@ export const zhCN = {
       results: { one: "{n} 条结果", other: "{n} 条结果" },
     },
     banner: { close: "关闭" },
+    sortable: {
+      role: "可排序的项",
+      handle: "移动「{name}」：拖动，或按上下方向键",
+      instructions: "按住手柄拖动以调整顺序，或聚焦手柄后按上下方向键移动一位。",
+      picked: "已拿起「{name}」",
+      over: "移到「{name}」的位置",
+      dropped: "已放到「{name}」的位置",
+      cancelled: "已取消移动",
+    },
+    groupPicker: {
+      none: "不分组",
+      create: "新建分组「{name}」",
+      options: "可选的分组",
+    },
     a11y: {
       progress: "进度",
       countdown: "剩余时间",
@@ -123,6 +137,15 @@ export const zhCN = {
       manualHint: "输入服务名称和密钥",
     },
     groupSuggestions: "已有分组",
+    groupSheet: {
+      title: "选择分组",
+      newLabel: "新建分组",
+      newPlaceholder: "分组名称",
+      use: "使用",
+    },
+    reorderHint: "按住右侧的手柄上下拖动，调整账号和分组的顺序。顺序只保存在这台设备上。",
+    verifyWith: "使用指纹验证",
+    passwordOrFingerprint: "留空则用指纹验证。",
     fingerprint: {
       disableTitle: "关闭指纹解锁",
       disablePrompt: "输入主密码以关闭指纹解锁，手机里保存的密钥会被删除。",
@@ -237,7 +260,12 @@ export const zhCN = {
     search: "搜索账号…",
     allGroups: "全部分组",
     sortLabel: "排序",
-    sort: { name: "按名称", added: "最近添加", recent: "最近使用" },
+    sort: { name: "按名称", added: "最近添加", recent: "最近使用", manual: "手动" },
+    reorder: {
+      open: "排序",
+      done: "完成",
+      hint: "拖动手柄调整账号和分组的顺序，或聚焦手柄后按上下方向键。顺序只保存在这台设备上，收藏的账号仍排在最前。",
+    },
     add: {
       label: "添加",
       image: "扫描图片…",
@@ -328,6 +356,8 @@ export const zhCN = {
     deleteConfirm: "删除",
     revealTitle: "显示密钥",
     revealPrompt: "输入主密码以显示「{name}」的密钥和二维码。",
+    revealPromptBiometric: "验证身份以显示「{name}」的密钥和二维码，或输入主密码。",
+    revealReason: "显示账号的密钥",
     revealSubmit: "显示",
     revealWarning: "任何看到这个二维码或密钥的人，都能生成这个账号的验证码。",
     revealSecret: "密钥",
@@ -420,6 +450,7 @@ export const zhCN = {
     unavailable: "不能导出：{reason}",
     passwordPrompt: "输入主密码以生成二维码",
     start: "生成二维码",
+    reason: "导出账号",
     page: "第 {index} / {total} 张",
     previous: "上一张",
     next: "下一张",
@@ -698,6 +729,9 @@ export const zhCN = {
       otherPasswordHint: "同步空间中的设备使用另一个主密码：请输入其中任一设备的主密码。",
       code: "口令",
       codeHint: "这份邀请码需要口令：请输入邀请方屏幕上显示的口令。",
+      reason: "加入同步空间",
+      biometricHint:
+        "主密码留空则用指纹验证。用指纹加入后，要等下次用主密码解锁这台设备，它的主密码才能用于恢复同步空间。",
     },
     recoveryKey: {
       row: "恢复密钥",
@@ -735,11 +769,14 @@ export const zhCN = {
       synced: "已同步 · {when}",
       failed: "同步失败：{error}",
       now: "立即同步",
+      keyringUnsealed:
+        "这台设备是用指纹加入的：下次用主密码解锁后，它的主密码才能用于恢复同步空间。",
       keyringPending:
         "这台设备的新主密码将在下次同步时写入同步空间；在此之前，用恢复密钥恢复时请输入旧的主密码或其他设备的主密码。",
     },
     storageRow: "存储",
     storageEdit: "修改存储设置",
+    storageReason: "修改同步的存储设置",
     storageEditBody:
       "更换访问密钥、密码或地址。同步空间必须已经在新的位置；换到 Lockra 中继时不必，这台设备下次同步就会把空间写过去。",
     device: {

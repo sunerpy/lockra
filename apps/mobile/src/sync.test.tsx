@@ -7,7 +7,7 @@ import {
   mockSyncSpace,
   sampleEntries,
 } from "@lockra/shared/mock";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { depthOf } from "./app/nav";
 import { ready, renderApp } from "./test/render";
 
@@ -24,6 +24,18 @@ async function openSync(user: User) {
   await user.click(screen.getByTestId("codes-settings"));
   await user.click(await screen.findByTestId("settings-sync"));
   return screen.findByTestId("page-sync");
+}
+
+/** An unlocked vault whose fingerprint is on, the default unlock (the mock's default settings). */
+function withFingerprint(options: ConstructorParameters<typeof MockBackend>[0] = {}) {
+  return new MockBackend({
+    entries: sampleEntries(),
+    biometric: "fingerprint",
+    biometricUnlock: true,
+    deviceUnlock: true,
+    settings: { locale: "zh-cn" },
+    ...options,
+  });
 }
 
 /** An unlocked vault in a sync space (the sample space, this device "Desktop"). */
@@ -381,36 +393,140 @@ describe("sync on the phone", () => {
     await user.click(within(reminder).getByRole("button", { name: "保存到文件…" }));
     await waitFor(() => expect(screen.queryByTestId("sync-key-reminder")).not.toBeInTheDocument());
     expect(backend.biometricReasons).toEqual(["保存恢复密钥"]);
-    // Its row still shows the key, after the fingerprint.
+    // Its row still shows the key: the fingerprint, the default unlock, is asked by itself.
     await user.click(
       within(screen.getByTestId("sync-recovery-row")).getByRole("button", {
         name: "显示恢复密钥…",
       }),
     );
     const page = within(await screen.findByTestId("page-sync-key"));
-    await user.click(page.getByRole("button", { name: "使用指纹验证" }));
     expect(await page.findByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
-    expect(backend.biometricReasons.at(-1)).toBe("显示恢复密钥");
+    expect(backend.biometricReasons).toEqual(["保存恢复密钥", "显示恢复密钥"]);
   });
 
-  it("shows an invitation after the fingerprint that unlocks the vault", async () => {
-    const backend = new MockBackend({
-      entries: sampleEntries(),
+  it("shows an invitation after the fingerprint, asked by itself where it is the default unlock", async () => {
+    const backend = withFingerprint({ sync: mockSyncSpace() });
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-invite-open"));
+    const page = within(await screen.findByTestId("page-sync-invite"));
+    await user.click(await page.findByRole("button", { name: "无法扫码？" }));
+    expect(page.getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
+    expect(backend.biometricReasons).toEqual(["显示同步邀请码"]);
+  });
+
+  it("waits for the fingerprint's button where the password is the default unlock", async () => {
+    const backend = withFingerprint({
       sync: mockSyncSpace(),
-      biometric: "fingerprint",
-      biometricUnlock: true,
-      deviceUnlock: true,
-      settings: { locale: "zh-cn" },
+      settings: { locale: "zh-cn", default_unlock: "password" },
     });
     const { user } = renderApp({ backend });
     await ready();
     await openSync(user);
     await user.click(screen.getByTestId("sync-invite-open"));
     const page = within(await screen.findByTestId("page-sync-invite"));
+    expect(page.getByText("验证身份以显示邀请码，或输入主密码。")).toBeInTheDocument();
+    expect(backend.biometricReasons).toEqual([]);
     await user.click(page.getByRole("button", { name: "使用指纹验证" }));
-    await user.click(await page.findByRole("button", { name: "无法扫码？" }));
-    expect(page.getByTestId("invite-code")).toHaveTextContent(MOCK_INVITE_CODE);
-    expect(backend.biometricReasons.at(-1)).toBe("显示同步邀请码");
+    expect(await page.findByTestId("sync-invite")).toBeInTheDocument();
+    expect(backend.biometricReasons).toEqual(["显示同步邀请码"]);
+  });
+
+  it("leaves the password after a cancelled fingerprint, saying nothing", async () => {
+    const backend = withFingerprint({ sync: mockSyncSpace() });
+    backend.answerBiometric("biometric_cancelled");
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-invite-open"));
+    const page = within(await screen.findByTestId("page-sync-invite"));
+    await waitFor(() => expect(backend.biometricReasons).toEqual(["显示同步邀请码"]));
+    expect(page.queryByText("验证已取消")).not.toBeInTheDocument();
+    await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    expect(await page.findByTestId("sync-invite")).toBeInTheDocument();
+    // Once only: the page does not ask again by itself.
+    expect(backend.biometricReasons).toEqual(["显示同步邀请码"]);
+  });
+
+  it("says when the fingerprint cannot be used, and takes the password then", async () => {
+    const backend = withFingerprint({ sync: mockSyncSpace() });
+    backend.answerBiometric("biometric_unavailable");
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(
+      within(screen.getByTestId("sync-recovery-row")).getByRole("button", {
+        name: "显示恢复密钥…",
+      }),
+    );
+    const page = within(await screen.findByTestId("page-sync-key"));
+    expect(await page.findByText(/无法使用指纹/)).toBeInTheDocument();
+    await user.type(page.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    expect(await page.findByTestId("sync-key")).toHaveTextContent(MOCK_SYNC_KEY);
+  });
+
+  it("joins from the invitation the camera reads with the fingerprint for the password", async () => {
+    const backend = withFingerprint();
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-join-open"));
+    const form = within(await screen.findByTestId("sync-join"));
+    expect(form.getByTestId("sync-join-fingerprint")).toHaveTextContent("主密码留空则用指纹验证");
+    backend.setScan("lockra-invite:1:bW9jaw");
+    await user.click(form.getByRole("button", { name: "扫码加入" }));
+    expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
+    expect(backend.biometricReasons).toEqual(["加入同步空间"]);
+    // Until the next unlock with the password, this phone's own password recovers nothing.
+    expect(screen.getByTestId("sync-keyring-unsealed")).toHaveTextContent("用指纹加入");
+    // Locked, the pages close. The fingerprint, asked by itself, unlocks it with no password to
+    // seal the keyring under: the note stays.
+    await act(() => backend.dispatch({ command: "vault_lock" }));
+    await waitFor(() => expect(backend.biometricReasons).toHaveLength(2));
+    await screen.findByTestId("page-codes");
+    await openSync(user);
+    expect(screen.getByTestId("sync-keyring-unsealed")).toBeInTheDocument();
+    // The next unlock with the password seals it under that password.
+    backend.answerBiometric("biometric_cancelled");
+    await act(() => backend.dispatch({ command: "vault_lock" }));
+    await user.type(await screen.findByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+    await screen.findByTestId("page-codes");
+    await openSync(user);
+    expect(screen.queryByTestId("sync-keyring-unsealed")).not.toBeInTheDocument();
+    expect(screen.getByText(/新主密码将在下次同步时写入/)).toBeInTheDocument();
+  });
+
+  it("joins from a pasted invitation with the fingerprint, but recovers with a password only", async () => {
+    const backend = withFingerprint();
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-join-open"));
+    const form = within(await screen.findByTestId("sync-join"));
+    await user.click(form.getByRole("radio", { name: "恢复密钥" }));
+    expect(form.queryByTestId("sync-join-fingerprint")).not.toBeInTheDocument();
+    await user.click(form.getByRole("radio", { name: "配对链接" }));
+    await user.type(form.getByLabelText("配对链接或邀请码"), "lockra-invite:1:bW9jaw");
+    await user.click(form.getByRole("button", { name: "加入" }));
+    expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
+    const join = backend.calls.find((c) => c.command === "sync_join");
+    expect(join).toMatchObject({ command: "sync_join", reason: "加入同步空间" });
+    expect(join).not.toHaveProperty("password");
+  });
+
+  it("changes the storage with the fingerprint for the password", async () => {
+    const backend = withFingerprint({ sync: mockSyncSpace() });
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-storage-edit"));
+    const form = within(await screen.findByTestId("sync-storage-form"));
+    expect(form.getByText("留空则用指纹验证。")).toBeInTheDocument();
+    await user.type(form.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
+    await user.click(form.getByRole("button", { name: "保存" }));
+    expect(await screen.findByTestId("page-sync")).toBeInTheDocument();
+    expect(backend.biometricReasons).toEqual(["修改同步的存储设置"]);
   });
 
   it("joins with a pasted sealed invitation and its code", async () => {

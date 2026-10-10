@@ -168,9 +168,10 @@ async fn export_otpauth_file<R: Runtime>(
     app: AppHandle<R>,
     core: State<'_, Core>,
     entry_ids: Vec<uuid::Uuid>,
-    password: Zeroizing<String>,
+    password: Option<Zeroizing<String>>,
+    reason: Option<String>,
 ) -> Result<Option<String>, CoreError> {
-    let list = core.export_otpauth_text(&entry_ids, password).await?;
+    let list = core.export_otpauth_text(&entry_ids, password, reason).await?;
     let picker = files::Files::new(app);
     let saved = tauri::async_runtime::spawn_blocking(move || picker.save(files::LIST_NAME, files::LIST_MIME, list.as_bytes()))
         .await
@@ -200,15 +201,16 @@ async fn sync_scan_join<R: Runtime>(
     core: State<'_, Core>,
     prompt: String,
     cancel: String,
-    password: Zeroizing<String>,
+    password: Option<Zeroizing<String>>,
     device_name: String,
     space_password: Option<Zeroizing<String>>,
     storage: Option<StorageConfig>,
+    reason: Option<String>,
 ) -> Result<bool, CoreError> {
     let camera = scanner::Scanner::new(app);
     let texts = scanner::ScanTexts { prompt, cancel };
     let scan = tauri::async_runtime::spawn_blocking(move || camera.scan(&texts)).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
-    sync::join(&core, scan, password, device_name, space_password, storage).await
+    sync::join(&core, scan, sync::JoinProof { password, reason }, device_name, space_password, storage).await
 }
 
 /// Open where this copy updates: a Play copy's Play listing (in the Play app), else the page of the

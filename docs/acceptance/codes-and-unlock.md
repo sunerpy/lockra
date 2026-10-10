@@ -91,6 +91,48 @@ Problems found by looking at them, and fixed:
 2. A counter-based (HOTP) row kept its "next code" button while selecting; it steps aside with the
    other buttons.
 
+## Reordering, the group picker and the fingerprint on the phone (0.8.6)
+
+Asked for on 2026-10-10: groups and accounts reordered by dragging, on the desktop and the phone;
+a group picker of Lockra's own instead of the webview's `<datalist>`, a dark native box on
+WebKitGTK and WebView2 (on the phone, a sheet from the bottom); and the phone taking the
+fingerprint instead of the master password.
+
+- **The order** is this device's own, in the vault's local `view` (`entry_order`, `group_order`;
+  `docs/formats.md` §2): never synced, in no backup, not in `settings.json`. Dragging the accounts
+  turns the code order to **Manual**; pinned accounts stay first and **No group** last, and
+  accounts never dragged follow, oldest first
+  (`a_dragged_order_is_kept_for_this_device_and_makes_the_code_order_manual`, `entries.test.ts`).
+  **Reorder** shows a handle on every row and group heading (@dnd-kit; a drag starts after 4 px,
+  so a tap stays a tap); ArrowUp and ArrowDown on a handle move one place and keep the focus
+  (`Sortable.test.tsx`, `ReorderList.test.tsx`, `Codes.test.tsx` "Codes · reordering", the
+  phone's `accounts.test.tsx`).
+- **The group picker** (`GroupCombobox`: editing, adding by hand, **Move to group…**) lists the
+  groups in use, **No group**, and **New group “…”** for a name typed; arrows, Enter and Esc work
+  as in a list, and Esc closes the list before the dialog (`GroupCombobox.test.tsx`, inside the
+  real `Dialog`). The phone's field opens a sheet with a history entry of its own, so the back
+  gesture closes the sheet and not the page (`accounts.test.tsx`).
+- **The fingerprint** shows a secret and starts an export in place of the password
+  (`the_biometric_check_that_unlocks_the_vault_shows_a_secret_and_starts_an_export`); the phone's
+  pages ask by themselves where it is the default unlock and say nothing after a cancel
+  (`accounts.test.tsx`, `export.test.tsx`; sync in `docs/acceptance/sync.md`).
+
+Run here: `make smoke-desktop`, 2026-10-10. It opens the edit dialog's group list
+(`screens/desktop/edit-group-1280-light`: **No group** and **Home**, checked), presses Esc twice
+(the list closes, then the dialog), and in **Reorder** moves an account a place from the keyboard
+and another by X's own pointer (pressed, moved down in steps, let go): each order reaches the core,
+and the sort reads **Manual** (`codes-reorder-1280-light`). Found by it and fixed: Esc in an open
+group list closed the dialog as well. The dialog listens on `document` in the capture phase,
+before the field hears the key, and the unit test had stood in for the dialog with a listener of
+its own; the list now takes Esc on `window` first, as `Popover` does, and the test runs inside the
+real dialog. The pointer's drag first passed one run in two: ten moves and the release within a
+few milliseconds dropped before the list knew what the row was over. The smoke now waits for the
+drag to start and for another row to make room before it lets go, as a hand does.
+
+To check on real devices: drag with a mouse on Windows and macOS, and with a finger on the phone
+(a tap on a handle stays a tap; the page does not scroll while a row moves); the group list's
+look in WebView2 and WKWebView; the phone's group sheet closed by the back gesture.
+
 ## Verified on real devices
 
 - **Touch ID**, by the owner on a Mac with 0.6.0 (2026-10-03): with 0.5.1 the locked screen showed
