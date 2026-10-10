@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.5](https://github.com/sunerpy/lockra/compare/v0.8.4...v0.8.5) (2026-10-10)
+
+
+### Features
+
+* **mobile:** 从 Google Play 安装的手机端改由 Play 更新 ([#102](https://github.com/sunerpy/lockra/issues/102)) ([74b9e69](https://github.com/sunerpy/lockra/commit/74b9e699c8a688c5a5ad5d26f941856e2487a770))
+
 ## [0.8.4](https://github.com/sunerpy/lockra/compare/v0.8.3...v0.8.4) (2026-10-09)
 
 
