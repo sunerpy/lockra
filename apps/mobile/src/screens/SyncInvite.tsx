@@ -1,0 +1,167 @@
+// An invitation for another device, once the user proved to be here (the fingerprint that unlocks
+// this vault, asked by itself where it is the default unlock, or the master password): the QR code
+// the other device scans and, for a computer, which scans nothing, the text the core copies: on a
+// relay the pairing link itself, elsewhere, behind "Can't scan?", the sealed text with its code
+// apart. It hides after REVEAL_SECONDS like any secret (app/secret-page.ts).
+import { type SyncInvite as Invite, errorText } from "@lockra/shared";
+import { Banner, Button, PasswordField, QrView, useBackend, useSubmit, useT } from "@lockra/ui";
+import { type SubmitEvent, useState } from "react";
+import { useNav } from "../app/nav";
+import { shown, useAutoFingerprint } from "../app/presence";
+import { useSecretAnswer, useSecretPage } from "../app/secret-page";
+import { Page } from "../components/Page";
+
+export function SyncInvite() {
+  const t = useT();
+  const nav = useNav();
+  const { backend } = useBackend();
+  const [password, setPassword] = useState("");
+  const [invite, setInvite] = useState<{ answer: Invite; at: number } | undefined>(undefined);
+  const submit = useSubmit();
+  const copying = useSubmit();
+  const [copied, setCopied] = useState(false);
+  const [cantScan, setCantScan] = useState(false);
+  const deliver = useSecretAnswer();
+  const left = useSecretPage(invite?.at);
+  const ask = async (typed?: string) => {
+    const answer = await submit.run(() =>
+      backend.dispatch(
+        typed === undefined
+          ? { command: "sync_invite", reason: t("sync.invite.reason") }
+          : { command: "sync_invite", password: typed },
+      ),
+    );
+    setPassword("");
+    if (answer !== undefined) deliver(() => setInvite({ answer, at: Date.now() }));
+  };
+  const biometric = useAutoFingerprint(() => ask());
+  const failure = shown(submit.error);
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (password === "") return;
+    await ask(password);
+  };
+  if (invite === undefined) {
+    return (
+      <Page title={t("sync.invite.open")} testId="page-sync-invite">
+        <form onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-4">
+          <p className="text-[14px] text-fg">
+            {t(biometric === null ? "sync.invite.prompt" : "sync.invite.promptBiometric")}
+          </p>
+          {biometric !== null && (
+            <Button
+              variant="outline"
+              size="lg"
+              icon="fingerprint"
+              loading={submit.busy}
+              onClick={() => void ask()}>
+              {t(`sync.invite.verifyWith.${biometric}`)}
+            </Button>
+          )}
+          <PasswordField
+            size="lg"
+            label={t("sync.masterPassword")}
+            value={password}
+            onChange={setPassword}
+            autoComplete="current-password"
+            error={failure === undefined ? undefined : errorText(t, failure)}
+          />
+          <Button
+            variant="primary"
+            size="lg"
+            type="submit"
+            icon="qr"
+            loading={submit.busy}
+            disabled={password === ""}>
+            {t("sync.invite.submit")}
+          </Button>
+        </form>
+      </Page>
+    );
+  }
+  const { answer } = invite;
+  // On a relay nothing is sealed: the invitation itself is the pairing link to copy and send.
+  const shared = answer.shared;
+  const copy = async () => {
+    setCopied(false);
+    const done = await copying.run(() =>
+      backend.dispatch({ command: "sync_invite_copy", text: shared?.text ?? answer.invite }),
+    );
+    if (done !== undefined) setCopied(true);
+  };
+  const copyControls = (label: string, done: string) => (
+    <>
+      <Button
+        variant="outline"
+        size="lg"
+        icon="copy"
+        loading={copying.busy}
+        onClick={() => void copy()}>
+        {label}
+      </Button>
+      {copied && (
+        <p role="status" className="text-[13px] text-fg-muted">
+          {done}
+        </p>
+      )}
+      {copying.error !== undefined && (
+        <p role="alert" className="text-[13px] text-danger">
+          {errorText(t, copying.error)}
+        </p>
+      )}
+    </>
+  );
+  return (
+    <Page title={t("sync.invite.open")} testId="page-sync-invite">
+      <div className="flex flex-col gap-4" data-testid="sync-invite">
+        <Banner tone="warn" marker="icon">
+          {t(shared === null ? "sync.invite.linkWarning" : "sync.invite.warning")}
+        </Banner>
+        <div className="self-center">
+          <QrView svg={answer.svg} label={t("ui.a11y.qr")} size={260} />
+        </div>
+        <p className="text-[14px] text-fg">
+          {t(shared === null ? "sync.invite.bodyLink" : "sync.invite.body")}
+        </p>
+        {shared === null ? (
+          <div className="flex flex-col gap-3" data-testid="invite-link">
+            {copyControls(t("sync.invite.copyLink"), t("sync.invite.copiedLink"))}
+          </div>
+        ) : (
+          <>
+            <Button
+              variant="ghost"
+              size="lg"
+              icon={cantScan ? "chevronDown" : "chevronRight"}
+              aria-expanded={cantScan}
+              onClick={() => setCantScan((open) => !open)}
+              className="self-start">
+              {t("sync.invite.cantScan")}
+            </Button>
+            {cantScan && (
+              <div className="flex flex-col gap-3" data-testid="invite-send">
+                <p className="text-[13px] text-fg-muted">{t("sync.invite.cantScanBody")}</p>
+                {copyControls(t("sync.invite.copy"), t("sync.invite.copied"))}
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[13px] text-fg-muted">{t("sync.invite.code")}</span>
+                  <div
+                    className="mono text-[20px] tracking-wide text-fg select-all"
+                    data-testid="invite-code">
+                    {shared.code}
+                  </div>
+                  <p className="text-[13px] text-fg-subtle">{t("sync.invite.codeHint")}</p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+        <p className="text-[13px] text-fg-subtle" data-testid="invite-countdown">
+          {t("sync.invite.hideIn", { s: left })}
+        </p>
+        <Button variant="primary" size="lg" onClick={nav.back}>
+          {t("common.done")}
+        </Button>
+      </div>
+    </Page>
+  );
+}

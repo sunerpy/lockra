@@ -1,0 +1,299 @@
+// Joining a sync space on the phone: the invitation another device shows, scanned with the camera
+// (its text goes from the camera to the core and never through here) or pasted (a sealed one with
+// its code), which hands the space over; or a recovery with the storage and the recovery key typed
+// in. An invitation needs this phone's own master password alone: on the welcome screen
+// (`newVault`) a new one, typed twice; with a vault, the vault's. A recovery opens the space with
+// the master password of a device in it: on the welcome screen it becomes this phone's; with a
+// vault, its own is tried first, and only when the space's devices use another one does the form
+// ask for that too. An invitation without storage (a space in a computer's cloud drive folder)
+// asks for the storage this phone reaches the same folder at, such as its WebDAV. With a vault
+// whose fingerprint is on, an invitation may take the fingerprint for the vault's password: this
+// phone's keyring is then sealed under its password at the next unlock with it (the core).
+import {
+  type JoinSource,
+  emptyStorageForm,
+  errorText,
+  isLockraError,
+  isSealedInvite,
+  storageComplete,
+  storageConfig,
+  withPreset,
+} from "@lockra/shared";
+import {
+  Button,
+  Input,
+  PasswordField,
+  Segmented,
+  StorageFields,
+  Textarea,
+  useBackend,
+  useSubmit,
+  useT,
+} from "@lockra/ui";
+import { type SubmitEvent, useState } from "react";
+import { overPhoneScreen } from "../app/phone-screen";
+import { shown, useFingerprint } from "../app/presence";
+
+type Mode = "scan" | "invite" | "key";
+
+export function JoinSync({
+  newVault = false,
+  onJoined,
+}: {
+  newVault?: boolean;
+  onJoined?: () => void;
+}) {
+  const t = useT();
+  const { backend } = useBackend();
+  const [mode, setMode] = useState<Mode>("scan");
+  const [invite, setInvite] = useState("");
+  const [code, setCode] = useState("");
+  // The core said this vault's password opens nothing in the space: the space's is asked for.
+  const [askSpace, setAskSpace] = useState(false);
+  // The invitation holds the sync key alone: this phone's way to the space is asked for.
+  const [askStorage, setAskStorage] = useState(false);
+  const [storage, setStorage] = useState(emptyStorageForm);
+  const [syncKey, setSyncKey] = useState("");
+  const [password, setPassword] = useState("");
+  const [repeat, setRepeat] = useState("");
+  const [spacePassword, setSpacePassword] = useState("");
+  const [deviceName, setDeviceName] = useState(() => t("sync.platformDevice.android"));
+  const submit = useSubmit();
+  const fingerprint = useFingerprint();
+  // An invitation to this unlocked vault: its fingerprint may stand in for its password.
+  const byFingerprint = !newVault && mode !== "key" && fingerprint !== null;
+  const sealed = mode === "invite" && isSealedInvite(invite);
+  const withStorage = mode === "key" || askStorage;
+  const sourceReady =
+    (mode === "scan" ||
+      (mode === "invite"
+        ? invite.trim() !== "" && (!sealed || code.trim() !== "")
+        : syncKey.trim() !== "")) &&
+    (!withStorage || storageComplete(storage));
+  const ownStorage = askStorage ? storageConfig(storage) : undefined;
+  // A new vault's own password, typed twice: an invitation asks no other.
+  const choosing = newVault && mode !== "key";
+  const mismatch = choosing && repeat !== "" && repeat !== password;
+  const ready =
+    sourceReady && (password !== "" || byFingerprint) && (!choosing || repeat === password);
+  // Left empty, the fingerprint: no password goes, the core asks for the check.
+  const proof = password === "" ? { reason: t("sync.join.reason") } : { password };
+  // A recovery whose space's devices use another password asks for it too.
+  const showSpace = !newVault && askSpace && mode === "key";
+  const space_password = showSpace && spacePassword !== "" ? spacePassword : undefined;
+  const problem = shown(submit.error);
+  const forget = () => {
+    setPassword("");
+    setRepeat("");
+    setSpacePassword("");
+  };
+  /** Asked for the space's password, the form shows its field. */
+  const watch = async <T,>(work: () => Promise<T>): Promise<T> => {
+    try {
+      return await work();
+    } catch (failure: unknown) {
+      if (isLockraError(failure) && failure.code === "sync_space_password_needed")
+        setAskSpace(true);
+      if (isLockraError(failure) && failure.code === "sync_invite_needs_storage" && !askStorage) {
+        setAskStorage(true);
+        // Most likely the drive's WebDAV.
+        setStorage((form) =>
+          form.kind === "webdav" ? form : withPreset(form, { kind: "webdav" }),
+        );
+      }
+      throw failure;
+    }
+  };
+  const scan = async () => {
+    const joined = await submit.run(() =>
+      watch(() =>
+        overPhoneScreen(() =>
+          backend.scanJoin(
+            { prompt: t("mobile.sync.scanPrompt"), cancel: t("common.cancel") },
+            { ...proof, deviceName, spacePassword: space_password, storage: ownStorage },
+          ),
+        ),
+      ),
+    );
+    // Left without a code, nothing was tried: the passwords stay.
+    if (joined === false) return;
+    forget();
+    if (joined === true) onJoined?.();
+  };
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (!ready) return;
+    if (mode === "scan") {
+      await scan();
+      return;
+    }
+    const source: JoinSource =
+      mode === "invite"
+        ? {
+            type: "invite",
+            text: invite.trim(),
+            code: sealed ? code.trim() : undefined,
+            storage: ownStorage,
+          }
+        : { type: "manual", storage: storageConfig(storage), sync_key: syncKey.trim() };
+    const done = await submit.run(() =>
+      watch(() =>
+        backend.dispatch({
+          command: "sync_join",
+          source,
+          ...proof,
+          device_name: deviceName,
+          space_password,
+        }),
+      ),
+    );
+    forget();
+    if (done !== undefined) onJoined?.();
+  };
+  return (
+    <form
+      onSubmit={(e) => void onSubmit(e)}
+      className="flex flex-col gap-4"
+      data-testid="sync-join">
+      <Segmented
+        size="lg"
+        label={t("sync.off.joinTitle")}
+        value={mode}
+        onChange={setMode}
+        options={[
+          { value: "scan", label: t("mobile.sync.fromScan") },
+          { value: "invite", label: t("sync.join.fromInvite") },
+          { value: "key", label: t("sync.join.fromKey") },
+        ]}
+        className="self-start"
+      />
+      {mode === "scan" && <p className="text-[14px] text-fg-muted">{t("mobile.sync.scanHint")}</p>}
+      {mode === "invite" && (
+        <>
+          <Textarea
+            label={t("sync.join.invite")}
+            value={invite}
+            onChange={(e) => setInvite(e.target.value)}
+            placeholder="lockra-invite:…"
+            mono
+            rows={4}
+            spellCheck={false}
+          />
+          <p className="-mt-2 text-[13px] text-fg-muted">{t("sync.join.inviteHint")}</p>
+          {sealed && (
+            <Input
+              size="lg"
+              label={t("sync.join.code")}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              help={t("sync.join.codeHint")}
+              placeholder="XXXXX-XXXXX"
+              mono
+              spellCheck={false}
+              autoComplete="off"
+            />
+          )}
+        </>
+      )}
+      {mode === "key" && (
+        <>
+          <StorageFields
+            failure={submit.error}
+            size="lg"
+            form={storage}
+            onChange={(patch) => setStorage((form) => ({ ...form, ...patch }))}
+          />
+          <Input
+            size="lg"
+            label={t("sync.join.syncKey")}
+            value={syncKey}
+            onChange={(e) => setSyncKey(e.target.value)}
+            placeholder="LKS1-XXXX-XXXX-…"
+            mono
+            spellCheck={false}
+            autoComplete="off"
+          />
+        </>
+      )}
+      {mode !== "key" && askStorage && (
+        <div className="flex flex-col gap-3" data-testid="sync-join-storage">
+          <p className="text-[13px] text-fg-muted">{t("mobile.sync.needsStorage")}</p>
+          <StorageFields
+            failure={submit.error}
+            size="lg"
+            form={storage}
+            onChange={(patch) => setStorage((form) => ({ ...form, ...patch }))}
+          />
+        </div>
+      )}
+      <Input
+        size="lg"
+        label={t("sync.deviceName")}
+        value={deviceName}
+        onChange={(e) => setDeviceName(e.target.value)}
+        help={t("sync.deviceNameHint")}
+        maxLength={64}
+      />
+      <PasswordField
+        size="lg"
+        label={t(
+          choosing
+            ? "sync.join.newPassword"
+            : newVault
+              ? "sync.spacePassword"
+              : "sync.join.vaultPassword",
+        )}
+        value={password}
+        onChange={setPassword}
+        help={t(
+          choosing
+            ? "sync.join.newPasswordHint"
+            : newVault
+              ? "sync.spacePasswordHint"
+              : "sync.join.vaultPasswordHint",
+        )}
+        autoComplete={choosing ? "new-password" : "current-password"}
+      />
+      {choosing && (
+        <PasswordField
+          size="lg"
+          label={t("welcome.create.repeat")}
+          value={repeat}
+          onChange={setRepeat}
+          autoComplete="new-password"
+          error={mismatch ? t("welcome.create.mismatch") : undefined}
+        />
+      )}
+      {newVault && <p className="text-[13px] text-fg-muted">{t("mobile.sync.newVault")}</p>}
+      {byFingerprint && (
+        <p className="text-[13px] text-fg-muted" data-testid="sync-join-fingerprint">
+          {t("sync.join.biometricHint")}
+        </p>
+      )}
+      {showSpace && (
+        <PasswordField
+          size="lg"
+          label={t("sync.join.otherPassword")}
+          value={spacePassword}
+          onChange={setSpacePassword}
+          help={t("sync.join.otherPasswordHint")}
+          autoComplete="off"
+        />
+      )}
+      {problem !== undefined && problem !== "sync_invite_needs_storage" && (
+        <p role="alert" className="text-[13px] text-danger">
+          {errorText(t, problem)}
+        </p>
+      )}
+      <Button
+        variant="primary"
+        size="lg"
+        type="submit"
+        icon={mode === "scan" ? "scan" : "link"}
+        loading={submit.busy}
+        disabled={!ready}>
+        {t(mode === "scan" ? "mobile.sync.scan" : "sync.join.submit")}
+      </Button>
+    </form>
+  );
+}

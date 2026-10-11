@@ -1,0 +1,115 @@
+# cargo-deny: the licence and supply-chain policy of the Lockra workspace.
+# `cargo deny check licenses bans sources` runs in `make verify` and CI; `advisories` needs the
+# RustSec database from the network and runs in CI only.
+#
+# Lockra is Apache-2.0 and its packages carry every dependency, so every dependency must allow the
+# combined binary under Apache-2.0 terms: permissive licences, and file-level MPL-2.0. Copyleft that
+# would reach the whole binary (GPL, LGPL under static linking) and non-commercial licences are not
+# in `allow`, so a new dependency under one of them fails here instead of at release time.
+
+[graph]
+# What ships: the six release targets of .github/release-targets.json, the three desktop platforms
+# on x64 and ARM64 (.github/scripts/test-tauri-release.py keeps the two lists equal). Tauri's
+# mobile-only dependencies (an HTTP client on Android and iOS) are outside the graph, which is what
+# lets [bans] forbid network stacks.
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-pc-windows-msvc",
+  "aarch64-pc-windows-msvc",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
+]
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+# The list names what the project accepts, not only what is present today.
+unused-allowed-license = "allow"
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "MPL-2.0", # file-level copyleft (s3.3): the MPL files stay MPL, the larger work may not
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+
+[bans]
+# Two majors of one crate (windows-sys, getrandom) come from upstream and are not fixable here.
+multiple-versions = "warn"
+# Intra-workspace path dependencies count as wildcards; external versions are pinned exactly
+# (`=x.y.z` in the workspace manifest) and Cargo.lock is committed.
+wildcards = "warn"
+allow-wildcard-paths = true
+
+# Lockra goes online for two things only (docs/security.md, "What is protected"): the in-app update, when the
+# user asks or has turned automatic updates on, and the sync of a space the user set up (crates/lockra-remote:
+# storage of their own, or a Lockra relay). The HTTP client and the TLS stack may come in through
+# tauri-plugin-updater and lockra-remote and nothing else: any other crate that pulls one in is a
+# design change, not a dependency bump. The relay server (crates/lockra-relay) is a binary of its own,
+# never linked into the apps: it serves plain HTTP/1.1 through hyper behind a proxy that ends TLS.
+[[bans.deny]]
+name = "reqwest"
+wrappers = ["tauri-plugin-updater", "lockra-remote", "opendal-http-transport-reqwest"]
+reason = "The update check and the user's own sync storage are Lockra's only network access; another HTTP client is a design change."
+[[bans.deny]]
+name = "hyper"
+wrappers = ["reqwest", "hyper-util", "hyper-rustls", "lockra-relay"]
+reason = "HTTP only for the update check and the sync storage, through reqwest, and the relay server's own."
+[[bans.deny]]
+name = "ureq"
+reason = "Lockra's network access goes through reqwest only."
+[[bans.deny]]
+name = "rustls"
+wrappers = [
+  "tauri-plugin-updater",
+  "lockra-remote",
+  "reqwest",
+  "hyper-rustls",
+  "tokio-rustls",
+  "rustls-platform-verifier",
+]
+reason = "TLS only for the update check and the sync storage."
+[[bans.deny]]
+name = "native-tls"
+reason = "rustls is Lockra's only TLS stack."
+[[bans.deny]]
+name = "openssl-sys"
+reason = "rustls is Lockra's only TLS stack."
+[[bans.deny]]
+name = "aws-lc-rs"
+reason = "rustls runs on ring, which the update check installs as the process's provider; no second crypto library."
+[[bans.deny]]
+name = "aws-lc-sys"
+reason = "rustls runs on ring; no second crypto library (and no C toolchain for it on every target)."
+
+[advisories]
+version = 2
+yanked = "deny"
+unmaintained = "all"
+# An ignore that no longer matches fails the check, so a stale exception cannot linger.
+unused-ignored-advisory = "deny"
+ignore = [
+  # gtk3-rs (Tauri's Linux webview) pulls proc-macro-error; no safe upgrade until Tauri moves to GTK4.
+  { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is transitive through gtk3-rs macros; remove with the Tauri GTK4 migration" },
+  # Tauri's urlpattern resolves through rust-unic 0.9.
+  { id = "RUSTSEC-2025-0075", reason = "unic-char-range via tauri-utils -> urlpattern; remove when that chain migrates" },
+  { id = "RUSTSEC-2025-0080", reason = "unic-common via tauri-utils -> urlpattern; remove when that chain migrates" },
+  { id = "RUSTSEC-2025-0081", reason = "unic-char-property via tauri-utils -> urlpattern; remove when that chain migrates" },
+  { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version via tauri-utils -> urlpattern; remove when that chain migrates" },
+  { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident via tauri-utils -> urlpattern; remove when that chain migrates" },
+]
+
+[sources]
+# A registry mirror is a source replacement: Cargo.lock still names crates.io, so this holds locally too.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

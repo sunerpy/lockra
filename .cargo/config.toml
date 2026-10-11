@@ -1,0 +1,10 @@
+# Windows: link the MSVC C runtime statically into the exe, Rust std and the bundled SQLite alike.
+# Without it the exe imports VCRUNTIME140.dll from the Visual C++ Redistributable, which a fresh
+# Windows install does not carry. cargo-xwin reads it too and switches its link to the static ucrt
+# (apps/desktop/src-tauri/build.rs names libucrt.lib for the Tauri CLI's invocation of it). Both
+# Windows targets of the release matrix (.github/release-targets.json) carry it.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

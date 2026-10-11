@@ -1,0 +1,13 @@
+Lockra
+Copyright 2026 The Lockra Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Lockra's design tokens, theme helpers and React components (packages/ui) are derived from
+Voltip (https://github.com/sunerpy/voltip), Copyright 2026 The Voltip Authors, licensed under
+the Apache License, Version 2.0.
+
+The bundled fonts are distributed under the SIL Open Font License, Version 1.1:
+  - Instrument Sans (@fontsource-variable/instrument-sans)
+  - JetBrains Mono (@fontsource-variable/jetbrains-mono)
+  - Noto Sans SC (@fontsource-variable/noto-sans-sc)

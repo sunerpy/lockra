@@ -1,0 +1,248 @@
+import { describe, expect, it } from "vitest";
+import {
+  ALL_GROUPS,
+  cutMark,
+  FAVORITES,
+  UNGROUPED,
+  entryFilters,
+  entryGroups,
+  exportBlocker,
+  filterEntries,
+  groupSections,
+  moveItem,
+  parseKind,
+  pinnedFilter,
+  pinnedFromFilter,
+  recentEntry,
+  sortEntries,
+} from "./entries";
+import { mockEntry } from "./mock-backend";
+
+describe("sortEntries / filterEntries", () => {
+  const entries = [
+    mockEntry("beta", "b", { at: 3, last_used_at_ms: 10 }),
+    mockEntry("Alpha", "a", { at: 1 }),
+    mockEntry("", "carol", { at: 2, favorite: true, group: "home", last_used_at_ms: 20 }),
+  ].map((e) => e.view);
+
+  it("puts favourites first, then the chosen order", () => {
+    expect(sortEntries(entries, "name").map((e) => e.issuer || e.account)).toEqual([
+      "carol",
+      "Alpha",
+      "beta",
+    ]);
+    expect(sortEntries(entries, "added").map((e) => e.issuer || e.account)).toEqual([
+      "carol",
+      "beta",
+      "Alpha",
+    ]);
+    expect(sortEntries(entries, "recent").map((e) => e.issuer || e.account)).toEqual([
+      "carol",
+      "beta",
+      "Alpha",
+    ]);
+  });
+
+  it("keeps a dragged order, favourites still first, accounts never dragged after it, oldest first", () => {
+    const [beta, alpha, carol] = entries.map((e) => e.id);
+    const names = (order: readonly string[]) =>
+      sortEntries(entries, "manual", order).map((e) => e.issuer || e.account);
+    expect(names([alpha ?? "", beta ?? "", carol ?? ""])).toEqual(["carol", "Alpha", "beta"]);
+    expect(names([beta ?? ""])).toEqual(["carol", "beta", "Alpha"]);
+    expect(names([])).toEqual(["carol", "Alpha", "beta"]);
+    // Another order ignores the dragged one.
+    expect(sortEntries(entries, "name", [beta ?? ""]).map((e) => e.issuer || e.account)).toEqual([
+      "carol",
+      "Alpha",
+      "beta",
+    ]);
+  });
+
+  it("matches issuer, account and group, case-insensitively", () => {
+    expect(filterEntries(entries, "ALP", "")).toHaveLength(1);
+    expect(filterEntries(entries, "home", "")).toHaveLength(1);
+    expect(filterEntries(entries, "", "home")).toHaveLength(1);
+    expect(filterEntries(entries, "  ", "")).toHaveLength(3);
+  });
+
+  it("filters the pinned accounts and those in no group (the chips of the codes page)", () => {
+    expect(filterEntries(entries, "", FAVORITES).map((e) => e.account)).toEqual(["carol"]);
+    expect(filterEntries(entries, "", UNGROUPED).map((e) => e.account)).toEqual(["b", "a"]);
+    // A group named like a sentinel is still the user's group.
+    expect(filterEntries(entries, "", "home")).toHaveLength(1);
+  });
+
+  it("knows the account used last, if any", () => {
+    expect(recentEntry(entries)?.account).toBe("carol");
+    expect(recentEntry(entries.map((e) => ({ ...e, last_used_at_ms: null })))).toBeUndefined();
+    expect(recentEntry([])).toBeUndefined();
+  });
+});
+
+describe("groupSections / entryGroups", () => {
+  const entries = [
+    mockEntry("b", "1", { group: "Work" }),
+    mockEntry("a", "2"),
+    mockEntry("c", "3", { group: "Home" }),
+    mockEntry("d", "4", { group: "Work" }),
+  ].map((e) => e.view);
+
+  it("makes a section per group by name, the accounts in no group last, each in its order", () => {
+    expect(groupSections(entries).map((s) => [s.key, s.entries.map((e) => e.issuer)])).toEqual([
+      ["Home", ["c"]],
+      ["Work", ["b", "d"]],
+      ["", ["a"]],
+    ]);
+    expect(groupSections([])).toEqual([]);
+  });
+
+  it("puts dragged groups first in their order, the others after by name, no group last", () => {
+    const keys = (order: readonly string[]) => groupSections(entries, order).map((s) => s.key);
+    expect(keys(["Work"])).toEqual(["Work", "Home", ""]);
+    expect(keys(["Work", "Home", "Gone"])).toEqual(["Work", "Home", ""]);
+    expect(keys([])).toEqual(["Home", "Work", ""]);
+  });
+
+  it("moves no group where it was dragged, like a group", () => {
+    const keys = (order: readonly string[]) => groupSections(entries, order).map((s) => s.key);
+    expect(keys([""])).toEqual(["", "Home", "Work"]);
+    expect(keys(["Work", ""])).toEqual(["Work", "", "Home"]);
+    expect(keys(["Home", "Work", ""])).toEqual(["Home", "Work", ""]);
+  });
+
+  it("heads the list with the pinned section: a group, no group, or the pinned accounts", () => {
+    const sections = (pinned: Parameters<typeof groupSections>[2], order: string[] = []) =>
+      groupSections(entries, order, pinned).map((s) => [s.key, s.entries.map((e) => e.issuer)]);
+    expect(sections({ type: "group", name: "Work" }, ["Home"])).toEqual([
+      ["Work", ["b", "d"]],
+      ["Home", ["c"]],
+      ["", ["a"]],
+    ]);
+    expect(sections({ type: "ungrouped" })).toEqual([
+      ["", ["a"]],
+      ["Home", ["c"]],
+      ["Work", ["b", "d"]],
+    ]);
+    // A pin of a group no account has changes nothing.
+    expect(sections({ type: "group", name: "Gone" })).toEqual(sections(null));
+    // The pinned accounts gather in a section of their own, out of their groups: each shows once,
+    // and a group left empty has no section.
+    const pinned = [
+      mockEntry("b", "1", { group: "Work", favorite: true }),
+      mockEntry("a", "2", { favorite: true }),
+      mockEntry("c", "3", { group: "Home", favorite: true }),
+      mockEntry("d", "4", { group: "Work" }),
+    ].map((e) => e.view);
+    expect(
+      groupSections(pinned, [], { type: "favorites" }).map((s) => [
+        s.key,
+        s.entries.map((e) => e.issuer),
+      ]),
+    ).toEqual([
+      [FAVORITES, ["b", "a", "c"]],
+      ["Work", ["d"]],
+    ]);
+    // Without a pinned account, no such section.
+    expect(sections({ type: "favorites" })).toEqual(sections(null));
+  });
+
+  it("moves one item to another place", () => {
+    expect(moveItem(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "c", "a", "d"]);
+    expect(moveItem(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
+    expect(moveItem(["a", "b"], "a", "a")).toEqual(["a", "b"]);
+    expect(moveItem(["a", "b"], "x", "a")).toEqual(["a", "b"]);
+  });
+
+  it("lists the groups in use, once each, sorted", () => {
+    expect(entryGroups(entries)).toEqual(["Home", "Work"]);
+  });
+});
+
+describe("entryFilters / pinnedFilter", () => {
+  const entries = [
+    mockEntry("b", "1", { group: "Work", favorite: true }),
+    mockEntry("a", "2"),
+    mockEntry("c", "3", { group: "Home" }),
+    mockEntry("d", "4", { group: "Work" }),
+  ].map((e) => e.view);
+  const chips = (pinned: Parameters<typeof entryFilters>[1]) =>
+    entryFilters(entries, pinned).map(
+      (f) => `${f.value || "all"} ${f.count}${f.pinned ? " pin" : ""}`,
+    );
+
+  it("lists everything, the pinned accounts, each group and no group, with their counts", () => {
+    expect(chips(null)).toEqual(["all 4", `${FAVORITES} 1`, "Home 1", "Work 2", `${UNGROUPED} 1`]);
+    expect(entryFilters(entries, null).map((f) => f.kind)).toEqual([
+      "all",
+      "favorites",
+      "group",
+      "group",
+      "ungrouped",
+    ]);
+    // No pinned account, no group: only what is there.
+    expect(entryFilters([entries[1] as (typeof entries)[number]], null).map((f) => f.kind)).toEqual(
+      ["all"],
+    );
+  });
+
+  it("puts the pinned one first", () => {
+    expect(chips({ type: "group", name: "Work" })).toEqual([
+      "Work 2 pin",
+      "all 4",
+      `${FAVORITES} 1`,
+      "Home 1",
+      `${UNGROUPED} 1`,
+    ]);
+    expect(chips({ type: "favorites" })[0]).toBe(`${FAVORITES} 1 pin`);
+    expect(chips({ type: "ungrouped" })[0]).toBe(`${UNGROUPED} 1 pin`);
+    // A pin with nothing to show is left out.
+    expect(chips({ type: "group", name: "Gone" })).toEqual(chips(null));
+  });
+
+  it("turns a pin into a filter and back", () => {
+    expect(pinnedFilter(null)).toBe(ALL_GROUPS);
+    expect(pinnedFilter({ type: "favorites" })).toBe(FAVORITES);
+    expect(pinnedFilter({ type: "ungrouped" })).toBe(UNGROUPED);
+    expect(pinnedFilter({ type: "group", name: "Work" })).toBe("Work");
+    for (const pinned of [
+      null,
+      { type: "favorites" } as const,
+      { type: "ungrouped" } as const,
+      { type: "group", name: "Work" } as const,
+    ])
+      expect(pinnedFromFilter(pinnedFilter(pinned))).toEqual(pinned);
+  });
+});
+
+describe("cutMark", () => {
+  it("keeps two characters as people count them", () => {
+    expect(cutMark("GitHub")).toBe("Gi");
+    expect(cutMark("👨‍💻🚀x")).toBe("👨‍💻🚀");
+    expect(cutMark("")).toBe("");
+  });
+});
+
+describe("parseKind", () => {
+  it("accepts the core's ranges only", () => {
+    expect(parseKind("totp", "30", "0")).toEqual({ type: "totp", period: 30 });
+    expect(parseKind("totp", "0", "0")).toBeUndefined();
+    expect(parseKind("totp", "3601", "0")).toBeUndefined();
+    expect(parseKind("totp", "1.5", "0")).toBeUndefined();
+    expect(parseKind("hotp", "30", "7")).toEqual({ type: "hotp", counter: 7 });
+    expect(parseKind("hotp", "30", "")).toBeUndefined();
+    expect(parseKind("hotp", "30", "-1")).toBeUndefined();
+  });
+});
+
+describe("exportBlocker", () => {
+  it("takes every account into a file, and the core's reason for the others", () => {
+    const entry = mockEntry("Bank", "card", {}).view;
+    const blocked = {
+      ...entry,
+      export: { google: "hotp_not_supported" as const, microsoft: null },
+    };
+    expect(exportBlocker(blocked, "google")).toBe("hotp_not_supported");
+    expect(exportBlocker(blocked, "microsoft")).toBeNull();
+    expect(exportBlocker(blocked, "file")).toBeNull();
+  });
+});

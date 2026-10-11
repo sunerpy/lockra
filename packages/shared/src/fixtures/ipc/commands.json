@@ -1,0 +1,307 @@
+{
+  "commands": [
+    {
+      "command": "app_state"
+    },
+    {
+      "command": "vault_create",
+      "password": "correct horse battery"
+    },
+    {
+      "command": "vault_unlock",
+      "password": "correct horse battery"
+    },
+    {
+      "command": "vault_unlock_device",
+      "reason": "unlock Lockra"
+    },
+    {
+      "command": "vault_lock"
+    },
+    {
+      "command": "vault_change_password",
+      "current": "correct horse battery",
+      "new": "a new password"
+    },
+    {
+      "command": "vault_reset"
+    },
+    {
+      "command": "device_unlock_enable"
+    },
+    {
+      "command": "device_unlock_disable",
+      "password": "a new password"
+    },
+    {
+      "command": "device_biometric_enable",
+      "reason": "turn on Touch ID"
+    },
+    {
+      "command": "device_biometric_disable",
+      "password": "a new password"
+    },
+    {
+      "command": "entry_add_uri",
+      "uri": "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"
+    },
+    {
+      "command": "entry_add_manual",
+      "draft": {
+        "account": "me@example.com",
+        "algorithm": "sha256",
+        "digits": 8,
+        "group": "Work",
+        "issuer": "Mail",
+        "kind": {
+          "period": 30,
+          "type": "totp"
+        },
+        "secret": "GEZD GNBV GY3T QOJQ"
+      }
+    },
+    {
+      "command": "entry_update",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "patch": {
+        "favorite": true,
+        "group": "",
+        "issuer": "GitHub Enterprise"
+      }
+    },
+    {
+      "command": "entry_delete",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+    },
+    {
+      "command": "entries_set_group",
+      "group": "Work",
+      "ids": [
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+      ]
+    },
+    {
+      "command": "entry_hotp_next",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+    },
+    {
+      "command": "entry_copy",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+    },
+    {
+      "command": "entry_reveal",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "password": "a new password"
+    },
+    {
+      "command": "view_collapse_groups",
+      "groups": [
+        "Work",
+        ""
+      ]
+    },
+    {
+      "command": "view_order_entries",
+      "ids": [
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000002",
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+      ]
+    },
+    {
+      "command": "view_order_groups",
+      "groups": [
+        "Work",
+        "",
+        "Money"
+      ]
+    },
+    {
+      "command": "view_pin_group",
+      "pinned": {
+        "name": "Work",
+        "type": "group"
+      }
+    },
+    {
+      "command": "import_text",
+      "text": "otpauth://totp/A:b?secret=GEZDGNBV"
+    },
+    {
+      "command": "import_clipboard"
+    },
+    {
+      "command": "import_backup_password",
+      "password": "backup password"
+    },
+    {
+      "choices": [
+        {
+          "action": "replace",
+          "id": 2
+        },
+        {
+          "action": "skip",
+          "id": 1
+        }
+      ],
+      "command": "import_commit"
+    },
+    {
+      "command": "import_cancel"
+    },
+    {
+      "command": "export_start",
+      "entry_ids": [
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
+      ],
+      "reason": "export the accounts",
+      "target": "google"
+    },
+    {
+      "command": "export_page",
+      "index": 0,
+      "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064"
+    },
+    {
+      "command": "export_close",
+      "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064"
+    },
+    {
+      "command": "secret_view_closed"
+    },
+    {
+      "command": "backup_auto_now"
+    },
+    {
+      "command": "restore_commit",
+      "mode": "replace",
+      "password": "a new password"
+    },
+    {
+      "command": "restore_cancel"
+    },
+    {
+      "command": "settings_set",
+      "settings": {
+        "accent": "green",
+        "auto_backup": {
+          "dir": "/home/user/Backups/Lockra",
+          "enabled": true,
+          "keep": 7
+        },
+        "auto_lock_minutes": 10,
+        "auto_update": true,
+        "biometric_offer": false,
+        "clipboard_clear_seconds": 20,
+        "codes_view": "grid",
+        "default_unlock": "password",
+        "density": "compact",
+        "follow_system_theme": false,
+        "font_size_px": 13,
+        "group_codes": false,
+        "hide_codes": true,
+        "locale": "zh-cn",
+        "reduce_motion": true,
+        "sort": "recent",
+        "theme": "glass_night"
+      }
+    },
+    {
+      "command": "activity"
+    },
+    {
+      "command": "update_check"
+    },
+    {
+      "command": "update_install"
+    },
+    {
+      "command": "sync_create",
+      "device_name": "Desktop",
+      "password": "a new password",
+      "storage": {
+        "kind": "relay",
+        "url": "https://lockra-relay.onethinker.top"
+      }
+    },
+    {
+      "command": "sync_join",
+      "device_name": "Pixel 8",
+      "password": "a new password",
+      "source": {
+        "code": "7K2QM-XW4FD",
+        "storage": {
+          "kind": "webdav",
+          "password": "app password",
+          "prefix": "lockra",
+          "url": "https://dav.jianguoyun.com/dav/",
+          "username": "me@example.com"
+        },
+        "text": "lockra-invite:2:TEtTSU5WVDI",
+        "type": "invite"
+      },
+      "space_password": "another device's password"
+    },
+    {
+      "command": "sync_invite",
+      "password": "a new password"
+    },
+    {
+      "command": "sync_invite_copy",
+      "text": "lockra-invite:2:TEtTSU5WVDI"
+    },
+    {
+      "command": "sync_key_acknowledge"
+    },
+    {
+      "command": "sync_key_reveal",
+      "password": "a new password"
+    },
+    {
+      "command": "sync_set_storage",
+      "reason": "change the storage settings",
+      "storage": {
+        "kind": "folder"
+      }
+    },
+    {
+      "command": "sync_rename_device",
+      "name": "Work desktop"
+    },
+    {
+      "command": "sync_remove_device",
+      "tag": "0a9b8c7d6e5f40312233445566778899"
+    },
+    {
+      "command": "sync_now"
+    },
+    {
+      "command": "sync_disable"
+    }
+  ],
+  "phone_commands": [
+    "lockra_dispatch",
+    "codes_subscribe",
+    "codes_unsubscribe",
+    "import_pick_files",
+    "import_scan",
+    "backup_save",
+    "restore_pick",
+    "export_otpauth_file",
+    "sync_scan_join",
+    "sync_key_save",
+    "update_open_release"
+  ],
+  "shell_commands": [
+    "lockra_dispatch",
+    "codes_subscribe",
+    "codes_unsubscribe",
+    "import_pick_files",
+    "backup_save",
+    "backup_pick_dir",
+    "restore_pick",
+    "export_otpauth_file",
+    "sync_key_save",
+    "sync_pick_folder"
+  ]
+}

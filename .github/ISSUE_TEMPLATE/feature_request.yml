@@ -1,0 +1,19 @@
+name: Feature request
+description: Something Lockra should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do
+      description: The task, not the solution. What do you do today instead?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: How it could work
+  - type: markdown
+    attributes:
+      value: |
+        Some things are left out on purpose (sync, browser extensions, mobile apps): see the roadmap at https://firlab.app/lockra/roadmap.

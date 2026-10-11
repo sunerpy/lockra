@@ -1,0 +1,134 @@
+# The one-line installers against the real latest release, on the systems they serve: apt on
+# Linux x64 and ARM64 (and the AppImage there), dnf in Fedora, the dmg on macOS, and the per-user
+# installer on Windows x64 and ARM64, run the way `irm | iex` runs it. The offline tests
+# (scripts/test-install.sh and .ps1, in ci.yml) cover the logic; this proves the commands the
+# documentation prints. It runs when a script changes, weekly (a release's assets could change
+# shape), and by hand; it is not a required check, because it depends on GitHub's downloads.
+name: Install scripts
+
+on:
+  pull_request:
+    paths:
+      - "scripts/install.sh"
+      - "scripts/install.ps1"
+      - ".github/workflows/install-scripts.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/install.sh"
+      - "scripts/install.ps1"
+      - ".github/workflows/install-scripts.yml"
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-scripts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apt:
+    name: Linux ${{ matrix.arch }} (apt and AppImage)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: ubuntu-24.04 }
+          - { arch: ARM64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the .deb
+        run: sh scripts/install.sh
+
+      - name: Check the package
+        run: |
+          set -eu
+          dpkg -s lockra | grep -E '^(Status|Version):'
+          test -x /usr/bin/lockra-desktop
+
+      - name: Install the AppImage
+        env:
+          LOCKRA_PACKAGE: appimage
+          LOCKRA_INSTALL_DIR: ${{ runner.temp }}/bin
+        run: |
+          set -eu
+          sh scripts/install.sh
+          test -x "$LOCKRA_INSTALL_DIR/Lockra.AppImage"
+          grep -q "Exec=\"$LOCKRA_INSTALL_DIR/Lockra.AppImage\"" "$HOME/.local/share/applications/lockra.desktop"
+
+  dnf:
+    name: Linux x64 (dnf)
+    runs-on: ubuntu-24.04
+    container: fedora:42
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the .rpm
+        run: sh scripts/install.sh
+
+      - name: Check the package
+        run: |
+          set -eu
+          rpm -q lockra
+          test -x /usr/bin/lockra-desktop
+
+  macos:
+    name: macOS (dmg)
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the dmg
+        env:
+          LOCKRA_INSTALL_DIR: ${{ runner.temp }}/Applications
+        run: |
+          set -eu
+          sh scripts/install.sh
+          test -x "$LOCKRA_INSTALL_DIR/Lockra.app/Contents/MacOS/lockra-desktop"
+          /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$LOCKRA_INSTALL_DIR/Lockra.app/Contents/Info.plist"
+
+  windows:
+    name: Windows ${{ matrix.arch }} (installer)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, runner: windows-2025 }
+          - { arch: ARM64, runner: windows-11-arm }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Windows PowerShell 5.1, the script piped into Invoke-Expression: what `irm | iex` does.
+      - name: Install
+        shell: powershell
+        run: Get-Content -Raw scripts/install.ps1 | Invoke-Expression
+
+      - name: Check the installed app and stop it
+        shell: powershell
+        run: |
+          $Exe = Join-Path $env:LOCALAPPDATA "Lockra\lockra-desktop.exe"
+          if (-not (Test-Path $Exe)) { throw "not installed at $Exe" }
+          (Get-Item $Exe).VersionInfo.ProductVersion
+          Get-Process -Name lockra-desktop -ErrorAction SilentlyContinue | Stop-Process -Force

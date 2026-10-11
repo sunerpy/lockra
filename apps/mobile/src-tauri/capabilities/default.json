@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "Main window: the app's own commands and the core IPC; no plugin is reachable from the webview.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

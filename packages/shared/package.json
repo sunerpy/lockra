@@ -1,0 +1,30 @@
+{
+  "name": "@lockra/shared",
+  "version": "0.0.0",
+  "private": true,
+  "description": "IPC contract (zod), the Backend interface and the Tauri backend; the in-memory mock (./mock) and the typed fixtures for the browser preview and tests.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./mock": "./src/mock-backend.ts",
+    "./fixtures": "./src/fixtures/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint --type-aware src && tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.11.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.2",
+    "@vitest/coverage-v8": "5.0.1",
+    "typescript": "7.0.2",
+    "vitest": "5.0.1"
+  }
+}

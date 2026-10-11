@@ -1,0 +1,180 @@
+[
+  {
+    "type": "state",
+    "state": {
+      "app_version": "0.1.0",
+      "platform": "linux",
+      "phase": "locked",
+      "data_dir": "/home/user/.local/share/dev.lockra.desktop",
+      "lock": {
+        "device_unlock": {
+          "available": true,
+          "enabled": true,
+          "biometric": {
+            "kind": "touch_id",
+            "enabled": true
+          }
+        },
+        "failed_attempts": 4,
+        "retry_at_ms": 1790000002000
+      },
+      "entries": [],
+      "collapsed_groups": [],
+      "entry_order": [],
+      "group_order": [],
+      "pinned_group": null,
+      "settings": {
+        "theme": "light",
+        "follow_system_theme": true,
+        "accent": "default",
+        "density": "default",
+        "font_size_px": 14,
+        "reduce_motion": false,
+        "locale": "system",
+        "auto_lock_minutes": 5,
+        "clipboard_clear_seconds": 30,
+        "hide_codes": false,
+        "sort": "name",
+        "group_codes": true,
+        "codes_view": "list",
+        "auto_backup": {
+          "enabled": false,
+          "dir": null,
+          "keep": 10
+        },
+        "auto_update": false,
+        "default_unlock": "biometric",
+        "biometric_offer": true
+      },
+      "import": null,
+      "backup": {
+        "last_backup_ms": null,
+        "last_auto_file": null,
+        "last_auto_error": null
+      },
+      "restore": null,
+      "auto_lock_at_ms": null,
+      "update": {
+        "method": "nsis",
+        "status": {
+          "state": "downloading",
+          "version": "0.2.0",
+          "received": 4194304,
+          "total": 11508084
+        }
+      },
+      "sync": {
+        "space": null
+      }
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "copied",
+      "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "clear_after_s": 30
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "copied",
+      "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "clear_after_s": null
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "clipboard_cleared"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "imported",
+      "added": 3,
+      "replaced": 1,
+      "skipped": 2
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "file_unrecognized",
+      "name": "notes.bin"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "file_unreadable",
+      "name": "huge.png"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "backup_written",
+      "file_name": "lockra-auto-20260921-134640.lockrabackup",
+      "automatic": true
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "backup_failed",
+      "code": "backup_dir_unavailable"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "restored",
+      "entries": 12
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "auto_locked"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "export_expired",
+      "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "device_unlock_turned_off"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "sync_brought",
+      "added": 2,
+      "updated": 1,
+      "removed": 0,
+      "devices": [
+        "MacBook",
+        "Pixel 8"
+      ]
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "sync_brought",
+      "added": 0,
+      "updated": 0,
+      "removed": 1,
+      "devices": []
+    }
+  }
+]

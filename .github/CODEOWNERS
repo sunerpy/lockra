@@ -1,0 +1,7 @@
+# Changes to the workflows, their scripts and the release configuration need the owner's review
+# (docs/release.md, repository settings).
+* @sunerpy
+/.github/workflows/ @sunerpy
+/.github/scripts/ @sunerpy
+/release-please-config.json @sunerpy
+/.release-please-manifest.json @sunerpy

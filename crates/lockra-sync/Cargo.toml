@@ -1,0 +1,33 @@
+[package]
+name = "lockra-sync"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "End-to-end encrypted multi-device sync over storage the user configures: keys, objects, clock and merge."
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+chacha20poly1305.workspace = true
+data-encoding.workspace = true
+getrandom.workspace = true
+hkdf.workspace = true
+hmac.workspace = true
+lockra-vault.workspace = true
+parking_lot.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+url.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+lockra-vault = { workspace = true, features = ["test-kdf"] }
+proptest.workspace = true
+tokio.workspace = true

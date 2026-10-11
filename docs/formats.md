@@ -1,0 +1,344 @@
+# Lockra file and transfer formats
+
+What Lockra writes and reads. The code is the authority: `crates/lockra-vault` (container),
+`crates/lockra-core` (entries, settings, backups), `crates/lockra-transfer` (Google, Microsoft,
+otpauth lists, QR codes), `crates/lockra-otp` (codes and URIs), `crates/lockra-sync` (the sync
+objects).
+
+## 1. The container (vault and backups)
+
+One layout for the vault and for every backup:
+
+```
+magic (8 bytes) | header length (u32, little-endian) | header (JSON, ≤ 64 KiB) | payload (ciphertext)
+```
+
+| Field           | Value                                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| magic           | `LKRAVLT1` (vault) or `LKRABAK1` (backup); the header repeats it as `kind` and the two must agree                                                                   |
+| `format`        | `1`; a larger number is `UnsupportedVersion`                                                                                                                        |
+| `kind`          | `vault` or `backup`                                                                                                                                                 |
+| `vault_id`      | UUID of the vault the file belongs to (a backup keeps its vault's id)                                                                                               |
+| `created_at_ms` | when the vault was created                                                                                                                                          |
+| `kdf`           | `{algorithm: "argon2id", m_kib, t, p, salt}` — default 64 MiB, 3 passes, 1 lane, 16-byte salt; a file asking for more than 256 MiB, 16 passes or 8 lanes is refused |
+| `slots`         | the data key wrapped once per way in: `{kind: "password" \| "device", nonce, wrapped_dek, check?}`                                                                  |
+| `payload_nonce` | 24 bytes                                                                                                                                                            |
+
+Binary fields are Base64. Cryptography:
+
+- The **payload** (the entries, JSON) is encrypted with XChaCha20-Poly1305 under a random 32-byte
+  data key (DEK). Its associated data is **every byte before it**: the magic, the length and the
+  whole header, slots included. Changing any header byte, including a slot, fails authentication.
+- A **password slot** wraps the DEK with a key derived from the password by Argon2id (the header's
+  `kdf`). A **device slot** wraps it with a random 32-byte key kept in the OS keychain
+  (service `dev.lockra.desktop`, account = `vault_id`). A slot's associated data is
+  `lockra/slot/v1 | vault_id (16 bytes) | kind (1 = password, 2 = device)`.
+- A device slot's `check` is what the device confirms before its key is used: `"biometric"` (Touch
+  ID, Windows Hello) or absent. It sits in the header, so a file whose check was taken out no longer
+  opens with any key; a value this version does not know is kept as it is, and the device slot is
+  then not used (the master password opens the vault).
+- Every write rewrites the whole file: a fresh payload nonce, the current header as associated
+  data. There is no in-place slot edit.
+
+Slot operations:
+
+| Operation                             | DEK         | Slots afterwards                                                                                                                      |
+| ------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| create                                | new         | password                                                                                                                              |
+| remember on this device               | kept        | password + device (new device key into the keychain)                                                                                  |
+| stop remembering (needs the password) | **rotated** | password; the keychain entry is deleted                                                                                               |
+| change the master password            | **rotated** | password (new salt) + device, if the keychain still returns the device key; otherwise the device slot is dropped and the user is told |
+| ask for Touch ID / Windows Hello      | kept        | the device slot gains `check: "biometric"` after one check passes; turning it off (needs the password) removes it                     |
+
+Errors: a password slot that does not open is `WrongPassword`; a payload that fails
+authentication, a truncated file or a malformed header is `Corrupted`; a future `format` is
+`UnsupportedVersion`; a foreign magic is `NotLockra`.
+
+Writes are atomic: `vault.lockra.tmp` is written and synced, the current file is kept as
+`vault.lockra.prev`, the new one is renamed into place, and the directory is synced (Unix). Files
+are created `0600` on Unix.
+
+## 2. The vault
+
+`vault.lockra` in the app data directory (`~/.local/share/dev.lockra.desktop`,
+`%APPDATA%\dev.lockra.desktop`, `~/Library/Application Support/dev.lockra.desktop`). Its payload
+(JSON) is `{format: 2, entries, tombstones, local}`; format 1 (before 0.4.0) had the entries
+only, and reads as format 2 with every entry stamped at its `updated_at_ms`; a larger format is
+refused (`VaultUnsupported`). The entries:
+
+| Field                                               |                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------ |
+| `id`                                                | UUID                                                                     |
+| `kind`                                              | `{type: "totp", period}` (1–3600 s) or `{type: "hotp", counter}`         |
+| `algorithm`                                         | `sha1`, `sha256`, `sha512`                                               |
+| `digits`                                            | 6–8                                                                      |
+| `secret`                                            | bytes (never sent to the webview except by an explicit reveal or export) |
+| `issuer`, `account`, `group`, `favorite`            |                                                                          |
+| `origin`                                            | `manual`, `uri`, `google`, `microsoft`, `backup`                         |
+| `created_at_ms`, `updated_at_ms`, `last_used_at_ms` | `last_used_at_ms` stays on this device: it does not sync                 |
+| `stamp`                                             | `{wall_ms, counter, device}`: when it last changed (§9)                  |
+| `color`, `mark`                                     | the avatar's colour and up to two characters; absent: from the name      |
+
+`color` is one of `red orange amber green teal blue indigo purple pink gray`; absent (`auto`), the
+avatar takes a colour from a hash of the name, the same on every device. A colour this version does
+not know reads as `auto`, so neither the vault nor another device's snapshot fails over one. `mark`
+holds at most two characters as people count them (an emoji with its joiners is one).
+
+`tombstones` lists deleted accounts as `{id, stamp, counter?}` (an HOTP account's counter at its
+deletion), so that a deletion reaches the other devices of a sync space. Replacing an account's
+secret through an import gives it a new id (the old id is tombstoned), so its HOTP counter starts
+again with the new secret. `local` is this device's own part and never leaves the vault file (no
+backup, no sync): `clock` (its device number and the latest stamp), `view` (the groups folded in
+the code list, `{collapsed_groups}`, "" for the accounts in no group, the order the accounts
+and the groups were dragged into on this device, `{entry_order}` (ids) and `{group_order}`
+(names, "" for the accounts in no group, which move like a group since 0.8.9), and the group
+pinned at the top, `{pinned_group}`: `{"type": "favorites"}`, `{"type": "group", "name"}` or
+`{"type": "ungrouped"}`, a kind this version cannot read being no pin; each is left out while
+empty: group names stay inside the encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and credentials, the space id, its
+data key, the sync key, this device's name, its keyring and what the runs remember, among it
+`keyring_unsealed`: the keyring was sealed under random bytes by a join with the biometric check,
+and waits for the next unlock with the master password). A `sync` this version cannot read (one kept by an earlier build, or by a later
+Lockra: to 0.7.3, a space in a cloud drive's folder, `{kind: "folder", path}`; to 0.8.0, a space on
+a relay, `{kind: "relay", url}`) is left out and the vault opens without it: sync is off on that
+device until it is set up again.
+
+Duplicates: the same secret and parameters is **the same account** (an import skips it); the same
+issuer and account with a different secret is a **conflict** (both are kept by default, or the
+import replaces the existing one). Duplicates inside one import are collapsed first.
+
+A forgotten password: _reset_ renames the vault to `vault.lockra.reset-<ms>` (and `.prev` along
+with it) and starts over; nothing is deleted.
+
+## 3. Settings
+
+`settings.json` in the app config directory, plain JSON without secrets: theme, follow the system
+theme, accent, density, font size (12–18 px), reduce motion, locale (`system`, `zh-cn`, `en`),
+auto-lock minutes (0 = never; default 5), clipboard clearing seconds (0 = never; default 30), hide
+codes, code order (`name`, `added`, `recent`, `manual`: the order of the local part's
+`view.entry_order`, accounts never dragged after it, oldest first), automatic backup `{enabled, dir, keep}` (keep
+3–50, default 10) and automatic updates (`auto_update`, default off). From 0.3.2 the file also carries `schema: 2`;
+a file without it (0.2.0 to 0.3.1) has `auto_update` read as off, because 0.3.0 could have carried
+0.2.0's check-only `auto_check_updates` over into it, and 0.2.0's field itself is not read. Unknown or missing fields take their defaults.
+
+`update-ready.json` in the data directory, next to the vault: `{"version": "0.3.0"}`, the release
+the automatic update downloaded and has not installed yet; the next start installs that version
+at once. It is removed when a check finds nothing newer or the update is installed, and a file
+that does not parse counts as none.
+
+## 4. Backups
+
+A `*.lockrabackup` file is the container with magic `LKRABAK1` and one password slot.
+
+- **Under the master password** (automatic backups, the copy before a restore, the default manual
+  backup): the vault's password slot is copied as it is (same salt, cost and wrapped DEK), and the
+  payload is sealed again under the backup's own header. Writing one needs no password, so it
+  works however the vault was unlocked; opening it needs the master password **of that moment**.
+  After a password change the DEK rotates, so earlier backups keep opening with the old password.
+- **Under a separate backup password** (manual backup, by choice): a new DEK and salt.
+
+A backup's payload is `{format: 2, entries, tombstones}`: the vault's `local` part (the sync space
+and its credentials) is left out, so a restored backup is a new device that joins its space again.
+
+Automatic backups go to the chosen folder 3 seconds after the last change, named
+`lockra-auto-YYYYMMDD-HHMMSS.lockrabackup` (UTC; `-2`, `-3`, … on a clash). Beyond `keep`, the
+oldest files **of that pattern** are deleted; nothing else in the folder is touched. A folder that
+cannot be written is reported in the app and tried again at the next change.
+
+Restoring into a vault: _merge_ puts the backup's accounts into the import preview; _replace_
+first writes the current vault as `pre-restore-YYYYMMDD-HHMMSS.lockrabackup` in the data
+directory. Restoring on the welcome screen makes the backup the vault and its password the master
+password. A vault file (`.lockra`) can be restored the same way. With sync on, _replace_ is a
+change made at that moment: the backup's accounts are stamped anew and the accounts that go are
+tombstoned, so the other devices end up with the backup's accounts too.
+
+## 5. otpauth URIs
+
+Google's Key Uri Format, `otpauth://totp|hotp/<issuer>:<account>?secret=…&issuer=…`.
+
+- **Read leniently**: scheme and parameter names in any case, `+` as a space, the separator
+  literal or `%3A`, the `issuer` parameter before the label's prefix, defaults SHA1 / 6 digits /
+  30 s / counter 0, Base32 without padding, in either case, with spaces or dashes.
+- **Written strictly**: a literal separator, everything outside RFC 3986's unreserved set
+  percent-encoded, and `algorithm`, `digits` and `period` (or `counter`) always spelled out, so the
+  URI reads back to exactly the same account.
+- A `.txt` list holds one URI per line; blank lines and lines starting with `#` are skipped; every
+  other line that is not a URI shows in the preview as unsupported, with its line number.
+
+## 6. Google Authenticator
+
+Export screen: _Transfer accounts → Export accounts_; one or more QR codes of
+`otpauth-migration://offline?data=<percent-encoded Base64 of a protobuf>`.
+
+```
+MigrationPayload { repeated OtpParameters otp_parameters = 1; int32 version = 2;
+                   int32 batch_size = 3; int32 batch_index = 4; int32 batch_id = 5; }
+OtpParameters    { bytes secret = 1; string name = 2; string issuer = 3;
+                   Algorithm algorithm = 4;   // 1 SHA1, 2 SHA256, 3 SHA512, 4 MD5
+                   DigitCount digits = 5;     // 1 six, 2 eight
+                   OtpType type = 6;          // 1 HOTP, 2 TOTP
+                   int64 counter = 7; }
+```
+
+- **Import**: standard and URL-safe Base64, with or without padding; an empty issuer is taken from
+  a `issuer:account` name; MD5 and unknown types are listed as unsupported. Codes of one batch are
+  tracked by `batch_id`, and the preview says which are still missing.
+- **Export**: only 30-second TOTP and HOTP with 6 or 8 digits fit (there is no period field).
+  At most 10 accounts per code, and fewer while the code would exceed version 20 at error
+  correction M; `version = 1`, a random positive `batch_id`. Accounts that do not fit are listed
+  with the reason.
+- Android's export screen blocks screenshots: photograph it with another device (or screenshot on
+  iOS) and import the photo.
+
+## 7. Microsoft Authenticator
+
+No export exists. The only bulk source is the app's database on a **rooted** Android phone:
+`/data/data/com.azure.authenticator/databases/PhoneFactor` together with `PhoneFactor-wal` (the
+database runs in WAL mode; recent accounts live in the WAL until a checkpoint; `-shm` is not
+needed). Lockra recognises the two files by their headers, copies them into a private temporary
+directory, opens the copy (the originals are never written), and reads
+`accounts(name, username, oath_secret_key, account_type[, encrypted_oath_secret_key])`:
+
+| `account_type` | Meaning                    | Read as                             |
+| -------------- | -------------------------- | ----------------------------------- |
+| 0              | third-party TOTP           | Base32 secret, 6 digits, SHA1, 30 s |
+| 1              | personal Microsoft account | Base64 secret, 8 digits, SHA1, 30 s |
+| other          | work or school (Entra)     | unsupported: no exportable secret   |
+
+An empty `oath_secret_key` beside an `encrypted_oath_secret_key` is reported as encrypted (newer
+app versions); a secret that does not decode is reported as invalid. **Export** to Microsoft
+Authenticator is one standard `otpauth://totp` QR code per account, SHA1 / 6 digits / 30 s only
+(the app ignores other parameters).
+
+## 8. QR codes
+
+Encoded by the core as SVG: black modules on a white background, a 4-module quiet zone; the
+webview shows them through an `<img>` data URL, so nothing in the SVG can run. Decoded with rxing
+from PNG, JPEG and WebP images (several codes per image, photos at an angle); a picked file's type
+is judged from its first bytes, not its name: Lockra magic, `SQLite format 3`, an image, or text.
+
+## 9. Sync
+
+A sync space lives under the prefix the user chose on their storage (an S3-compatible bucket or a
+WebDAV folder), in a folder of the computer that a cloud drive's client keeps in sync (the folder
+is the place, no prefix), or on a Lockra relay, which keeps each space by its id ("The relay"
+below): one snapshot per device, and nothing else.
+
+```
+<prefix>/lockra-sync-v1/<space id>/devices/<device tag>.lks
+<folder>/lockra-sync-v1/<space id>/devices/<device tag>.lks
+<relay>/v1/spaces/<space id>/devices/<device tag>.lks
+```
+
+The same space can be reached both ways: a computer through its cloud drive's folder, a phone
+through the same drive's WebDAV, its prefix the folder's path in the drive. In a folder, a write
+replaces the file atomically (a temporary `<name>.tmp` renamed over it) and keeps no copy beside
+it; files of the drive's own (conflicted copies, downloads in progress) are no object of the space
+and are not read. The folder's path is kept with every link on its way resolved when it is
+chosen; every read and write then opens the folders one at a time from the top of the file system
+without following a link, and acts on names inside the last one only. A link anywhere on the way
+is refused, a linked object is no object, a link at the temporary name is replaced, and a folder
+swapped for a link while a write runs does not move it: nothing outside the folder is reached. The etag of a file is the SHA-256 of its bytes. While the folder itself is
+missing (moved, deleted, its drive not connected) a run neither reads nor writes, and the folder is
+not made again.
+
+Every object is framed like the container: `magic (8) | header length (u32 LE) | header (JSON, ≤
+16 KiB) | ciphertext`, the ciphertext authenticated with every byte before it as associated data.
+
+| Object   | Magic      | Header                                       | Ciphertext                                                                               |
+| -------- | ---------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| keyring  | `LKSKEYR1` | `{format: 1, space_id, kdf, nonce}`          | the space's 32-byte data key                                                             |
+| snapshot | `LKSDEVS1` | `{format: 1, space_id, tag, nonce, keyring}` | `seq`, `written_at_ms`, the device name, the payload; padded to a multiple of 4096 bytes |
+
+- **One writer per object.** A device writes only its own snapshot. Another device only deletes
+  one (removing a device), and a device still in use writes its snapshot again. No object is
+  shared: what the space holds is the merge of the snapshots, so no lock and no conditional write
+  is needed, and S3 and WebDAV behave alike.
+- **Keyrings.** A snapshot's `keyring` (Base64) is a keyring object, the device's own: the data
+  key wrapped under HKDF-SHA256(salt = space id, ikm = Argon2id(that device's master password,
+  `kdf`) ‖ sync key, info `lockra-sync v1 keyring`). It is sealed when the device creates or joins
+  the space and again under a new master password, each time with a fresh salt and nonce; its
+  header names no device and no time. A join by the biometric check seals it under a random
+  password kept nowhere, at the same cost, and the next unlock with the master password seals it
+  again under that password. A keyring asking for more than the container's KDF limits is
+  refused before any work. A device joining from an invitation takes the data key it carries,
+  once one of the space's snapshots opens under it, and seals its own keyring under its own
+  master password. A recovery (the storage settings and the sync key typed in) reads the space's
+  snapshots (at most 32) and tries their keyrings with the password typed in; the first that opens
+  gives the data key.
+- **Snapshots** are encrypted under HKDF(salt = space id, ikm = data key, info
+  `lockra-sync v1 snapshot`), XChaCha20-Poly1305.
+- **Names.** The space id is derived from the sync key (HKDF, info `lockra-sync v1 space id`, as a
+  version-4 UUID). A device tag is the first 16 bytes, in hex, of HMAC-SHA256 under
+  HKDF(data key, info `lockra-sync v1 device tag`) of the device's random 64-bit number.
+- **Payload.** `{format: 1, entries, tombstones}` as in the vault (§2), without
+  `last_used_at_ms`. A device writes its snapshot when its device name, keyring or payload
+  changed, under a sequence number no write of it had before: one higher than the last written or
+  attempted. S3 and relay writes carry `If-None-Match: *` or `If-Match: <etag>`, which catch a
+  copied vault writing under the same name sooner. A snapshot under a new etag is read and merged even at a
+  sequence number already seen; one under a lower number than seen is refused. An object larger
+  than 16 MiB is never read (`MAX_OBJECT_BYTES`): it is reported as unreadable. An object is read
+  as a stream, and no further than the size the storage gave for it.
+- **Merge.** Last writer wins per account, on the stamps: a hybrid logical clock
+  `(wall_ms, counter, device)` that follows wall time, never goes back on a device and comes after
+  every stamp the device has seen. A tombstone at or after an account's stamp removes it; a change
+  after the deletion brings it back. An HOTP counter is the exception to "the whole later version
+  wins": an account and its tombstone carry the highest counter any of their versions reached, so
+  a code once shown never comes back on any device. Merging is commutative, associative and
+  idempotent.
+- **The sync key** is `LKS1-` and 14 groups of four Base32 characters: the 32-byte key and three
+  bytes of its SHA-256, so a mistyped character is caught. Case, spaces and dashes do not matter.
+  The interface calls it the recovery key: it is shown only on `sync_key_reveal`, after the
+  master password or the biometric check, and no invitation shows it.
+- **An invitation** is `lockra-invite:1:` and Base64url (no padding) of
+  `{storage, sync_key, data_key}`: the storage settings with their credentials (a relay's are its
+  address, `{kind: "relay", url}`), the sync key text, and the space's data key (standard Base64
+  of its 32 bytes). It hands the space over: the joining device needs no other device's master
+  password. The QR code carries it so, and so does the pairing link of a space on a relay, which
+  is this text, copied and sent as it is. A space in a folder invites with `{sync_key, data_key}`
+  alone: a folder is of no use on another device, and its path is never taken from an invitation
+  (one naming a folder is refused); the joining device says how it reaches the space. An
+  invitation of Lockra up to 0.8.2 carries no `data_key`; Lockra refuses it
+  (`sync_invite_outdated`), and Lockra up to 0.8.2 reads no invitation with one. Lockra up to
+  0.7.3 reads only invitations with their storage.
+- **A sealed invitation**, the text to send for a space not on a relay, is `lockra-invite:2:` and
+  Base64url (no padding) of an
+  object framed like the others: magic `LKSINVT2`, the header `{format: 2, kdf, nonce}`, then
+  XChaCha20-Poly1305 of the plain invitation's JSON, the header bytes as associated data. The key
+  is HKDF-SHA256(Argon2id(code, salt), info `lockra-sync v1 shared invitation`) at the vault's
+  cost, with the usual bounds on the parameters. The code is ten characters of Crockford's Base32
+  (50 bits, shown as `ABCDE-FGHJK`); case, spaces and dashes do not matter, and O reads as 0, I
+  and L as 1.
+
+### The relay
+
+A relay (`docs/relay.md`) keeps a space's snapshots under its id, at an HTTPS address of its own:
+
+```
+GET    <relay>/v1/spaces/<space id>/devices/                    the listing
+GET    <relay>/v1/spaces/<space id>/devices/<device tag>.lks    a snapshot
+PUT    <relay>/v1/spaces/<space id>/devices/<device tag>.lks
+DELETE <relay>/v1/spaces/<space id>/devices/<device tag>.lks
+GET    <relay>/healthz                                          ok
+GET    <relay>/v1/                                              {service: "lockra-relay", api: 1, version}
+```
+
+- **Access.** Every request for a space carries `Authorization: Bearer <token>`, the space's access
+  token: Base64url (no padding) of the 32 bytes of HKDF-SHA256(salt = the space id's 16 bytes,
+  ikm = sync key, info `lockra-relay v1 access token`). The relay keeps the SHA-256 of those 32
+  bytes (hex, in the space's `access` file); a space's first write binds it. Another token is refused (403), a
+  missing or malformed one asks for one (401). Nothing else of the sync key reaches the relay.
+- **The listing** is `{"objects": [{"name", "size", "etag"}]}`, the snapshots by name. Its `ETag`
+  is the listing's revision, a hash of the names and etags. `If-None-Match: <revision>` answers
+  `304` while nothing changed; with `?wait=<seconds>` too, the relay holds the `304` back until a
+  snapshot is written or removed, or the wait (at most its `--max-wait`, 30 s by default) is over.
+  A space the relay does not keep lists empty.
+- **Snapshots.** A read answers the bytes and their `ETag`: the first 16 bytes of their SHA-256 in
+  hex, quoted. A write answers the new etag and honours `If-None-Match: *` and `If-Match: <etag>`
+  (`412` when they fail): unlike WebDAV, a relay holds a write's condition. Removing nothing is no
+  error (`204`). A name that is no device tag and `.lks`, and a space id not written as a lowercase
+  UUID, are `404`.
+- **Refusals.** `413` for a snapshot larger than the relay keeps; `507` with `{"error": "full",
+"limit": "devices" | "space" | "relay" | "spaces"}` at a limit of the space or of the relay; `429`
+  with `Retry-After` past a rate; `503` with `Retry-After` while a space being removed was in use.
+  Every other error is `{"error": "<code>"}` with its status. Every answer carries
+  `Cache-Control: no-store`.
