@@ -111,8 +111,16 @@
       "command": "view_order_groups",
       "groups": [
         "Work",
+        "",
         "Money"
       ]
+    },
+    {
+      "command": "view_pin_group",
+      "pinned": {
+        "name": "Work",
+        "type": "group"
+      }
     },
     {
       "command": "import_text",

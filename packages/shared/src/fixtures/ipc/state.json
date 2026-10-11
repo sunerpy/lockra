@@ -26,6 +26,7 @@
       "retry_at_ms": 1790000002000
     },
     "phase": "locked",
+    "pinned_group": null,
     "platform": "linux",
     "restore": null,
     "settings": {
@@ -91,6 +92,7 @@
       "retry_at_ms": null
     },
     "phase": "no_vault",
+    "pinned_group": null,
     "platform": "linux",
     "restore": {
       "created_at_ms": 1789136000000,
@@ -157,6 +159,7 @@
       "retry_at_ms": 1790000002000
     },
     "phase": "locked",
+    "pinned_group": null,
     "platform": "android",
     "restore": null,
     "settings": {
@@ -310,7 +313,8 @@
       "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
     ],
     "group_order": [
-      "Work"
+      "Work",
+      ""
     ],
     "import": {
       "awaiting_password": "other.lockrabackup",
@@ -508,6 +512,9 @@
       "retry_at_ms": null
     },
     "phase": "unlocked",
+    "pinned_group": {
+      "type": "favorites"
+    },
     "platform": "linux",
     "restore": null,
     "settings": {

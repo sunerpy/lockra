@@ -142,6 +142,20 @@ on this device only: it does not sync to your other devices.
 On the phone, tap the **Reorder** button after the filters, then drag the handle on the right of a
 row up or down.
 
+## Group shown first
+
+<StatusTag status="building" />
+
+Choose **Pinned**, a group or **No group** under **Settings › General › Group shown first**; on the
+desktop, with that filter chosen, **Show “name” first** in the ⋯ menu at the top right of the list
+does the same. That group comes first among the filters and the codes page opens on it; in **All**,
+its section heads the list. With **Pinned** shown first, the pinned accounts gather in a **Pinned**
+section at the top instead of in their groups, a section that does not fold. The choice is kept on
+this device only: it does not sync to your other devices and is not in backups.
+
+With any filter but **All**, the list shows its accounts without the sections' headings. While you
+reorder, **No group** moves like any group; the group shown first stays first.
+
 ## Cards
 
 <StatusTag status="available" /> Available from version 0.8.7.

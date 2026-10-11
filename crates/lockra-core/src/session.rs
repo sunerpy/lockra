@@ -26,7 +26,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::backup::{auto_file_name, pre_restore_file_name, prune};
-use crate::entry::{Entry, EntryDraft, EntryPatch, VaultData, clean_mark, clean_name, random_device};
+use crate::entry::{Entry, EntryDraft, EntryPatch, PinnedGroup, VaultData, clean_mark, clean_name, random_device};
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
@@ -833,19 +833,43 @@ impl Core {
     }
 
     /// The groups in the order they were dragged into, kept for this device like the folds: groups
-    /// in use, cleaned, once each ("" is no group, whose section stays last).
+    /// in use, cleaned, once each; "" is the accounts in no group, which move like a group.
     pub fn order_groups(&self, groups: Vec<String>) -> CoreResult<()> {
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
             let existing: std::collections::BTreeSet<String> = session.data.entries.iter().filter_map(|e| e.group.clone()).collect();
             let mut seen = std::collections::HashSet::new();
-            let order: Vec<String> = groups.iter().map(|g| clean_name(g)).filter(|g| existing.contains(g) && seen.insert(g.clone())).collect();
+            let order: Vec<String> =
+                groups.iter().map(|g| clean_name(g)).filter(|g| (g.is_empty() || existing.contains(g)) && seen.insert(g.clone())).collect();
             if session.data.group_order() == order.as_slice() {
                 return Ok(());
             }
             let previous = std::mem::replace(&mut session.data.local_mut().view.group_order, order);
             self.save(&mut st, false, move |s| s.data.local_mut().view.group_order = previous)?;
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// Pin a group at the top of this device's code list, or none; kept for this device like the
+    /// folds. A group is one in use, its name cleaned: another name pins nothing.
+    pub fn pin_group(&self, pinned: Option<PinnedGroup>) -> CoreResult<()> {
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let pinned = match pinned {
+                Some(PinnedGroup::Group { name }) => {
+                    let name = clean_name(&name);
+                    session.data.entries.iter().any(|e| e.group.as_deref() == Some(name.as_str())).then_some(PinnedGroup::Group { name })
+                }
+                other => other,
+            };
+            if session.data.pinned_group() == pinned.as_ref() {
+                return Ok(());
+            }
+            let previous = std::mem::replace(&mut session.data.local_mut().view.pinned_group, pinned);
+            self.save(&mut st, false, move |s| s.data.local_mut().view.pinned_group = previous)?;
         }
         self.changed();
         Ok(())
@@ -2481,13 +2505,18 @@ impl Core {
 
     fn view(&self, st: &State) -> UiState {
         let now = self.now_ms();
-        let (phase, entries, (collapsed_groups, entry_order, group_order), import) = match &st.phase {
+        let (phase, entries, (collapsed_groups, entry_order, group_order, pinned_group), import) = match &st.phase {
             PhaseState::NoVault => (Phase::NoVault, Vec::new(), Default::default(), None),
             PhaseState::Locked => (Phase::Locked, Vec::new(), Default::default(), None),
             PhaseState::Unlocked(session) => (
                 Phase::Unlocked,
                 session.data.entries.iter().map(Entry::view).collect(),
-                (session.data.collapsed_groups().to_vec(), session.data.entry_order().to_vec(), session.data.group_order().to_vec()),
+                (
+                    session.data.collapsed_groups().to_vec(),
+                    session.data.entry_order().to_vec(),
+                    session.data.group_order().to_vec(),
+                    session.data.pinned_group().cloned(),
+                ),
                 session.import.as_ref().map(|i| i.view(&session.data)),
             ),
         };
@@ -2523,6 +2552,7 @@ impl Core {
             collapsed_groups,
             entry_order,
             group_order,
+            pinned_group,
             settings: st.settings.clone(),
             import,
             backup: BackupView { last_backup_ms: st.last_backup_ms, last_auto_file: st.last_auto_file.clone(), last_auto_error: st.last_auto_error },

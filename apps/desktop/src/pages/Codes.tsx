@@ -22,6 +22,8 @@ import {
   entryLabel,
   filterEntries,
   groupSections,
+  pinnedFilter,
+  pinnedFromFilter,
   recentEntry,
   relativeTime,
   sortEntries,
@@ -34,7 +36,6 @@ import {
   EmptyState,
   EntryRow,
   EntryTile,
-  type FilterChip,
   FilterChips,
   Icon,
   IconButton,
@@ -55,6 +56,7 @@ import {
   useClock,
   useCodes,
   useFlash,
+  useFilterChips,
   useT,
   useUiState,
 } from "@lockra/ui";
@@ -72,6 +74,11 @@ import { motionReduced } from "../app/appearance";
 import { useDispatch, useGuarded } from "../app/dispatch";
 import { useShell } from "../app/shell-state";
 import { MoveGroupDialog } from "../features/entries/MoveGroupDialog";
+
+/** The pinned accounts' section, at the top while 收藏 is pinned, does not fold. */
+function foldable(key: string): boolean {
+  return key !== FAVORITES;
+}
 
 /** A row's menu: what it offers and what each choice does, shared by the "⋯" button, the right
  *  click and the buttons beside them. `select` starts a selection with the row ticked. */
@@ -133,7 +140,16 @@ export function Codes() {
   const codes = useCodes();
   const now = useClock();
   const [query, setQuery] = useState("");
-  const [group, setGroup] = useState(ALL_GROUPS);
+  const pinned = state.pinned_group;
+  const pinnedValue = pinnedFilter(pinned);
+  // The list opens on the pinned group, and turns to a group as it is pinned (not as it is
+  // unpinned: what shows stays).
+  const [group, setGroup] = useState(pinnedValue);
+  const [pinSeen, setPinSeen] = useState(pinnedValue);
+  if (pinSeen !== pinnedValue) {
+    setPinSeen(pinnedValue);
+    if (pinnedValue !== ALL_GROUPS) setGroup(pinnedValue);
+  }
   const [context, setContext] = useState<{ entry: EntryView; at: MenuPoint } | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
@@ -168,30 +184,9 @@ export function Codes() {
     group_order: groupOrder,
   } = state;
   const groups = useMemo(() => entryGroups(entries), [entries]);
-  // The filters (board A1): everything, the pinned accounts, each group, those in no group.
-  const filters = useMemo((): FilterChip[] => {
-    const counts = new Map<string, number>();
-    for (const e of entries) counts.set(e.group ?? "", (counts.get(e.group ?? "") ?? 0) + 1);
-    const pinned = entries.filter((e) => e.favorite).length;
-    const loose = counts.get("") ?? 0;
-    return [
-      { value: ALL_GROUPS, label: t("codes.chips.all"), count: entries.length },
-      ...(pinned > 0
-        ? [
-            {
-              value: FAVORITES,
-              label: t("codes.chips.favorites"),
-              count: pinned,
-              icon: "star" as const,
-            },
-          ]
-        : []),
-      ...groups.map((g) => ({ value: g, label: g, count: counts.get(g) ?? 0, userText: true })),
-      ...(groups.length > 0 && loose > 0
-        ? [{ value: UNGROUPED, label: t("codes.groupNone"), count: loose }]
-        : []),
-    ];
-  }, [entries, groups, t]);
+  // The filters (board A1): everything, the pinned accounts, each group, those in no group; the
+  // group pinned on this device first.
+  const filters = useFilterChips(entries, pinned);
   // A filter that no longer exists (its last account moved or unpinned) shows everything again.
   const activeGroup = filters.some((f) => f.value === group) ? group : ALL_GROUPS;
   const sorted = useMemo(
@@ -207,17 +202,30 @@ export function Codes() {
     () => visible.filter((e) => ticked.has(e.id)).map((e) => e.id),
     [visible, ticked],
   );
-  const grouped = settings.group_codes && groups.length > 0;
+  // Sections in 全部 only: a filter shows its accounts as one flat list.
+  const sectioned = settings.group_codes && activeGroup === ALL_GROUPS;
   // Ticking several accounts happens in the list.
   const cards = settings.codes_view === "grid" && !selecting;
   const searching = query.trim() !== "";
   const folded = useMemo(() => new Set(collapsedGroups), [collapsedGroups]);
   const sections = useMemo(
-    () => (grouped ? groupSections(visible, groupOrder) : [{ key: NO_GROUP, entries: visible }]),
-    [grouped, visible, groupOrder],
+    () =>
+      sectioned
+        ? groupSections(visible, groupOrder, pinned)
+        : [{ key: NO_GROUP, entries: visible }],
+    [sectioned, visible, groupOrder, pinned],
   );
+  // Headings when there is something to tell apart: groups, or the pinned accounts' own section.
+  const grouped = sectioned && (groups.length > 0 || sections.some((s) => s.key !== NO_GROUP));
   // Every section of the whole list, whatever the search or the group chosen above it.
-  const allSections = useMemo(() => groupSections(entries).map((s) => s.key), [entries]);
+  // Every section that folds, whatever the search or the filter: the pinned accounts' does not.
+  const allSections = useMemo(
+    () =>
+      groupSections(entries, groupOrder, pinned)
+        .map((s) => s.key)
+        .filter((key) => key !== FAVORITES),
+    [entries, groupOrder, pinned],
+  );
   const startReorder = () => {
     stopSelection();
     setQuery("");
@@ -334,8 +342,30 @@ export function Codes() {
   const setView = (codes_view: CodesView) =>
     void dispatch({ command: "settings_set", settings: { ...settings, codes_view } });
 
+  // The filter shown pins at the top from here (Settings › 通用 has every choice).
+  const shownName =
+    activeGroup === FAVORITES
+      ? t("codes.chips.favorites")
+      : activeGroup === UNGROUPED
+        ? t("codes.groupNone")
+        : activeGroup;
+  const shownPinned = activeGroup === pinnedValue;
   const toolSections: MenuSection[] = [
     { items: [{ kind: "action", id: "select", label: t("codes.select"), icon: "check" }] },
+    ...(activeGroup === ALL_GROUPS
+      ? []
+      : [
+          {
+            items: [
+              {
+                kind: "action" as const,
+                id: shownPinned ? "unpin" : "pin",
+                label: t(shownPinned ? "codes.pin.unpin" : "codes.pin.pin", { group: shownName }),
+                icon: "pin" as const,
+              },
+            ],
+          },
+        ]),
     ...(groups.length > 0
       ? [
           {
@@ -373,6 +403,11 @@ export function Codes() {
   ];
   const onTool = (id: string) => {
     if (id === "select") startSelection();
+    else if (id === "pin" || id === "unpin")
+      void dispatch({
+        command: "view_pin_group",
+        pinned: id === "pin" ? pinnedFromFilter(activeGroup) : null,
+      });
     else if (id === "group-view")
       void dispatch({
         command: "settings_set",
@@ -381,6 +416,8 @@ export function Codes() {
     else if (id === "collapse-all") fold(allSections);
     else fold([]);
   };
+  const sectionName = (key: string) =>
+    key === FAVORITES ? t("codes.chips.favorites") : key === NO_GROUP ? t("codes.groupNone") : key;
   // The card of the account used last, else the first of the list (board A1); not while searching,
   // selecting or reordering, which are about the list.
   const recent = recentEntry(entries) ?? sorted[0];
@@ -587,6 +624,8 @@ export function Codes() {
                   void dispatch({ command: "view_order_groups", groups: order })
                 }
                 noGroupLabel={t("codes.groupNone")}
+                favoritesLabel={t("codes.chips.favorites")}
+                pinned={pinned}
               />
             </Card>
           ) : visible.length === 0 ? (
@@ -606,8 +645,9 @@ export function Codes() {
                   className="flex flex-col gap-3"
                   data-testid="codes-grid">
                   {sections.map((section) => {
-                    const name = section.key === NO_GROUP ? t("codes.groupNone") : section.key;
-                    const open = !grouped || searching || !folded.has(section.key);
+                    const name = sectionName(section.key);
+                    const open =
+                      !grouped || searching || !foldable(section.key) || !folded.has(section.key);
                     return (
                       <section
                         key={section.key === NO_GROUP ? "\u0000" : section.key}
@@ -616,7 +656,8 @@ export function Codes() {
                         {grouped && (
                           <SectionHeading
                             name={name}
-                            userText={section.key !== NO_GROUP}
+                            userText={section.key !== NO_GROUP && section.key !== FAVORITES}
+                            pinnedAccounts={section.key === FAVORITES}
                             count={section.entries.length}
                             open={open}
                             searching={searching}
@@ -666,9 +707,10 @@ export function Codes() {
                 <Card padding="none" className="p-1.5">
                   <div ref={list} onKeyDown={onListKey} data-testid="codes-list">
                     {sections.map((section) => {
-                      const name = section.key === NO_GROUP ? t("codes.groupNone") : section.key;
+                      const name = sectionName(section.key);
                       // A search shows what it finds in every section, folded or not.
-                      const open = !grouped || searching || !folded.has(section.key);
+                      const open =
+                        !grouped || searching || !foldable(section.key) || !folded.has(section.key);
                       return (
                         <section
                           key={section.key === NO_GROUP ? "\u0000" : section.key}
@@ -677,7 +719,8 @@ export function Codes() {
                           {grouped && (
                             <SectionHeading
                               name={name}
-                              userText={section.key !== NO_GROUP}
+                              userText={section.key !== NO_GROUP && section.key !== FAVORITES}
+                              pinnedAccounts={section.key === FAVORITES}
                               count={section.entries.length}
                               open={open}
                               searching={searching}
@@ -922,6 +965,7 @@ function RowMenu({ entry, onSelect }: { entry: EntryView; onSelect: (entry: Entr
 function SectionHeading({
   name,
   userText,
+  pinnedAccounts = false,
   count,
   open,
   searching,
@@ -931,6 +975,8 @@ function SectionHeading({
   name: string;
   /** The group's own name, as the user typed it (not 未分组). */
   userText: boolean;
+  /** The pinned accounts' section (收藏 pinned at the top): a star, and it does not fold. */
+  pinnedAccounts?: boolean;
   count: number;
   open: boolean;
   searching: boolean;
@@ -940,19 +986,29 @@ function SectionHeading({
   return (
     <div className="flex items-center gap-1">
       {tick}
-      <button
-        type="button"
-        aria-expanded={open}
-        disabled={searching}
-        onClick={onToggle}
-        data-testid="codes-group-toggle"
-        className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-6 px-2 text-left text-[12px] font-medium text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:bg-inset disabled:hover:bg-transparent">
-        <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
-        <span className="min-w-0 truncate" {...(userText ? { "data-user-text": "" } : {})}>
-          {name}
-        </span>
-        <span className="ml-auto mono text-[11px] text-fg-subtle">{count}</span>
-      </button>
+      {pinnedAccounts ? (
+        <div
+          data-testid="codes-pinned-heading"
+          className="flex h-8 min-w-0 flex-1 items-center gap-1.5 px-2 text-[12px] font-medium text-fg-muted">
+          <Icon name="star" size={14} className="text-warning" />
+          <span className="min-w-0 truncate">{name}</span>
+          <span className="ml-auto mono text-[11px] text-fg-subtle">{count}</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          aria-expanded={open}
+          disabled={searching}
+          onClick={onToggle}
+          data-testid="codes-group-toggle"
+          className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-6 px-2 text-left text-[12px] font-medium text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:bg-inset disabled:hover:bg-transparent">
+          <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+          <span className="min-w-0 truncate" {...(userText ? { "data-user-text": "" } : {})}>
+            {name}
+          </span>
+          <span className="ml-auto mono text-[11px] text-fg-subtle">{count}</span>
+        </button>
+      )}
     </div>
   );
 }

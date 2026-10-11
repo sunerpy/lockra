@@ -1,3 +1,4 @@
+import { MockBackend, sampleEntries } from "@lockra/shared/mock";
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import { depthOf } from "./app/nav";
 import { ready, renderApp } from "./test/render";
@@ -89,5 +90,62 @@ describe("the codes screen (board A2)", () => {
     history.back();
     await user.click(await screen.findByTestId("dock-settings"));
     expect(await screen.findByTestId("page-settings")).toBeInTheDocument();
+  });
+
+  it("shows a filter as one flat list, and 全部 in sections", async () => {
+    const { user } = renderApp();
+    await ready();
+    const headings = () => screen.queryAllByTestId("codes-group-toggle").map((h) => h.textContent);
+    expect(headings()).toEqual(["工作3", "未分组5"]);
+    for (const chip of ["收藏 1", "工作 3", "未分组 5"]) {
+      await user.click(screen.getByRole("radio", { name: chip }));
+      expect(headings()).toEqual([]);
+    }
+  });
+
+  it("opens on the pinned group, first of the chips; in 全部 收藏 gathers the pinned accounts", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      settings: { locale: "zh-cn" },
+      pinnedGroup: { type: "favorites" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const chips = within(screen.getByTestId("codes-chips")).getAllByRole("radio");
+    expect(chips[0]).toHaveAttribute("aria-label", "收藏 1");
+    expect(chips[0]).toHaveAttribute("aria-checked", "true");
+    expect(names()).toEqual(["GitHub"]);
+    await user.click(screen.getByRole("radio", { name: "全部 8" }));
+    expect(screen.getByTestId("codes-pinned-heading")).toHaveTextContent("收藏1");
+    const work = screen.getByRole("region", { name: "工作" });
+    expect(within(work).queryByText("GitHub")).toBeNull();
+  });
+
+  it("pins a group in Settings, and the codes open on it", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await user.click(screen.getByTestId("dock-settings"));
+    await screen.findByTestId("page-settings");
+    await user.selectOptions(screen.getByRole("combobox", { name: "置顶分组" }), "工作");
+    expect(backend.calls.at(-1)).toEqual({
+      command: "view_pin_group",
+      pinned: { type: "group", name: "工作" },
+    });
+    history.back();
+    await screen.findByTestId("codes-dock");
+    expect(screen.getByRole("radio", { name: "工作 3" })).toHaveAttribute("aria-checked", "true");
+    expect(names()).toEqual(["GitHub", "AWS", "Cloudflare"]);
+  });
+
+  it("moves 未分组 like a group while reordering", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await user.click(screen.getByTestId("codes-reorder"));
+    screen.getByRole("button", { name: "移动「未分组」：拖动，或按上下方向键" }).focus();
+    await user.keyboard("{ArrowUp}");
+    expect(backend.calls.filter((c) => c.command === "view_order_groups").at(-1)).toEqual({
+      command: "view_order_groups",
+      groups: ["", "工作"],
+    });
   });
 });

@@ -351,6 +351,117 @@ describe("Codes · groups", () => {
   });
 });
 
+describe("Codes · filters and the pinned group", () => {
+  const chipOrder = () =>
+    within(screen.getByTestId("codes-chips"))
+      .getAllByRole("radio")
+      .map(
+        (chip) =>
+          `${chip.getAttribute("aria-label")}${chip.hasAttribute("data-pinned") ? " pin" : ""}`,
+      );
+  const headings = () =>
+    screen.queryAllByTestId(/^codes-(group-toggle|pinned-heading)$/).map((h) => h.textContent);
+
+  it("shows a filter as one flat list, without the sections' headings", async () => {
+    const { user } = renderApp();
+    await ready();
+    expect(headings()).toEqual(["工作3", "未分组5"]);
+    for (const chip of ["收藏 1", "工作 3", "未分组 5"]) {
+      await user.click(screen.getByRole("radio", { name: chip }));
+      expect(headings()).toEqual([]);
+    }
+    await user.click(screen.getByRole("radio", { name: "全部 8" }));
+    expect(headings()).toEqual(["工作3", "未分组5"]);
+  });
+
+  it("pins the filter shown from the list's menu: first of the chips, and first in 全部", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await user.click(screen.getByRole("radio", { name: "未分组 5" }));
+    await tool(user, "置顶「未分组」");
+    expect(backend.calls.at(-1)).toEqual({
+      command: "view_pin_group",
+      pinned: { type: "ungrouped" },
+    });
+    expect(chipOrder()).toEqual(["未分组 5 pin", "全部 8", "收藏 1", "工作 3"]);
+    // Still on it, flat; in 全部 its section heads the list.
+    expect(screen.getByRole("radio", { name: "未分组 5" })).toHaveAttribute("aria-checked", "true");
+    await user.click(screen.getByRole("radio", { name: "全部 8" }));
+    expect(headings()).toEqual(["未分组5", "工作3"]);
+    // Unpinned from its own menu: what shows stays.
+    await user.click(screen.getByRole("radio", { name: "未分组 5" }));
+    await tool(user, "取消置顶「未分组」");
+    expect(backend.calls.at(-1)).toEqual({ command: "view_pin_group", pinned: null });
+    expect(chipOrder()).toEqual(["全部 8", "收藏 1", "工作 3", "未分组 5"]);
+    expect(screen.getByRole("radio", { name: "未分组 5" })).toHaveAttribute("aria-checked", "true");
+    // In 全部 the menu has nothing to pin.
+    await user.click(screen.getByRole("radio", { name: "全部 8" }));
+    expect(await tools(user)).toEqual(["选择", "按分组显示 ✓", "全部折叠"]);
+  });
+
+  it("opens on the pinned group", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      settings: { locale: "zh-cn" },
+      pinnedGroup: { type: "group", name: "工作" },
+    });
+    renderApp({ backend });
+    await ready();
+    expect(chipOrder()[0]).toBe("工作 3 pin");
+    expect(screen.getByRole("radio", { name: "工作 3" })).toHaveAttribute("aria-checked", "true");
+    expect(names()).toEqual(["GitHub", "AWS", "Cloudflare"]);
+    expect(headings()).toEqual([]);
+  });
+
+  it("gathers the pinned accounts at the top of 全部 when 收藏 is pinned, a section that does not fold", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      settings: { locale: "zh-cn" },
+      pinnedGroup: { type: "favorites" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    // It opens on them, flat.
+    expect(screen.getByRole("radio", { name: "收藏 1" })).toHaveAttribute("aria-checked", "true");
+    expect(names()).toEqual(["GitHub"]);
+    await user.click(screen.getByRole("radio", { name: "全部 8" }));
+    expect(headings()).toEqual(["收藏1", "工作2", "未分组5"]);
+    expect(
+      within(screen.getByRole("region", { name: "工作" }))
+        .getAllByTestId("entry-row")
+        .map((row) => row.querySelector(".truncate")?.textContent),
+    ).toEqual(["AWS", "Cloudflare"]);
+    await tool(user, "全部折叠");
+    expect(backend.calls.at(-1)).toEqual({ command: "view_collapse_groups", groups: ["工作", ""] });
+    expect(names()).toEqual(["GitHub"]);
+  });
+
+  it("moves 未分组 like a group while reordering, the pinned section staying first", async () => {
+    const backend = new MockBackend({
+      entries: [
+        mockEntry("GitHub", "me", { group: "Work", at: 1 }),
+        mockEntry("Bank", "me", { group: "Money", at: 2 }),
+        mockEntry("Mail", "me", { at: 3 }),
+      ],
+      settings: { locale: "zh-cn" },
+      pinnedGroup: { type: "group", name: "Work" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.click(screen.getByTestId("codes-reorder"));
+    const titles = () =>
+      screen.getAllByTestId("reorder-section").map((section) => section.getAttribute("aria-label"));
+    expect(titles()).toEqual(["Work", "Money", "未分组"]);
+    screen.getByRole("button", { name: "移动「未分组」：拖动，或按上下方向键" }).focus();
+    await user.keyboard("{ArrowUp}");
+    expect(backend.calls.filter((c) => c.command === "view_order_groups").at(-1)).toEqual({
+      command: "view_order_groups",
+      groups: ["Work", "", "Money"],
+    });
+    expect(titles()).toEqual(["Work", "未分组", "Money"]);
+  });
+});
+
 describe("Codes · row actions", () => {
   it("pins from the button beside each row's menu, and edits from the menu", async () => {
     const { user, backend } = renderApp();

@@ -1,5 +1,6 @@
 import { LOCALE_SETTINGS, SORT_ORDERS } from "@lockra/shared";
 import {
+  PinnedGroupSelect,
   Segmented,
   SettingsPane,
   SettingsRows,
@@ -8,15 +9,18 @@ import {
   useT,
   useUiState,
 } from "@lockra/ui";
+import { useDispatch } from "../../app/dispatch";
 import { useUpdateSettings } from "../../app/settings";
 import { UpdateControls } from "../../features/update/UpdateControls";
 
-/** Settings › General: the interface language, the order of the codes, and automatic updates with
- *  the updater's status and its one action (as Voltip's 通用 pane has them). */
+/** Settings › General: the interface language, the order of the codes and the group pinned at the
+ *  top (this device's, kept in the vault), and automatic updates with the updater's status and its
+ *  one action (as Voltip's 通用 pane has them). */
 export function General() {
   const t = useT();
-  const { settings, update: updater } = useUiState();
+  const { settings, update: updater, entries, pinned_group: pinned } = useUiState();
   const update = useUpdateSettings();
+  const dispatch = useDispatch();
   return (
     <SettingsPane title={t("settings.section.general")} lede={t("settings.general.lede")}>
       <SettingsRows>
@@ -39,6 +43,16 @@ export function General() {
             value={settings.sort}
             onChange={(sort) => update({ sort })}
             options={SORT_ORDERS.map((value) => ({ value, label: t(`codes.sort.${value}`) }))}
+          />
+        </StatusRow>
+        <StatusRow
+          label={t("codes.pin.label")}
+          help={t("codes.pin.hint")}
+          data-testid="settings-pinned-group">
+          <PinnedGroupSelect
+            entries={entries}
+            pinned={pinned}
+            onChange={(next) => void dispatch({ command: "view_pin_group", pinned: next })}
           />
         </StatusRow>
         <StatusRow

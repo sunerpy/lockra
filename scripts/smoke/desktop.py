@@ -485,6 +485,19 @@ class Smoke:
         self.shot("codes-groups-folded-1280-light")
         self.tool("全部展开")
         until("everything unfolded", lambda: len(web.find_all('[data-testid="entry-row"]')) == len(entries))
+        # 未分组 pinned from the ⋯ menu while it is shown: its chip first, and in 全部 its section
+        # first; then unpinned, the view as it was.
+        def chip(name):
+            return web.wait(xpath=f"//*[@data-testid='filter-chip'][starts-with(@aria-label, '{name} ')]")
+
+        web.click(chip("未分组"))
+        self.tool("置顶「未分组」")
+        until("the pinned chip first", lambda: web.run("return document.querySelector('[data-testid=filter-chip]').dataset.pinned") == "true")
+        web.click(chip("全部"))
+        until("未分组 first", lambda: web.run("return document.querySelector('[data-testid=codes-group-toggle]').textContent.startsWith('未分组')"))
+        self.shot("codes-pinned-1280-light")
+        web.invoke({"command": "view_pin_group", "pinned": None})
+        until("unpinned", lambda: web.invoke({"command": "app_state"})["pinned_group"] is None)
         row = web.find_all('[data-testid="entry-row"]')[1]
         web.run(
             "const r = arguments[0].getBoundingClientRect();"

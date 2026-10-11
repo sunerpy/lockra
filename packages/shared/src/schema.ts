@@ -521,6 +521,15 @@ export const lockViewSchema = z.object({
 });
 export type LockView = z.infer<typeof lockViewSchema>;
 
+/** The group pinned at the top of the code list: the pinned accounts (收藏), a group or the
+ *  accounts in no group (lockra-core `PinnedGroup`). */
+export const pinnedGroupSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("favorites") }),
+  z.object({ type: z.literal("group"), name: z.string() }),
+  z.object({ type: z.literal("ungrouped") }),
+]);
+export type PinnedGroup = z.infer<typeof pinnedGroupSchema>;
+
 export const uiStateSchema = z.object({
   app_version: z.string(),
   platform: platformSchema,
@@ -532,8 +541,11 @@ export const uiStateSchema = z.object({
   collapsed_groups: z.array(z.string()),
   /** The accounts in the order they were dragged into (`manual` order); this device's. */
   entry_order: z.array(idSchema),
-  /** The groups in the order they were dragged into; this device's. */
+  /** The groups in the order they were dragged into ("" for the accounts in no group); this
+   *  device's. */
   group_order: z.array(z.string()),
+  /** The group this device pins at the top of the code list; none unless unlocked. */
+  pinned_group: pinnedGroupSchema.nullable(),
   settings: settingsSchema,
   import: importViewSchema.nullable(),
   backup: backupViewSchema,
@@ -729,8 +741,10 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("view_collapse_groups"), groups: z.array(z.string()) }),
   /** The accounts in the order they were dragged into; the code order becomes manual. */
   z.object({ command: z.literal("view_order_entries"), ids: z.array(idSchema) }),
-  /** The groups in the order they were dragged into. */
+  /** The groups in the order they were dragged into ("" for the accounts in no group). */
   z.object({ command: z.literal("view_order_groups"), groups: z.array(z.string()) }),
+  /** Pin a group at the top of the code list, or none. */
+  z.object({ command: z.literal("view_pin_group"), pinned: pinnedGroupSchema.nullable() }),
   z.object({ command: z.literal("import_text"), text: z.string() }),
   z.object({ command: z.literal("import_clipboard") }),
   z.object({ command: z.literal("import_backup_password"), password }),

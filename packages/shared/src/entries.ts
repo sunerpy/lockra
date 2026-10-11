@@ -6,6 +6,7 @@ import {
   type ExportTarget,
   MARK_CHARS,
   type OtpKind,
+  type PinnedGroup,
   type SortOrder,
 } from "./schema";
 
@@ -102,34 +103,110 @@ export function recentEntry(entries: readonly EntryView[]): EntryView | undefine
   return best;
 }
 
-/** One section of the code list: a group's accounts, or those in no group (`key` ""). */
+/** One section of the code list: a group's accounts, those in no group (`key` ""), or the pinned
+ *  accounts gathered at the top (`key` {@link FAVORITES}). */
 export interface GroupSection {
   key: string;
   entries: EntryView[];
 }
 
-/** The accounts in sections: one per group, the groups in `dragged` first in that order and the
- *  others by name, then the accounts in no group; each keeps the order it is given. */
+/** Undragged, the accounts in no group come after the groups. */
+function lastIfNoGroup(key: string): number {
+  return key === NO_GROUP ? 1 : 0;
+}
+
+/** The section `pinned` puts first, by its key (none for the pinned accounts' own section). */
+function pinnedKey(pinned: PinnedGroup | null): string | undefined {
+  if (pinned?.type === "group") return pinned.name;
+  return pinned?.type === "ungrouped" ? NO_GROUP : undefined;
+}
+
+/** The accounts in sections, each keeping the order it is given: the pinned one first (the pinned
+ *  accounts gathered out of their groups, one group, or those in no group), then the groups in
+ *  `dragged` in that order ("" is the accounts in no group, which move like a group), the others by
+ *  name, and the accounts in no group last unless they were dragged. */
 export function groupSections(
   entries: readonly EntryView[],
   dragged: readonly string[] = [],
+  pinned: PinnedGroup | null = null,
 ): GroupSection[] {
   const place = new Map(dragged.map((group, at) => [group, at]));
+  const gathered = pinned?.type === "favorites" ? entries.filter((e) => e.favorite) : [];
   const byGroup = new Map<string, EntryView[]>();
   for (const entry of entries) {
+    if (gathered.includes(entry)) continue;
     const key = entry.group ?? NO_GROUP;
     const section = byGroup.get(key);
     if (section) section.push(entry);
     else byGroup.set(key, [entry]);
   }
-  const keys = [...byGroup.keys()].filter((key) => key !== NO_GROUP);
+  const keys = [...byGroup.keys()];
   // A sorted copy: `toSorted` is ES2023 (Safari 16), past the ES2022 lib kept for older macOS.
   // oxlint-disable-next-line unicorn/no-array-sort
   keys.sort(
-    (a, b) => (place.get(a) ?? Infinity) - (place.get(b) ?? Infinity) || a.localeCompare(b),
+    (a, b) =>
+      (place.get(a) ?? Infinity) - (place.get(b) ?? Infinity) ||
+      lastIfNoGroup(a) - lastIfNoGroup(b) ||
+      a.localeCompare(b),
   );
-  if (byGroup.has(NO_GROUP)) keys.push(NO_GROUP);
-  return keys.map((key) => ({ key, entries: byGroup.get(key) ?? [] }));
+  const first = pinnedKey(pinned);
+  if (first !== undefined && byGroup.has(first))
+    keys.unshift(...keys.splice(keys.indexOf(first), 1));
+  const sections = keys.map((key) => ({ key, entries: byGroup.get(key) ?? [] }));
+  return gathered.length > 0 ? [{ key: FAVORITES, entries: gathered }, ...sections] : sections;
+}
+
+/** The filter a pin opens the code list on ({@link ALL_GROUPS} without one). */
+export function pinnedFilter(pinned: PinnedGroup | null): string {
+  if (pinned === null) return ALL_GROUPS;
+  if (pinned.type === "favorites") return FAVORITES;
+  return pinned.type === "ungrouped" ? UNGROUPED : pinned.name;
+}
+
+/** The pin a filter names: none for {@link ALL_GROUPS}. */
+export function pinnedFromFilter(filter: string): PinnedGroup | null {
+  if (filter === ALL_GROUPS) return null;
+  if (filter === FAVORITES) return { type: "favorites" };
+  return filter === UNGROUPED ? { type: "ungrouped" } : { type: "group", name: filter };
+}
+
+/** One of the code list's filters: everything, the pinned accounts, a group, those in no group. */
+export interface EntryFilter {
+  value: string;
+  kind: "all" | "favorites" | "group" | "ungrouped";
+  count: number;
+  /** The group pinned on this device: first of the filters, and the one the list opens on. */
+  pinned: boolean;
+}
+
+/** The code list's filters, each with its number of accounts: 全部, 收藏 (when an account is
+ *  pinned), each group by name, and 未分组 (when some accounts are in no group beside groups); the
+ *  pinned one first. */
+export function entryFilters(
+  entries: readonly EntryView[],
+  pinned: PinnedGroup | null,
+): EntryFilter[] {
+  const counts = new Map<string, number>();
+  for (const e of entries)
+    counts.set(e.group ?? NO_GROUP, (counts.get(e.group ?? NO_GROUP) ?? 0) + 1);
+  const groups = entryGroups(entries);
+  const favorites = entries.filter((e) => e.favorite).length;
+  const loose = counts.get(NO_GROUP) ?? 0;
+  const pin = pinned === null ? undefined : pinnedFilter(pinned);
+  const filter = (value: string, kind: EntryFilter["kind"], count: number): EntryFilter => ({
+    value,
+    kind,
+    count,
+    pinned: value === pin,
+  });
+  const filters = [
+    filter(ALL_GROUPS, "all", entries.length),
+    ...(favorites > 0 ? [filter(FAVORITES, "favorites", favorites)] : []),
+    ...groups.map((g) => filter(g, "group", counts.get(g) ?? 0)),
+    ...(groups.length > 0 && loose > 0 ? [filter(UNGROUPED, "ungrouped", loose)] : []),
+  ];
+  const at = filters.findIndex((f) => f.pinned);
+  return at > 0 ? [...filters.splice(at, 1), ...filters] : filters;
 }
 
 /** `list` with `item` moved to where `target` is (a drop on it, or one step with the keyboard). */

@@ -1,5 +1,7 @@
-import { type KeyboardEvent, useRef } from "react";
+import { type EntryView, type PinnedGroup, entryFilters } from "@lockra/shared";
+import { type KeyboardEvent, useMemo, useRef } from "react";
 import { cx } from "../cx";
+import { useT } from "../i18n/I18nProvider";
 import { Icon, type IconName } from "./Icon";
 
 export interface FilterChip {
@@ -9,6 +11,40 @@ export interface FilterChip {
   icon?: IconName;
   /** The label is the user's own text (a group's name), not interface copy. */
   userText?: boolean;
+  /** The group pinned on this device (first of the chips, the one the page opens on). */
+  pinned?: boolean;
+}
+
+/** The codes page's chips, desktop and phone alike: 全部, 收藏 with its star, each group and 未分组,
+ *  with their counts; the pinned one first, a pin on a pinned group. */
+export function useFilterChips(
+  entries: readonly EntryView[],
+  pinned: PinnedGroup | null,
+): FilterChip[] {
+  const t = useT();
+  return useMemo(
+    () =>
+      entryFilters(entries, pinned).map((f) => ({
+        value: f.value,
+        count: f.count,
+        label:
+          f.kind === "all"
+            ? t("codes.chips.all")
+            : f.kind === "favorites"
+              ? t("codes.chips.favorites")
+              : f.kind === "ungrouped"
+                ? t("codes.groupNone")
+                : f.value,
+        pinned: f.pinned,
+        ...(f.kind === "favorites"
+          ? { icon: "star" as const }
+          : f.pinned
+            ? { icon: "pin" as const }
+            : {}),
+        ...(f.kind === "group" ? { userText: true } : {}),
+      })),
+    [entries, pinned, t],
+  );
 }
 
 export interface FilterChipsProps {
@@ -94,6 +130,7 @@ export function FilterChips({
               onChange(option.value);
             }}
             data-testid="filter-chip"
+            data-pinned={option.pinned || undefined}
             className={cx(
               "inline-flex shrink-0 items-center gap-1.5 rounded-pill px-4 text-[13px] font-medium whitespace-nowrap hairline transition-colors disabled:opacity-50",
               size === "lg" ? "h-11" : "h-10",
@@ -101,7 +138,13 @@ export function FilterChips({
                 ? "bg-chip-on text-chip-on-fg shadow-[var(--card-shadow)]"
                 : "bg-surface text-fg-muted hover:text-fg",
             )}>
-            {option.icon && <Icon name={option.icon} size={14} className="text-warning" />}
+            {option.icon && (
+              <Icon
+                name={option.icon}
+                size={14}
+                className={option.icon === "star" ? "text-warning" : "text-accent-text"}
+              />
+            )}
             <span
               className="max-w-40 truncate"
               {...(option.userText ? { "data-user-text": "" } : {})}>

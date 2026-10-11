@@ -44,6 +44,26 @@ describe("SettingsDialog", () => {
     expect(document.documentElement.lang).toBe("en-US");
   });
 
+  it("pins a group at the top of the codes, and the page turns to it", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const dialog = await openSettings(user);
+    const pin = dialog.getByRole("combobox", { name: "置顶分组" });
+    expect(pin).toHaveDisplayValue("不置顶");
+    expect(dialog.getByTestId("settings-pinned-group")).toHaveTextContent("打开验证码页时默认显示");
+    await user.selectOptions(pin, "收藏");
+    expect(backend.calls.at(-1)).toEqual({
+      command: "view_pin_group",
+      pinned: { type: "favorites" },
+    });
+    expect(pin).toHaveDisplayValue("收藏");
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("radio", { name: "收藏 1" })).toHaveAttribute("aria-checked", "true");
+    await openSettings(user);
+    await user.selectOptions(screen.getByRole("combobox", { name: "置顶分组" }), "不置顶");
+    expect(backend.calls.at(-1)).toEqual({ command: "view_pin_group", pinned: null });
+  });
+
   it("applies the theme, accent, density, font size and motion at once", async () => {
     const { user, backend } = renderApp();
     await ready();
