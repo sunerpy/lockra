@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Screenshots for the documentation site (docs/site/public/screens), from the real app in one
 language: the codes page, the import preview of a Google Authenticator export and the backup page,
-in the light and dark themes at 1440 x 900, as <page>-<lang>-<theme>.webp. The accounts are made up
+at 1440 x 900, as <page>-<lang>-<scheme>.webp: the site's light figure in 澄空 and its dark one in
+澄空 · 夜, Lockra's default theme on a light and on a dark system. The accounts are made up
 (example.com addresses, secrets derived from their names). Run by scripts/capture-site-screens.sh,
 which owns Xvfb, the driver and the throwaway folders; the WebDriver session is the smoke test's.
 Every wait is a condition with a deadline.
@@ -25,7 +26,8 @@ from desktop import Session, until  # noqa: E402
 
 WIDTH, HEIGHT = 1440, 900
 PASSWORD = "site screenshots pass phrase"
-THEMES = ["light", "dark"]
+# The site's scheme, and the theme its figure is shot in.
+SCHEMES = {"light": "glass", "dark": "glass_night"}
 
 COPY = {
     "en": {
@@ -130,7 +132,7 @@ class Capture:
         subprocess.run(["xdotool", "mousemove", "--window", self.window, str(x - 1), str(y - 1), "mousemove", "--window", self.window, str(x), str(y)], env=self.env, check=True)
         self.web.run("document.activeElement?.blur()")
 
-    def shot(self, page, theme):
+    def shot(self, page, scheme):
         """A screenshot once two in a row agree (the countdown ring steps once a second), as WebP."""
         self.rest()
         last, deadline = None, time.monotonic() + 8
@@ -143,7 +145,7 @@ class Capture:
         picture = Image.open(io.BytesIO(image)).convert("RGB")
         if picture.size != (WIDTH, HEIGHT):
             sys.exit(f"site-screens: the screenshot is {picture.size}, expected {(WIDTH, HEIGHT)}")
-        path = os.path.join(self.args.out, f"{page}-{self.args.lang}-{theme}.webp")
+        path = os.path.join(self.args.out, f"{page}-{self.args.lang}-{scheme}.webp")
         picture.save(path, "WEBP", quality=85, method=6)
         print(f"site-screens: {path}")
 
@@ -153,7 +155,7 @@ class Capture:
         self.resize()
         web.invoke({"command": "vault_create", "password": PASSWORD})
         web.wait('[data-testid="page-codes"]')
-        self.settings(locale=copy["locale"], reduce_motion=True, follow_system_theme=False, theme="light")
+        self.settings(locale=copy["locale"], reduce_motion=True, follow_system_theme=False, theme="glass")
 
         bank, card = copy["bank"]
         accounts = [
@@ -184,16 +186,16 @@ class Capture:
         self.nav("codes")
         until("eight rows", lambda: len(web.find_all('[data-testid="entry-row"]')) == 8)
         self.quiet()
-        for theme in THEMES:
+        for scheme, theme in SCHEMES.items():
             self.theme(theme)
             # Mid-window: no code in its last five seconds, when the next one would show beside it.
             until("the middle of a 30-second window", lambda: 5 <= time.time() % 30 <= 15, timeout=40)
-            self.shot("codes", theme)
+            self.shot("codes", scheme)
 
         self.nav("backup")
-        for theme in THEMES:
+        for scheme, theme in SCHEMES.items():
             self.theme(theme)
-            self.shot("backup", theme)
+            self.shot("backup", scheme)
 
         # The first of two export codes, with one account of each kind the preview tells apart.
         batch = [
@@ -215,9 +217,9 @@ class Capture:
         web.wait('[data-testid="import-preview"]')
         until("six accounts in the preview", lambda: len(web.invoke({"command": "app_state"})["import"]["candidates"]) == 6)
         self.quiet()
-        for theme in THEMES:
+        for scheme, theme in SCHEMES.items():
             self.theme(theme)
-            self.shot("import", theme)
+            self.shot("import", scheme)
         web.invoke({"command": "import_cancel"})
         web.quit()
 

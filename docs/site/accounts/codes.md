@@ -184,6 +184,13 @@ versions. With **Follow system** on, each column switches between its light and 
 system. **Warm paper** and **Graphite** do not follow the system: choosing one of them, or a theme
 of the other brightness, turns **Follow system** off.
 
+## Default theme
+
+<StatusTag status="building" />
+
+A new installation starts on **Clear sky** with **Follow system** on, so a dark system shows
+**Clear sky · Night**. An installation of an earlier version keeps the theme it shows.
+
 ## Order
 
 The sort menu orders the list by name, by the most recently added, or by the most recently used.

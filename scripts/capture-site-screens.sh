@@ -2,7 +2,7 @@
 # Screenshots for the documentation site: the real app (a debug build serving the release web
 # bundle, with the in-memory keychain of debug builds) under Xvfb, once per language, each time in
 # fresh throwaway folders. scripts/smoke/site_screens.py drives it over WebDriver with made-up
-# accounts and writes <page>-<lang>-<theme>.webp. Look at every image before committing it
+# accounts and writes <page>-<lang>-<light|dark>.webp. Look at every image before committing it
 # (docs/site/README.md, "Screenshots").
 # Usage: scripts/capture-site-screens.sh [out-dir]
 set -euo pipefail

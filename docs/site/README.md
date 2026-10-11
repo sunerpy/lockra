@@ -117,8 +117,10 @@ the buttons link to the install guide and the releases page.
 
 ## Screenshots
 
-Screenshots are WebP files in `public/screens/`, named `<page>-<lang>-<theme>.webp`, 1440 × 900 at
-device pixel ratio 1, WebP quality 85. They come from the real app with made-up accounts:
+Screenshots are WebP files in `public/screens/`, named `<page>-<lang>-<scheme>.webp`, 1440 × 900 at
+device pixel ratio 1, WebP quality 85: the `light` figure shows the app in 澄空, the `dark` one in
+澄空 · 夜, Lockra's default theme on a light and on a dark system. They come from the real app with
+made-up accounts:
 
 ```bash
 make site-screens     # scripts/capture-site-screens.sh docs/site/public/screens
@@ -127,7 +129,7 @@ make site-screens     # scripts/capture-site-screens.sh docs/site/public/screens
 The script builds the app, starts it under Xvfb once per language in throwaway folders, and lets
 `scripts/smoke/site_screens.py` create a vault, add eight accounts, run an automatic backup and
 read a Google Authenticator export code from the clipboard. It captures the codes page, the
-backup page and the import preview, each in the light and the dark theme. It needs what
+backup page and the import preview, each in 澄空 and in 澄空 · 夜. It needs what
 `make smoke-desktop` needs (Xvfb, xdotool, xclip, tauri-driver, WebKitWebDriver) plus Pillow and
 cairosvg for Python.
 

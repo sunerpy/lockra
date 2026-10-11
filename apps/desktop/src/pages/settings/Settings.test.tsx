@@ -70,7 +70,7 @@ describe("SettingsDialog", () => {
     const dialog = await openSettings(user, "外观");
     await user.click(dialog.getByRole("switch", { name: "跟随系统" }));
     expect(backend.calls.at(-1)).toMatchObject({
-      settings: { follow_system_theme: false, theme: "light" },
+      settings: { follow_system_theme: false, theme: "glass" },
     });
     await user.click(dialog.getByRole("radio", { name: /暖纸/ }));
     expect(document.documentElement.dataset.theme).toBe("warm");
@@ -108,18 +108,18 @@ describe("SettingsDialog", () => {
     expect(grid.getByText("浅色")).toBeInTheDocument();
     expect(grid.getByText("深色")).toBeInTheDocument();
     expect(dialog.getByText(/^跟随系统时，同一列的浅色与深色自动切换/)).toBeInTheDocument();
-    // jsdom's system is light: following it, the light column picked is what shows, linked to its
-    // dark one.
-    expect(grid.getByRole("radio", { name: "明亮" })).toHaveAttribute("aria-checked", "true");
-    expect(grid.getByTestId("theme-pair")).toHaveAttribute("data-column", "light");
-    await user.click(grid.getByRole("radio", { name: "澄空" }));
+    // jsdom's system is light: following it, the light column picked (澄空, the default) is what
+    // shows, linked to its dark one.
+    expect(grid.getByRole("radio", { name: "澄空" })).toHaveAttribute("aria-checked", "true");
+    expect(grid.getByTestId("theme-pair")).toHaveAttribute("data-column", "glass");
+    await user.click(grid.getByRole("radio", { name: "明亮" }));
     expect(backend.calls.at(-1)).toMatchObject({
       command: "settings_set",
-      settings: { theme: "glass", follow_system_theme: true },
+      settings: { theme: "light", follow_system_theme: true },
     });
-    expect(document.documentElement.dataset.theme).toBe("glass");
-    expect(dialog.getByText("跟随系统 · 现在是澄空")).toBeInTheDocument();
-    expect(grid.getByTestId("theme-pair")).toHaveAttribute("data-column", "glass");
+    expect(document.documentElement.dataset.theme).toBe("light");
+    expect(dialog.getByText("跟随系统 · 现在是明亮")).toBeInTheDocument();
+    expect(grid.getByTestId("theme-pair")).toHaveAttribute("data-column", "light");
     // The other scheme is a choice of its own: following stops, and it shows.
     await user.click(grid.getByRole("radio", { name: "墨白 · 夜" }));
     expect(backend.calls.at(-1)).toMatchObject({

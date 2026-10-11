@@ -3,15 +3,15 @@
 with real X input where it matters (typing the master password, Ctrl+L) and the X clipboard
 (xclip). Run by scripts/smoke-desktop-linux.sh, which owns Xvfb, the driver and the data dirs.
 
-Checks: create a vault by typing; import an otpauth link from the clipboard; the copied code
-equals an independent RFC 6238 computation; lock and unlock; Google's export QR code decodes
-(rxing, scripts' decode-qr) back to the same account; then screenshots of every page at three
-window sizes in the light and dark themes, plus the empty, long and 200-account states; Touch ID
-turned on from the unlock screen's pointer and unlocking with it (the debug build's stand-in check);
-an account's colour and avatar text, folded groups, a row's right-click menu, several accounts
-ticked and moved to a group at once, the group picker's list, and accounts reordered by a handle;
-the newer themes (澄空, 墨白 and their nights) as a list and as cards, a card and a row just copied,
-and Settings › 外观's grid of eight themes.
+Checks: a new install on 澄空, the default theme; create a vault by typing; import an otpauth link
+from the clipboard; the copied code equals an independent RFC 6238 computation; lock and unlock;
+Google's export QR code decodes (rxing, scripts' decode-qr) back to the same account; then
+screenshots of every page at three window sizes in the light and dark themes, plus the empty, long
+and 200-account states; Touch ID turned on from the unlock screen's pointer and unlocking with it
+(the debug build's stand-in check); an account's colour and avatar text, folded groups, a row's
+right-click menu, several accounts ticked and moved to a group at once, the group picker's list, and
+accounts reordered by a handle; the newer themes (澄空, 墨白 and their nights) as a list and as cards, a
+card and a row just copied, and Settings › 外观's grid of eight themes.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -266,6 +266,11 @@ class Smoke:
     def run(self):
         web = self.web
         self.page("welcome")
+        # A new install starts on 澄空, following the system (light under Xvfb). The screenshots
+        # are named for the theme they show, here 明亮.
+        until("the default theme, 澄空", lambda: web.run("return document.documentElement.dataset.theme") == "glass")
+        self.settings(follow_system_theme=False, theme="light")
+        until("the light theme", lambda: web.run("return document.documentElement.dataset.theme") == "light")
         self.shot("welcome-1152-light")
         # The title bar's close button, for the close test the shell script runs afterwards.
         rect = web.run("const b = [...document.querySelectorAll('header button')].find((e) => e.getAttribute('aria-label') === '关闭'); const r = b.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2, innerWidth, innerHeight];")

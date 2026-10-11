@@ -9,12 +9,12 @@ use serde::{Deserialize, Serialize};
 
 /// The palettes of the design system (DESIGN.md). Following the system's scheme switches within a
 /// pair: light ↔ dark (warm and graphite follow it there too), glass ↔ glass night, paper ↔ paper
-/// night.
+/// night. New installs start on glass from 0.9.1, on light before
+/// ([`SettingsStore::load_at_start`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeId {
     /// 明亮 · 白瓷.
-    #[default]
     Light,
     /// 暗黑 · 夜灯.
     Dark,
@@ -23,6 +23,7 @@ pub enum ThemeId {
     /// 石墨 · 仪表.
     Graphite,
     /// 澄空: frosted surfaces over an aurora.
+    #[default]
     Glass,
     /// 澄空 · 夜.
     GlassNight,
@@ -275,6 +276,22 @@ impl SettingsStore {
         }
     }
 
+    /// The settings Lockra starts with. Without `settings.json`, this is the first start here, or a
+    /// start after versions that never saved a setting: the settings are written then, so that a
+    /// default changed later does not change them. A vault already here means such an install from
+    /// before 0.9.1, whose default theme was light, and it keeps light.
+    pub fn load_at_start(&self, vault_exists: bool) -> Settings {
+        if self.path.exists() {
+            return self.load();
+        }
+        let theme = if vault_exists { ThemeId::Light } else { ThemeId::default() };
+        let settings = Settings { theme, ..Settings::default() };
+        if let Err(error) = self.save(&settings) {
+            tracing::warn!(%error, "settings.json could not be written; the settings hold for this run");
+        }
+        settings
+    }
+
     /// Write the settings (atomically, like the vault), with [`SETTINGS_SCHEMA`] first.
     pub fn save(&self, settings: &Settings) -> std::io::Result<()> {
         if let Some(dir) = self.path.parent() {
@@ -319,6 +336,34 @@ mod tests {
     fn missing_file_gives_defaults() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(SettingsStore::new(dir.path()).load(), Settings::default());
+    }
+
+    #[test]
+    fn a_first_start_writes_the_defaults_and_an_install_from_before_0_9_1_keeps_light() {
+        let defaults = Settings::default();
+        assert_eq!((defaults.theme, defaults.follow_system_theme), (ThemeId::Glass, true));
+        // A first start: the defaults, written at once and read back as written from then on.
+        let dir = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(&dir.path().join("nested"));
+        assert_eq!(store.load_at_start(false), defaults);
+        assert_eq!(store.load(), defaults);
+        assert_eq!(store.load_at_start(true), defaults, "a vault made since does not make it older");
+        // A vault and no file: an install from before 0.9.1 that never saved a setting. It keeps
+        // 明亮, its default then.
+        let older = tempfile::tempdir().unwrap();
+        let store = SettingsStore::new(older.path());
+        let kept = store.load_at_start(true);
+        assert_eq!(kept, Settings { theme: ThemeId::Light, ..Settings::default() });
+        assert_eq!(store.load(), kept);
+        // A file already there is read as it is.
+        store.save(&Settings { theme: ThemeId::Paper, ..Settings::default() }).unwrap();
+        assert_eq!(store.load_at_start(true).theme, ThemeId::Paper);
+        // A config directory that cannot be written: the same choice, for this run.
+        let blocked = tempfile::tempdir().unwrap();
+        let not_a_dir = blocked.path().join("file");
+        fs::write(&not_a_dir, b"").unwrap();
+        assert_eq!(SettingsStore::new(&not_a_dir).load_at_start(true).theme, ThemeId::Light);
+        assert_eq!(SettingsStore::new(&not_a_dir).load_at_start(false), defaults);
     }
 
     #[test]
@@ -416,13 +461,14 @@ mod tests {
         // rest of the file survives: an older Lockra reads 0.8.7's themes the same way.
         fs::write(&path, r#"{"schema":2,"theme":"aurora","codes_view":"masonry","accent":"green"}"#).unwrap();
         let loaded = store.load();
-        assert_eq!((loaded.theme, loaded.codes_view, loaded.accent), (ThemeId::Light, CodesView::List, AccentId::Green));
+        assert_eq!((loaded.theme, loaded.codes_view, loaded.accent), (ThemeId::Glass, CodesView::List, AccentId::Green));
     }
 
     #[test]
     fn wire_names_are_stable() {
         let json = serde_json::to_value(Settings::default()).unwrap();
-        assert_eq!(json["theme"], "light");
+        assert_eq!(json["theme"], "glass");
+        assert_eq!(serde_json::to_value(ThemeId::Light).unwrap(), "light");
         assert_eq!(json["locale"], "system");
         assert_eq!(serde_json::to_value(LocaleSetting::ZhCn).unwrap(), "zh-cn");
         assert_eq!(json["auto_backup"]["keep"], 10);

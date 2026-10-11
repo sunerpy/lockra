@@ -960,6 +960,24 @@ async fn settings_are_saved_normalized_and_reloaded() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_new_install_starts_on_glass_and_one_from_before_0_9_1_keeps_light() {
+    // A new install: 澄空, following the system (澄空 · 夜 on a dark one).
+    let h = harness();
+    let settings = h.core.state().settings;
+    assert_eq!((settings.theme, settings.follow_system_theme), (ThemeId::Glass, true));
+    h.core.create_vault(pw(MASTER)).await.unwrap();
+    // Its first start wrote the file: the vault made since does not make it look older.
+    assert_eq!(h.restart().state().settings.theme, ThemeId::Glass);
+    // A vault and no settings.json: an install from before 0.9.1 that never saved a setting,
+    // whose default was 明亮. It stays on it, from then on in the file.
+    let file = h.dir.path().join("config").join("settings.json");
+    fs::remove_file(&file).unwrap();
+    assert_eq!(h.restart().state().settings, Settings { theme: ThemeId::Light, ..Settings::default() });
+    assert!(fs::read_to_string(&file).unwrap().contains(r#""theme": "light""#));
+    assert_eq!(h.restart().state().settings.theme, ThemeId::Light);
+}
+
+#[tokio::test(start_paused = true)]
 async fn state_and_events_never_carry_a_secret() {
     let mut h = Harness::unlocked().await;
     let id = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
@@ -1110,8 +1128,7 @@ async fn a_pinned_group_is_kept_for_this_device_only() {
     restarted.backup_to(file.clone(), None).await.unwrap();
     let backup = Sealed::open_with_password(&fs::read(&file).unwrap(), MASTER.as_bytes()).unwrap();
     assert!(!String::from_utf8_lossy(&backup.payload).contains("pinned"));
-    // (No setting changed here, so the file may not exist at all.)
-    let plain = fs::read_to_string(h.dir.path().join("config").join("settings.json")).unwrap_or_default();
+    let plain = fs::read_to_string(h.dir.path().join("config").join("settings.json")).unwrap();
     assert!(!plain.contains("pinned") && !plain.contains("Work"), "{plain}");
     // Unpinned.
     restarted.pin_group(None).unwrap();

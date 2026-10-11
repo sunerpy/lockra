@@ -28,7 +28,9 @@ Following the system switches within a pair (Settings › 外观 draws each as a
 dark): 明亮 ↔ 暗黑, 澄空 ↔ 澄空 · 夜, 墨白 ↔ 墨白 · 夜. 暖纸 and 石墨 have no pair: picking one stops
 following (as does a tile of the other scheme: what was picked is what shows), and a vault that
 follows the system with one of them set shows 明亮 or 暗黑, as before the pairs (`pickTheme`,
-`resolveTheme` in `packages/ui/src/theme.ts`).
+`resolveTheme` in `packages/ui/src/theme.ts`). New installs start on 澄空, following the system;
+an install from before 0.9.1 that never saved a setting keeps 明亮, its default
+(`SettingsStore::load_at_start`). The pages paint 澄空 until the settings arrive (`index.html`).
 
 ### Structure
 
