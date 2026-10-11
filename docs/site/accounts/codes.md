@@ -78,8 +78,8 @@ a star follows its name.
 
 <StatusTag status="available" /> Available from version 0.5.0.
 
-When accounts have groups, the list shows a section for each group, by name, then **No group** for
-the others. Click a section's heading to fold or unfold it; **Collapse all** and **Expand all**,
+When accounts have groups, **All** shows a section for each group, by name, then **No group** for
+the others; any other filter lists its accounts without sections. Click a section's heading to fold or unfold it; **Collapse all** and **Expand all**,
 in the ⋯ menu at the top right of the list, do it for every section at once. A search shows what it
 finds in folded sections too. Which sections are folded is kept in the vault, on this device only.
 **Show groups**, in the same menu, turns the sections off and shows a single list.
@@ -136,7 +136,8 @@ to change the order of the accounts and of the groups; **Done** ends it. While y
 search field and the filters are off.
 
 Once the accounts are reordered, the sort menu reads **Manual**, and accounts added later go to the
-end. Pinned accounts still come first and **No group** stays last. The order is kept in the vault,
+end. Pinned accounts still come first. **No group** moves like any group, and the group shown first
+stays first. The order is kept in the vault,
 on this device only: it does not sync to your other devices.
 
 On the phone, tap the **Reorder** button after the filters, then drag the handle on the right of a
@@ -144,7 +145,7 @@ row up or down.
 
 ## Group shown first
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.8.9.
 
 Choose **Pinned**, a group or **No group** under **Settings › General › Group shown first**; on the
 desktop, with that filter chosen, **Show “name” first** in the ⋯ menu at the top right of the list
