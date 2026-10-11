@@ -338,7 +338,9 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   sync key nor anything else of the space can be computed. The device derives it from the sync key
   whenever it opens the relay and stores it nowhere; the relay keeps only the token's SHA-256.
   Whoever takes the relay's disk, or the relay itself, holds ciphertext and hashes, as an S3 bucket's
-  operator would.
+  operator would, and so does anyone its operator is made to hand them to: nothing on it opens
+  without the sync key, which the relay never sees, and the built-in relay's disk holds no client
+  address.
 - **What it sees.** The space's id (derived one way from the sync key), its devices' tags (keyed
   hashes, which link no device across spaces), the snapshots' sizes in 4 KiB steps, when they
   change, and the addresses that ask. The built-in relay keeps the addresses in memory only, for

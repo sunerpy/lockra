@@ -147,7 +147,11 @@ in the encrypted vault and never in a backup.
 A Lockra relay, the built-in one or your own, is storage like any other and is trusted with no
 more: it keeps the same encrypted files, and neither the key that encrypts them nor the recovery
 key reaches it. The devices identify themselves to it with a value made from the recovery key, from
-which the recovery key cannot be recovered, so nobody else can read or change the space there. The relay sees
+which the recovery key cannot be recovered, so nobody else can read or change the space there. If
+the relay's disk is taken, or its operator is made to hand over what it keeps, all anyone gets is
+these encrypted files and the fingerprint of that value: opening the files takes the recovery key
+together with a device's master password, or the key in an invitation, and those are on your
+devices only, not on the relay or with Lockra's developer. The relay sees
 when and from which network addresses the devices sync, and it can delete the space or be
 unavailable; the devices keep every account either way
 ([Through a Lockra relay](/backup/sync#through-a-lockra-relay)).

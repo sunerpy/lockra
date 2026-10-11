@@ -24,7 +24,7 @@ Every release has a static Linux binary for x64 and ARM64,
 `SHA256SUMS` and the release's attestations:
 
 ```sh
-version=0.8.1 arch=x64
+version=$(gh release view --repo sunerpy/lockra --json tagName --jq '.tagName | ltrimstr("v")') arch=x64
 gh release download "v$version" --repo sunerpy/lockra --pattern "lockra-relay_${version}_linux_${arch}.tar.gz" --pattern SHA256SUMS
 sha256sum --check --ignore-missing SHA256SUMS
 gh attestation verify "lockra-relay_${version}_linux_${arch}.tar.gz" --repo sunerpy/lockra
