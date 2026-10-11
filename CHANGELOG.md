@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.8](https://github.com/sunerpy/lockra/compare/v0.8.7...v0.8.8) (2026-10-11)
+
+
+### Features
+
+* 所有主题改用澄空的页面布局（桌面与手机） ([#111](https://github.com/sunerpy/lockra/issues/111)) ([48fb4b7](https://github.com/sunerpy/lockra/commit/48fb4b72dce756d7573de697f87bdd3cfc5807fe))
+
 ## [0.8.7](https://github.com/sunerpy/lockra/compare/v0.8.6...v0.8.7) (2026-10-11)
 
 
