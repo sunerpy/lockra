@@ -94,7 +94,7 @@ export type Settings = z.infer<typeof settingsSchema>;
 /** The defaults of lockra-core `Settings::default()` (the mock backend and the tests start here). */
 export function defaultSettings(): Settings {
   return {
-    theme: "light",
+    theme: "glass",
     follow_system_theme: true,
     accent: "default",
     density: "default",

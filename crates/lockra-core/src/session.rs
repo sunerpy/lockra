@@ -214,7 +214,6 @@ impl Core {
     /// Open the core on `config` and start its scheduler; call from inside a tokio runtime.
     pub fn start(config: CoreConfig, ports: Ports) -> Self {
         let settings_store = SettingsStore::new(&config.config_dir);
-        let settings = settings_store.load();
         let vault_path = config.data_dir.join(VAULT_FILE);
         let (phase, vault_id, device_slot, device_check) = match fs::read(&vault_path) {
             Ok(bytes) => match read_header(&bytes) {
@@ -224,6 +223,7 @@ impl Core {
             },
             Err(_) => (PhaseState::NoVault, None, false, None),
         };
+        let settings = settings_store.load_at_start(!matches!(phase, PhaseState::NoVault));
         let update = UpdateState::new(settings.auto_update && ports.updater.method().is_some_and(InstallMethod::installs));
         let state = State {
             phase,

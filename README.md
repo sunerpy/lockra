@@ -24,7 +24,7 @@ on, for end-to-end encrypted sync. It imports from
 Google Authenticator and Microsoft Authenticator, exports back to them, and keeps encrypted backups
 in a folder you choose.
 
-![Lockra's codes page](./docs/acceptance/screens/desktop/codes-1280-light.png)
+![Lockra's codes page](./docs/acceptance/screens/desktop/codes-1280-glass.png)
 
 ## Features
 

@@ -22,7 +22,8 @@ describe("useAppearance", () => {
       const { rerender } = renderHook(({ s }) => useAppearance(s), {
         initialProps: { s: settings },
       });
-      expect(document.documentElement.dataset.theme).toBe("dark");
+      // The default, 澄空, follows the system within its pair.
+      expect(document.documentElement.dataset.theme).toBe("glass_night");
       expect(document.documentElement.dataset.accent).toBe("purple");
       expect(document.documentElement.dataset.density).toBe("compact");
       rerender({ s: { ...settings, follow_system_theme: false, theme: "warm" } });
@@ -32,7 +33,7 @@ describe("useAppearance", () => {
       act(() => {
         for (const l of listeners) l();
       });
-      expect(document.documentElement.dataset.theme).toBe("light");
+      expect(document.documentElement.dataset.theme).toBe("glass");
     } finally {
       vi.unstubAllGlobals();
     }
