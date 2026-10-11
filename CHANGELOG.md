@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.9](https://github.com/sunerpy/lockra/compare/v0.8.8...v0.8.9) (2026-10-11)
+
+
+### Features
+
+* 未分组可以拖动排序，支持置顶分组，筛选时平铺显示 ([#114](https://github.com/sunerpy/lockra/issues/114)) ([ab0be7b](https://github.com/sunerpy/lockra/commit/ab0be7b2d3a4b2d2c53559df73b61f138a331c5e))
+
 ## [0.8.8](https://github.com/sunerpy/lockra/compare/v0.8.7...v0.8.8) (2026-10-11)
 
 
