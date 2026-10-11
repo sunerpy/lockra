@@ -113,7 +113,7 @@
 
 ## 默认主题
 
-<StatusTag status="building" />
+<StatusTag status="available" /> 自 0.9.1 版起提供。
 
 新安装的 Lockra 默认使用「澄空」并开启「跟随系统」，系统为深色时显示「澄空 · 夜」。此前版本已安装的 Lockra 保持原来的主题。
 

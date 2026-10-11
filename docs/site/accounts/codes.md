@@ -186,7 +186,7 @@ of the other brightness, turns **Follow system** off.
 
 ## Default theme
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.9.1.
 
 A new installation starts on **Clear sky** with **Follow system** on, so a dark system shows
 **Clear sky · Night**. An installation of an earlier version keeps the theme it shows.
