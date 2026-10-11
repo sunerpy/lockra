@@ -1,7 +1,7 @@
 # Codes
 
-This page explains the codes page: reading and copying codes, finding an account, and arranging
-the list.
+This page explains the codes page: reading and copying codes, finding an account, arranging the
+list, and choosing how the page looks.
 
 <ScreenFigure src="/screens/codes-en-light.webp" dark="/screens/codes-en-dark.webp" width="1440" height="900" alt="The codes page with the account list, the search field and the sort menu." />
 
@@ -106,6 +106,33 @@ on this device only: it does not sync to your other devices.
 
 On the phone, tap the **Reorder** button at the top of the codes page, then drag the handle on the
 right of a row up or down.
+
+## Cards
+
+<StatusTag status="building" />
+
+The two buttons beside the sort menu show the accounts as a list or as cards (**Code view**, also
+in **Settings › Appearance**). A card shows the account above its code in large type, and under the
+code a bar that empties as the code's period runs out, with the seconds left; in the last five
+seconds the next code appears under the code. Click a card, or select it with the arrow keys and
+press Enter, to copy its code; the card shows **Copied** for a moment. Counter-based accounts show
+**Next code** instead of the bar. Selecting several accounts and reordering use the list.
+
+On the phone, choose **Cards** under **Code view** in **Settings**: two cards to a row.
+
+The view is kept on this device and applies in every theme. In the list too, the row you copied
+shows **Copied** in place of its code for a moment.
+
+## Themes
+
+<StatusTag status="building" />
+
+**Settings › Appearance** shows eight themes, the light ones above the dark ones. Besides **Light**,
+**Dark**, **Warm paper** and **Graphite**, **Clear sky** places frosted cards over a soft gradient
+and **Ink** draws in black on paper; **Clear sky · Night** and **Ink · Night** are their dark
+versions. With **Follow system** on, each column switches between its light and dark theme with the
+system. **Warm paper** and **Graphite** do not follow the system: choosing one of them, or a theme
+of the other brightness, turns **Follow system** off.
 
 ## Order
 

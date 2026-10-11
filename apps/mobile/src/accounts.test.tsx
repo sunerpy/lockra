@@ -355,3 +355,54 @@ describe("reordering on the phone", () => {
     expect(names()).toEqual(["Jira", "GitHub", "Bank"]);
   });
 });
+
+describe("the list on the phone", () => {
+  it("shows on the copied row that it was copied", async () => {
+    const { user } = renderApp();
+    await ready();
+    const row = screen.getAllByTestId("entry-row")[0] as HTMLElement;
+    await user.click(row);
+    expect(within(row).getByTestId("row-copied")).toHaveTextContent(/^已复制$/);
+  });
+});
+
+describe("the cards on the phone", () => {
+  const cards = () => renderApp({ mock: { settings: { codes_view: "grid" } } });
+
+  it("shows two cards to a row that copy on a tap and say so", async () => {
+    const { user, backend } = cards();
+    await ready();
+    expect(screen.queryAllByTestId("entry-row")).toHaveLength(0);
+    const tiles = screen.getAllByTestId("entry-tile");
+    expect(tiles.length).toBeGreaterThan(1);
+    // Two columns, and the phone's smaller code.
+    expect(screen.getAllByRole("list")[0]).toHaveClass("grid-cols-2");
+    expect(within(tiles[0] as HTMLElement).getByTestId("otp-code").style.fontSize).toBe("28px");
+    await user.click(tiles[0] as HTMLElement);
+    expect(backend.calls.filter((c) => c.command === "entry_copy")).toHaveLength(1);
+    expect(within(tiles[0] as HTMLElement).getByTestId("tile-copied")).toHaveTextContent(
+      /^已复制$/,
+    );
+  });
+
+  it("open the account's actions with a long press or ⋯, and fold the sections", async () => {
+    const { user, backend } = cards();
+    await ready();
+    const tile = screen.getAllByTestId("entry-tile")[0] as HTMLElement;
+    fireEvent.contextMenu(tile);
+    expect(await screen.findByTestId("page-account")).toBeInTheDocument();
+    goBack();
+    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+    await user.click(
+      within(screen.getAllByTestId("entry-tile")[0] as HTMLElement).getByTestId("row-more"),
+    );
+    expect(await screen.findByTestId("page-account")).toBeInTheDocument();
+    goBack();
+    await screen.findByTestId("page-codes");
+    expect(backend.calls.some((c) => c.command === "entry_copy")).toBe(false);
+    const before = screen.getAllByTestId("entry-tile").length;
+    await user.click(screen.getAllByTestId("codes-group-toggle")[0] as HTMLElement);
+    expect(backend.calls.at(-1)).toMatchObject({ command: "view_collapse_groups" });
+    expect(screen.getAllByTestId("entry-tile").length).toBeLessThan(before);
+  });
+});

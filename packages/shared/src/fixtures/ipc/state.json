@@ -39,6 +39,7 @@
       "auto_update": false,
       "biometric_offer": true,
       "clipboard_clear_seconds": 30,
+      "codes_view": "list",
       "default_unlock": "biometric",
       "density": "default",
       "follow_system_theme": true,
@@ -107,6 +108,7 @@
       "auto_update": false,
       "biometric_offer": true,
       "clipboard_clear_seconds": 30,
+      "codes_view": "list",
       "default_unlock": "biometric",
       "density": "default",
       "follow_system_theme": true,
@@ -168,6 +170,7 @@
       "auto_update": false,
       "biometric_offer": true,
       "clipboard_clear_seconds": 30,
+      "codes_view": "list",
       "default_unlock": "biometric",
       "density": "default",
       "follow_system_theme": true,
@@ -518,6 +521,7 @@
       "auto_update": true,
       "biometric_offer": false,
       "clipboard_clear_seconds": 20,
+      "codes_view": "grid",
       "default_unlock": "password",
       "density": "compact",
       "follow_system_theme": false,
@@ -527,7 +531,7 @@
       "locale": "zh-cn",
       "reduce_motion": true,
       "sort": "recent",
-      "theme": "dark"
+      "theme": "glass_night"
     },
     "sync": {
       "space": {

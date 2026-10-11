@@ -1,6 +1,6 @@
 // Development only (`#showcase`, never in a release bundle): every primitive in every state, to be
-// checked in the four themes before pages are built on them (DESIGN.md §3). Keys 1–4 switch the
-// theme, so a headless run can screenshot all four without clicking.
+// checked in the eight themes before pages are built on them (DESIGN.md §3). Keys 1–8 switch the
+// theme, so a headless run can screenshot all eight without clicking.
 import {
   ACCOUNT_COLORS,
   type CodeView,
@@ -19,6 +19,7 @@ import {
   EmptyState,
   EntryAvatar,
   EntryRow,
+  EntryTile,
   Eyebrow,
   Icon,
   IconButton,
@@ -114,12 +115,12 @@ export default function Showcase() {
     <div
       data-testid="showcase"
       data-freeze={frozen || undefined}
-      className="grid h-full grid-rows-[auto_minmax(0,1fr)] bg-canvas text-fg">
+      className="grid h-full grid-rows-[auto_minmax(0,1fr)] app-canvas text-fg">
       {frozen && <style>{FREEZE_STYLE}</style>}
       <header className="flex h-10 items-center gap-3 border-b border-border bg-surface px-4">
         <Logo size={20} />
         <span className="text-[14px] font-semibold">{t("showcase.title")}</span>
-        <span className="mono text-[11px] text-fg-subtle">theme={theme} · 1–4</span>
+        <span className="mono text-[11px] text-fg-subtle">theme={theme} · 1–8</span>
       </header>
       <main className="min-h-0 overflow-y-auto">
         <div className="mx-auto flex max-w-[1040px] flex-col gap-4 px-6 py-5">
@@ -174,6 +175,64 @@ export default function Showcase() {
               </div>
             </Panel>
           </div>
+          <Panel eyebrow="CARDS" title="EntryTile · 验证码视图 › 卡片">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+              <EntryTile
+                entry={sampleEntry("a", "GitHub", "octocat", { favorite: true })}
+                code={code("a")}
+                nowMs={now}
+                onCopy={() => undefined}
+                onFavorite={() => undefined}
+              />
+              <EntryTile
+                entry={sampleEntry("w", "Microsoft", "alex@outlook.com", { digits: 8 })}
+                code={{ ...late, code: "73190634", next_code: "53021477" }}
+                nowMs={now}
+                onCopy={() => undefined}
+              />
+              <EntryTile
+                entry={sampleEntry("m", "AWS", "root@acme-corp")}
+                code={code("m", 9_000)}
+                nowMs={now}
+                copied="已复制 · 30 秒后清空剪贴板"
+                onCopy={() => undefined}
+              />
+              <EntryTile
+                entry={sampleEntry("h", "Bank", "6222 •••• 1234", {
+                  kind: { type: "hotp", counter: 12 },
+                  color: "amber",
+                  mark: "银行",
+                })}
+                code={{
+                  entry_id: "h",
+                  code: "287082",
+                  next_code: null,
+                  valid_from_ms: null,
+                  valid_until_ms: null,
+                }}
+                nowMs={now}
+                onCopy={() => undefined}
+                onNext={() => undefined}
+              />
+            </div>
+            <div className="mt-4 grid w-[372px] grid-cols-2 gap-2.5">
+              <EntryTile
+                size="sm"
+                entry={sampleEntry("p", "Google", "alex@gmail.com")}
+                code={code("p")}
+                nowMs={now}
+                onCopy={() => undefined}
+              />
+              <EntryTile
+                size="sm"
+                entry={sampleEntry("q", "Smoke", "alice@example.com")}
+                code={code("q")}
+                nowMs={now}
+                copied="已复制"
+                onCopy={() => undefined}
+              />
+            </div>
+          </Panel>
           <Panel eyebrow="CODES" title="EntryRow · OtpCode · CountdownRing">
             <div className="flex flex-col">
               <EntryRow
@@ -195,6 +254,13 @@ export default function Showcase() {
                 code={code("m", 9_000)}
                 nowMs={now}
                 masked
+                onCopy={() => undefined}
+              />
+              <EntryRow
+                entry={sampleEntry("c", "Cloudflare", "ops@example.com")}
+                code={code("c")}
+                nowMs={now}
+                copied="已复制"
                 onCopy={() => undefined}
               />
               <EntryRow

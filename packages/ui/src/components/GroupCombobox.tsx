@@ -152,7 +152,7 @@ export function GroupCombobox({
           id={listId}
           role="listbox"
           aria-label={t("ui.groupPicker.options")}
-          className="absolute top-full right-0 left-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-10 bg-surface p-1 shadow-win hairline"
+          className="absolute top-full right-0 left-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-10 bg-overlay p-1 shadow-win hairline overlay-frost"
           data-testid="group-options">
           {options.map((option, at) => {
             const chosen = option.value === name && !option.key.startsWith("\u0001");

@@ -70,7 +70,8 @@ export function CountdownRing({
         strokeDasharray={circumference}
         strokeDashoffset={circumference * (1 - fraction)}
         className={cx(
-          warning ? "stroke-warning" : "stroke-accent",
+          // The theme's meter: the accent, or ink in 墨白.
+          warning ? "stroke-warning" : "stroke-[var(--meter)]",
           !still && "transition-[stroke-dashoffset] duration-1000 ease-linear",
         )}
       />

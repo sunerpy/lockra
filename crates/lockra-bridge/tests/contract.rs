@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use lockra_bridge::{COMMANDS, PHONE_COMMANDS, SHELL_COMMANDS, UiCommand, dispatch};
 use lockra_core::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
-use lockra_core::settings::{AccentId, AutoBackup, DefaultUnlock, Density, LocaleSetting, Settings, SortOrder, ThemeId};
+use lockra_core::settings::{AccentId, AutoBackup, CodesView, DefaultUnlock, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded,
     ExportPage, ExportStarted, ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView,
@@ -108,7 +108,7 @@ fn entries() -> Vec<EntryView> {
 
 fn settings() -> Settings {
     Settings {
-        theme: ThemeId::Dark,
+        theme: ThemeId::GlassNight,
         follow_system_theme: false,
         accent: AccentId::Green,
         density: Density::Compact,
@@ -120,6 +120,7 @@ fn settings() -> Settings {
         hide_codes: true,
         sort: SortOrder::Recent,
         group_codes: false,
+        codes_view: CodesView::Grid,
         auto_backup: AutoBackup { enabled: true, dir: Some("/home/user/Backups/Lockra".into()), keep: 7 },
         auto_update: true,
         default_unlock: DefaultUnlock::Password,

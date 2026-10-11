@@ -25,10 +25,10 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
-  primary: "bg-primary text-primary-fg hover:opacity-90",
+  primary: "bg-primary text-primary-fg shadow-primary hover:opacity-90",
   outline: "bg-surface text-fg hairline hover:bg-inset",
   ghost: "bg-transparent text-fg hover:bg-inset",
-  danger: "bg-danger text-surface hover:opacity-90",
+  danger: "bg-danger text-surface-solid hover:opacity-90",
   // Links as Codex draws them: the accent text colour, no underline, a stronger shade on hover.
   text: "bg-transparent px-0 text-accent-text hover:text-accent-text-hover",
   // A destructive or secondary action in the same place: its own colour, and its own hover.

@@ -1,7 +1,7 @@
 # Lockra design system
 
 Lockra's interface is derived from Voltip's (`sunerpy/voltip`, Apache-2.0): the same four
-palettes, accent system, fonts, radii, window chrome and component anatomy, applied to an
+classic palettes (four more were drawn for Lockra, see Palettes), accent system, fonts, radii, window chrome and component anatomy, applied to an
 authenticator. The values below are a reading guide; **the code is the truth**:
 `packages/ui/src/tokens.css` (every colour, font, radius and shadow) and
 `packages/ui/src/components/*`. A rule here that the code contradicts is a bug in one of the two.
@@ -10,15 +10,51 @@ authenticator. The values below are a reading guide; **the code is the truth**:
 
 ### Palettes
 
-Four themes switched by `data-theme` on `<html>`; every component reads CSS variables through the
+Eight themes switched by `data-theme` on `<html>`; every component reads CSS variables through the
 Tailwind utilities declared in `@theme inline` (`bg-canvas`, `text-fg-muted`, `border-border`, …).
 
-| Theme      | Name        | Character                                                  |
-| ---------- | ----------- | ---------------------------------------------------------- |
-| `light`    | 明亮 · 白瓷 | cool white canvas `#f2f3f6`, white surfaces, ink `#1b1d22` |
-| `dark`     | 暗黑 · 夜灯 | near-black canvas `#0c0d11`, surfaces `#14161b`            |
-| `warm`     | 暖纸 · 手稿 | paper `#f5efe4`, ochre accent `#b85c38`                    |
-| `graphite` | 石墨 · 仪表 | slate canvas `#22252b`, surfaces `#2a2e35`                 |
+| Theme         | Name            | Character                                                          |
+| ------------- | --------------- | ------------------------------------------------------------------ |
+| `light`       | 明亮 · 白瓷     | cool white canvas `#f2f3f6`, white surfaces, ink `#1b1d22`         |
+| `dark`        | 暗黑 · 夜灯     | near-black canvas `#0c0d11`, surfaces `#14161b`                    |
+| `warm`        | 暖纸 · 手稿     | paper `#f5efe4`, ochre accent `#b85c38`                            |
+| `graphite`    | 石墨 · 仪表     | slate canvas `#22252b`, surfaces `#2a2e35`                         |
+| `glass`       | 澄空 · 极光玻璃 | an aurora on `#eef2fa` behind frosted white (66 %), blue `#3d7bff` |
+| `glass_night` | 澄空 · 夜       | the aurora on `#0b1020`, white at 7 %, blue `#6e9bff`              |
+| `paper`       | 墨白 · 纸上墨迹 | paper `#f7f6f2`, white cards, ink `#111111` for text and meters    |
+| `paper_night` | 墨白 · 夜       | `#141311`, cards `#1c1b19`, ink `#f2efe8`                          |
+
+Following the system switches within a pair (Settings › 外观 draws each as a column, light above
+dark): 明亮 ↔ 暗黑, 澄空 ↔ 澄空 · 夜, 墨白 ↔ 墨白 · 夜. 暖纸 and 石墨 have no pair: picking one stops
+following (as does a tile of the other scheme: what was picked is what shows), and a vault that
+follows the system with one of them set shows 明亮 or 暗黑, as before the pairs (`pickTheme`,
+`resolveTheme` in `packages/ui/src/theme.ts`).
+
+### Structure
+
+A theme is more than its roles: each sets the variables below (the classic four share one block that
+keeps the look they had). They reach the components through `hairline` (the default 1 px edge, in
+the components layer so that an element's own `border-danger` or `hover:border-…` wins),
+`app-canvas`, `panel` (card shadow and frost), `sidebar-shell`, `titlebar`, `overlay-frost` and
+`tile-copied`, and through `bg-surface` / `bg-nav` / `bg-overlay`, `rounded-6/10/14` and
+`shadow-primary`. `bg-surface` is the fill, translucent in 澄空: text in the surface's colour (a
+danger button's label) takes `text-surface-solid`, the opaque role, and `theme.test.ts` rejects
+text in the fill. `prefers-reduced-transparency` turns the frost and the translucent fills off.
+
+| Variable                                                                      | Classic                                 | 澄空 (and 夜)                                                            | 墨白 (and 夜)                                           |
+| ----------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `--surface-fill` / `--nav-fill` / `--overlay-fill`                            | the opaque roles                        | white at 66 / 50 / 90 %; at night 7 / 5 %, the overlay `#161c33` at 92 % | the opaque roles                                        |
+| `--edge` (hairlines)                                                          | `border`                                | white at 90 % (night 12 %)                                               | `border`                                                |
+| `--canvas-image`                                                              | none                                    | four radial gradients                                                    | none                                                    |
+| `--card-shadow` / `--surface-blur`                                            | none                                    | soft shadow / blur 22 px                                                 | none                                                    |
+| `--radius-control` / `--radius-card` / `--radius-dialog`                      | 6 / 10 / 14                             | 12 / 18 / 22                                                             | 10 / 16 / 18                                            |
+| `--sidebar-inset` / `--sidebar-radius`                                        | 0 (a rule on the right)                 | 12 / 20 (it floats)                                                      | 0                                                       |
+| `--primary-shadow`                                                            | none                                    | a blue glow                                                              | none                                                    |
+| `--meter` (ring and card bar)                                                 | accent                                  | accent                                                                   | ink (`fg`)                                              |
+| `--titlebar-fill` / `--titlebar-rule`                                         | surface / border                        | transparent                                                              | canvas / border                                         |
+| `--tile-copied-*` / `--tile-pill-*` (a card just copied), `--tile-hover-edge` | the card, an accent pill; the edge kept | the same                                                                 | the card turns to ink, plain text; an ink edge on hover |
+| `--row-pill-bg` / `--row-pill-fg` (a row just copied)                         | accent-soft / accent-text               | the same                                                                 | ink: `fg` / `surface`                                   |
+| `--logo-body` / `--logo-dots` (the in-app logo)                               | `#339cff` / white                       | `#3d7bff` (night `#6e9bff`) / white                                      | `#2142ff` (night `#8fa3ff`) / white                     |
 
 Roles (same names in every theme): `canvas surface inset inset2 border border-strong fg fg-muted
 fg-subtle primary primary-fg accent accent-fg accent-soft accent-text accent-text-hover thumb ok
@@ -51,8 +87,11 @@ against white, as in Codex: state is never carried by the fill alone.
 ### Shape, depth, motion
 
 - Radii `4 6 10 14 20 999` (`rounded-4` … `rounded-pill`). Cards are `rounded-10`, inputs and
-  buttons `rounded-6`, dialogs `rounded-14`.
-- Cards have **no shadow**: a 1 px hairline (`border-border`). Shadows only lift overlays.
+  buttons `rounded-6`, dialogs `rounded-14`; those three take the theme's radius (6 / 10 / 14 in
+  the classic four, see Structure). Anything that must keep its shape whatever the theme (the
+  account avatar, the theme previews' frame) sets its own pixels.
+- Cards have **no shadow**: a 1 px hairline (`hairline`, the theme's edge). Shadows only lift
+  overlays; 澄空's frosted cards are the exception (`panel`).
 - Density knob `data-density`: rows 32 px (default) or 28 px (compact), card padding 16 / 12 px.
 - Motion: 150 ms colour transitions on interactive elements; the countdown ring moves with a 1 s
   linear transition. `data-reduce-motion="true"` (Settings or the OS preference) turns every
@@ -63,10 +102,11 @@ against white, as in Codex: state is never carried by the fill alone.
 - **Green (`ok`) is for 8 px status lamps only** (unlocked, backup healthy). Never a fill.
 - `accent`: links (`accent-text`, no underline), the countdown ring, selection, focus outline
   (`accent-text`, 2 px, offset 1), progress, primary toggles.
-- `warning`: a code in its last five seconds (ring and digits).
+- `warning`: a code in its last five seconds (ring, card bar and digits; the 12 px seconds beside the
+  bar stay `fg-muted`, since `warning` is under 4.5:1 there).
 - `danger`: destructive actions, failed backups, wrong passwords.
-- **No hex literal in a TSX file** (`scripts/check-no-literal-colors.sh`); the logo is the one
-  exception, as in Voltip, because the mark must look the same in every theme.
+- **No hex literal in a TSX file** (`scripts/check-no-literal-colors.sh`), the logo included: inside
+  the app it sits on the theme's card and takes `--logo-body` / `--logo-dots`.
 
 ### Account colours
 
@@ -102,22 +142,31 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
 Ported from Voltip (same anatomy and props, Voltip-only options removed): `Icon Lamp LampText
 Eyebrow Card Panel Badge Chip Button IconButton Toggle Segmented Input Select Menu Popover Keycap(s)
 Banner StatusRow SettingsLayout EmptyState Progress Table ThemeTile ThemeSwitch Dialog Toast
-CommandPalette Sidebar Toolbar TitleBar OptionCard`, plus `Logo` (Voltip's navy plate with a
-blue padlock under a pale shackle, its body showing a masked code: three pale dots).
+CommandPalette Sidebar Toolbar TitleBar OptionCard`, plus `Logo`: a padlock under its shackle, its
+body showing a masked code (three dots). Inside the app it sits on the theme's card (`bg-surface`,
+`hairline`, `panel`: frosted in 澄空, paper in 墨白), the shackle in `fg`, the body the theme's own
+blue (`--logo-body`, whatever the accent), the dots `--logo-dots`. The app icon
+(`apps/desktop/src-tauri/icons/icon.svg`, the Android icon sources, the site's `lockra-logo.svg`)
+puts a white padlock on the brand's blue-violet tile (`#3D7BFF` → `#7C5CFF`, dots `#5B6BFF`). Both
+were the owner's choice on 2026-10-11 (Penpot 「Lockra 界面方向」 › 「00 · Logo」, options B and C).
 
 New for Lockra:
 
-| Primitive       | What it is                                                                                                        |
-| --------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `OtpCode`       | the code in mono, grouped; `masked` shows `••• •••`; `warning` tone in the last 5 s                               |
-| `CountdownRing` | 20 px ring, accent stroke shrinking over the window, warning ≤ 5 s, static when reduce-motion                     |
-| `EntryAvatar`   | 32 px rounded square with the issuer's first letter on `inset2`; never a brand logo                               |
-| `EntryRow`      | avatar · issuer/account · code · ring · actions; the whole row copies on click/Enter                              |
-| `PasswordField` | input with show/hide and an optional four-step strength meter                                                     |
-| `DropZone`      | dashed `border-strong` area; `accent-soft` fill while a drag hovers                                               |
-| `QrView`        | white plate (the QR's own quiet zone) inside a dialog, page `n / N`, prev/next                                    |
-| `StepList`      | numbered steps (mono numerals in `inset` circles) for the import sources                                          |
-| `useClock`      | a shared, second-aligned clock for countdowns (Voltip's `useNow` ticks every 30 s and only drives relative times) |
+| Primitive       | What it is                                                                                                         |
+| --------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `OtpCode`       | the code in mono, grouped; `masked` shows `••• •••`; `warning` tone in the last 5 s                                |
+| `CountdownRing` | 20 px ring, accent stroke shrinking over the window, warning ≤ 5 s, static when reduce-motion                      |
+| `EntryAvatar`   | rounded square (24–40 px, its own corner) with the issuer's first letter on its colour; never a brand logo         |
+| `EntryRow`      | avatar · issuer/account · code · ring · actions; the whole row copies on click/Enter; just copied, 「✓ 已复制」 in |
+|                 | the theme's pill replaces the code for 1.6 s; hovered, 「点击复制」 shows beside it (taking no room until then)    |
+| `EntryTile`     | the card of 验证码视图 › 卡片: avatar, names, star and menu over a 46 px code, a bar that empties, the next code   |
+|                 | in the last 5 s or the HOTP counter; copied, it says so for 1.6 s (`useFlash`). 300 px columns on the desktop,     |
+|                 | two to a row on the phone (`size="sm"`, 28 px code). Selecting and reordering stay in the list                     |
+| `PasswordField` | input with show/hide and an optional four-step strength meter                                                      |
+| `DropZone`      | dashed `border-strong` area; `accent-soft` fill while a drag hovers                                                |
+| `QrView`        | white plate (the QR's own quiet zone) inside a dialog, page `n / N`, prev/next                                     |
+| `StepList`      | numbered steps (mono numerals in `inset` circles) for the import sources                                           |
+| `useClock`      | a shared, second-aligned clock for countdowns (Voltip's `useNow` ticks every 30 s and only drives relative times)  |
 
 Every interactive primitive has `default hover focus-visible active disabled` states, plus
 `loading` (buttons: spinner, label kept) and `error` (inputs: `danger` border and message below).
@@ -145,7 +194,8 @@ smooth because rows are plain DOM).
 - **Widths**: a desktop window with a 960 × 600 minimum, so the 375 / 768 breakpoints of the
   web QA gate do not apply. Screens are checked at **960 × 600, 1280 × 800, 1440 × 900**, in the
   light and dark themes, in the real Tauri window (WebKitGTK under Xvfb); results in
-  `docs/acceptance/visual-qa.md`.
+  `docs/acceptance/visual-qa.md`. The newer themes and the card view are checked at 1280 × 800
+  against their Penpot boards in `docs/acceptance/themes.md`, with the deviations listed there.
 - **Windows** loses Snap Layouts on the maximize button (`decorations: false`, an upstream
   WebView2 limitation; accepted, as in Voltip).
 - **Linux** cannot exclude a window from screen capture: secret views say so in place.

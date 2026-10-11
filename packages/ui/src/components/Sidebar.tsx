@@ -157,12 +157,14 @@ export function Sidebar({
       data-collapsed={collapsed}
       data-floating={floating}
       // A flex item's automatic minimum is its content: pin all three so a long label can never
-      // hold the rail open wider than 56 px.
+      // hold the rail open wider than 56 px. 澄空 floats it inside the window: `sidebar-shell` adds
+      // the theme's inset around it, and the shell's column grows by that much.
       style={{ width, minWidth: width, maxWidth: width }}
       className={cx(
-        "flex h-full shrink-0 flex-col bg-nav pb-4",
+        "flex shrink-0 flex-col bg-nav pb-4",
+        floating && "h-full",
         collapsed ? "px-2" : "px-3",
-        floating ? "shadow-win" : "border-r border-border",
+        floating ? "shadow-win" : "sidebar-shell",
         className,
       )}>
       {/* Brand row: exactly 40 px, flush with the top edge, so it and the TitleBar form one

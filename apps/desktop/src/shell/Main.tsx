@@ -18,7 +18,7 @@ export function Main() {
   if (state.phase === "unlocked") return <Shell />;
   return (
     <WindowFrame title={t("shell.product")} platform={state.platform} bare>
-      <main className="min-h-0 overflow-y-auto bg-canvas">
+      <main className="min-h-0 overflow-y-auto app-canvas">
         {state.phase === "no_vault" ? <Welcome /> : <Unlock />}
       </main>
     </WindowFrame>

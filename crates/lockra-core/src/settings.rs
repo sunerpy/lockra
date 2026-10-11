@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// The four palettes of the design system (DESIGN.md).
+/// The palettes of the design system (DESIGN.md). Following the system's scheme switches within a
+/// pair: light ↔ dark (warm and graphite follow it there too), glass ↔ glass night, paper ↔ paper
+/// night.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ThemeId {
@@ -20,6 +22,25 @@ pub enum ThemeId {
     Warm,
     /// 石墨 · 仪表.
     Graphite,
+    /// 澄空: frosted surfaces over an aurora.
+    Glass,
+    /// 澄空 · 夜.
+    GlassNight,
+    /// 墨白: ink on paper.
+    Paper,
+    /// 墨白 · 夜.
+    PaperNight,
+}
+
+/// How the code list is laid out: rows, or a grid of cards with the code large.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodesView {
+    /// One row per account.
+    #[default]
+    List,
+    /// A grid of cards.
+    Grid,
 }
 
 /// The accent choices of Settings › Appearance; `default` keeps the theme's own accent.
@@ -124,7 +145,7 @@ pub enum DefaultUnlock {
 pub struct Settings {
     /// Palette.
     pub theme: ThemeId,
-    /// Follow the system's light / dark preference (light ↔ dark only).
+    /// Follow the system's light / dark preference, within the theme's pair.
     pub follow_system_theme: bool,
     /// Accent colour.
     pub accent: AccentId,
@@ -146,6 +167,8 @@ pub struct Settings {
     pub sort: SortOrder,
     /// Show the code list in sections, one per group, each of which folds.
     pub group_codes: bool,
+    /// Rows or cards, whatever the theme.
+    pub codes_view: CodesView,
     /// Automatic backups.
     pub auto_backup: AutoBackup,
     /// Update automatically: 10 seconds after start look for a newer release and download it in the
@@ -187,6 +210,7 @@ impl Default for Settings {
             hide_codes: false,
             sort: SortOrder::default(),
             group_codes: true,
+            codes_view: CodesView::default(),
             auto_backup: AutoBackup::default(),
             auto_update: false,
             default_unlock: DefaultUnlock::default(),
@@ -368,6 +392,31 @@ mod tests {
         }
         .normalized();
         assert_eq!((s.font_size_px, s.clipboard_clear_seconds, s.auto_backup.keep, s.auto_backup.dir), (FONT_SIZE_MIN, 30, 1, None));
+    }
+
+    #[test]
+    fn the_glass_and_paper_themes_and_the_card_view_are_kept_and_an_unknown_one_falls_back() {
+        assert_eq!(Settings::default().codes_view, CodesView::List);
+        let json = serde_json::to_value(Settings::default()).unwrap();
+        assert_eq!(json["codes_view"], "list");
+        for (theme, name) in [(ThemeId::Glass, "glass"), (ThemeId::GlassNight, "glass_night"), (ThemeId::Paper, "paper"), (ThemeId::PaperNight, "paper_night")]
+        {
+            assert_eq!(serde_json::to_value(theme).unwrap(), name);
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let store = SettingsStore::new(dir.path());
+        fs::write(&path, r#"{"schema":2,"theme":"glass_night","codes_view":"grid"}"#).unwrap();
+        let loaded = store.load();
+        assert_eq!((loaded.theme, loaded.codes_view), (ThemeId::GlassNight, CodesView::Grid));
+        store.save(&Settings { theme: ThemeId::Paper, codes_view: CodesView::Grid, ..Settings::default() }).unwrap();
+        let written = fs::read_to_string(&path).unwrap();
+        assert!(written.contains(r#""theme": "paper""#) && written.contains(r#""codes_view": "grid""#), "{written}");
+        // A theme or a view this build does not know (a newer Lockra's) keeps the default, and the
+        // rest of the file survives: an older Lockra reads 0.8.7's themes the same way.
+        fs::write(&path, r#"{"schema":2,"theme":"aurora","codes_view":"masonry","accent":"green"}"#).unwrap();
+        let loaded = store.load();
+        assert_eq!((loaded.theme, loaded.codes_view, loaded.accent), (ThemeId::Light, CodesView::List, AccentId::Green));
     }
 
     #[test]

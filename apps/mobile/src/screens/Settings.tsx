@@ -1,26 +1,27 @@
-// The phone's settings: the language, the order of the codes and their groups; the theme and
-// motion; locking, the fingerprint, the clipboard, hidden codes and the master password; sync;
+// The phone's settings: the language, the order of the codes and their groups; the theme (a pair
+// of a light and a dark one to a row, as the desktop's columns), the code view and motion; locking, the fingerprint, the clipboard, hidden codes and the master password; sync;
 // backups and the export; the version and a check for a newer one.
 // Every choice applies at once, as on the desktop.
 import {
   AUTO_LOCK_CHOICES,
   CLIPBOARD_CHOICES,
+  CODES_VIEWS,
   LOCALE_SETTINGS,
   SORT_ORDERS,
-  THEME_IDS,
   storageSummary,
   syncStatusLine,
-  themeName,
-  themeSubtitle,
 } from "@lockra/shared";
 import {
   Icon,
   Segmented,
   Select,
-  cx,
+  THEME_COLUMNS,
+  ThemeTile,
+  pickTheme,
   resolveTheme,
   systemPrefersDark,
   systemPrefersReducedMotion,
+  themePair,
   useBackend,
   useGuarded,
   useI18n,
@@ -38,7 +39,7 @@ import { Field, InfoRow, Section, SwitchRow } from "../components/Rows";
 import { UpdateRow } from "../components/UpdateRow";
 
 export function Settings() {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const nav = useNav();
   const { settings, app_version: version } = useUiState();
   const update = useUpdateSettings();
@@ -48,7 +49,8 @@ export function Settings() {
     if (await guarded(() => overPhoneScreen(() => backend.pickRestoreFile())))
       nav.open({ name: "restore" });
   };
-  const resolved = resolveTheme(settings, systemPrefersDark());
+  const systemDark = systemPrefersDark();
+  const resolved = resolveTheme(settings, systemDark);
   const systemReduced = systemPrefersReducedMotion();
   const never = t("common.never");
   return (
@@ -94,33 +96,60 @@ export function Settings() {
             }
             testId="settings-follow-system"
           />
-          <div
-            role="radiogroup"
-            aria-label={t("settings.appearance.theme")}
-            className="flex flex-col py-1">
-            {THEME_IDS.map((id) => {
-              const checked = resolved === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  role="radio"
-                  aria-checked={checked}
-                  disabled={settings.follow_system_theme}
-                  onClick={() => update({ theme: id })}
-                  className={cx(
-                    "flex min-h-14 items-center gap-3 px-4 py-2 text-left disabled:opacity-50",
-                    checked ? "text-fg" : "text-fg-muted",
-                  )}>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="text-[15px] text-fg">{themeName(id, locale)}</span>
-                    <span className="text-[13px] text-fg-muted">{themeSubtitle(id, locale)}</span>
-                  </span>
-                  {checked && <Icon name="check" size={18} className="text-accent-text" />}
-                </button>
-              );
-            })}
+          <div className="flex flex-col gap-2 px-4 py-3">
+            <div
+              role="radiogroup"
+              aria-label={t("settings.appearance.theme")}
+              className="grid grid-cols-[148px_1fr_148px] items-start justify-center gap-y-3">
+              <span className="text-[13px] text-fg-muted">{t("settings.appearance.light")}</span>
+              <span />
+              <span className="text-[13px] text-fg-muted">{t("settings.appearance.dark")}</span>
+              {THEME_COLUMNS.map(([light, dark]) => {
+                // Following the system: the pair it switches within, linked across the row.
+                const paired = settings.follow_system_theme && themePair(resolved)[0] === light;
+                return [
+                  <ThemeTile
+                    key={light}
+                    theme={light}
+                    selected={resolved === light}
+                    caption={null}
+                    onSelect={(theme) => update(pickTheme(settings, theme, systemDark))}
+                  />,
+                  <span
+                    key={`${light}-pair`}
+                    className="flex h-[104px] items-center justify-center">
+                    {paired && (
+                      <span
+                        aria-hidden
+                        data-testid="theme-pair"
+                        data-column={light}
+                        className="text-accent-text">
+                        <Icon name="link" size={16} />
+                      </span>
+                    )}
+                  </span>,
+                  <ThemeTile
+                    key={dark}
+                    theme={dark}
+                    selected={resolved === dark}
+                    caption={null}
+                    onSelect={(theme) => update(pickTheme(settings, theme, systemDark))}
+                  />,
+                ];
+              })}
+            </div>
+            <span className="text-[13px] text-fg-muted">{t("settings.appearance.themeHint")}</span>
           </div>
+          <Field label={t("codes.view.label")} hint={t("settings.appearance.codesViewHint")}>
+            <Segmented
+              size="lg"
+              label={t("codes.view.label")}
+              value={settings.codes_view}
+              onChange={(codes_view) => update({ codes_view })}
+              options={CODES_VIEWS.map((value) => ({ value, label: t(`codes.view.${value}`) }))}
+              className="self-start"
+            />
+          </Field>
           <SwitchRow
             label={t("settings.appearance.reduceMotion")}
             checked={settings.reduce_motion || systemReduced}

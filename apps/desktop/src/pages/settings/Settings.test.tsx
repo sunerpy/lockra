@@ -48,8 +48,6 @@ describe("SettingsDialog", () => {
     const { user, backend } = renderApp();
     await ready();
     const dialog = await openSettings(user, "外观");
-    // Following the system: the tiles wait until that is off.
-    expect(dialog.getByRole("radio", { name: /暖纸/ })).toBeDisabled();
     await user.click(dialog.getByRole("switch", { name: "跟随系统" }));
     expect(backend.calls.at(-1)).toMatchObject({
       settings: { follow_system_theme: false, theme: "light" },
@@ -69,6 +67,76 @@ describe("SettingsDialog", () => {
     expect(document.documentElement.dataset.reduceMotion).toBe("true");
     await user.click(dialog.getByRole("switch", { name: "跟随系统" }));
     expect(backend.calls.at(-1)).toMatchObject({ settings: { follow_system_theme: true } });
+  });
+
+  it("lays the themes out light above dark, and following the system picks a column", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const dialog = await openSettings(user, "外观");
+    const grid = within(dialog.getByTestId("theme-grid"));
+    const radios = grid.getAllByRole("radio").map((r) => r.getAttribute("aria-label"));
+    expect(radios).toEqual([
+      "明亮",
+      "澄空",
+      "墨白",
+      "暖纸",
+      "暗黑",
+      "澄空 · 夜",
+      "墨白 · 夜",
+      "石墨",
+    ]);
+    expect(grid.getByText("浅色")).toBeInTheDocument();
+    expect(grid.getByText("深色")).toBeInTheDocument();
+    expect(dialog.getByText(/^跟随系统时，同一列的浅色与深色自动切换/)).toBeInTheDocument();
+    // jsdom's system is light: following it, the light column picked is what shows, linked to its
+    // dark one.
+    expect(grid.getByRole("radio", { name: "明亮" })).toHaveAttribute("aria-checked", "true");
+    expect(grid.getByTestId("theme-pair")).toHaveAttribute("data-column", "light");
+    await user.click(grid.getByRole("radio", { name: "澄空" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "settings_set",
+      settings: { theme: "glass", follow_system_theme: true },
+    });
+    expect(document.documentElement.dataset.theme).toBe("glass");
+    expect(dialog.getByText("跟随系统 · 现在是澄空")).toBeInTheDocument();
+    expect(grid.getByTestId("theme-pair")).toHaveAttribute("data-column", "glass");
+    // The other scheme is a choice of its own: following stops, and it shows.
+    await user.click(grid.getByRole("radio", { name: "墨白 · 夜" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      settings: { theme: "paper_night", follow_system_theme: false },
+    });
+    expect(document.documentElement.dataset.theme).toBe("paper_night");
+    expect(dialog.getByRole("switch", { name: "跟随系统" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(grid.queryByTestId("theme-pair")).toBeNull();
+    // Following again: the column of the theme shown, in the system's scheme.
+    await user.click(dialog.getByRole("switch", { name: "跟随系统" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      settings: { theme: "paper_night", follow_system_theme: true },
+    });
+    expect(document.documentElement.dataset.theme).toBe("paper");
+    // 暖纸 and 石墨 do not follow the system.
+    await user.click(grid.getByRole("radio", { name: "石墨" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      settings: { theme: "graphite", follow_system_theme: false },
+    });
+    expect(document.documentElement.dataset.theme).toBe("graphite");
+  });
+
+  it("chooses the code view, whatever the theme", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const dialog = await openSettings(user, "外观");
+    const view = within(dialog.getByTestId("settings-codes-view"));
+    expect(view.getByRole("radio", { name: "列表" })).toHaveAttribute("aria-checked", "true");
+    await user.click(view.getByRole("radio", { name: "卡片" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "settings_set",
+      settings: { codes_view: "grid" },
+    });
+    expect(view.getByRole("radio", { name: "卡片" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("sets auto-lock, clipboard clearing and hidden codes", async () => {

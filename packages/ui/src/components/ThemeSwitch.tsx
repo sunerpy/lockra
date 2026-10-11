@@ -22,6 +22,10 @@ const GLYPH: Record<ThemeChoice, IconName> = {
   dark: "moon",
   warm: "paper",
   graphite: "gauge",
+  glass: "sparkles",
+  glass_night: "sparkles",
+  paper: "book",
+  paper_night: "book",
 };
 
 export interface ThemeSwitchProps {
@@ -32,7 +36,7 @@ export interface ThemeSwitchProps {
 }
 
 /** The sidebar's theme entry: two controls in one sidebar row. The glyph steps to the next theme
- *  at a click (its name says which one comes next); the name next to it is a menu of all five.
+ *  at a click (its name says which one comes next); the name next to it is a menu of them all.
  *  They stay two elements because one element with two gestures would open the menu at every
  *  step. The row has the box of every other entry (`SIDEBAR_ROW_CLASS`) and one hover surface;
  *  the glyph button covers exactly the glyph slot, so the glyph and the name line up with 反馈 and

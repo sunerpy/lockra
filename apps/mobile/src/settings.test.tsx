@@ -44,11 +44,51 @@ describe("the phone's settings", () => {
     );
     await user.click(following);
     expect(settingsSent(backend).follow_system_theme).toBe(true);
-    expect(within(themes).getByRole("radio", { name: /暖纸/ })).toBeDisabled();
+    // 暖纸 has no pair: following, the system's light or dark shows, and every tile stays open.
+    expect(within(themes).getByRole("radio", { name: "明亮" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(within(themes).getByRole("radio", { name: /暖纸/ })).toBeEnabled();
     // The language last: the page speaks it at once.
     await user.click(screen.getByRole("radio", { name: "English" }));
     expect(settingsSent(backend).locale).toBe("en");
     expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+  });
+
+  it("lay the themes out light beside dark, pick a column while following, and choose the code view", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    await user.click(screen.getByTestId("codes-settings"));
+    await screen.findByTestId("page-settings");
+    const themes = within(screen.getByRole("radiogroup", { name: "主题" }));
+    expect(themes.getAllByRole("radio").map((r) => r.getAttribute("aria-label"))).toEqual([
+      "明亮",
+      "暗黑",
+      "澄空",
+      "澄空 · 夜",
+      "墨白",
+      "墨白 · 夜",
+      "暖纸",
+      "石墨",
+    ]);
+    expect(screen.getByText(/^跟随系统时，同一列的浅色与深色自动切换/)).toBeInTheDocument();
+    await user.click(themes.getByRole("radio", { name: "澄空" }));
+    expect(settingsSent(backend)).toMatchObject({ theme: "glass", follow_system_theme: true });
+    expect(themes.getByTestId("theme-pair")).toHaveAttribute("data-column", "glass");
+    await user.click(themes.getByRole("radio", { name: "墨白 · 夜" }));
+    expect(settingsSent(backend)).toMatchObject({
+      theme: "paper_night",
+      follow_system_theme: false,
+    });
+    expect(document.documentElement.dataset.theme).toBe("paper_night");
+    expect(themes.queryByTestId("theme-pair")).toBeNull();
+    const view = within(screen.getByRole("radiogroup", { name: "验证码视图" }));
+    await user.click(view.getByRole("radio", { name: "卡片" }));
+    expect(settingsSent(backend).codes_view).toBe("grid");
+    await user.click(screen.getByRole("button", { name: "返回" }));
+    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
+    expect(screen.getAllByTestId("entry-tile").length).toBeGreaterThan(0);
   });
 
   it("change the master password, the current one checked first", async () => {

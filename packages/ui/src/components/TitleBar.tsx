@@ -98,10 +98,7 @@ export function TitleBar({
       data-testid="title-bar"
       data-platform={platform}
       onPointerDown={onPointerDown}
-      className={cx(
-        "flex h-10 shrink-0 items-center border-b border-border bg-surface select-none",
-        className,
-      )}>
+      className={cx("flex h-10 shrink-0 items-center titlebar select-none", className)}>
       <div
         className={cx(
           "flex min-w-0 flex-1 items-center gap-3 pr-6",

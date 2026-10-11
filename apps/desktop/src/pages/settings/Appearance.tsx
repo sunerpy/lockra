@@ -1,32 +1,42 @@
-import { THEME_IDS, themeName } from "@lockra/shared";
+import { CODES_VIEWS, themeName } from "@lockra/shared";
 import {
   ACCENT_IDS,
   FONT_SIZE_MAX,
   FONT_SIZE_MIN,
+  Icon,
   IconButton,
   Segmented,
   SettingsPane,
   SettingsRows,
   SettingsSection,
   StatusRow,
+  THEME_COLUMNS,
   ThemeTile,
   Toggle,
+  pickTheme,
   resolveTheme,
   systemPrefersDark,
   systemPrefersReducedMotion,
+  themePair,
   useI18n,
   useUiState,
 } from "@lockra/ui";
 import { useUpdateSettings } from "../../app/settings";
 
-/** Settings › Appearance: the four themes (or the system's), the accent, density, font size and
- *  motion. Every choice applies at once. */
+/** Settings › Appearance: the eight themes, light above dark with a column per pair (following the
+ *  system switches within the column, 暖纸 and 石墨 stand alone), the code view, the accent,
+ *  density, font size and motion. Every choice applies at once. */
 export function Appearance() {
   const { t, locale } = useI18n();
   const { settings } = useUiState();
   const update = useUpdateSettings();
-  const resolved = resolveTheme(settings, systemPrefersDark());
+  const systemDark = systemPrefersDark();
+  const resolved = resolveTheme(settings, systemDark);
   const systemReduced = systemPrefersReducedMotion();
+  // Following the system: the column it switches within, linked between its two tiles.
+  const pair = settings.follow_system_theme
+    ? THEME_COLUMNS.findIndex(([light]) => light === themePair(resolved)[0])
+    : -1;
   return (
     <SettingsPane title={t("settings.section.appearance")} lede={t("settings.appearance.lede")}>
       <SettingsSection
@@ -34,25 +44,50 @@ export function Appearance() {
         aside={
           settings.follow_system_theme ? (
             <span className="mono text-fg-subtle">
-              {t("theme.followSystem")} · {themeName(resolved, locale)}
+              {t("settings.appearance.following", { theme: themeName(resolved, locale) })}
             </span>
           ) : undefined
         }>
         <div
           role="radiogroup"
           aria-label={t("settings.appearance.theme")}
-          className="flex flex-wrap gap-4">
-          {THEME_IDS.map((id) => (
-            <ThemeTile
-              key={id}
-              theme={id}
-              selected={resolved === id}
-              disabled={settings.follow_system_theme}
-              caption={id}
-              onSelect={(theme) => update({ theme, follow_system_theme: false })}
-            />
-          ))}
+          className="grid grid-cols-[repeat(4,148px)] gap-x-4"
+          data-testid="theme-grid">
+          <span className="col-span-4 row-start-1 pb-1.5 text-[11px] text-fg-subtle">
+            {t("settings.appearance.light")}
+          </span>
+          <span className="col-start-1 row-start-3 flex h-8 items-end pb-1.5 text-[11px] text-fg-subtle">
+            {t("settings.appearance.dark")}
+          </span>
+          {pair >= 0 && (
+            <span
+              aria-hidden
+              data-testid="theme-pair"
+              data-column={THEME_COLUMNS[pair]?.[0]}
+              className="row-start-3 flex h-8 items-center justify-self-center text-accent-text"
+              style={{ gridColumnStart: pair + 1 }}>
+              <Icon name="link" size={14} />
+            </span>
+          )}
+          {([0, 1] as const).map((row) =>
+            THEME_COLUMNS.map((column, at) => {
+              const id = column[row];
+              return (
+                <div key={id} style={{ gridColumnStart: at + 1, gridRowStart: row === 0 ? 2 : 4 }}>
+                  <ThemeTile
+                    theme={id}
+                    selected={resolved === id}
+                    caption={null}
+                    onSelect={(theme) => update(pickTheme(settings, theme, systemDark))}
+                  />
+                </div>
+              );
+            }),
+          )}
         </div>
+        <p className="mt-3 text-[12px] leading-5 text-fg-muted">
+          {t("settings.appearance.themeHint")}
+        </p>
       </SettingsSection>
       <SettingsRows>
         <StatusRow label={t("theme.followSystem")} help={t("settings.appearance.followSystemHint")}>
@@ -62,6 +97,17 @@ export function Appearance() {
               update({ follow_system_theme: follow, theme: follow ? settings.theme : resolved })
             }
             ariaLabel={t("theme.followSystem")}
+          />
+        </StatusRow>
+        <StatusRow
+          label={t("codes.view.label")}
+          help={t("settings.appearance.codesViewHint")}
+          data-testid="settings-codes-view">
+          <Segmented
+            label={t("codes.view.label")}
+            value={settings.codes_view}
+            onChange={(codes_view) => update({ codes_view })}
+            options={CODES_VIEWS.map((value) => ({ value, label: t(`codes.view.${value}`) }))}
           />
         </StatusRow>
         <StatusRow

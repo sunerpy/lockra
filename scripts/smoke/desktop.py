@@ -9,7 +9,9 @@ equals an independent RFC 6238 computation; lock and unlock; Google's export QR 
 window sizes in the light and dark themes, plus the empty, long and 200-account states; Touch ID
 turned on from the unlock screen's pointer and unlocking with it (the debug build's stand-in check);
 an account's colour and avatar text, folded groups, a row's right-click menu, several accounts
-ticked and moved to a group at once, the group picker's list, and accounts reordered by a handle.
+ticked and moved to a group at once, the group picker's list, and accounts reordered by a handle;
+the newer themes (澄空, 墨白 and their nights) as a list and as cards, a card and a row just copied,
+and Settings › 外观's grid of eight themes.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -363,6 +365,45 @@ class Smoke:
         web.gone('[data-testid="settings-content"]')
         self.settings(theme="light")
 
+        # The newer themes as a list and as cards (验证码视图), and the classic two as cards.
+        self.nav("验证码")
+        self.page("codes")
+        tiles = lambda: len(web.find_all('[data-testid="entry-tile"]'))
+        for theme in ["glass", "glass_night", "paper", "paper_night", "light", "dark"]:
+            self.settings(theme=theme, codes_view="list")
+            until(f"the {theme} theme", lambda: web.run("return document.documentElement.dataset.theme") == theme)
+            until("the list", lambda: tiles() == 0)
+            if theme not in ("light", "dark"):
+                self.shot(f"codes-1280-{theme}")
+            self.settings(codes_view="grid")
+            until("the cards", lambda: tiles() > 0)
+            self.shot(f"codes-cards-1280-{theme}")
+        # A card and a row just copied, as 墨白 (ink) and 澄空 (an accent pill) draw them: one frame,
+        # taken while the mark is on (it goes after FLASH_MS, 1.6 s), so not shot()'s two alike.
+        for view, item, name in [("grid", "entry-tile", "codes-cards-copied"), ("list", "entry-row", "codes-copied")]:
+            for theme in ["paper", "glass"]:
+                self.settings(theme=theme, codes_view=view)
+                until(f"the {theme} theme", lambda: web.run("return document.documentElement.dataset.theme") == theme)
+                until(f"the {view}", lambda: web.find_all(f'[data-testid="{item}"]'))
+                web.click(web.find_all(f'[data-testid="{item}"]')[0])
+                until("the copied mark", lambda: web.find_all('[data-copied="true"]'))
+                path = os.path.join(self.args.out, f"{name}-1280-{theme}.png")
+                with open(path, "wb") as f:
+                    f.write(web.screenshot())
+                print(f"smoke: {path}")
+                until("the mark gone", lambda: not web.find_all('[data-copied="true"]'))
+        # Settings › 外观: light above dark, a column per pair, followed in 澄空.
+        self.settings(theme="glass", codes_view="list", follow_system_theme=True)
+        self.focus()
+        self.x("key", "ctrl+comma")
+        web.wait('[data-testid="settings-content"]')
+        web.click(web.wait(xpath="//button[@role='tab'][normalize-space()='外观']"))
+        web.wait('[data-testid="theme-grid"]')
+        self.shot("settings-appearance-1280-glass")
+        self.x("key", "Escape")
+        web.gone('[data-testid="settings-content"]')
+        self.settings(theme="light", follow_system_theme=False)
+
         # Touch ID (the debug build's stand-in check, which always passes): while it is off, the
         # unlock screen says where to turn it on; there one switch turns it and "remember on this
         # device" on; then the unlock screen's button opens the vault, the user's own lock waits for
@@ -528,6 +569,11 @@ class Smoke:
         self.nav("验证码")
         self.page("codes")
         self.shot("codes-long-1280-light")
+        self.settings(codes_view="grid")
+        until("the cards", lambda: web.find_all('[data-testid="entry-tile"]'))
+        self.shot("codes-long-cards-1280-light")
+        self.settings(codes_view="list")
+        until("the list", lambda: not web.find_all('[data-testid="entry-tile"]'))
         many = "\n".join(f"otpauth://totp/Service%20{i:03d}:user{i}%40example.com?secret={base64.b32encode(hashlib.sha1(str(i).encode()).digest()[:10]).decode()}" for i in range(200))
         web.invoke({"command": "import_text", "text": many})
         web.invoke({"command": "import_commit"})

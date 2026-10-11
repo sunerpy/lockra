@@ -91,7 +91,8 @@ describe("Sidebar", () => {
     const props = { activeId: "home", onNavigate: vi.fn(), groups: [] };
     const { rerender } = render(<Sidebar {...props} className="extra" />);
     const nav = screen.getByRole("navigation", { name: "主导航" });
-    expect(nav).toHaveClass("pb-4", "extra", "border-r");
+    // The rule on its right (or 澄空's floating panel) comes from the theme's sidebar shell.
+    expect(nav).toHaveClass("pb-4", "extra", "sidebar-shell");
     expect(nav).not.toHaveClass("py-4");
     const brand = screen.getByTestId("sidebar-brand");
     expect(brand).toHaveAttribute("data-tauri-drag-region", "deep");
@@ -109,7 +110,7 @@ describe("Sidebar", () => {
     // Floating (the hover preview of a hidden sidebar): a shadow, no border.
     rerender(<Sidebar {...props} floating />);
     expect(screen.getByRole("navigation", { name: "主导航" })).toHaveClass("shadow-win");
-    expect(screen.getByRole("navigation", { name: "主导航" })).not.toHaveClass("border-r");
+    expect(screen.getByRole("navigation", { name: "主导航" })).not.toHaveClass("sidebar-shell");
   });
 });
 
@@ -153,7 +154,8 @@ describe("ThemeSwitch", () => {
     const onChange = vi.fn();
     const { rerender } = render(<ThemeSwitch value="light" onChange={onChange} />);
     expect(nextThemeChoice("light")).toBe("dark");
-    expect(nextThemeChoice("graphite")).toBe("system");
+    expect(nextThemeChoice("graphite")).toBe("glass");
+    expect(nextThemeChoice("paper_night")).toBe("system");
     expect(nextThemeChoice("system")).toBe("light");
     await user.click(screen.getByRole("button", { name: "切换到暗黑" }));
     expect(onChange).toHaveBeenLastCalledWith("dark");
@@ -165,15 +167,19 @@ describe("ThemeSwitch", () => {
       "暗黑",
       "暖纸",
       "石墨",
+      "澄空",
+      "澄空 · 夜",
+      "墨白",
+      "墨白 · 夜",
     ]);
     await user.selectOptions(menu, "warm");
     expect(onChange).toHaveBeenLastCalledWith("warm");
     rerender(<ThemeSwitch value="graphite" onChange={onChange} collapsed />);
     expect(screen.getByTestId("theme-switch")).toHaveClass("justify-center");
     expect(screen.queryByRole("combobox")).toBeNull();
-    expect(screen.getByRole("button", { name: "切换到跟随系统" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "切换到澄空" })).toHaveAttribute(
       "title",
-      "切换到跟随系统",
+      "切换到澄空",
     );
   });
 });
