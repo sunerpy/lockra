@@ -109,7 +109,7 @@ right of a row up or down.
 
 ## Cards
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.8.7.
 
 The two buttons beside the sort menu show the accounts as a list or as cards (**Code view**, also
 in **Settings › Appearance**). A card shows the account above its code in large type, and under the
@@ -125,7 +125,7 @@ shows **Copied** in place of its code for a moment.
 
 ## Themes
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.8.7.
 
 **Settings › Appearance** shows eight themes, the light ones above the dark ones. Besides **Light**,
 **Dark**, **Warm paper** and **Graphite**, **Clear sky** places frosted cards over a soft gradient
