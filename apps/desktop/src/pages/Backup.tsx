@@ -13,6 +13,7 @@ import {
   Banner,
   Button,
   Lamp,
+  PageHeader,
   Panel,
   PasswordField,
   Segmented,
@@ -32,7 +33,7 @@ export function Backup() {
   const { t } = useI18n();
   return (
     <div className="flex flex-col gap-4" data-testid="page-backup">
-      <p className="text-[13px] text-fg-muted">{t("backup.subtitle")}</p>
+      <PageHeader title={t("shell.nav.backup")} subtitle={t("backup.subtitle")} />
       <ManualBackup />
       <AutoBackup />
       <RestoreBackup />

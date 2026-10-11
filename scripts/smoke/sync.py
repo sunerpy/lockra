@@ -203,7 +203,7 @@ class Phase:
         return sorted(e["issuer"] for e in self.state()["entries"])
 
     def open_sync(self):
-        self.web.click(self.web.wait(xpath="//nav//button[normalize-space()='设置']"))
+        self.web.click(self.web.wait(css='[data-testid="sidebar-settings"]'))
         self.web.click(self.web.wait(xpath="//*[@role='tab'][normalize-space()='同步']"))
         self.web.wait(css="[data-testid=settings-content][data-section=sync]")
 

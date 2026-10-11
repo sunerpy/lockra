@@ -6,6 +6,8 @@ export interface CountdownRingProps {
   validUntilMs: number;
   nowMs: number;
   size?: number;
+  /** The ring's width in px (2.5 by default; the hero card's large ring is wider). */
+  stroke?: number;
   /** No transition (Settings › Appearance › reduce motion). */
   still?: boolean;
   className?: string;
@@ -32,12 +34,12 @@ export function CountdownRing({
   validUntilMs,
   nowMs,
   size = 20,
+  stroke = 2.5,
   still = false,
   className,
 }: CountdownRingProps) {
   const t = useT();
   const { fraction, seconds } = remaining(validFromMs, validUntilMs, nowMs);
-  const stroke = 2.5;
   const r = (size - stroke) / 2;
   const circumference = 2 * Math.PI * r;
   const warning = seconds <= WARNING_SECONDS;

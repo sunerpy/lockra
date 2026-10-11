@@ -135,7 +135,10 @@ describe("EntryDialogs", () => {
       command: "entry_update",
       patch: { color: "purple", mark: "GH" },
     });
-    const avatar = screen.getAllByTestId("entry-avatar")[0];
+    // GitHub's row, the first of the list (the card above it shows the account copied last).
+    const avatar = within(screen.getAllByTestId("entry-row")[0] as HTMLElement).getByTestId(
+      "entry-avatar",
+    );
     expect(avatar).toHaveAttribute("data-tag", "purple");
     expect(avatar).toHaveTextContent("GH");
   });

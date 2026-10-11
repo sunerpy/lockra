@@ -301,8 +301,9 @@
   --row-pill-fg: var(--accent-text);
   --logo-body: #339cff;
   --logo-dots: #ffffff;
-  --titlebar-fill: var(--surface);
-  --titlebar-rule: var(--border);
+  /* The filter chip that is on (the codes page): the accent's tint, white glass or ink. */
+  --chip-on-bg: var(--accent-soft);
+  --chip-on-fg: var(--accent-text);
 }
 
 /* 澄空 · 极光玻璃 */
@@ -401,8 +402,9 @@
   --row-pill-fg: var(--accent-text);
   --logo-body: #3d7bff;
   --logo-dots: #ffffff;
-  --titlebar-fill: transparent;
-  --titlebar-rule: transparent;
+  /* The filter chip that is on (the codes page): the accent's tint, white glass or ink. */
+  --chip-on-bg: var(--nav-active);
+  --chip-on-fg: var(--fg);
 }
 
 /* 澄空 · 夜 */
@@ -501,8 +503,9 @@
   --row-pill-fg: var(--accent-text);
   --logo-body: #6e9bff;
   --logo-dots: #ffffff;
-  --titlebar-fill: transparent;
-  --titlebar-rule: transparent;
+  /* The filter chip that is on (the codes page): the accent's tint, white glass or ink. */
+  --chip-on-bg: var(--nav-active);
+  --chip-on-fg: var(--fg);
 }
 
 /* 墨白 · 纸上墨迹 */
@@ -597,8 +600,9 @@
   --row-pill-fg: var(--surface);
   --logo-body: #2142ff;
   --logo-dots: #ffffff;
-  --titlebar-fill: var(--canvas);
-  --titlebar-rule: var(--border);
+  /* The filter chip that is on (the codes page): the accent's tint, white glass or ink. */
+  --chip-on-bg: var(--primary);
+  --chip-on-fg: var(--primary-fg);
 }
 
 /* 墨白 · 夜 */
@@ -693,8 +697,9 @@
   --row-pill-fg: var(--surface);
   --logo-body: #8fa3ff;
   --logo-dots: #ffffff;
-  --titlebar-fill: var(--canvas);
-  --titlebar-rule: var(--border);
+  /* The filter chip that is on (the codes page): the accent's tint, white glass or ink. */
+  --chip-on-bg: var(--primary);
+  --chip-on-fg: var(--primary-fg);
 }
 
 /* 强调色（设置 › 外观，本机）：ChatGPT / Codex 的强调色，浅色主题取浅档、深色主题取深档；
@@ -1236,6 +1241,8 @@
   /* Menus, popovers, dialogs and toasts: nearly opaque even where the surfaces are glass. */
   --color-overlay: var(--overlay-fill);
   --color-nav-active: var(--nav-active);
+  --color-chip-on: var(--chip-on-bg);
+  --color-chip-on-fg: var(--chip-on-fg);
   --color-track: var(--track);
   --color-keycap-bg: var(--keycap-bg);
   --color-keycap-border: var(--keycap-border);
@@ -1388,7 +1395,6 @@
   -webkit-backdrop-filter: var(--surface-blur);
   backdrop-filter: var(--surface-blur);
 }
-/* The title bar: a surface strip with a rule, the canvas (墨白) or nothing at all (澄空). */
 /* A card just copied (验证码视图 › 卡片) in its theme's colours: 墨白 turns it to ink, the others keep
  * the card and say it in the pill. The tile-copied-* values are resolved on the theme's element, so
  * these never refer to themselves. */
@@ -1400,10 +1406,6 @@
   --fg-subtle: var(--tile-copied-muted);
   --accent-text: var(--tile-copied-accent);
   --accent-text-hover: var(--tile-copied-accent);
-}
-@utility titlebar {
-  background-color: var(--titlebar-fill);
-  border-bottom: 1px solid var(--titlebar-rule);
 }
 /* Overlays frost what lies under them where the theme has glass. */
 @utility overlay-frost {

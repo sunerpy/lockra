@@ -7,8 +7,10 @@ export interface OtpCodeProps {
   masked?: boolean;
   /** The last seconds of the window. */
   tone?: "normal" | "warning" | "muted";
-  /** A step of the scale, or pixels for a card's large code (drawn at weight 500, not 600). */
+  /** A step of the scale, or pixels for a card's large code. */
   size?: "sm" | "md" | "lg" | number;
+  /** 600 by default; a card's pixel-sized code is drawn at 500 unless it says otherwise. */
+  weight?: "medium" | "semibold";
   className?: string;
 }
 
@@ -21,8 +23,10 @@ export function OtpCode({
   masked = false,
   tone = "normal",
   size = "md",
+  weight,
   className,
 }: OtpCodeProps) {
+  const heavy = (weight ?? (typeof size === "number" ? "medium" : "semibold")) === "semibold";
   const shown = masked ? groupCode("•".repeat(code.length)) : groupCode(code);
   return (
     <span
@@ -32,7 +36,8 @@ export function OtpCode({
       style={typeof size === "number" ? { fontSize: size } : undefined}
       className={cx(
         "mono tracking-[0.04em] whitespace-nowrap tabular-nums",
-        typeof size === "number" ? "font-medium" : cx("font-semibold", SIZE[size]),
+        heavy ? "font-semibold" : "font-medium",
+        typeof size === "number" ? undefined : SIZE[size],
         TONE[tone],
         className,
       )}>

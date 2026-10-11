@@ -11,13 +11,17 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
   error?: string;
   label?: string;
   help?: string;
-  size?: "sm" | "md" | "lg";
+  /** `xl` is the codes page's search (boards A1, A2). */
+  size?: "sm" | "md" | "lg" | "xl";
+  /** A round-ended field on the theme's card surface: the codes page's search. */
+  pill?: boolean;
 }
 
 const SIZE_CLASS = {
   sm: "h-7 text-[12px]",
   md: "h-8 text-[13px]",
   lg: "h-11 text-[15px]",
+  xl: "h-13.5 text-[14px]",
 } as const;
 
 export function Input({
@@ -28,6 +32,7 @@ export function Input({
   label,
   help,
   size = "md",
+  pill = false,
   className,
   id,
   ...rest
@@ -44,13 +49,20 @@ export function Input({
       )}
       <div
         className={cx(
-          "flex items-center gap-2 rounded-6 bg-surface px-2.5 hairline transition-colors",
+          "flex items-center gap-2 bg-surface hairline transition-colors",
+          pill ? "rounded-pill px-4 panel" : "rounded-6 px-2.5",
           "focus-within:border-fg focus-within:shadow-[0_0_0_1px_var(--fg)]",
           error &&
             "border-danger focus-within:border-danger focus-within:shadow-[0_0_0_1px_var(--danger)]",
           SIZE_CLASS[size],
         )}>
-        {icon && <Icon name={icon} size={14} className="shrink-0 text-fg-subtle" />}
+        {icon && (
+          <Icon
+            name={icon}
+            size={size === "xl" ? 18 : 14}
+            className={cx("shrink-0", size === "xl" ? "text-fg-muted" : "text-fg-subtle")}
+          />
+        )}
         <input
           id={inputId}
           aria-invalid={error ? true : undefined}

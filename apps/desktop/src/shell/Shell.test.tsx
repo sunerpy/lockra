@@ -2,11 +2,11 @@ import { act, screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../test/render";
 
 describe("Shell", () => {
-  it("navigates with the sidebar and titles the page", async () => {
+  it("navigates with the sidebar, and each page titles itself (board A1)", async () => {
     const { user } = renderApp();
     await ready();
-    const banner = screen.getByRole("banner");
-    expect(within(banner).getByText("验证码")).toBeInTheDocument();
+    const title = () => screen.getByRole("heading", { level: 1 });
+    expect(title()).toHaveTextContent("验证码");
     for (const [nav, page] of [
       ["导入", "page-import"],
       ["导出", "page-export"],
@@ -19,8 +19,38 @@ describe("Shell", () => {
         }),
       );
       expect(await screen.findByTestId(page)).toBeInTheDocument();
-      expect(within(banner).getByText(nav)).toBeInTheDocument();
+      expect(title()).toHaveTextContent(nav);
     }
+  });
+
+  it("keeps only the drag strip and the window's own things in the title bar", async () => {
+    renderApp();
+    await ready();
+    const banner = screen.getByRole("banner");
+    expect(within(banner).queryByRole("heading")).toBeNull();
+    expect(screen.queryByTestId("title-bar-readout")).toBeNull();
+    expect(screen.queryByTestId("title-bar-search")).toBeNull();
+    // The shortcut footer is gone; the keys live in the buttons' tooltips.
+    expect(screen.queryByRole("contentinfo")).toBeNull();
+    expect(screen.getByTestId("sidebar-lock")).toHaveAttribute("title", "锁定 · Ctrl L");
+    expect(screen.getByTestId("sidebar-settings")).toHaveAttribute("title", "设置 · Ctrl ,");
+  });
+
+  it("opens Settings › 同步 from the sidebar's 同步", async () => {
+    const { user } = renderApp();
+    await ready();
+    await user.click(
+      within(screen.getByRole("navigation", { name: "主导航" })).getByRole("button", {
+        name: "同步",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "设置" });
+    expect(within(dialog).getByRole("tab", { name: "同步" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    // Still on the codes: 同步 is not a page.
+    expect(screen.getByTestId("page-codes")).toBeInTheDocument();
   });
 
   it("regression: the shell's row cannot grow past the window, so only the page body scrolls", async () => {
@@ -32,12 +62,17 @@ describe("Shell", () => {
     expect(screen.getByTestId("page-body")).toHaveClass("min-h-0", "overflow-y-auto");
   });
 
-  it("reads out the vault state and the auto-lock in the title bar", async () => {
-    renderApp();
+  it("reads out the vault state, the auto-lock and the sync on the sidebar's status card", async () => {
+    const { user } = renderApp();
     await ready();
-    const banner = screen.getByRole("banner");
-    expect(within(banner).getByText("已解锁 · 8 个账号")).toBeInTheDocument();
-    expect(within(banner).getByText("5 分钟后自动锁定")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-status")).toHaveTextContent(
+      "已解锁5 分钟后自动锁定未开启同步",
+    );
+    // The icon rail keeps the buttons and drops the card.
+    await user.click(screen.getByRole("button", { name: "收起为图标栏" }));
+    expect(screen.queryByTestId("sidebar-status")).toBeNull();
+    expect(screen.getByTestId("sidebar-buttons")).toHaveClass("flex-col");
+    expect(screen.getByTestId("sidebar-lock")).toBeInTheDocument();
   });
 
   it("copies an account's code from the command palette", async () => {
@@ -127,14 +162,5 @@ describe("Shell", () => {
     expect(
       within(screen.getByRole("navigation", { name: "主导航" })).getByText("3"),
     ).toBeInTheDocument();
-  });
-
-  it("shows the last backup in the footer", async () => {
-    const { backend } = renderApp();
-    await ready();
-    await act(async () => {
-      await backend.saveBackup();
-    });
-    expect(screen.getByRole("contentinfo")).toHaveTextContent("上次备份 刚刚");
   });
 });

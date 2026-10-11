@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cx } from "../cx";
+import { Icon, type IconName } from "./Icon";
 import { Keycap } from "./Keycap";
 
 export interface ToastAction {
@@ -15,6 +16,8 @@ export interface ToastItem {
   /** Milliseconds before auto-dismiss (2 000 / 3 000 / 5 000 by tone). */
   duration: number;
   tone?: "neutral" | "danger";
+  /** Before the message (a check for a copy). */
+  icon?: IconName;
 }
 
 export interface ToastProps {
@@ -22,20 +25,25 @@ export interface ToastProps {
   onDismiss: (id: string) => void;
 }
 
-/** 320×44 card with a 2 px drain bar shrinking over the undo window. */
+/** A 48 px pill in the theme's ink (danger red for a failure), its text in the surface colour, with
+ *  a 2 px drain bar shrinking over the undo window (board A1: dark on the light themes, light on
+ *  the dark ones). */
 export function Toast({ toast, onDismiss }: ToastProps) {
+  const danger = toast.tone === "danger";
   return (
     <div
-      role={toast.tone === "danger" ? "alert" : "status"}
+      role={danger ? "alert" : "status"}
       data-tone={toast.tone ?? "neutral"}
-      className="relative flex h-11 w-80 items-center justify-between gap-3 overflow-hidden rounded-10 bg-overlay px-3.5 text-[13px] hairline shadow-pop overlay-frost">
-      <span className={cx("truncate", toast.tone === "danger" ? "text-danger" : "text-fg")}>
-        {toast.message}
-      </span>
+      className={cx(
+        "relative flex h-12 max-w-[min(560px,calc(100vw-48px))] min-w-80 items-center gap-3 overflow-hidden rounded-pill px-5 text-[13px] text-surface-solid shadow-pop",
+        danger ? "bg-danger" : "bg-fg",
+      )}>
+      {toast.icon && <Icon name={toast.icon} size={16} className="shrink-0" />}
+      <span className="min-w-0 flex-1 truncate">{toast.message}</span>
       {toast.action && (
         <button
           type="button"
-          className="flex shrink-0 items-center gap-1.5 font-semibold text-fg hover:underline"
+          className="flex shrink-0 items-center gap-1.5 font-semibold hover:underline"
           onClick={() => {
             toast.action?.onClick();
             onDismiss(toast.id);
@@ -45,7 +53,7 @@ export function Toast({ toast, onDismiss }: ToastProps) {
         </button>
       )}
       <span
-        className="absolute bottom-0 left-0 h-0.5 bg-primary"
+        className="absolute bottom-0 left-0 h-0.5 bg-[var(--surface)] opacity-40"
         style={{ animation: `lk-drain ${toast.duration}ms linear forwards` }}
       />
     </div>
@@ -57,12 +65,15 @@ export interface ToastViewportProps {
   onDismiss: (id: string) => void;
 }
 
-/** Bottom-right stack, newest at the bottom, max 3 visible. */
+/** Bottom-centre stack, newest at the bottom, max 3 visible; `--toast-bottom` lifts it (above the
+ *  phone's dock). */
 export function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
   const visible = toasts.slice(-3);
   if (visible.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed right-6 bottom-6 z-40 flex flex-col items-end gap-2">
+    <div
+      data-testid="toast-viewport"
+      className="pointer-events-none fixed bottom-[var(--toast-bottom,1.5rem)] left-1/2 z-40 flex -translate-x-1/2 flex-col items-center gap-2">
       {visible.map((t) => (
         <div key={t.id} className="pointer-events-auto">
           <Toast toast={t} onDismiss={onDismiss} />

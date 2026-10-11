@@ -16,6 +16,7 @@ import { Keycap, Keycaps, splitKeys } from "./Keycap";
 import { Lamp } from "./Lamp";
 import { LampText } from "./LampText";
 import { Panel } from "./Panel";
+import { PageHeader } from "./PageHeader";
 import { Segmented } from "./Segmented";
 import { Select } from "./Select";
 import { StatusRow } from "./StatusRow";
@@ -422,5 +423,22 @@ describe("Card / Panel / Eyebrow / StatusRow / EmptyState / Banner", () => {
     await user.click(screen.getByRole("button", { name: "关闭" }));
     expect(onDismiss).toHaveBeenCalled();
     expect(screen.getAllByRole("status")).toHaveLength(4);
+  });
+});
+
+describe("PageHeader", () => {
+  it("names the page in its own heading, with its facts and actions", () => {
+    const { rerender } = render(
+      <PageHeader
+        title="验证码"
+        subtitle="7 个账号 · 3 个分组"
+        actions={<button type="button">添加账号</button>}
+      />,
+    );
+    expect(screen.getByRole("heading", { level: 1, name: "验证码" })).toHaveClass("text-[26px]");
+    expect(screen.getByTestId("page-subtitle")).toHaveTextContent("7 个账号 · 3 个分组");
+    expect(screen.getByRole("button", { name: "添加账号" })).toBeInTheDocument();
+    rerender(<PageHeader title="导入" />);
+    expect(screen.queryByTestId("page-subtitle")).toBeNull();
   });
 });

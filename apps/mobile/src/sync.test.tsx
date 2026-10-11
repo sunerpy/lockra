@@ -21,7 +21,7 @@ afterEach(async () => {
 type User = ReturnType<typeof renderApp>["user"];
 
 async function openSync(user: User) {
-  await user.click(screen.getByTestId("codes-settings"));
+  await user.click(screen.getByTestId("dock-settings"));
   await user.click(await screen.findByTestId("settings-sync"));
   return screen.findByTestId("page-sync");
 }
@@ -51,7 +51,7 @@ describe("sync on the phone", () => {
   it("sets up a space and reminds of its recovery key, which its own page shows", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     const row = await screen.findByTestId("settings-sync");
     expect(row).toHaveTextContent("设置同步");
     expect(row).toHaveTextContent("经 Lockra 中继或你自己的存储，与其他设备同步");
@@ -287,7 +287,7 @@ describe("sync on the phone", () => {
     const backend = inSpace();
     const { user } = renderApp({ backend });
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     const row = await screen.findByTestId("settings-sync");
     expect(row).toHaveTextContent("已同步");
     expect(row).toHaveTextContent("S3 兼容 · s3.eu-central-1.amazonaws.com / my-lockra / lockra");

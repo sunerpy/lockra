@@ -17,8 +17,8 @@ export interface SidebarGroup {
   items: SidebarItem[];
 }
 
-/** Width of the expanded sidebar and of the collapsed icon rail, in px. */
-export const SIDEBAR_WIDTH = 224;
+/** Width of the expanded sidebar (board A1) and of the collapsed icon rail, in px. */
+export const SIDEBAR_WIDTH = 232;
 export const SIDEBAR_RAIL_WIDTH = 56;
 
 /** macOS draws its native traffic lights over the window's top-left corner (`titleBarStyle:
@@ -33,17 +33,20 @@ export const TRAFFIC_LIGHTS_BRAND_INSET = "pl-[calc(80px_-_0.75rem)]";
  *  narrower than they are, and its border cut through the green button. */
 export const SIDEBAR_RAIL_WIDTH_TRAFFIC_LIGHTS = 76;
 
-/** One 36 px sidebar row, shared by the nav items, the footer entries and the theme switch so
- *  their glyphs and labels line up (user feedback 2026-09-28: the theme row's glyph sat 2 px and
- *  its name 10 px right of the others, with two separate hover patches). */
+/** One sidebar row, 40 px at the default 字号 (board A1 draws 44; 40 keeps the footer on a 600 px
+ *  window), shared by the nav items, the footer entries and the theme switch so their glyphs and
+ *  labels line up (user feedback 2026-09-28: the theme row's glyph sat 2 px and its name 10 px
+ *  right of the others, with two separate hover patches). */
 export const SIDEBAR_ROW_CLASS =
-  "flex h-9 w-full items-center rounded-6 text-[13px] transition-colors";
-/** An expanded row: the glyph 8 px from the edge, the label 10 px after the 16 px glyph. */
-export const SIDEBAR_ROW_EXPANDED_CLASS = "gap-2.5 px-2";
-/** A control that covers exactly the glyph's slot of an expanded row: the row's `px-2` inset
- *  (0.5 rem), the 16 px glyph and the `gap-2.5` (0.625 rem), so whatever follows it starts where a
- *  row's label does. Spacing is in rem (it follows 设置 › 外观 › 字号), the glyph in px. */
-export const SIDEBAR_GLYPH_SLOT_CLASS = "w-[calc(1.125rem_+_16px)] pl-2";
+  "flex h-11.5 w-full items-center rounded-6 text-[14px] font-medium transition-colors";
+/** An expanded row: the glyph 0.875 rem from the edge, the label 0.625 rem after the glyph. */
+export const SIDEBAR_ROW_EXPANDED_CLASS = "gap-2.5 px-3.5";
+/** A control that covers exactly the glyph's slot of an expanded row: the row's `px-3.5` inset
+ *  (0.875 rem), the 18 px glyph and the `gap-2.5` (0.625 rem), so whatever follows it starts where
+ *  a row's label does. Spacing is in rem (it follows 设置 › 外观 › 字号), the glyph in px. */
+export const SIDEBAR_GLYPH_SLOT_CLASS = "w-[calc(1.5rem_+_18px)] pl-3.5";
+/** The sidebar's glyphs, in px. */
+export const SIDEBAR_GLYPH_SIZE = 18;
 
 export interface SidebarProps {
   groups: readonly SidebarGroup[];
@@ -51,7 +54,7 @@ export interface SidebarProps {
   onNavigate: (id: string) => void;
   /** Items greyed out (onboarding keeps only the home item live). */
   disabledIds?: readonly string[];
-  /** Brand lamp: green when the core is ready. */
+  /** A lamp after the brand (green when the core is ready); none when the footer says it. */
   statusTone?: LampTone;
   /** The 56 px icon rail: glyphs only; every entry keeps its label as its name and tooltip. */
   collapsed?: boolean;
@@ -87,8 +90,8 @@ export interface SidebarEntryProps {
   "data-testid"?: string;
 }
 
-/** One 36 px sidebar row: a glyph and, while expanded, the label. Collapsed, the label stays as
- *  the accessible name and the tooltip, since nothing else on screen says what the glyph is. */
+/** One sidebar row: a glyph and, while expanded, the label. Collapsed, the label stays as the
+ *  accessible name and the tooltip, since nothing else on screen says what the glyph is. */
 export function SidebarEntry({
   icon,
   label,
@@ -113,17 +116,24 @@ export function SidebarEntry({
       className={cx(
         SIDEBAR_ROW_CLASS,
         collapsed ? "justify-center" : SIDEBAR_ROW_EXPANDED_CLASS,
+        // The current page is raised: the theme's card shadow (澄空) on the active surface.
         current
-          ? "bg-nav-active font-medium text-fg"
+          ? "bg-nav-active font-medium text-fg shadow-[var(--card-shadow)]"
           : "text-fg-muted hover:bg-nav-active hover:text-fg",
         disabled && "cursor-not-allowed opacity-40 hover:bg-transparent hover:text-fg-muted",
       )}>
-      <Icon name={icon} size={16} className={current ? "text-fg" : "text-fg-subtle"} />
+      <Icon
+        name={icon}
+        size={SIDEBAR_GLYPH_SIZE}
+        className={current ? "text-accent-text" : "text-fg-subtle"}
+      />
       {!collapsed && (
         <>
           <span className="flex-1 truncate text-left">{label}</span>
           {trailing !== undefined && (
-            <span className="mono text-[11px] text-fg-subtle">{trailing}</span>
+            <span className="inline-flex h-5 min-w-7 items-center justify-center rounded-pill bg-accent-soft px-2 text-[12px] font-semibold text-accent-text tabular-nums">
+              {trailing}
+            </span>
           )}
         </>
       )}
@@ -132,14 +142,14 @@ export function SidebarEntry({
 }
 
 /** The nav rail: a 40 px brand row (part of the window drag strip) with the layout controls,
- *  the grouped items (36 px) and the footer entries pinned to the bottom. 224 px wide, or the
+ *  the grouped items and the footer pinned to the bottom. {@link SIDEBAR_WIDTH} px wide, or the
  *  56 px icon rail when `collapsed`. */
 export function Sidebar({
   groups,
   activeId,
   onNavigate,
   disabledIds = [],
-  statusTone = "ok",
+  statusTone,
   collapsed = false,
   controls,
   footer,
@@ -182,11 +192,13 @@ export function Sidebar({
               : "px-2",
           collapsed && trafficLights && "invisible",
         )}>
-        {!trafficLights && <Logo size={24} className="shrink-0" />}
+        {!trafficLights && <Logo size={28} className="shrink-0" />}
         {!collapsed && (
           <>
-            <span className="text-[15px] font-semibold text-fg">{brand}</span>
-            <Lamp tone={statusTone} size={6} label={t("ui.sidebar.coreStatus")} />
+            <span className="text-[17px] font-semibold text-fg">{brand}</span>
+            {statusTone !== undefined && (
+              <Lamp tone={statusTone} size={6} label={t("ui.sidebar.coreStatus")} />
+            )}
             {controls !== undefined && (
               <div
                 role="group"
@@ -215,7 +227,7 @@ export function Sidebar({
             {collapsed ? (
               <div aria-hidden className="mx-2 mb-1 h-px bg-border first:hidden" />
             ) : (
-              <div className="mb-1 px-2 text-[11px] text-fg-subtle">{g.title}</div>
+              <div className="mb-1 px-2 text-[11px] font-medium text-fg-subtle">{g.title}</div>
             )}
             <ul className="flex flex-col gap-0.5">
               {g.items.map((item) => (
@@ -242,10 +254,97 @@ export function Sidebar({
         ))}
       </div>
       {footer !== undefined && (
-        <div data-testid="sidebar-footer" className="mt-4 flex flex-col gap-0.5">
+        <div data-testid="sidebar-footer" className="mt-4 flex flex-col gap-2">
           {footer}
         </div>
       )}
     </nav>
+  );
+}
+
+export interface SidebarStatusProps {
+  /** The first line, after the lamp: 已解锁. */
+  title: string;
+  lamp: LampTone;
+  /** The facts under it: when the vault locks, how sync stands. */
+  lines: readonly { icon?: IconName; text: string }[];
+}
+
+/** The sidebar's status card above its buttons (board A1): the lamp and the vault's state, then a
+ *  line or two of facts. Only in the expanded sidebar. */
+export function SidebarStatus({ title, lamp, lines }: SidebarStatusProps) {
+  return (
+    <div
+      data-testid="sidebar-status"
+      className="flex flex-col gap-2 rounded-10 bg-surface px-3.5 py-3 text-[12px] text-fg-muted hairline panel">
+      <span className="flex items-center gap-2 text-[13px] font-medium text-fg">
+        <Lamp tone={lamp} size={8} />
+        {title}
+      </span>
+      {lines.map((line) => (
+        <span key={line.text} className="flex min-w-0 items-center gap-2">
+          {line.icon && <Icon name={line.icon} size={14} className="shrink-0 text-fg-subtle" />}
+          <span className="truncate">{line.text}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export interface SidebarButtonProps {
+  icon: IconName;
+  /** The name and the tooltip: the glyph alone says nothing. */
+  label: string;
+  onClick: () => void;
+  /** It opens a dialog (settings). */
+  opensDialog?: boolean;
+  /** Its key, added to the tooltip (the shortcut footer is gone). */
+  shortcut?: string;
+  "data-testid"?: string;
+}
+
+/** One of the square buttons at the foot of the sidebar (board A1: lock, theme, settings), side by
+ *  side in the expanded sidebar and stacked in the icon rail. */
+export function SidebarButton({
+  icon,
+  label,
+  onClick,
+  opensDialog = false,
+  shortcut,
+  "data-testid": testId,
+}: SidebarButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={shortcut === undefined ? label : `${label} · ${shortcut}`}
+      aria-haspopup={opensDialog ? "dialog" : undefined}
+      onClick={onClick}
+      data-testid={testId}
+      className={SIDEBAR_BUTTON_CLASS}>
+      <Icon name={icon} size={SIDEBAR_GLYPH_SIZE} />
+    </button>
+  );
+}
+
+/** The square footer button's box, shared with the theme switch's button form. */
+export const SIDEBAR_BUTTON_CLASS =
+  "inline-flex h-12 min-w-0 flex-1 items-center justify-center rounded-6 bg-surface text-fg-muted outline-none hairline panel transition-colors hover:text-fg focus-visible:text-fg";
+
+/** The footer's buttons: in a row while expanded, stacked in the rail. */
+export function SidebarButtons({
+  collapsed = false,
+  children,
+}: {
+  collapsed?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      role="group"
+      data-testid="sidebar-buttons"
+      className={cx("flex gap-2", collapsed ? "flex-col" : "flex-row")}>
+      {children}
+    </div>
   );
 }

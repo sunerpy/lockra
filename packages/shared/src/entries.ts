@@ -63,18 +63,43 @@ export function sortEntries(
   );
 }
 
-/** The accounts whose issuer, account or group contains `query`, in `group` (all when empty). */
+/** The codes page's chips beside a group's name: the pinned accounts, and those in no group. A
+ *  group name cannot start with a control character, so neither can be one. */
+export const FAVORITES = "\u0001favorites";
+export const UNGROUPED = "\u0001ungrouped";
+
+/** The accounts whose issuer, account or group contains `query`, in `group` (all when empty; the
+ *  pinned ones for {@link FAVORITES}, those in no group for {@link UNGROUPED}). */
 export function filterEntries(
   entries: readonly EntryView[],
   query: string,
   group: string,
 ): EntryView[] {
   const q = query.trim().toLocaleLowerCase();
+  const inGroup = (e: EntryView) =>
+    group === ALL_GROUPS ||
+    (group === FAVORITES
+      ? e.favorite
+      : group === UNGROUPED
+        ? (e.group ?? "") === ""
+        : e.group === group);
   return entries.filter(
     (e) =>
-      (group === ALL_GROUPS || e.group === group) &&
+      inGroup(e) &&
       (q === "" || `${e.issuer}\n${e.account}\n${e.group ?? ""}`.toLocaleLowerCase().includes(q)),
   );
+}
+
+/** The account copied last (the codes page's 「最近使用」), or none while nothing was copied. */
+export function recentEntry(entries: readonly EntryView[]): EntryView | undefined {
+  let best: EntryView | undefined;
+  for (const e of entries)
+    if (
+      e.last_used_at_ms !== null &&
+      (best === undefined || e.last_used_at_ms > (best.last_used_at_ms ?? 0))
+    )
+      best = e;
+  return best;
 }
 
 /** One section of the code list: a group's accounts, or those in no group (`key` ""). */

@@ -1,12 +1,12 @@
 import { LockraError } from "@lockra/shared";
-import { MockBackend } from "@lockra/shared/mock";
+import { MockBackend, mockEntry } from "@lockra/shared/mock";
 import { act, renderHook, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { BackendProvider } from "../backend/BackendProvider";
 import { ToastViewport, useToasts } from "../components/Toast";
 import { I18nProvider } from "../i18n/I18nProvider";
 import { useDispatch, useGuarded, useSubmit } from "./dispatch";
-import { ToasterProvider, useToaster } from "./toaster";
+import { NoticeBridge, ToasterProvider, useToaster } from "./toaster";
 
 /** The providers a page has, with the toasts on screen. */
 function Providers({ backend, children }: { backend: MockBackend; children: ReactNode }) {
@@ -93,6 +93,32 @@ describe("ToasterProvider", () => {
     const shown = [...screen.queryAllByRole("alert"), ...screen.queryAllByRole("status")];
     expect(shown).toHaveLength(2);
     expect(screen.getByRole("status")).toHaveTextContent("已复制");
+  });
+
+  it("turns the core's notices into toasts, naming the account a copy came from", async () => {
+    const backend = new MockBackend({
+      entries: [mockEntry("GitHub", "octocat")],
+      phase: "unlocked",
+    });
+    const { result } = renderHook(() => useDispatch(), {
+      wrapper: function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <Providers backend={backend}>
+            <NoticeBridge />
+            {children}
+          </Providers>
+        );
+      },
+    });
+    const { entries } = await backend.getState();
+    // The first state in, as in the app, where nothing can be copied before it.
+    await act(async () => {});
+    await act(async () => {
+      await result.current({ command: "entry_copy", id: entries[0]?.id ?? "" });
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "已复制 GitHub 的验证码 · 30 秒后清空剪贴板",
+    );
   });
 
   it("is required by its hook", () => {

@@ -30,6 +30,23 @@ describe("Toast", () => {
     expect(screen.getByRole("alert")).toHaveAttribute("data-tone", "danger");
   });
 
+  it("is a dark pill at the bottom centre, with its icon (board A1)", () => {
+    render(
+      <ToastViewport
+        toasts={[{ id: "1", message: "已复制 GitHub 的验证码", duration: 1000, icon: "check" }]}
+        onDismiss={vi.fn()}
+      />,
+    );
+    const toast = screen.getByRole("status");
+    // Inverted: the theme's ink as the fill, its surface as the text.
+    expect(toast).toHaveClass("rounded-pill", "bg-fg", "text-surface-solid");
+    expect(toast.querySelector('[data-icon="check"]')).not.toBeNull();
+    const viewport = toast.closest("[data-testid=toast-viewport]");
+    expect(viewport).toHaveClass("left-1/2", "-translate-x-1/2", "items-center");
+    // Above the phone's dock where the page says so.
+    expect(viewport).toHaveClass("bottom-[var(--toast-bottom,1.5rem)]");
+  });
+
   it("viewport shows the newest three and nothing when empty", () => {
     const { container, rerender } = render(<ToastViewport toasts={[]} onDismiss={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();

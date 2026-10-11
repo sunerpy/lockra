@@ -14,6 +14,7 @@ import {
   CardGrid,
   EntryAvatar,
   OptionCard,
+  PageHeader,
   Panel,
   PasswordField,
   Toggle,
@@ -83,7 +84,7 @@ export function Export() {
   ];
   return (
     <div className="flex flex-col gap-4" data-testid="page-export">
-      <p className="text-[13px] text-fg-muted">{t("export.subtitle")}</p>
+      <PageHeader title={t("shell.nav.export")} subtitle={t("export.subtitle")} />
       <CardGrid min={240} role="listbox" aria-label={t("export.target")}>
         {ways.map((w) => (
           <OptionCard

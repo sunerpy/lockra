@@ -11,6 +11,7 @@ import type {
   OtpKind,
   Origin,
   RejectReason,
+  SyncSpaceView,
   SyncStatus,
   ThemeId,
   UpdateStatus,
@@ -77,10 +78,15 @@ export function parametersText(
   return `${algorithm.toUpperCase()} · ${digits} · ${timing}`;
 }
 
-/** What a notice says, with the error inside a backup failure translated too. */
-export function noticeText(t: TFunction, notice: Notice): string {
+/** What a notice says, with the error inside a backup failure translated too. A copy names the
+ *  account when the caller knows it (`name`, the account's label). */
+export function noticeText(t: TFunction, notice: Notice, name?: string): string {
   switch (notice.type) {
     case "copied":
+      if (name !== undefined && name !== "")
+        return notice.clear_after_s === null
+          ? t("notice.copiedKeptName", { name })
+          : t("notice.copiedName", { name, s: notice.clear_after_s });
       return notice.clear_after_s === null
         ? t("notice.copiedKept")
         : t("notice.copied", { s: notice.clear_after_s });
@@ -159,6 +165,21 @@ export function relativeTime(t: TFunction, thenMs: number, nowMs: number): strin
   const hours = Math.floor(minutes / 60);
   if (hours < 48) return t("common.hoursAgo", { n: hours });
   return t("common.daysAgo", { n: Math.floor(hours / 24) });
+}
+
+/** The sync line of the sidebar's status card and of the codes page's vault card (board A1): off,
+ *  running, failed, or the devices of the space once it has synced. */
+export function syncSummary(t: TFunction, space: SyncSpaceView | null): string {
+  if (space === null) return t("codes.hero.syncOff");
+  switch (space.status.state) {
+    case "syncing":
+      return t("codes.hero.syncing");
+    case "failed":
+      return t("codes.hero.syncFailed");
+    case "idle":
+      if (space.last_sync_ms === null) return t("sync.status.idle");
+  }
+  return t("codes.hero.devices", { n: space.devices.length });
 }
 
 /** What a sync space's last run says, and the tone of the lamp beside it. */

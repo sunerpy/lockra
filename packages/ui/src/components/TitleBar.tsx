@@ -29,7 +29,9 @@ export interface TitleBarControls {
 }
 
 export interface TitleBarProps {
-  title: ReactNode;
+  /** The window's name. The unlocked app leaves the title to the page (its `PageHeader`, board
+   *  A1), so its bar is the drag strip, the update note and the window buttons only. */
+  title?: ReactNode;
   /** Compact inline readout after the title (engine model with its lamp, microphone short name):
    *  mono 11 px, subtle, ` · ` separated, truncated when narrow, hidden below `md`. At most
    *  `TITLE_BAR_READOUT_MAX` items are drawn. */
@@ -98,14 +100,17 @@ export function TitleBar({
       data-testid="title-bar"
       data-platform={platform}
       onPointerDown={onPointerDown}
-      className={cx("flex h-10 shrink-0 items-center titlebar select-none", className)}>
+      // No fill and no rule in any theme: the strip is the window's canvas (board A1).
+      className={cx("flex h-10 shrink-0 items-center select-none", className)}>
       <div
         className={cx(
           "flex min-w-0 flex-1 items-center gap-3 pr-6",
           trafficLights ? "pl-[80px]" : left !== undefined ? "pl-3" : "pl-6",
         )}>
         {left}
-        <h1 className="shrink-0 truncate text-[14px] font-semibold text-fg">{title}</h1>
+        {title !== undefined && (
+          <h1 className="shrink-0 truncate text-[14px] font-semibold text-fg">{title}</h1>
+        )}
         {shown.length > 0 && (
           <div
             data-testid="title-bar-readout"

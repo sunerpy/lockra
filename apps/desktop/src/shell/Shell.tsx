@@ -1,18 +1,18 @@
-import { relativeTime } from "@lockra/shared";
+import { syncSummary } from "@lockra/shared";
 import {
   CommandPalette,
   Icon,
   IconButton,
-  Keycaps,
   SIDEBAR_RAIL_WIDTH,
   SIDEBAR_WIDTH,
   Sidebar,
-  SidebarEntry,
+  SidebarButton,
+  SidebarButtons,
   type SidebarGroup,
+  SidebarStatus,
+  type SidebarStatusProps,
   ThemeSwitch,
   type ThemeChoice,
-  type ToolbarReadout,
-  cx,
   noteUserLock,
   useBackend,
   useClock,
@@ -106,7 +106,11 @@ function ShellLayout() {
     },
     {
       title: t("shell.group.data"),
-      items: [{ id: "backup", label: t("shell.nav.backup"), icon: "archive" }],
+      items: [
+        { id: "backup", label: t("shell.nav.backup"), icon: "archive" },
+        // Not a page: it opens Settings › 同步 (board A1 lists it with the data).
+        { id: "sync", label: t("shell.nav.sync"), icon: "cloud" },
+      ],
     },
   ];
   const themeChoice: ThemeChoice = state.settings.follow_system_theme
@@ -125,38 +129,39 @@ function ShellLayout() {
       return !c;
     });
   };
-  const readouts: ToolbarReadout[] = [
-    {
-      label: t("ui.sidebar.coreStatus"),
-      value: `${t("shell.status.unlocked")} · ${t("common.accounts", { n: state.entries.length })}`,
-      lamp: "ok",
-    },
-  ];
+  // The sidebar's status card (board A1): the vault, when it locks by itself, and the sync.
+  const statusLines: SidebarStatusProps["lines"][number][] = [];
   if (state.auto_lock_at_ms !== null) {
     const minutes = Math.max(1, Math.ceil((state.auto_lock_at_ms - now) / 60_000));
-    readouts.push({
-      label: t("settings.security.autoLock"),
-      value: t("codes.autoLockIn", { time: t("common.minutes", { n: minutes }) }),
+    statusLines.push({
+      text: t("codes.autoLockIn", { time: t("common.minutes", { n: minutes }) }),
     });
   }
-  const pageTitle = t(`shell.nav.${shell.page}`);
+  statusLines.push({ icon: "cloud", text: syncSummary(t, state.sync.space) });
+  const openSettings = () => shell.open({ type: "settings", section: "general" });
   const footer = (
     <>
-      <SidebarEntry
-        icon="lock"
-        label={t("shell.nav.lock")}
-        onClick={lock}
-        collapsed={collapsed}
-        data-testid="sidebar-lock"
-      />
-      <ThemeSwitch value={themeChoice} onChange={setTheme} collapsed={collapsed} />
-      <SidebarEntry
-        icon="settings"
-        label={t("shell.nav.settings")}
-        onClick={() => shell.open({ type: "settings", section: "general" })}
-        collapsed={collapsed}
-        opensDialog
-      />
+      {!collapsed && (
+        <SidebarStatus title={t("shell.status.unlocked")} lamp="ok" lines={statusLines} />
+      )}
+      <SidebarButtons collapsed={collapsed}>
+        <SidebarButton
+          icon="lock"
+          label={t("shell.nav.lock")}
+          shortcut="Ctrl L"
+          onClick={lock}
+          data-testid="sidebar-lock"
+        />
+        <ThemeSwitch value={themeChoice} onChange={setTheme} variant="button" />
+        <SidebarButton
+          icon="settings"
+          label={t("shell.nav.settings")}
+          shortcut="Ctrl ,"
+          opensDialog
+          onClick={openSettings}
+          data-testid="sidebar-settings"
+        />
+      </SidebarButtons>
     </>
   );
   return (
@@ -174,9 +179,9 @@ function ShellLayout() {
         groups={groups}
         activeId={shell.page}
         onNavigate={(id) => {
-          if (isPageId(id)) shell.navigate(id);
+          if (id === "sync") shell.open({ type: "settings", section: "sync" });
+          else if (isPageId(id)) shell.navigate(id);
         }}
-        statusTone="ok"
         collapsed={collapsed}
         brand={t("shell.product")}
         trafficLights={state.platform === "macos"}
@@ -189,53 +194,27 @@ function ShellLayout() {
         }
         footer={footer}
       />
+      {/* The title bar is the drag strip, the update note and the window buttons; each page
+          starts with its own header (board A1). */}
       <WindowFrame
-        title={pageTitle}
         platform={state.platform}
-        readouts={readouts}
-        onSearch={() => shell.setPaletteOpen(true)}
         right={<UpdateBadge onOpen={() => shell.setUpdateOpen(true)} />}>
-        <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto]">
-          <main className="relative min-h-0 overflow-y-auto" data-testid="page-body">
-            <div className="mx-auto w-full max-w-[1040px] px-6 py-5">
-              {shell.page === "codes" && <Codes />}
-              {shell.page === "import" && <Import dragging={dragging} />}
-              {shell.page === "export" && <Export />}
-              {shell.page === "backup" && <Backup />}
+        <main className="relative min-h-0 overflow-y-auto" data-testid="page-body">
+          <div className="mx-auto w-full max-w-[1040px] px-6 pt-1 pb-8">
+            {shell.page === "codes" && <Codes />}
+            {shell.page === "import" && <Import dragging={dragging} />}
+            {shell.page === "export" && <Export />}
+            {shell.page === "backup" && <Backup />}
+          </div>
+          {dragging && shell.page !== "import" && (
+            <div
+              className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-14 border border-dashed border-accent bg-accent-soft/80 text-[14px] font-medium text-accent-text"
+              data-testid="drop-overlay">
+              <Icon name="download" size={18} className="mr-2" />
+              {t("import.drop")}
             </div>
-            {dragging && shell.page !== "import" && (
-              <div
-                className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-14 border border-dashed border-accent bg-accent-soft/80 text-[14px] font-medium text-accent-text"
-                data-testid="drop-overlay">
-                <Icon name="download" size={18} className="mr-2" />
-                {t("import.drop")}
-              </div>
-            )}
-          </main>
-          <footer className="mono flex h-7 shrink-0 items-center gap-1 overflow-hidden border-t border-border px-6 text-[11px] whitespace-nowrap text-fg-subtle">
-            {(
-              [
-                ["Ctrl K", t("shell.footer.palette")],
-                ["Ctrl N", t("shell.footer.add")],
-                ["Ctrl L", t("shell.footer.lock")],
-                ["Ctrl ,", t("shell.footer.settings")],
-              ] as const
-            ).map(([keys, label], i) => (
-              <span key={keys} className="flex items-center gap-1.5">
-                {i > 0 && <span className="px-1">·</span>}
-                <Keycaps keys={keys} />
-                <span>{label}</span>
-              </span>
-            ))}
-            {state.backup.last_backup_ms !== null && (
-              <span className={cx("ml-auto")}>
-                {t("backup.manual.last", {
-                  when: relativeTime(t, state.backup.last_backup_ms, now),
-                })}
-              </span>
-            )}
-          </footer>
-        </div>
+          )}
+        </main>
       </WindowFrame>
       <CommandPalette
         open={shell.paletteOpen}

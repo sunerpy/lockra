@@ -5,6 +5,41 @@ list, and choosing how the page looks.
 
 <ScreenFigure src="/screens/codes-en-light.webp" dark="/screens/codes-en-dark.webp" width="1440" height="900" alt="The codes page with the account list, the search field and the sort menu." />
 
+## The new layout
+
+<StatusTag status="building" />
+
+The page starts with its title and a line of facts (how many accounts and groups, and with sync on,
+how it stands), with the search field and **Add account** on the right.
+
+Two cards follow:
+
+- **Recently used**: the account whose code you copied last, its code in large type, the seconds
+  left in a ring and the next code under it. Click the card or press Enter to copy.
+- **Vault**: whether it is unlocked and when it locks by itself, the last backup, the sync, and the
+  devices of the sync space.
+
+While you search, select or reorder, the two cards step aside.
+
+Under them come the filters and the list's tools. The filters are **All**, **Pinned**, each group
+and **No group**, each with its number of accounts; they replace the group menu next to the search
+field. On the right: **Reorder** (the handle), the list or cards switch, the sort menu and a ⋯ menu,
+where **Select**, **Show groups**, **Collapse all** and **Expand all** move. A row's star and ⋯ show
+while the pointer is on the row or the keyboard focus is in it, and **Edit…** is in the ⋯ menu; a
+star follows the name of a pinned account. The message after a copy names the account.
+
+At the foot of the sidebar, a card says whether the vault is unlocked, when it locks by itself and
+how the sync stands, over three buttons: **Lock**, the theme and **Settings**. The theme button
+moves to the next theme at each click; **Settings › Appearance** has them all. **Sync** in the
+sidebar opens **Settings › Sync**. Every theme has the same layout: a theme changes only colours and
+materials.
+
+On the phone, the page starts with a large title and "Unlocked · N accounts", with round **Add
+account** and **Lock** buttons beside it; then the search field, the **Recently used** card, the
+filters, which scroll sideways (with **Reorder** after them), and the accounts, each in a card of its
+own. The bar at the bottom of the screen has **Codes**, **Scan** and **Settings**: **Scan** opens the
+camera on a QR code at once.
+
 ## Reading a code
 
 Each row shows the account's initial, its service and account name, the current code and a ring.

@@ -1,14 +1,20 @@
-// The accounts and their codes, as a list or as cards two to a row (验证码视图, in Settings › 外观):
-// a tap copies the code, a long press or ⋯ opens the account's actions, + adds accounts; with
-// groups, the accounts are in sections that fold; a search shows what it finds in every section,
-// folded or not. The reorder button shows the list with handles: the groups and the accounts
-// inside them move by dragging the handles, an order this phone keeps.
+// The accounts and their codes (board A2): a large title with the vault's state, add and lock; the
+// search; the account copied last in a card of its own; the filters (全部, 收藏, each group, 未分组)
+// and the reorder button; then every account, each row a card of its own, or cards two to a row
+// (验证码视图, in Settings › 外观). A tap copies the code, a long press or ⋯ opens the account's
+// actions; with groups, the accounts are in sections that fold; a search shows what it finds in
+// every section, folded or not. The reorder button shows the list with handles: the groups and the
+// accounts inside them move by dragging the handles, an order this phone keeps. The dock at the
+// bottom scans a QR code and opens the settings.
 import {
   ALL_GROUPS,
+  FAVORITES,
   NO_GROUP,
+  UNGROUPED,
   entryGroups,
   filterEntries,
   groupSections,
+  recentEntry,
   sortEntries,
 } from "@lockra/shared";
 import {
@@ -17,9 +23,14 @@ import {
   EmptyState,
   EntryRow,
   EntryTile,
+  type FilterChip,
+  FilterChips,
   Icon,
+  type IconName,
   IconButton,
   Input,
+  Lamp,
+  RecentCard,
   ReorderList,
   motionReduced,
   noteUserLock,
@@ -30,8 +41,10 @@ import {
   useT,
   useUiState,
 } from "@lockra/ui";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { useNav } from "../app/nav";
+import { usePhoneImport } from "../app/phone-import";
+import { Dock } from "../components/Dock";
 
 export function Codes() {
   const t = useT();
@@ -39,6 +52,8 @@ export function Codes() {
   const dispatch = useDispatch();
   const codes = useCodes();
   const now = useClock();
+  const { scan } = usePhoneImport();
+  const scroller = useRef<HTMLElement>(null);
   const {
     settings,
     entries,
@@ -47,6 +62,7 @@ export function Codes() {
     group_order: groupOrder,
   } = useUiState();
   const [query, setQuery] = useState("");
+  const [group, setGroup] = useState(ALL_GROUPS);
   const [reordering, setReordering] = useState(false);
   // The row or card just copied says so for a moment.
   const [copiedId, flash] = useFlash();
@@ -55,16 +71,49 @@ export function Codes() {
     void dispatch({ command: "entry_copy", id }).then((done) => {
       if (done !== undefined) flash(id);
     });
-  const visible = useMemo(
-    () => filterEntries(sortEntries(entries, settings.sort, entryOrder), query, ALL_GROUPS),
-    [entries, settings.sort, entryOrder, query],
+  const groups = useMemo(() => entryGroups(entries), [entries]);
+  // The filters, as on the desktop: everything, the pinned accounts, each group, those in none.
+  const filters = useMemo((): FilterChip[] => {
+    const counts = new Map<string, number>();
+    for (const e of entries) counts.set(e.group ?? "", (counts.get(e.group ?? "") ?? 0) + 1);
+    const pinned = entries.filter((e) => e.favorite).length;
+    const loose = counts.get("") ?? 0;
+    return [
+      { value: ALL_GROUPS, label: t("codes.chips.all"), count: entries.length },
+      ...(pinned > 0
+        ? [
+            {
+              value: FAVORITES,
+              label: t("codes.chips.favorites"),
+              count: pinned,
+              icon: "star" as const,
+            },
+          ]
+        : []),
+      ...groups.map((g) => ({ value: g, label: g, count: counts.get(g) ?? 0, userText: true })),
+      ...(groups.length > 0 && loose > 0
+        ? [{ value: UNGROUPED, label: t("codes.groupNone"), count: loose }]
+        : []),
+    ];
+  }, [entries, groups, t]);
+  // A filter that no longer exists (its last account moved or unpinned) shows everything again.
+  const activeGroup = filters.some((f) => f.value === group) ? group : ALL_GROUPS;
+  const sorted = useMemo(
+    () => sortEntries(entries, settings.sort, entryOrder),
+    [entries, settings.sort, entryOrder],
   );
-  const grouped = settings.group_codes && entryGroups(entries).length > 0;
+  const visible = useMemo(
+    () => filterEntries(sorted, query, activeGroup),
+    [sorted, query, activeGroup],
+  );
+  const grouped = settings.group_codes && groups.length > 0;
   const searching = query.trim() !== "";
   const folded = new Set(collapsedGroups);
   const sections = grouped
     ? groupSections(visible, groupOrder)
     : [{ key: NO_GROUP, entries: visible }];
+  // The card of the account copied last, else the first of the list; not while searching.
+  const recent = recentEntry(entries) ?? sorted[0];
   // A long press: the webview hears it as a context menu.
   const actions = (id: string) => (event: { preventDefault: () => void }) => {
     event.preventDefault();
@@ -85,49 +134,34 @@ export function Codes() {
       command: "view_collapse_groups",
       groups: folded.has(key) ? [...folded].filter((k) => k !== key) : [...folded, key],
     });
+  const lock = () => {
+    // The user's own lock: the fingerprint waits until they leave and come back.
+    noteUserLock();
+    void dispatch({ command: "vault_lock" });
+  };
   return (
-    <div className="flex h-full flex-col" data-testid="page-codes">
-      <header className="flex items-center gap-2 border-b border-border bg-surface px-4 pt-[max(env(safe-area-inset-top),0.5rem)] pb-1">
-        <h1 className="flex-1 text-[18px] font-semibold text-fg">{t("codes.title")}</h1>
-        {entries.length > 1 && !reordering && (
-          <IconButton
-            icon="drag"
-            label={t("codes.reorder.open")}
-            size={40}
-            onClick={() => {
-              setQuery("");
-              setReordering(true);
-            }}
-            data-testid="codes-reorder"
+    <div className="flex h-full flex-col pt-[env(safe-area-inset-top)]" data-testid="page-codes">
+      <main
+        ref={scroller}
+        className="min-h-0 flex-1 overflow-y-auto px-4 pt-4 pb-[calc(env(safe-area-inset-bottom)+7rem)]">
+        <header className="mb-4 flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-[30px] leading-tight font-bold text-fg">{t("codes.title")}</h1>
+            <p className="mt-1 flex items-center gap-2 text-[13px] text-fg-muted">
+              <Lamp tone="ok" size={8} />
+              <span className="truncate" data-testid="codes-subtitle">
+                {`${t("shell.status.unlocked")} · ${t("common.accounts", { n: entries.length })}`}
+              </span>
+            </p>
+          </div>
+          <RoundButton
+            icon="plus"
+            label={t("codes.add.label")}
+            onClick={() => nav.open({ name: "add" })}
+            testId="codes-add"
           />
-        )}
-        <IconButton
-          icon="plus"
-          label={t("codes.add.label")}
-          size={40}
-          onClick={() => nav.open({ name: "add" })}
-          data-testid="codes-add"
-        />
-        <IconButton
-          icon="settings"
-          label={t("settings.title")}
-          size={40}
-          onClick={() => nav.open({ name: "settings" })}
-          data-testid="codes-settings"
-        />
-        <IconButton
-          icon="lock"
-          label={t("shell.nav.lock")}
-          size={40}
-          onClick={() => {
-            // The user's own lock: the fingerprint waits until they leave and come back.
-            noteUserLock();
-            void dispatch({ command: "vault_lock" });
-          }}
-          data-testid="codes-lock"
-        />
-      </header>
-      <main className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
+          <RoundButton icon="lock" label={t("shell.nav.lock")} onClick={lock} testId="codes-lock" />
+        </header>
         {entries.length === 0 ? (
           <EmptyState
             icon="key"
@@ -174,9 +208,10 @@ export function Codes() {
             </Card>
           </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-4">
             <Input
-              size="lg"
+              size="xl"
+              pill
               icon="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -185,6 +220,48 @@ export function Codes() {
               enterKeyHint="search"
               data-testid="codes-search"
             />
+            {recent !== undefined && !searching && (
+              <RecentCard
+                size="sm"
+                entry={recent}
+                code={codes.get(recent.id)}
+                nowMs={now}
+                masked={settings.hide_codes}
+                still={motionReduced(settings)}
+                onCopy={() => copy(recent.id)}
+                onNext={recent.kind.type === "hotp" ? next(recent.id) : undefined}
+              />
+            )}
+            {(filters.length > 1 || entries.length > 1) && (
+              <div className="flex min-w-0 items-center gap-2">
+                {filters.length > 1 ? (
+                  <FilterChips
+                    label={t("codes.chips.label")}
+                    options={filters}
+                    value={activeGroup}
+                    onChange={setGroup}
+                    scroll
+                    size="lg"
+                    className="min-w-0 flex-1"
+                    data-testid="codes-chips"
+                  />
+                ) : (
+                  <span className="flex-1" />
+                )}
+                {entries.length > 1 && (
+                  <RoundButton
+                    icon="drag"
+                    label={t("codes.reorder.open")}
+                    onClick={() => {
+                      setQuery("");
+                      setGroup(ALL_GROUPS);
+                      setReordering(true);
+                    }}
+                    testId="codes-reorder"
+                  />
+                )}
+              </div>
+            )}
             {visible.length === 0 ? (
               <EmptyState
                 compact
@@ -219,7 +296,7 @@ export function Codes() {
                         <div
                           role="list"
                           aria-label={grouped ? name : t("codes.title")}
-                          className={cards ? "grid grid-cols-2 gap-2.5" : undefined}>
+                          className={cards ? "grid grid-cols-2 gap-2.5" : "flex flex-col gap-2.5"}>
                           {section.entries.map((entry) => (
                             <div
                               role="listitem"
@@ -243,6 +320,7 @@ export function Codes() {
                                 />
                               ) : (
                                 <EntryRow
+                                  card
                                   entry={entry}
                                   code={codes.get(entry.id)}
                                   nowMs={now}
@@ -269,19 +347,50 @@ export function Codes() {
           </div>
         )}
       </main>
+      <Dock
+        onCodes={() => scroller.current?.scrollTo({ top: 0, behavior: "smooth" })}
+        onScan={() =>
+          void (async () => {
+            if (await scan()) nav.open({ name: "preview" });
+          })()
+        }
+        onSettings={() => nav.open({ name: "settings" })}
+      />
     </div>
   );
 }
 
-/** The list sits in one card; the cards sit on the canvas, a little apart. */
+/** A round 44 px button on the canvas (board A2): add and lock in the header, reorder by the
+ *  filters. */
+function RoundButton({
+  icon,
+  label,
+  onClick,
+  testId,
+}: {
+  icon: IconName;
+  label: string;
+  onClick: () => void;
+  testId: string;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      data-testid={testId}
+      className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-surface text-fg-muted hairline panel active:text-fg">
+      <Icon name={icon} size={18} />
+    </button>
+  );
+}
+
+/** Rows and cards sit on the canvas, each a card of its own (board A2). */
 function Sections({ cards, children }: { cards: boolean; children: ReactNode }) {
-  return cards ? (
-    <div className="flex flex-col gap-2" data-testid="codes-grid">
+  return (
+    <div className="flex flex-col gap-2" data-testid={cards ? "codes-grid" : "codes-list"}>
       {children}
     </div>
-  ) : (
-    <Card padding="none" className="p-1.5" data-testid="codes-list">
-      {children}
-    </Card>
   );
 }

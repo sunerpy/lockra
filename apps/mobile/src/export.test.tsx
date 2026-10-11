@@ -18,7 +18,7 @@ const FINGERPRINT = {
 } as const;
 
 async function openExport(user: ReturnType<typeof renderApp>["user"]) {
-  await user.click(screen.getByTestId("codes-settings"));
+  await user.click(screen.getByTestId("dock-settings"));
   await user.click(await screen.findByTestId("settings-export"));
   expect(await screen.findByTestId("page-export")).toBeInTheDocument();
 }

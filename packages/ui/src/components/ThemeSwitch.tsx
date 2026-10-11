@@ -3,7 +3,12 @@ import { useId } from "react";
 import { cx } from "../cx";
 import { useT } from "../i18n/I18nProvider";
 import { Icon, type IconName } from "./Icon";
-import { SIDEBAR_GLYPH_SLOT_CLASS, SIDEBAR_ROW_CLASS } from "./Sidebar";
+import {
+  SIDEBAR_BUTTON_CLASS,
+  SIDEBAR_GLYPH_SIZE,
+  SIDEBAR_GLYPH_SLOT_CLASS,
+  SIDEBAR_ROW_CLASS,
+} from "./Sidebar";
 
 /** A theme, or following the system's light / dark preference. */
 export type ThemeChoice = ThemeId | "system";
@@ -33,6 +38,9 @@ export interface ThemeSwitchProps {
   onChange: (choice: ThemeChoice) => void;
   /** In the icon rail only the glyph is left. */
   collapsed?: boolean;
+  /** `button`: one of the sidebar's square footer buttons (board A1), the glyph that steps; the
+   *  full list is in Settings › 外观. */
+  variant?: "row" | "button";
 }
 
 /** The sidebar's theme entry: two controls in one sidebar row. The glyph steps to the next theme
@@ -41,13 +49,33 @@ export interface ThemeSwitchProps {
  *  step. The row has the box of every other entry (`SIDEBAR_ROW_CLASS`) and one hover surface;
  *  the glyph button covers exactly the glyph slot, so the glyph and the name line up with 反馈 and
  *  设置 (user feedback 2026-09-28). */
-export function ThemeSwitch({ value, onChange, collapsed = false }: ThemeSwitchProps) {
+export function ThemeSwitch({
+  value,
+  onChange,
+  collapsed = false,
+  variant = "row",
+}: ThemeSwitchProps) {
   const t = useT();
   const menuId = useId();
   const name = (choice: ThemeChoice) =>
     choice === "system" ? t("theme.followSystem") : t(`theme.name.${choice}`);
   const next = nextThemeChoice(value);
   const stepLabel = t("ui.themeSwitch.next", { theme: name(next) });
+  if (variant === "button")
+    return (
+      <button
+        type="button"
+        aria-label={stepLabel}
+        title={stepLabel}
+        data-testid="theme-switch"
+        data-theme-choice={value}
+        onClick={() => {
+          onChange(next);
+        }}
+        className={SIDEBAR_BUTTON_CLASS}>
+        <Icon name={GLYPH[value]} size={SIDEBAR_GLYPH_SIZE} />
+      </button>
+    );
   return (
     <div
       data-testid="theme-switch"
@@ -69,7 +97,7 @@ export function ThemeSwitch({ value, onChange, collapsed = false }: ThemeSwitchP
           "flex h-9 shrink-0 items-center rounded-6 text-fg-subtle outline-none group-hover:text-fg focus-visible:bg-nav-active",
           collapsed ? "w-full justify-center" : SIDEBAR_GLYPH_SLOT_CLASS,
         )}>
-        <Icon name={GLYPH[value]} size={16} />
+        <Icon name={GLYPH[value]} size={SIDEBAR_GLYPH_SIZE} />
       </button>
       {!collapsed && (
         <div className="relative flex h-9 min-w-0 flex-1 items-center">

@@ -1,8 +1,15 @@
 import { type Backend, resolveLocale } from "@lockra/shared";
-import { BackendProvider, I18nProvider, ToastViewport, useBackend, useToasts } from "@lockra/ui";
-import { type ComponentType, Suspense, lazy, useEffect } from "react";
+import {
+  BackendProvider,
+  I18nProvider,
+  NoticeBridge,
+  ToastViewport,
+  useBackend,
+  useToasts,
+} from "@lockra/ui";
+import { type ComponentType, Suspense, lazy } from "react";
 import { useAppearance } from "./app/appearance";
-import { ToasterProvider, useToaster } from "./app/notices";
+import { ToasterProvider } from "./app/notices";
 import { Main } from "./shell/Main";
 
 /** The component showcase, in development builds only (`#showcase`); a release bundle has no
@@ -44,15 +51,4 @@ function Root() {
       </ToasterProvider>
     </I18nProvider>
   );
-}
-
-/** Core notices become toasts (inside the i18n tree, so they are translated). */
-function NoticeBridge() {
-  const { backend } = useBackend();
-  const toaster = useToaster();
-  useEffect(
-    () => backend.on((event) => event.type === "notice" && toaster.notice(event.notice)),
-    [backend, toaster],
-  );
-  return null;
 }

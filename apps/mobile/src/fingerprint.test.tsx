@@ -35,7 +35,7 @@ describe("the fingerprint on the phone", () => {
     const backend = phone();
     const { user } = renderApp({ backend });
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     const row = within(await screen.findByTestId("settings-fingerprint"));
     expect(row.getByText("使用指纹解锁")).toBeInTheDocument();
     const toggle = row.getByRole("switch");
@@ -63,7 +63,7 @@ describe("the fingerprint on the phone", () => {
   it("is not offered where no fingerprint is enrolled", async () => {
     const { user } = renderApp({ backend: phone({ biometric: null }) });
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     await screen.findByTestId("page-settings");
     expect(screen.queryByTestId("settings-fingerprint")).not.toBeInTheDocument();
   });
@@ -106,7 +106,7 @@ describe("the fingerprint on the phone", () => {
     const backend = phone({ deviceUnlock: true, biometricUnlock: true });
     const { user } = renderApp({ backend });
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     const choice = within(await screen.findByRole("radiogroup", { name: "默认解锁方式" }));
     expect(choice.getByRole("radio", { name: "指纹" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText(/打开或切回 Lockra 时会自动请求指纹/)).toBeInTheDocument();

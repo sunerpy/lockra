@@ -70,7 +70,7 @@ def main():
     badge = web.wait(css="[data-testid=update-badge]")
     until("the note to name the new version", lambda: args.to_version in web.text(badge))
     shot(web, args.out, "update-badge-light")
-    web.click(web.wait(xpath="//nav//button[normalize-space()='设置']"))
+    web.click(web.wait(css='[data-testid="sidebar-settings"]'))
     section = web.wait(css="[data-testid=update-section]")
     until("Settings › General to name the new version", lambda: args.to_version in web.text(section))
     shot(web, args.out, "update-settings-light")

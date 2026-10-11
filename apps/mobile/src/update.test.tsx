@@ -20,7 +20,7 @@ function phone(options: ConstructorParameters<typeof MockBackend>[0] = {}) {
 }
 
 async function about(user: ReturnType<typeof renderApp>["user"]) {
-  await user.click(screen.getByTestId("codes-settings"));
+  await user.click(screen.getByTestId("dock-settings"));
   return within(await screen.findByTestId("about-update"));
 }
 
@@ -106,7 +106,7 @@ describe("updates on the phone", () => {
   it("offers no check where this build has none", async () => {
     const { user } = renderApp({ backend: phone({ updateMethod: null }) });
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     await screen.findByTestId("page-settings");
     expect(screen.queryByTestId("about-update")).not.toBeInTheDocument();
   });

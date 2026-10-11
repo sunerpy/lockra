@@ -42,7 +42,7 @@ describe("adding accounts on the phone", () => {
   it("adds one by hand from +, the core checking the secret, and lands on the codes", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByRole("button", { name: "添加" }));
+    await user.click(screen.getByRole("button", { name: "添加账号" }));
     await user.click(await screen.findByTestId("add-manual"));
     const form = within(await screen.findByTestId("manual-form"));
     const add = form.getByRole("button", { name: "添加" });
@@ -115,7 +115,10 @@ describe("adding accounts on the phone", () => {
     expect(
       screen.getByText("点按 + 添加：扫描二维码、读取截图、粘贴 otpauth 链接，或手动输入密钥。"),
     ).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "添加账号" }));
+    // The empty state's own button, under the header's +.
+    const [plus, button] = screen.getAllByRole("button", { name: "添加账号" });
+    expect(plus).toHaveAttribute("data-testid", "codes-add");
+    await user.click(button as HTMLElement);
     expect(await screen.findByTestId("page-add")).toBeInTheDocument();
   });
 

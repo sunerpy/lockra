@@ -15,7 +15,8 @@ import { createPortal } from "react-dom";
 import { cx } from "../cx";
 import { Icon, type IconName } from "./Icon";
 
-/** One row of a `Menu`: a choice of a set (`radio`) or a command (`action`). */
+/** One row of a `Menu`: a choice of a set (`radio`), a setting that is on or off (`check`) or a
+ *  command (`action`). */
 export type MenuItem =
   | {
       kind: "radio";
@@ -25,6 +26,7 @@ export type MenuItem =
       /** The label is the user's own text (a name they typed), not interface copy. */
       userText?: boolean;
     }
+  | { kind: "check"; id: string; label: string; checked: boolean }
   | { kind: "action"; id: string; label: string; icon?: IconName };
 
 /** Items under an optional heading; sections are separated by a rule. */
@@ -255,13 +257,19 @@ function MenuList({
                   items.current[at] = el;
                 }}
                 type="button"
-                role={item.kind === "radio" ? "menuitemradio" : "menuitem"}
-                aria-checked={item.kind === "radio" ? item.checked : undefined}
+                role={
+                  item.kind === "radio"
+                    ? "menuitemradio"
+                    : item.kind === "check"
+                      ? "menuitemcheckbox"
+                      : "menuitem"
+                }
+                aria-checked={item.kind === "action" ? undefined : item.checked}
                 tabIndex={-1}
                 onClick={() => onPick(item.id)}
                 className="flex h-8 w-full items-center gap-2 px-3 text-left text-[13px] text-fg outline-none hover:bg-inset focus-visible:bg-inset focus:bg-inset">
                 <span className="flex w-4 shrink-0 justify-center text-accent-text">
-                  {item.kind === "radio" && item.checked && <Icon name="check" size={14} />}
+                  {item.kind !== "action" && item.checked && <Icon name="check" size={14} />}
                   {item.kind === "action" && item.icon !== undefined && (
                     <Icon name={item.icon} size={14} className="text-fg-muted" />
                   )}
