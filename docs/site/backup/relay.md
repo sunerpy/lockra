@@ -42,7 +42,9 @@ program, which needs no other library, and a systemd service for it.
 1. Download the package for your server, check it and install the program:
 
    ```sh
-   version=0.8.1 arch=x64
+   # The latest release's version, from the address GitHub sends /releases/latest to.
+   latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/sunerpy/lockra/releases/latest)
+   version=${latest##*/v} arch=x64
    base="https://github.com/sunerpy/lockra/releases/download/v$version"
    curl -fL -O "$base/lockra-relay_${version}_linux_${arch}.tar.gz" -O "$base/SHA256SUMS"
    sha256sum --check --ignore-missing SHA256SUMS

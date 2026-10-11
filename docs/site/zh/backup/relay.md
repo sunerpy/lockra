@@ -33,7 +33,9 @@
 1. 下载与服务器对应的包，校验后安装程序：
 
    ```sh
-   version=0.8.1 arch=x64
+   # 最新版本的版本号：取自 GitHub 把 /releases/latest 跳转到的地址
+   latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/sunerpy/lockra/releases/latest)
+   version=${latest##*/v} arch=x64
    base="https://github.com/sunerpy/lockra/releases/download/v$version"
    curl -fL -O "$base/lockra-relay_${version}_linux_${arch}.tar.gz" -O "$base/SHA256SUMS"
    sha256sum --check --ignore-missing SHA256SUMS

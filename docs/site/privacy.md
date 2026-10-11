@@ -53,6 +53,10 @@ developer, on a server in AWS's Seoul region (South Korea).
 - **What it cannot see**: your accounts, their secrets, the device names, the recovery key and the
   master passwords. The files stay encrypted on the relay; neither the relay nor Lockra's developer
   can open them.
+- **If the server is taken, or Lockra is made to hand over what it holds**: there is nothing to give
+  but what is listed above, the encrypted files, the identifiers and the fingerprint; the disk holds
+  no network address. The files are as unreadable off the relay as on it: the keys that open them
+  are on your devices only.
 - **How long**: a space is deleted with its files 400 days after a device last reached it.
   Removing a device in **Settings › Sync** deletes its file at once.
 - **Network addresses**: kept in the relay's memory only, to limit the requests from each address,
