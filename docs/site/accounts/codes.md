@@ -3,11 +3,11 @@
 This page explains the codes page: reading and copying codes, finding an account, arranging the
 list, and choosing how the page looks.
 
-<ScreenFigure src="/screens/codes-en-light.webp" dark="/screens/codes-en-dark.webp" width="1440" height="900" alt="The codes page with the account list, the search field and the sort menu." />
+<ScreenFigure src="/screens/codes-en-light.webp" dark="/screens/codes-en-dark.webp" width="1440" height="900" alt="The codes page: the title, the search field and Add account at the top, then the Recently used and Vault cards, the filters and the account list." />
 
-## The new layout
+## The page
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.8.8.
 
 The page starts with its title and a line of facts (how many accounts and groups, and with sync on,
 how it stands), with the search field and **Add account** on the right.
@@ -22,11 +22,9 @@ Two cards follow:
 While you search, select or reorder, the two cards step aside.
 
 Under them come the filters and the list's tools. The filters are **All**, **Pinned**, each group
-and **No group**, each with its number of accounts; they replace the group menu next to the search
-field. On the right: **Reorder** (the handle), the list or cards switch, the sort menu and a ⋯ menu,
-where **Select**, **Show groups**, **Collapse all** and **Expand all** move. A row's star and ⋯ show
-while the pointer is on the row or the keyboard focus is in it, and **Edit…** is in the ⋯ menu; a
-star follows the name of a pinned account. The message after a copy names the account.
+and **No group**, each with its number of accounts. On the right: **Reorder** (the handle), the list
+or cards switch, the sort menu and a ⋯ menu with **Select**, **Show groups**, **Collapse all** and
+**Expand all**.
 
 At the foot of the sidebar, a card says whether the vault is unlocked, when it locks by itself and
 how the sync stands, over three buttons: **Lock**, the theme and **Settings**. The theme button
@@ -52,8 +50,8 @@ only when you ask for the next one.
 
 ## Copying a code
 
-Click a row, or select it with the arrow keys and press Enter. A message confirms the copy and says
-when the clipboard will be cleared: after 30 seconds by default, and only if it still holds the
+Click a row, or select it with the arrow keys and press Enter. A message at the bottom names the
+account whose code was copied and says when the clipboard will be cleared: after 30 seconds by default, and only if it still holds the
 code, so anything you copied afterwards is left alone. The time can be changed, or clearing turned
 off, in **Settings › Security**.
 
@@ -62,7 +60,7 @@ macOS it is marked to stay out of clipboard history where the clipboard manager 
 
 ## Finding an account
 
-Type in the search field, or press `/` or `Ctrl F` to go to it. The list keeps the accounts whose
+Type in the search field at the top of the page, or press `/` or `Ctrl F` to go to it. The list keeps the accounts whose
 service, account or group contains the text. Enter copies the first match, the down arrow moves into
 the list, and Esc clears the search.
 
@@ -71,9 +69,10 @@ copy that account's code.
 
 ## Groups and pinned accounts
 
-Give accounts a group, such as "Work", in **Edit…** (the ⋯ menu of a row). When groups exist, a
-menu next to the search field shows one group at a time. **Pin to top**, in the same menu, keeps an
-account first.
+Give accounts a group, such as "Work", in **Edit…** (the ⋯ menu of a row). The filters above the
+list show only the pinned accounts, one group, or the accounts in none (**No group**); **All** shows
+every account again. The star of a row, or **Pin to top** in its ⋯ menu, keeps an account first, and
+a star follows its name.
 
 ## Folding groups
 
@@ -81,9 +80,9 @@ account first.
 
 When accounts have groups, the list shows a section for each group, by name, then **No group** for
 the others. Click a section's heading to fold or unfold it; **Collapse all** and **Expand all**,
-beside the sort menu, do it for every section at once. A search shows what it finds in folded
-sections too. Which sections are folded is kept in the vault, on this device only. The folder button
-beside the sort menu (**Show groups**) turns the sections off and shows a single list.
+in the ⋯ menu at the top right of the list, do it for every section at once. A search shows what it
+finds in folded sections too. Which sections are folded is kept in the vault, on this device only.
+**Show groups**, in the same menu, turns the sections off and shows a single list.
 
 ## Colours and avatar text
 
@@ -99,17 +98,18 @@ stay in backups.
 
 <StatusTag status="available" /> Available from version 0.5.0.
 
-Beside each row's ⋯ button, a star pins the account to the top (or unpins it) and a pencil opens
-**Edit…**. Right-click a row, or press the context-menu key or Shift F10 on a selected row, to open
-the same menu as ⋯ where you are.
+Beside each row's ⋯ button, a star pins the account to the top (or unpins it). With a mouse, both
+show while the pointer is on the row or the keyboard focus is in it; on the phone, ⋯ is always
+there. **Edit…** is in the ⋯ menu. Right-click a row, or press the context-menu key or Shift F10 on
+a selected row, to open the same menu as ⋯ where you are.
 
 ## Selecting several accounts
 
 <StatusTag status="available" /> Available from version 0.6.0.
 
-Click **Select** beside the sort menu, or choose **Select** in an account's menu, to tick accounts:
-click a row or press Space on it, tick a section's box for all of its accounts, or click **Select
-all** for every account the search and the group menu show. **Move to group…** then puts the ticked
+Choose **Select** in the ⋯ menu at the top right of the list, or in an account's menu, to tick
+accounts: click a row or press Space on it, tick a section's box for all of its accounts, or click
+**Select all** for every account the search and the filters show. **Move to group…** then puts the ticked
 accounts in one group in a single step: type a group or pick one, or leave it empty to take them out
 of their groups. **Done**, or Esc, leaves without changing anything.
 
@@ -130,17 +130,17 @@ that sheet, not the page under it.
 
 <StatusTag status="available" /> Available from version 0.8.6.
 
-Click **Reorder** beside the sort menu: a handle appears on the right of each group's heading and of
-each row. Drag a handle up or down, or focus it and press the up and down arrow keys, to change the
-order of the accounts and of the groups; **Done** ends it. While you reorder, the search field and
-the group menu are off.
+Click **Reorder** (the handle among the list's tools): a handle appears on the right of each group's
+heading and of each row. Drag a handle up or down, or focus it and press the up and down arrow keys,
+to change the order of the accounts and of the groups; **Done** ends it. While you reorder, the
+search field and the filters are off.
 
 Once the accounts are reordered, the sort menu reads **Manual**, and accounts added later go to the
 end. Pinned accounts still come first and **No group** stays last. The order is kept in the vault,
 on this device only: it does not sync to your other devices.
 
-On the phone, tap the **Reorder** button at the top of the codes page, then drag the handle on the
-right of a row up or down.
+On the phone, tap the **Reorder** button after the filters, then drag the handle on the right of a
+row up or down.
 
 ## Cards
 
