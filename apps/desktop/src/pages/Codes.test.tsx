@@ -30,6 +30,19 @@ describe("Codes", () => {
     expect(backend.calls.filter((c) => c.command === "entry_copy")).toHaveLength(2);
   });
 
+  it("shows on the copied row that it was copied, for a moment", async () => {
+    const { user } = renderApp();
+    await ready();
+    const [first, second] = screen.getAllByTestId("entry-row");
+    if (!first || !second) throw new Error("no rows");
+    await user.click(first);
+    expect(first).toHaveAttribute("data-copied", "true");
+    expect(within(first).getByTestId("row-copied")).toHaveTextContent(/^已复制$/);
+    await user.click(second);
+    expect(first).not.toHaveAttribute("data-copied");
+    expect(second).toHaveAttribute("data-copied", "true");
+  });
+
   it("searches, copies the first match with Enter and says when nothing matches", async () => {
     const { user, backend } = renderApp();
     await ready();
@@ -417,5 +430,126 @@ describe("Codes · reordering", () => {
     // The list as dragged: Work first, Jira before GitHub; the order is manual now.
     expect(names()).toEqual(["Jira", "GitHub", "Bank"]);
     expect(screen.getByTestId("codes-sort")).toHaveValue("manual");
+  });
+});
+
+describe("Codes · cards", () => {
+  const tileNames = () =>
+    screen
+      .getAllByTestId("entry-tile")
+      .map((tile) => tile.querySelector(".truncate")?.textContent ?? "");
+  const cards = () => renderApp({ mock: { settings: { codes_view: "grid" } } });
+
+  it("switches between the list and the cards from the toolbar and keeps the choice", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    const view = screen.getByTestId("codes-view");
+    expect(within(view).getByRole("radio", { name: "列表" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await user.click(within(view).getByRole("radio", { name: "卡片" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "settings_set",
+      settings: { codes_view: "grid" },
+    });
+    expect(screen.queryAllByTestId("entry-row")).toHaveLength(0);
+    expect(tileNames()).toHaveLength(sampleEntries().length);
+    expect(tileNames().slice(0, 3)).toEqual(["GitHub", "AWS", "Cloudflare"]);
+    await user.click(within(view).getByRole("radio", { name: "列表" }));
+    expect(screen.queryAllByTestId("entry-tile")).toHaveLength(0);
+    expect(names()).toHaveLength(sampleEntries().length);
+  });
+
+  it("copies from a card and shows on it that it was copied", async () => {
+    const { user, backend } = cards();
+    await ready();
+    const [first, second] = screen.getAllByTestId("entry-tile");
+    if (!first || !second) throw new Error("no cards");
+    await user.click(first);
+    expect(backend.calls.filter((c) => c.command === "entry_copy")).toHaveLength(1);
+    expect(first).toHaveAttribute("data-copied", "true");
+    expect(within(first).getByTestId("tile-copied")).toHaveTextContent(
+      "已复制 · 30 秒后清空剪贴板",
+    );
+    // The next copy moves the mark.
+    second.focus();
+    await user.keyboard("{Enter}");
+    expect(second).toHaveAttribute("data-copied", "true");
+    expect(first).not.toHaveAttribute("data-copied");
+  });
+
+  it("says only 已复制 when the clipboard is kept", async () => {
+    const { user } = renderApp({
+      mock: { settings: { codes_view: "grid", clipboard_clear_seconds: 0 } },
+    });
+    await ready();
+    const first = screen.getAllByTestId("entry-tile")[0];
+    if (!first) throw new Error("no cards");
+    await user.click(first);
+    expect(within(first).getByTestId("tile-copied")).toHaveTextContent(/^已复制$/);
+  });
+
+  it("moves between cards with the arrow keys, and back to the search", async () => {
+    const { user } = cards();
+    await ready();
+    const search = screen.getByTestId("codes-search");
+    search.focus();
+    await user.keyboard("{ArrowDown}");
+    const tiles = screen.getAllByTestId("entry-tile");
+    expect(tiles[0]).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(tiles[1]).toHaveFocus();
+    await user.keyboard("{End}");
+    expect(tiles.at(-1)).toHaveFocus();
+    await user.keyboard("{Home}");
+    expect(tiles[0]).toHaveFocus();
+    // jsdom lays nothing out: every card is in the first row, so up leaves for the search.
+    await user.keyboard("{ArrowUp}");
+    expect(search).toHaveFocus();
+  });
+
+  it("folds sections, pins, opens the menu and generates the next HOTP code from the cards", async () => {
+    const { user, backend } = cards();
+    await ready();
+    await user.click(screen.getByRole("button", { name: /^工作/ }));
+    expect(backend.calls.at(-1)).toEqual({ command: "view_collapse_groups", groups: ["工作"] });
+    expect(tileNames()).not.toContain("GitHub");
+    await user.click(screen.getByRole("button", { name: /^工作/ }));
+    const github = screen.getAllByTestId("entry-tile")[0];
+    if (!github) throw new Error("no cards");
+    await user.click(within(github).getByRole("button", { name: "收藏" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "entry_update",
+      patch: { favorite: false },
+    });
+    const aws = screen.getAllByTestId("entry-tile")[0];
+    if (!aws) throw new Error("no cards");
+    fireEvent.contextMenu(aws, { clientX: 200, clientY: 120 });
+    expect(screen.getByRole("menu", { name: "账号操作" })).toHaveStyle({ left: "200px" });
+    await user.keyboard("{Escape}");
+    await user.click(within(aws).getByTestId("row-menu"));
+    expect(screen.getByRole("menuitem", { name: "编辑…" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "生成下一个" }));
+    expect(backend.calls).toContainEqual(expect.objectContaining({ command: "entry_hotp_next" }));
+    expect(backend.calls.some((c) => c.command === "entry_copy")).toBe(false);
+  });
+
+  it("selects and reorders in the list, and comes back to the cards", async () => {
+    const { user } = cards();
+    await ready();
+    await user.click(screen.getByTestId("codes-select"));
+    expect(screen.queryAllByTestId("entry-tile")).toHaveLength(0);
+    expect(screen.getAllByTestId("entry-row")[0]).toHaveAttribute("role", "checkbox");
+    expect(
+      within(screen.getByTestId("codes-view")).getByRole("radio", { name: "卡片" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "完成" }));
+    expect(screen.getAllByTestId("entry-tile")).toHaveLength(sampleEntries().length);
+    await user.click(screen.getByTestId("codes-reorder"));
+    expect(screen.queryAllByTestId("entry-tile")).toHaveLength(0);
+    await user.click(screen.getByTestId("codes-reorder-done"));
+    expect(screen.getAllByTestId("entry-tile")).toHaveLength(sampleEntries().length);
   });
 });

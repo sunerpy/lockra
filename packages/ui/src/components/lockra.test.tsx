@@ -6,6 +6,7 @@ import { CountdownRing, remaining } from "./CountdownRing";
 import { DropZone } from "./DropZone";
 import { EntryAvatar, autoColor, initial } from "./EntryAvatar";
 import { EntryRow } from "./EntryRow";
+import { Logo } from "./Logo";
 import { OtpCode } from "./OtpCode";
 import { PasswordField, passwordStrength } from "./PasswordField";
 import { QrView } from "./QrView";
@@ -45,6 +46,29 @@ function code(overrides: Partial<CodeView> = {}): CodeView {
   };
 }
 
+describe("Logo", () => {
+  it("sits on the theme's card, not on a dark square: the padlock in the theme's ink and blue", () => {
+    // User choice 2026-10-11 (option B, Penpot 「00 · Logo」): the navy tile looked like a hole in
+    // 澄空 and 墨白. The plate is the theme's surface with its edge and depth; the colours are tokens.
+    const { rerender } = render(<Logo size={28} />);
+    const logo = screen.getByTestId("app-logo");
+    expect(logo.tagName).toBe("SPAN");
+    expect(logo).toHaveClass("bg-surface", "hairline", "panel", "rounded-[22%]");
+    expect([logo.style.width, logo.style.height]).toEqual(["28px", "28px"]);
+    expect(logo).toHaveAttribute("aria-hidden", "true");
+    const svg = logo.querySelector("svg");
+    expect(svg?.querySelector("path")).toHaveClass("stroke-fg");
+    expect(svg?.querySelector("rect")).toHaveClass("fill-[var(--logo-body)]");
+    const dots = svg?.querySelectorAll("circle") ?? [];
+    expect(dots).toHaveLength(3);
+    for (const dot of dots) expect(dot).toHaveClass("fill-[var(--logo-dots)]");
+    // No colour of its own any more.
+    expect(logo.outerHTML).not.toMatch(/#[0-9a-f]{6}/i);
+    rerender(<Logo size={48} label="Lockra" />);
+    expect(screen.getByRole("img", { name: "Lockra" })).toBe(screen.getByTestId("app-logo"));
+  });
+});
+
 describe("OtpCode", () => {
   it("groups digits, announces them and masks on request", () => {
     const { rerender } = render(<OtpCode code="492039" />);
@@ -56,6 +80,10 @@ describe("OtpCode", () => {
     rerender(<OtpCode code="492039" masked />);
     expect(screen.getByTestId("otp-code")).toHaveTextContent("••• •••");
     expect(screen.getByTestId("otp-code")).not.toHaveAttribute("aria-label");
+    // A card's code takes its own size in pixels.
+    rerender(<OtpCode code="492039" size={46} />);
+    expect(screen.getByTestId("otp-code").style.fontSize).toBe("46px");
+    expect(screen.getByTestId("otp-code").className).not.toMatch(/text-\[\d+px\]/);
   });
 });
 
@@ -101,6 +129,21 @@ describe("EntryAvatar", () => {
     rerender(<EntryAvatar issuer="GitHub" color="gray" mark={null} />);
     expect(avatar).toHaveAttribute("data-tag", "gray");
     expect(avatar).toHaveTextContent("G");
+  });
+
+  it("keeps its own corner whatever the theme's card radius, at the cards' sizes too", () => {
+    // regression (澄空 and 墨白, 2026-10-11): rounded-10 follows the theme's card radius (18 / 16),
+    // which turned a 32 px square into a circle.
+    const { rerender } = render(<EntryAvatar issuer="GitHub" />);
+    const avatar = screen.getByTestId("entry-avatar");
+    expect(avatar.className).not.toContain("rounded-10");
+    expect(avatar.style.borderRadius).toBe("10px");
+    rerender(<EntryAvatar issuer="GitHub" size={36} />);
+    expect([avatar.style.width, avatar.style.borderRadius]).toEqual(["36px", "10px"]);
+    expect(avatar).toHaveClass("text-[16px]");
+    rerender(<EntryAvatar issuer="GitHub" size={28} />);
+    expect([avatar.style.width, avatar.style.borderRadius]).toEqual(["28px", "8px"]);
+    expect(avatar).toHaveClass("text-[13px]");
   });
 
   it("shows the first letter of the issuer, else of the account", () => {
@@ -233,6 +276,46 @@ describe("EntryRow", () => {
     rerender(<EntryRow entry={entry()} code={code()} nowMs={T} onCopy={onCopy} />);
     expect(screen.queryByRole("button", { name: "收藏" })).toBeNull();
     expect(screen.queryByRole("button", { name: "编辑…" })).toBeNull();
+  });
+
+  it("says it was copied in place of its code, and hints at copying on hover", () => {
+    const { rerender } = render(
+      <EntryRow entry={entry()} code={code()} nowMs={T} onCopy={() => undefined} />,
+    );
+    const row = screen.getByTestId("entry-row");
+    // Shown on hover or focus, beside the code (boards A and B); hidden it takes no room, which a
+    // phone's narrow row needs for the names (regression 2026-10-11: they were cut to 「Git…」).
+    expect(screen.getByTestId("row-hint")).toHaveTextContent("点击复制");
+    expect(screen.getByTestId("row-hint")).toHaveClass("hidden", "group-hover:inline");
+    expect(screen.getByTestId("row-hint")).not.toHaveClass("opacity-0");
+    rerender(
+      <EntryRow entry={entry()} code={code()} nowMs={T} onCopy={() => undefined} copied="已复制" />,
+    );
+    expect(row).toHaveAttribute("data-copied", "true");
+    const pill = screen.getByTestId("row-copied");
+    expect(pill).toHaveTextContent(/^已复制$/);
+    // The theme's pill: the accent's soft fill, or ink in 墨白.
+    expect(pill).toHaveClass("bg-[var(--row-pill-bg)]", "text-[var(--row-pill-fg)]");
+    expect(screen.queryByTestId("otp-code")).toBeNull();
+    expect(screen.queryByTestId("row-hint")).toBeNull();
+    expect(screen.getByTestId("countdown-ring")).toBeInTheDocument();
+    // In its last seconds, or masked, the pill still stands alone.
+    const props = { entry: entry(), code: code(), onCopy: () => undefined, copied: "已复制" };
+    rerender(<EntryRow {...props} nowMs={T + 16_000} />);
+    expect(screen.queryByTestId("next-code")).toBeNull();
+    rerender(<EntryRow {...props} nowMs={T} masked />);
+    expect(screen.queryByTestId("otp-code")).toBeNull();
+    // While selecting, the row is a checkbox: no hint.
+    rerender(
+      <EntryRow
+        entry={entry()}
+        code={code()}
+        nowMs={T}
+        onCopy={() => undefined}
+        selection={{ checked: false, onToggle: () => undefined }}
+      />,
+    );
+    expect(screen.queryByTestId("row-hint")).toBeNull();
   });
 
   it("masks until hovered, waits for the first frame, and names an account-only entry", () => {

@@ -83,7 +83,7 @@ export function Dialog({
           e.stopPropagation();
         }}
         className={cx(
-          "flex flex-col gap-4 rounded-14 bg-surface p-6 outline-none hairline shadow-pop",
+          "flex flex-col gap-4 rounded-14 bg-overlay p-6 outline-none hairline shadow-pop overlay-frost",
         )}
         style={{ width }}>
         <h2 id={titleId} className="text-[16px] font-semibold text-fg">

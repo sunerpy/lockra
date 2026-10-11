@@ -1,4 +1,5 @@
 import { cx } from "../cx";
+import { Icon, type IconName } from "./Icon";
 
 const HEIGHT = { sm: "h-7", md: "h-8", lg: "h-11" } as const;
 const TEXT = { sm: "text-[11px]", md: "text-[12px]", lg: "text-[14px]" } as const;
@@ -9,6 +10,7 @@ export interface SegmentedOption<V extends string> {
   disabled?: boolean;
   /** Tooltip explaining why a segment is unavailable. */
   reason?: string;
+  icon?: IconName;
 }
 
 export interface SegmentedProps<V extends string> {
@@ -20,8 +22,11 @@ export interface SegmentedProps<V extends string> {
   /** `lg` is the phone's: a 44 px touch target. */
   size?: "sm" | "md" | "lg";
   mono?: boolean;
+  /** Each option shows its icon alone; its label is still its name and its tooltip. */
+  iconOnly?: boolean;
   label?: string;
   className?: string;
+  "data-testid"?: string;
 }
 
 export function Segmented<V extends string>({
@@ -31,13 +36,16 @@ export function Segmented<V extends string>({
   variant = "soft",
   size = "md",
   mono = false,
+  iconOnly = false,
   label,
   className,
+  "data-testid": testId,
 }: SegmentedProps<V>) {
   return (
     <div
       role="radiogroup"
       aria-label={label}
+      data-testid={testId}
       className={cx(
         "inline-flex items-center rounded-6 bg-inset p-0.5 hairline",
         HEIGHT[size],
@@ -51,13 +59,16 @@ export function Segmented<V extends string>({
             type="button"
             role="radio"
             aria-checked={selected}
+            aria-label={iconOnly ? opt.label : undefined}
             disabled={opt.disabled}
-            title={opt.reason}
+            title={opt.reason ?? (iconOnly ? opt.label : undefined)}
             onClick={() => {
               onChange(opt.value);
             }}
             className={cx(
-              "h-full rounded-[5px] px-3 whitespace-nowrap transition-colors",
+              // One pixel inside the frame's corner, whatever the theme makes of it.
+              "inline-flex h-full items-center gap-1.5 rounded-[calc(var(--radius-control)_-_1px)] whitespace-nowrap transition-colors",
+              iconOnly ? "px-2" : "px-3",
               TEXT[size],
               mono && "mono",
               selected &&
@@ -67,7 +78,8 @@ export function Segmented<V extends string>({
               !selected && "text-fg-muted hover:text-fg",
               opt.disabled && "cursor-not-allowed opacity-40 hover:text-fg-muted",
             )}>
-            {opt.label}
+            {opt.icon && <Icon name={opt.icon} size={size === "lg" ? 18 : 16} />}
+            {!iconOnly && opt.label}
           </button>
         );
       })}

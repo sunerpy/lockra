@@ -161,12 +161,13 @@ function ShellLayout() {
   );
   return (
     <div
-      className="grid h-full overflow-hidden bg-canvas text-fg"
+      className="grid h-full overflow-hidden app-canvas text-fg"
       data-testid="shell"
       // One explicit `minmax(0, 1fr)` row: an implicit `auto` row grows to the sidebar's content
       // height, and a 600 px window then lost its footer below the screen (smoke run 2026-10-01).
       style={{
-        gridTemplateColumns: `${collapsed ? SIDEBAR_RAIL_WIDTH : SIDEBAR_WIDTH}px minmax(0, 1fr)`,
+        // The sidebar's own width, and the inset a floating sidebar (澄空) keeps around it.
+        gridTemplateColumns: `calc(${collapsed ? SIDEBAR_RAIL_WIDTH : SIDEBAR_WIDTH}px + 2 * var(--sidebar-inset)) minmax(0, 1fr)`,
         gridTemplateRows: "minmax(0, 1fr)",
       }}>
       <Sidebar

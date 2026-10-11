@@ -1,6 +1,6 @@
 {
   "default": "lockra.svg",
-  "bg_color": "#0B1220",
+  "bg_color": "#5B6BFF",
   "android_bg": "lockra-background.svg",
   "android_fg": "lockra-foreground.svg",
   "android_monochrome": "lockra-monochrome.svg"

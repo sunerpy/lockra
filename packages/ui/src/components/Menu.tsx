@@ -232,7 +232,7 @@ function MenuList({
       data-testid={testId}
       style={style}
       className={cx(
-        "z-50 flex w-max flex-col rounded-10 bg-surface py-1 whitespace-nowrap shadow-win hairline",
+        "z-50 flex w-max flex-col rounded-10 bg-overlay py-1 whitespace-nowrap shadow-win hairline overlay-frost",
         className,
       )}>
       {sections.map((section, s) => (

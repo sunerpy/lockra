@@ -7,7 +7,8 @@ export interface OtpCodeProps {
   masked?: boolean;
   /** The last seconds of the window. */
   tone?: "normal" | "warning" | "muted";
-  size?: "sm" | "md" | "lg";
+  /** A step of the scale, or pixels for a card's large code (drawn at weight 500, not 600). */
+  size?: "sm" | "md" | "lg" | number;
   className?: string;
 }
 
@@ -28,9 +29,10 @@ export function OtpCode({
       data-testid="otp-code"
       data-masked={masked || undefined}
       aria-label={masked ? undefined : code.split("").join(" ")}
+      style={typeof size === "number" ? { fontSize: size } : undefined}
       className={cx(
-        "mono font-semibold tracking-[0.04em] whitespace-nowrap tabular-nums",
-        SIZE[size],
+        "mono tracking-[0.04em] whitespace-nowrap tabular-nums",
+        typeof size === "number" ? "font-medium" : cx("font-semibold", SIZE[size]),
         TONE[tone],
         className,
       )}>

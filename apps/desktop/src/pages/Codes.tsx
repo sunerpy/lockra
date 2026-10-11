@@ -1,11 +1,14 @@
-// The home page: every account with its current code. Click or Enter copies; ↑ ↓ move between
-// rows; "/" or Ctrl F searches. Favourites come first, then the chosen order. With groups, the
+// The home page: every account with its current code, as a list or as cards (验证码视图, a setting
+// of its own whatever the theme). Click or Enter copies; ↑ ↓ move between rows, and ← → too between
+// cards; "/" or Ctrl F searches. Favourites come first, then the chosen order. With groups, the
 // accounts are in sections that fold; a right click (or the context-menu key) opens a row's menu.
 // "Select" ticks several accounts (one by one, a section, or all that the search shows) to move
 // them to a group at once. "Reorder" shows the whole list with handles: the groups and the accounts
-// inside them move by dragging or with ↑ ↓ on a handle, and the order is this device's.
+// inside them move by dragging or with ↑ ↓ on a handle, and the order is this device's. Selecting
+// and reordering happen in the list, whichever view is chosen.
 import {
   ALL_GROUPS,
+  type CodesView,
   type EntryView,
   NO_GROUP,
   SORT_ORDERS,
@@ -23,6 +26,7 @@ import {
   ContextMenu,
   EmptyState,
   EntryRow,
+  EntryTile,
   Icon,
   IconButton,
   Input,
@@ -31,10 +35,14 @@ import {
   type MenuPoint,
   type MenuSection,
   ReorderList,
+  Segmented,
   Select,
+  cx,
+  tileStep,
   useBackend,
   useClock,
   useCodes,
+  useFlash,
   useNow,
   useT,
   useUiState,
@@ -42,6 +50,7 @@ import {
 import {
   type KeyboardEvent,
   type MouseEvent,
+  type ReactNode,
   useEffect,
   useId,
   useMemo,
@@ -119,6 +128,8 @@ export function Codes() {
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [moving, setMoving] = useState(false);
   const [reordering, setReordering] = useState(false);
+  // The row or card just copied says so for a moment.
+  const [copiedId, flash] = useFlash();
   const startSelection = (entry?: EntryView) => {
     setTicked(new Set(entry ? [entry.id] : []));
     setSelecting(true);
@@ -158,6 +169,8 @@ export function Codes() {
     [visible, ticked],
   );
   const grouped = settings.group_codes && groups.length > 0;
+  // Ticking several accounts happens in the list.
+  const cards = settings.codes_view === "grid" && !selecting;
   const searching = query.trim() !== "";
   const folded = useMemo(() => new Set(collapsedGroups), [collapsedGroups]);
   const sections = useMemo(
@@ -182,8 +195,20 @@ export function Codes() {
   }, [shell.searchFocus, searchId]);
 
   const rows = () =>
-    Array.from(list.current?.querySelectorAll<HTMLElement>('[data-testid="entry-row"]') ?? []);
-  const copy = (entry: EntryView) => void dispatch({ command: "entry_copy", id: entry.id });
+    Array.from(
+      list.current?.querySelectorAll<HTMLElement>(
+        '[data-testid="entry-row"], [data-testid="entry-tile"]',
+      ) ?? [],
+    );
+  const copy = (entry: EntryView) =>
+    void dispatch({ command: "entry_copy", id: entry.id }).then((done) => {
+      // `null` once copied; a failure has become a toast and `undefined`.
+      if (done !== undefined) flash(entry.id);
+    });
+  const copiedNote =
+    settings.clipboard_clear_seconds > 0
+      ? t("notice.copied", { s: settings.clipboard_clear_seconds })
+      : t("notice.copiedKept");
 
   /** The row's menu at the pointer of a right click, or beside the row from the keyboard. */
   const openContext = (row: HTMLElement, entry: EntryView, pointer?: MenuPoint) => {
@@ -227,8 +252,16 @@ export function Codes() {
       if (entry) openContext(row, entry);
       return;
     }
-    const next =
-      event.key === "ArrowDown"
+    const next = cards
+      ? tileStep(
+          all.map((tile) => {
+            const box = tile.getBoundingClientRect();
+            return { left: box.left, top: box.top, width: box.width };
+          }),
+          at,
+          event.key,
+        )
+      : event.key === "ArrowDown"
         ? at + 1
         : event.key === "ArrowUp"
           ? at - 1
@@ -259,6 +292,8 @@ export function Codes() {
 
   const setSort = (sort: SortOrder) =>
     void dispatch({ command: "settings_set", settings: { ...settings, sort } });
+  const setView = (codes_view: CodesView) =>
+    void dispatch({ command: "settings_set", settings: { ...settings, codes_view } });
 
   return (
     <div className="flex flex-col gap-4" data-testid="page-codes">
@@ -316,6 +351,20 @@ export function Codes() {
               onChange={setSort}
               options={SORT_ORDERS.map((value) => ({ value, label: t(`codes.sort.${value}`) }))}
               data-testid="codes-sort"
+            />
+            <Segmented
+              label={t("codes.view.label")}
+              iconOnly
+              value={settings.codes_view}
+              onChange={setView}
+              options={(["list", "grid"] as const).map((value) => ({
+                value,
+                label: t(`codes.view.${value}`),
+                icon: value,
+                // Selecting and reordering stay in the list.
+                disabled: selecting || reordering,
+              }))}
+              data-testid="codes-view"
             />
             {groups.length > 0 && (
               <IconButton
@@ -461,84 +510,150 @@ export function Codes() {
               />
             </Card>
           ) : (
-            <Card padding="none" className="p-1.5">
-              <div ref={list} onKeyDown={onListKey} data-testid="codes-list">
-                {sections.map((section) => {
-                  const name = section.key === NO_GROUP ? t("codes.groupNone") : section.key;
-                  // A search shows what it finds in every section, folded or not.
-                  const open = !grouped || searching || !folded.has(section.key);
-                  return (
-                    <section
-                      key={section.key === NO_GROUP ? "\u0000" : section.key}
-                      aria-label={grouped ? name : undefined}
-                      data-testid={grouped ? "codes-section" : undefined}>
-                      {grouped && (
-                        <div className="flex items-center gap-1">
-                          {selecting && (
-                            <SectionTick
-                              label={t("codes.selectGroup", { group: name })}
-                              ids={section.entries.map((e) => e.id)}
-                              ticked={ticked}
-                              onChange={tick}
+            <>
+              {cards ? (
+                <div
+                  ref={list}
+                  onKeyDown={onListKey}
+                  className="flex flex-col gap-3"
+                  data-testid="codes-grid">
+                  {sections.map((section) => {
+                    const name = section.key === NO_GROUP ? t("codes.groupNone") : section.key;
+                    const open = !grouped || searching || !folded.has(section.key);
+                    return (
+                      <section
+                        key={section.key === NO_GROUP ? "\u0000" : section.key}
+                        aria-label={grouped ? name : undefined}
+                        data-testid={grouped ? "codes-section" : undefined}>
+                        {grouped && (
+                          <SectionHeading
+                            name={name}
+                            userText={section.key !== NO_GROUP}
+                            count={section.entries.length}
+                            open={open}
+                            searching={searching}
+                            onToggle={() => toggleFold(section.key)}
+                          />
+                        )}
+                        {open && (
+                          <div
+                            role="list"
+                            aria-label={grouped ? name : t("codes.title")}
+                            className={cx(
+                              "grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4",
+                              grouped && "mt-1",
+                            )}>
+                            {section.entries.map((entry) => (
+                              <div role="listitem" key={entry.id} className="grid min-w-0">
+                                <EntryTile
+                                  entry={entry}
+                                  code={codes.get(entry.id)}
+                                  nowMs={now}
+                                  masked={settings.hide_codes}
+                                  still={motionReduced(settings)}
+                                  copied={copiedId === entry.id ? copiedNote : undefined}
+                                  onCopy={() => copy(entry)}
+                                  onNext={
+                                    entry.kind.type === "hotp"
+                                      ? () =>
+                                          void dispatch({
+                                            command: "entry_hotp_next",
+                                            id: entry.id,
+                                          })
+                                      : undefined
+                                  }
+                                  onFavorite={() => actions.run(entry, "favorite")}
+                                  onContextMenu={(event) => onRowContextMenu(event, entry)}
+                                  menu={<RowMenu entry={entry} onSelect={startSelection} />}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              ) : (
+                <Card padding="none" className="p-1.5">
+                  <div ref={list} onKeyDown={onListKey} data-testid="codes-list">
+                    {sections.map((section) => {
+                      const name = section.key === NO_GROUP ? t("codes.groupNone") : section.key;
+                      // A search shows what it finds in every section, folded or not.
+                      const open = !grouped || searching || !folded.has(section.key);
+                      return (
+                        <section
+                          key={section.key === NO_GROUP ? "\u0000" : section.key}
+                          aria-label={grouped ? name : undefined}
+                          data-testid={grouped ? "codes-section" : undefined}>
+                          {grouped && (
+                            <SectionHeading
+                              name={name}
+                              userText={section.key !== NO_GROUP}
+                              count={section.entries.length}
+                              open={open}
+                              searching={searching}
+                              onToggle={() => toggleFold(section.key)}
+                              tick={
+                                selecting && (
+                                  <SectionTick
+                                    label={t("codes.selectGroup", { group: name })}
+                                    ids={section.entries.map((e) => e.id)}
+                                    ticked={ticked}
+                                    onChange={tick}
+                                  />
+                                )
+                              }
                             />
                           )}
-                          <button
-                            type="button"
-                            aria-expanded={open}
-                            disabled={searching}
-                            onClick={() => toggleFold(section.key)}
-                            data-testid="codes-group-toggle"
-                            className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-6 px-2 text-left text-[12px] font-medium text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:bg-inset disabled:hover:bg-transparent">
-                            <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
-                            <span
-                              className="min-w-0 truncate"
-                              {...(section.key === NO_GROUP ? {} : { "data-user-text": "" })}>
-                              {name}
-                            </span>
-                            <span className="ml-auto mono text-[11px] text-fg-subtle">
-                              {section.entries.length}
-                            </span>
-                          </button>
-                        </div>
-                      )}
-                      {open && (
-                        <div role="list" aria-label={grouped ? name : t("codes.title")}>
-                          {section.entries.map((entry) => (
-                            <div role="listitem" key={entry.id}>
-                              <EntryRow
-                                entry={entry}
-                                code={codes.get(entry.id)}
-                                nowMs={now}
-                                masked={settings.hide_codes}
-                                still={motionReduced(settings)}
-                                onCopy={() => copy(entry)}
-                                onNext={
-                                  entry.kind.type === "hotp"
-                                    ? () =>
-                                        void dispatch({ command: "entry_hotp_next", id: entry.id })
-                                    : undefined
-                                }
-                                onFavorite={() => actions.run(entry, "favorite")}
-                                onEdit={() => actions.run(entry, "edit")}
-                                onContextMenu={(event) => onRowContextMenu(event, entry)}
-                                menu={<RowMenu entry={entry} onSelect={startSelection} />}
-                                selection={
-                                  selecting
-                                    ? {
-                                        checked: ticked.has(entry.id),
-                                        onToggle: () => tick([entry.id], !ticked.has(entry.id)),
-                                      }
-                                    : undefined
-                                }
-                              />
+                          {open && (
+                            <div role="list" aria-label={grouped ? name : t("codes.title")}>
+                              {section.entries.map((entry) => (
+                                <div role="listitem" key={entry.id}>
+                                  <EntryRow
+                                    entry={entry}
+                                    code={codes.get(entry.id)}
+                                    nowMs={now}
+                                    masked={settings.hide_codes}
+                                    still={motionReduced(settings)}
+                                    onCopy={() => copy(entry)}
+                                    onNext={
+                                      entry.kind.type === "hotp"
+                                        ? () =>
+                                            void dispatch({
+                                              command: "entry_hotp_next",
+                                              id: entry.id,
+                                            })
+                                        : undefined
+                                    }
+                                    copied={
+                                      copiedId === entry.id && !selecting
+                                        ? t("notice.copiedKept")
+                                        : undefined
+                                    }
+                                    onFavorite={() => actions.run(entry, "favorite")}
+                                    onEdit={() => actions.run(entry, "edit")}
+                                    onContextMenu={(event) => onRowContextMenu(event, entry)}
+                                    menu={<RowMenu entry={entry} onSelect={startSelection} />}
+                                    selection={
+                                      selecting
+                                        ? {
+                                            checked: ticked.has(entry.id),
+                                            onToggle: () => tick([entry.id], !ticked.has(entry.id)),
+                                          }
+                                        : undefined
+                                    }
+                                  />
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </section>
-                  );
-                })}
-              </div>
+                          )}
+                        </section>
+                      );
+                    })}
+                  </div>
+                </Card>
+              )}
               <ContextMenu
                 at={context?.at ?? null}
                 label={t("codes.actions")}
@@ -549,7 +664,7 @@ export function Codes() {
                 onClose={() => setContext(null)}
                 data-testid="row-context"
               />
-            </Card>
+            </>
           )}
           {moving && (
             <MoveGroupDialog
@@ -651,6 +766,46 @@ function RowMenu({ entry, onSelect }: { entry: EntryView; onSelect: (entry: Entr
       triggerClassName="inline-flex h-7 w-7 items-center justify-center rounded-6 text-fg-muted transition-colors hover:bg-inset2 hover:text-fg"
       trigger={<Icon name="more" size={16} />}
     />
+  );
+}
+
+/** A section's heading: its name and count, folding it open or shut (not while searching, which
+ *  shows what it finds everywhere); while selecting, its box first. */
+function SectionHeading({
+  name,
+  userText,
+  count,
+  open,
+  searching,
+  onToggle,
+  tick,
+}: {
+  name: string;
+  /** The group's own name, as the user typed it (not 未分组). */
+  userText: boolean;
+  count: number;
+  open: boolean;
+  searching: boolean;
+  onToggle: () => void;
+  tick?: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      {tick}
+      <button
+        type="button"
+        aria-expanded={open}
+        disabled={searching}
+        onClick={onToggle}
+        data-testid="codes-group-toggle"
+        className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-6 px-2 text-left text-[12px] font-medium text-fg-muted outline-none transition-colors hover:bg-inset focus-visible:bg-inset disabled:hover:bg-transparent">
+        <Icon name={open ? "chevronDown" : "chevronRight"} size={14} />
+        <span className="min-w-0 truncate" {...(userText ? { "data-user-text": "" } : {})}>
+          {name}
+        </span>
+        <span className="ml-auto mono text-[11px] text-fg-subtle">{count}</span>
+      </button>
+    </div>
   );
 }
 

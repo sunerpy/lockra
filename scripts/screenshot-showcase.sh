@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Screenshot the development showcase (every primitive, DESIGN.md §3) in the four themes, in the
+# Screenshot the development showcase (every primitive, DESIGN.md §3) in the eight themes, in the
 # real Tauri window (WebKitGTK) under Xvfb. Usage: scripts/screenshot-showcase.sh [out-dir]
 # Needs Xvfb, xdotool, xwininfo, scrot, python3 with Pillow, and the web workspace installed.
 set -euo pipefail
@@ -70,7 +70,7 @@ while True:
 import os
 os.remove(f"{out}/.probe.png")
 previous = None
-for key, theme in zip("1234", ["light", "dark", "warm", "graphite"]):
+for key, theme in zip("12345678", ["light", "dark", "warm", "graphite", "glass", "glass_night", "paper", "paper_night"]):
     subprocess.run(["xdotool", "key", "--window", win, key], env=env, check=True)
     path = f"{out}/showcase-{theme}.png"
     deadline = time.monotonic() + 30

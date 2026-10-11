@@ -61,6 +61,8 @@ const PATHS = {
   chevronLeft: "M15 6l-6 6 6 6",
   chevronUp: "M6 15l6-6 6 6",
   grid: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+  // Three lines with their bullets: the list view, beside the grid's four squares.
+  list: "M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01",
   globe: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18",
   folder: "M3 7h6l2 2h10v10H3z",
   key: "M15 3a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM9.5 14.5 3 21M6 18l2 2M4 20l2 2",

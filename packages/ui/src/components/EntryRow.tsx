@@ -29,6 +29,8 @@ export interface EntryRowProps {
   /** Selecting several accounts: the row is a checkbox that a click, Enter or Space ticks, and its
    *  buttons, menu and right click step aside. */
   selection?: { checked: boolean; onToggle: () => void };
+  /** Just copied: what the row says in place of its code, in the theme's pill (ink in 墨白). */
+  copied?: string;
   className?: string;
 }
 
@@ -49,6 +51,7 @@ export function EntryRow({
   onContextMenu,
   menu,
   selection,
+  copied,
   className,
 }: EntryRowProps) {
   const t = useT();
@@ -82,6 +85,7 @@ export function EntryRow({
       tabIndex={0}
       data-testid="entry-row"
       data-entry={entry.id}
+      data-copied={copied !== undefined || undefined}
       title={selecting ? t("codes.selectHint") : t("codes.copyHint")}
       onClick={activate}
       onKeyDown={onKeyDown}
@@ -111,24 +115,42 @@ export function EntryRow({
         color={entry.color}
         mark={entry.mark}
       />
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {/* The pin button says it where there is one; the name says it where there is none. */}
-          {entry.favorite && !onFavorite && (
-            <Icon name="star" size={12} className="shrink-0 text-accent-text" />
-          )}
-          <span className="truncate text-[14px] font-medium text-fg" title={entry.issuer}>
-            {entry.issuer || entry.account}
-          </span>
-        </div>
-        {entry.issuer !== "" && (
-          <div className="truncate text-[12px] text-fg-muted" title={entry.account}>
-            {entry.account}
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {/* The pin button says it where there is one; the name says it where there is none. */}
+            {entry.favorite && !onFavorite && (
+              <Icon name="star" size={12} className="shrink-0 text-accent-text" />
+            )}
+            <span className="truncate text-[14px] font-medium text-fg" title={entry.issuer}>
+              {entry.issuer || entry.account}
+            </span>
           </div>
+          {entry.issuer !== "" && (
+            <div className="truncate text-[12px] text-fg-muted" title={entry.account}>
+              {entry.account}
+            </div>
+          )}
+        </div>
+        {!selecting && copied === undefined && (
+          <span
+            aria-hidden
+            data-testid="row-hint"
+            // No room taken until it shows: a phone (no hover) keeps the whole width for the names.
+            className="hidden shrink-0 text-[12px] whitespace-nowrap text-fg-subtle group-hover:inline group-focus-visible:inline">
+            {t("codes.copyHint")}
+          </span>
         )}
       </div>
       <div className="flex flex-col items-end">
-        {current === undefined ? (
+        {copied !== undefined ? (
+          <span
+            data-testid="row-copied"
+            className="inline-flex h-7 items-center gap-1.5 rounded-pill bg-[var(--row-pill-bg)] px-3 text-[13px] font-medium whitespace-nowrap text-[var(--row-pill-fg)]">
+            <Icon name="check" size={14} />
+            {copied}
+          </span>
+        ) : current === undefined ? (
           <span className="mono text-[22px] text-fg-subtle">— — —</span>
         ) : (
           <OtpCode
@@ -138,14 +160,14 @@ export function EntryRow({
             className={masked ? "group-hover:hidden group-focus-visible:hidden" : undefined}
           />
         )}
-        {masked && current !== undefined && (
+        {masked && current !== undefined && copied === undefined && (
           <OtpCode
             code={current}
             tone={warning ? "warning" : "normal"}
             className="hidden group-hover:inline group-focus-visible:inline"
           />
         )}
-        {warning && code?.next_code && !masked && (
+        {warning && code?.next_code && !masked && copied === undefined && (
           <span data-testid="next-code" className="mono text-[11px] text-fg-subtle">
             {t("codes.nextCode", { code: groupCode(code.next_code) })}
           </span>

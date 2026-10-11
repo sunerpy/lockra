@@ -10,7 +10,8 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   selected?: boolean;
 }
 
-/** Surface + 1 px hairline + radius 10, no shadow. The only container in the app. */
+/** Surface + 1 px hairline + the theme's card radius (10 in the classic themes) and depth (none
+ *  there; a soft shadow and frost in 澄空). The only container in the app. */
 export function Card({
   children,
   padding = "md",
@@ -23,7 +24,7 @@ export function Card({
   return (
     <div
       className={cx(
-        "bg-surface hairline",
+        "bg-surface hairline panel",
         radius === 10 ? "rounded-10" : "rounded-14",
         padding === "md" && "p-[var(--card-pad)]",
         padding === "sm" && "p-3",

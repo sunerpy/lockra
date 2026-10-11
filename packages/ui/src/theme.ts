@@ -32,13 +32,64 @@ export function isAccentId(value: unknown): value is AccentId {
   return typeof value === "string" && (ACCENT_IDS as readonly string[]).includes(value);
 }
 
-/** Which theme the settings resolve to, honouring follow-system (light ↔ dark only). */
+/** The dark themes: the second of each pair, and graphite. */
+const DARK_THEMES: ReadonlySet<ThemeId> = new Set([
+  "dark",
+  "graphite",
+  "glass_night",
+  "paper_night",
+]);
+
+export function isDarkTheme(theme: ThemeId): boolean {
+  return DARK_THEMES.has(theme);
+}
+
+/** The light and the dark theme that following the system switches between: 澄空 ↔ 澄空 · 夜 and
+ *  墨白 ↔ 墨白 · 夜; warm and graphite have no pair of their own and follow it as light ↔ dark, as
+ *  every theme did before the pairs. */
+export function themePair(theme: ThemeId): readonly [ThemeId, ThemeId] {
+  if (theme === "glass" || theme === "glass_night") return ["glass", "glass_night"];
+  if (theme === "paper" || theme === "paper_night") return ["paper", "paper_night"];
+  return ["light", "dark"];
+}
+
+/** Whether picking `theme` keeps following the system: warm and graphite stand alone. */
+export function followsSystem(theme: ThemeId): boolean {
+  return theme !== "warm" && theme !== "graphite";
+}
+
+/** Settings › 外观's grid: a column per light theme with its dark one below it (the pairs that
+ *  following the system switches between), 暖纸 and 石墨 last. */
+export const THEME_COLUMNS: readonly (readonly [ThemeId, ThemeId])[] = [
+  ["light", "dark"],
+  ["glass", "glass_night"],
+  ["paper", "paper_night"],
+  ["warm", "graphite"],
+];
+
+/** What picking a theme writes. Following the system, a theme of the system's own scheme chooses
+ *  its column and keeps following; any other (the other scheme, or 暖纸 / 石墨, which have no pair)
+ *  is a choice of its own and stops following, so what was picked is what shows. */
+export function pickTheme(
+  settings: Pick<Settings, "follow_system_theme">,
+  theme: ThemeId,
+  systemDark: boolean,
+): Pick<Settings, "theme" | "follow_system_theme"> {
+  return {
+    theme,
+    follow_system_theme:
+      settings.follow_system_theme && followsSystem(theme) && isDarkTheme(theme) === systemDark,
+  };
+}
+
+/** Which theme the settings resolve to, following the system within the theme's pair. */
 export function resolveTheme(
   settings: Pick<Settings, "theme" | "follow_system_theme">,
   systemDark: boolean,
 ): ThemeId {
-  if (settings.follow_system_theme) return systemDark ? "dark" : "light";
-  return settings.theme;
+  if (!settings.follow_system_theme) return settings.theme;
+  const [light, dark] = themePair(settings.theme);
+  return systemDark ? dark : light;
 }
 
 /** The appearance the settings ask for on this system. */

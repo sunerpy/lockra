@@ -1,4 +1,4 @@
-/* Lockra design tokens (DESIGN.md), derived from Voltip's: four themes share one component set;
+/* Lockra design tokens (DESIGN.md), derived from Voltip's: eight themes share one component set;
  * switching `data-theme` on <html> (or any subtree) swaps the palette. Components only ever reference
  * these variables through the Tailwind utilities declared in `@theme inline` below; no hex literals
  * in TSX (scripts/check-no-literal-colors.sh). */
@@ -263,6 +263,440 @@
   --shadow-win: 0 24px 64px -20px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(0 0 0 / 0.08);
 }
 
+/* A theme's structure beyond its colours (DESIGN.md §1): translucent surfaces, the canvas image, radii,
+ * shadows, the floating sidebar and the meter colour. The classic four keep the look they had; every
+ * newer theme sets each of these itself, so a preview of one inside another (Settings › 外观) is right. */
+:root,
+[data-theme="light"],
+[data-theme="dark"],
+[data-theme="warm"],
+[data-theme="graphite"] {
+  --surface-fill: var(--surface);
+  --nav-fill: var(--nav);
+  --overlay-fill: var(--surface);
+  --edge: var(--border);
+  --canvas-image: none;
+  --card-shadow: none;
+  --surface-blur: none;
+  --radius-card: 10px;
+  --radius-dialog: 14px;
+  --radius-control: 6px;
+  --sidebar-inset: 0px;
+  --sidebar-radius: 0px;
+  --sidebar-edge: var(--border);
+  --sidebar-border: 0 1px 0 0;
+  --sidebar-shadow: none;
+  --primary-shadow: none;
+  --meter: var(--accent);
+  --tile-copied-bg: var(--surface-fill);
+  --tile-copied-fg: var(--fg);
+  --tile-copied-muted: var(--fg-muted);
+  --tile-copied-edge: var(--edge);
+  --tile-copied-accent: var(--accent-text);
+  --tile-pill-bg: var(--accent-soft);
+  --tile-pill-fg: var(--accent-text);
+  --tile-pill-pad: 12px;
+  --tile-hover-edge: var(--edge);
+  --row-pill-bg: var(--accent-soft);
+  --row-pill-fg: var(--accent-text);
+  --logo-body: #339cff;
+  --logo-dots: #ffffff;
+  --titlebar-fill: var(--surface);
+  --titlebar-rule: var(--border);
+}
+
+/* 澄空 · 极光玻璃 */
+:root[data-theme="glass"],
+[data-theme="glass"] {
+  color-scheme: light;
+  --canvas: #eef2fa;
+  --surface: #f8fafe;
+  --inset: #f2f5fc;
+  --inset2: #e9eef8;
+  --border: #dde4f1;
+  --border-strong: #ccd5e7;
+  --fg: #151826;
+  --fg-muted: #565d7a;
+  --fg-subtle: #7a819c;
+  --primary: #2f6bef;
+  --primary-fg: #ffffff;
+  --accent: #3d7bff;
+  --accent-fg: #000000;
+  --accent-soft: #e2ebfe;
+  --accent-text: #3162cc;
+  --accent-text-hover: #2850a7;
+  --thumb: #ffffff;
+  --ok: #2e9e62;
+  --ok-soft: #e4f4ea;
+  --ok-text: #1f7a4a;
+  --danger: #c93a33;
+  --danger-soft: #f9e7e5;
+  --warning: #b7791f;
+  --warning-soft: #fbf1dc;
+  --info: #0968c8;
+  --info-soft: #e1edf9;
+  --nav: #f1f4fb;
+  --nav-active: #ffffff;
+  --track: #e1e7f3;
+  --keycap-bg: #ffffff;
+  --keycap-border: #d5dcea;
+  --scrim: #151826;
+  --qr-plate: #ffffff;
+  --mark: #fff1b8;
+  /* Account colours (DESIGN.md): a soft fill and its text, 4.5:1 or more. */
+  --tag-red: #fbdfe0;
+  --tag-red-text: #95181c;
+  --tag-orange: #fbeadf;
+  --tag-orange-text: #934918;
+  --tag-amber: #fbf2df;
+  --tag-amber-text: #7d5a14;
+  --tag-green: #dffbe9;
+  --tag-green-text: #127035;
+  --tag-teal: #dffbf8;
+  --tag-teal-text: #126e64;
+  --tag-blue: #dfecfb;
+  --tag-blue-text: #185395;
+  --tag-indigo: #dfe2fb;
+  --tag-indigo-text: #182595;
+  --tag-purple: #eedffb;
+  --tag-purple-text: #5b1895;
+  --tag-pink: #fbdfee;
+  --tag-pink-text: #95185b;
+  --tag-gray: #e8eaed;
+  --tag-gray-text: #4c5361;
+  --shadow-pop: 0 12px 32px 0 rgb(42 51 102 / 0.14), 0 0 0 1px rgb(255 255 255 / 0.7);
+  --shadow-win: 0 30px 80px -24px rgb(27 35 80 / 0.32), 0 0 0 1px rgb(255 255 255 / 0.75);
+  /* Structure (see the classic defaults above). */
+  --surface-fill: rgb(255 255 255 / 0.66);
+  --nav-fill: rgb(255 255 255 / 0.5);
+  --overlay-fill: rgb(255 255 255 / 0.9);
+  --edge: rgb(255 255 255 / 0.9);
+  --canvas-image:
+    radial-gradient(62% 56% at 6% 0%, rgb(156 195 255 / 0.85), transparent 70%),
+    radial-gradient(56% 56% at 90% 2%, rgb(215 194 255 / 0.8), transparent 70%),
+    radial-gradient(56% 56% at 94% 98%, rgb(159 240 220 / 0.6), transparent 70%),
+    radial-gradient(46% 46% at 10% 96%, rgb(255 214 232 / 0.45), transparent 70%);
+  --card-shadow: 0 14px 36px -10px rgb(42 51 102 / 0.14);
+  --surface-blur: blur(22px) saturate(1.35);
+  --radius-card: 18px;
+  --radius-dialog: 22px;
+  --radius-control: 12px;
+  --sidebar-inset: 12px;
+  --sidebar-radius: 20px;
+  --sidebar-edge: rgb(255 255 255 / 0.9);
+  --sidebar-border: 1px;
+  --sidebar-shadow: 0 16px 40px -14px rgb(42 51 102 / 0.18);
+  --primary-shadow: 0 8px 22px -6px rgb(47 107 239 / 0.55);
+  --meter: var(--accent);
+  --tile-copied-bg: var(--surface-fill);
+  --tile-copied-fg: var(--fg);
+  --tile-copied-muted: var(--fg-muted);
+  --tile-copied-edge: var(--edge);
+  --tile-copied-accent: var(--accent-text);
+  --tile-pill-bg: var(--accent-soft);
+  --tile-pill-fg: var(--accent-text);
+  --tile-pill-pad: 12px;
+  --tile-hover-edge: var(--edge);
+  --row-pill-bg: var(--accent-soft);
+  --row-pill-fg: var(--accent-text);
+  --logo-body: #3d7bff;
+  --logo-dots: #ffffff;
+  --titlebar-fill: transparent;
+  --titlebar-rule: transparent;
+}
+
+/* 澄空 · 夜 */
+:root[data-theme="glass_night"],
+[data-theme="glass_night"] {
+  color-scheme: dark;
+  --canvas: #0b1020;
+  --surface: #161c33;
+  --inset: #1a2140;
+  --inset2: #20284a;
+  --border: #2a3255;
+  --border-strong: #38426a;
+  --fg: #eef1fa;
+  --fg-muted: #a2aac6;
+  --fg-subtle: #737d9c;
+  --primary: #7aa2ff;
+  --primary-fg: #0b1020;
+  --accent: #6e9bff;
+  --accent-fg: #000000;
+  --accent-soft: #2d3d68;
+  --accent-text: #84aaff;
+  --accent-text-hover: #adc6ff;
+  --thumb: #ffffff;
+  --ok: #34d399;
+  --ok-soft: #10332a;
+  --ok-text: #6ee7b7;
+  --danger: #f87171;
+  --danger-soft: #3a1c22;
+  --warning: #fbbf24;
+  --warning-soft: #3a2f12;
+  --info: #7ab3ff;
+  --info-soft: #162848;
+  --nav: #10162b;
+  --nav-active: #252e52;
+  --track: #2a3255;
+  --keycap-bg: #1a2140;
+  --keycap-border: #38426a;
+  --scrim: #000000;
+  --qr-plate: #ffffff;
+  --mark: #5a4a12;
+  /* Account colours (DESIGN.md): a soft fill and its text, 4.5:1 or more. */
+  --tag-red: #4c1f21;
+  --tag-red-text: #f0898c;
+  --tag-orange: #4c311f;
+  --tag-orange-text: #f0b289;
+  --tag-amber: #4c3d1f;
+  --tag-amber-text: #f0ce89;
+  --tag-green: #1f4c30;
+  --tag-green-text: #89f0af;
+  --tag-teal: #1f4c48;
+  --tag-teal-text: #89f0e6;
+  --tag-blue: #1f344c;
+  --tag-blue-text: #89b9f0;
+  --tag-indigo: #1f244c;
+  --tag-indigo-text: #8e97f1;
+  --tag-purple: #371f4c;
+  --tag-purple-text: #c089f0;
+  --tag-pink: #4c1f37;
+  --tag-pink-text: #f089c0;
+  --tag-gray: #32363e;
+  --tag-gray-text: #b3bac6;
+  --shadow-pop: 0 14px 36px 0 rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.08);
+  --shadow-win: 0 30px 80px -20px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.1);
+  /* Structure (see the classic defaults above). */
+  --surface-fill: rgb(255 255 255 / 0.07);
+  --nav-fill: rgb(255 255 255 / 0.05);
+  --overlay-fill: rgb(22 28 51 / 0.92);
+  --edge: rgb(255 255 255 / 0.12);
+  --canvas-image:
+    radial-gradient(62% 56% at 6% 0%, rgb(59 76 202 / 0.55), transparent 70%),
+    radial-gradient(56% 56% at 90% 2%, rgb(124 58 237 / 0.42), transparent 70%),
+    radial-gradient(56% 56% at 94% 98%, rgb(14 165 164 / 0.32), transparent 70%),
+    radial-gradient(46% 46% at 10% 96%, rgb(219 39 119 / 0.22), transparent 70%);
+  --card-shadow: 0 16px 40px -10px rgb(0 0 0 / 0.45);
+  --surface-blur: blur(22px) saturate(1.35);
+  --radius-card: 18px;
+  --radius-dialog: 22px;
+  --radius-control: 12px;
+  --sidebar-inset: 12px;
+  --sidebar-radius: 20px;
+  --sidebar-edge: rgb(255 255 255 / 0.12);
+  --sidebar-border: 1px;
+  --sidebar-shadow: 0 16px 40px -14px rgb(0 0 0 / 0.5);
+  --primary-shadow: 0 8px 24px -6px rgb(110 155 255 / 0.55);
+  --meter: var(--accent);
+  --tile-copied-bg: var(--surface-fill);
+  --tile-copied-fg: var(--fg);
+  --tile-copied-muted: var(--fg-muted);
+  --tile-copied-edge: var(--edge);
+  --tile-copied-accent: var(--accent-text);
+  --tile-pill-bg: var(--accent-soft);
+  --tile-pill-fg: var(--accent-text);
+  --tile-pill-pad: 12px;
+  --tile-hover-edge: var(--edge);
+  --row-pill-bg: var(--accent-soft);
+  --row-pill-fg: var(--accent-text);
+  --logo-body: #6e9bff;
+  --logo-dots: #ffffff;
+  --titlebar-fill: transparent;
+  --titlebar-rule: transparent;
+}
+
+/* 墨白 · 纸上墨迹 */
+:root[data-theme="paper"],
+[data-theme="paper"] {
+  color-scheme: light;
+  --canvas: #f7f6f2;
+  --surface: #ffffff;
+  --inset: #f4f2ec;
+  --inset2: #eceae3;
+  --border: #e4e1d8;
+  --border-strong: #d3cfc4;
+  --fg: #111111;
+  --fg-muted: #66635c;
+  --fg-subtle: #9a968c;
+  --primary: #111111;
+  --primary-fg: #ffffff;
+  --accent: #2142ff;
+  --accent-fg: #ffffff;
+  --accent-soft: #e4e8ff;
+  --accent-text: #2142ff;
+  --accent-text-hover: #1d3be3;
+  --thumb: #ffffff;
+  --ok: #2e9e62;
+  --ok-soft: #e4f4ea;
+  --ok-text: #1f7a4a;
+  --danger: #c93a33;
+  --danger-soft: #f9e7e5;
+  --warning: #b7791f;
+  --warning-soft: #fbf1dc;
+  --info: #0968c8;
+  --info-soft: #e1edf9;
+  --nav: #f7f6f2;
+  --nav-active: #eceae3;
+  --track: #eceae3;
+  --keycap-bg: #ffffff;
+  --keycap-border: #d3cfc4;
+  --scrim: #111111;
+  --qr-plate: #ffffff;
+  --mark: #fff1b8;
+  /* Account colours (DESIGN.md): a soft fill and its text, 4.5:1 or more. */
+  --tag-red: #fbdfe0;
+  --tag-red-text: #95181c;
+  --tag-orange: #fbeadf;
+  --tag-orange-text: #934918;
+  --tag-amber: #fbf2df;
+  --tag-amber-text: #7d5a14;
+  --tag-green: #dffbe9;
+  --tag-green-text: #127035;
+  --tag-teal: #dffbf8;
+  --tag-teal-text: #126e64;
+  --tag-blue: #dfecfb;
+  --tag-blue-text: #185395;
+  --tag-indigo: #dfe2fb;
+  --tag-indigo-text: #182595;
+  --tag-purple: #eedffb;
+  --tag-purple-text: #5b1895;
+  --tag-pink: #fbdfee;
+  --tag-pink-text: #95185b;
+  --tag-gray: #e8eaed;
+  --tag-gray-text: #4c5361;
+  --shadow-pop: 0 10px 28px 0 rgb(17 17 17 / 0.08), 0 0 0 1px rgb(17 17 17 / 0.06);
+  --shadow-win: 0 24px 64px -20px rgb(17 17 17 / 0.24), 0 0 0 1px rgb(17 17 17 / 0.08);
+  /* Structure (see the classic defaults above). */
+  --surface-fill: var(--surface);
+  --nav-fill: var(--nav);
+  --overlay-fill: var(--surface);
+  --edge: var(--border);
+  --canvas-image: none;
+  --card-shadow: none;
+  --surface-blur: none;
+  --radius-card: 16px;
+  --radius-dialog: 18px;
+  --radius-control: 10px;
+  --sidebar-inset: 0px;
+  --sidebar-radius: 0px;
+  --sidebar-edge: var(--border);
+  --sidebar-border: 0 1px 0 0;
+  --sidebar-shadow: none;
+  --primary-shadow: none;
+  --meter: var(--fg);
+  --tile-copied-bg: var(--fg);
+  --tile-copied-fg: var(--surface);
+  --tile-copied-muted: #b9b5ac;
+  --tile-copied-edge: var(--fg);
+  --tile-copied-accent: var(--surface);
+  --tile-pill-bg: transparent;
+  --tile-pill-fg: var(--surface);
+  --tile-pill-pad: 0px;
+  --tile-hover-edge: var(--fg);
+  --row-pill-bg: var(--fg);
+  --row-pill-fg: var(--surface);
+  --logo-body: #2142ff;
+  --logo-dots: #ffffff;
+  --titlebar-fill: var(--canvas);
+  --titlebar-rule: var(--border);
+}
+
+/* 墨白 · 夜 */
+:root[data-theme="paper_night"],
+[data-theme="paper_night"] {
+  color-scheme: dark;
+  --canvas: #141311;
+  --surface: #1c1b19;
+  --inset: #201f1c;
+  --inset2: #272522;
+  --border: #2e2c28;
+  --border-strong: #3d3a35;
+  --fg: #f2efe8;
+  --fg-muted: #a8a49b;
+  --fg-subtle: #7a766e;
+  --primary: #f2efe8;
+  --primary-fg: #141311;
+  --accent: #8fa3ff;
+  --accent-fg: #000000;
+  --accent-soft: #3a3e55;
+  --accent-text: #93a7ff;
+  --accent-text-hover: #b8c5ff;
+  --thumb: #ffffff;
+  --ok: #3ddc97;
+  --ok-soft: #11301f;
+  --ok-text: #6ee7b7;
+  --danger: #f87171;
+  --danger-soft: #3a1b1b;
+  --warning: #fbbf24;
+  --warning-soft: #3a2f12;
+  --info: #7ab3ff;
+  --info-soft: #18243a;
+  --nav: #141311;
+  --nav-active: #272522;
+  --track: #2e2c28;
+  --keycap-bg: #201f1c;
+  --keycap-border: #3d3a35;
+  --scrim: #000000;
+  --qr-plate: #ffffff;
+  --mark: #4a4012;
+  /* Account colours (DESIGN.md): a soft fill and its text, 4.5:1 or more. */
+  --tag-red: #4c1f21;
+  --tag-red-text: #f0898c;
+  --tag-orange: #4c311f;
+  --tag-orange-text: #f0b289;
+  --tag-amber: #4c3d1f;
+  --tag-amber-text: #f0ce89;
+  --tag-green: #1f4c30;
+  --tag-green-text: #89f0af;
+  --tag-teal: #1f4c48;
+  --tag-teal-text: #89f0e6;
+  --tag-blue: #1f344c;
+  --tag-blue-text: #89b9f0;
+  --tag-indigo: #1f244c;
+  --tag-indigo-text: #8e97f1;
+  --tag-purple: #371f4c;
+  --tag-purple-text: #c089f0;
+  --tag-pink: #4c1f37;
+  --tag-pink-text: #f089c0;
+  --tag-gray: #32363e;
+  --tag-gray-text: #b3bac6;
+  --shadow-pop: 0 10px 28px 0 rgb(0 0 0 / 0.45), 0 0 0 1px rgb(255 255 255 / 0.04);
+  --shadow-win: 0 24px 64px -20px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.06);
+  /* Structure (see the classic defaults above). */
+  --surface-fill: var(--surface);
+  --nav-fill: var(--nav);
+  --overlay-fill: var(--surface);
+  --edge: var(--border);
+  --canvas-image: none;
+  --card-shadow: none;
+  --surface-blur: none;
+  --radius-card: 16px;
+  --radius-dialog: 18px;
+  --radius-control: 10px;
+  --sidebar-inset: 0px;
+  --sidebar-radius: 0px;
+  --sidebar-edge: var(--border);
+  --sidebar-border: 0 1px 0 0;
+  --sidebar-shadow: none;
+  --primary-shadow: none;
+  --meter: var(--fg);
+  --tile-copied-bg: var(--fg);
+  --tile-copied-fg: var(--surface);
+  --tile-copied-muted: #5c5952;
+  --tile-copied-edge: var(--fg);
+  --tile-copied-accent: var(--surface);
+  --tile-pill-bg: transparent;
+  --tile-pill-fg: var(--surface);
+  --tile-pill-pad: 0px;
+  --tile-hover-edge: var(--fg);
+  --row-pill-bg: var(--fg);
+  --row-pill-fg: var(--surface);
+  --logo-body: #8fa3ff;
+  --logo-dots: #ffffff;
+  --titlebar-fill: var(--canvas);
+  --titlebar-rule: var(--border);
+}
+
 /* 强调色（设置 › 外观，本机）：ChatGPT / Codex 的强调色，浅色主题取浅档、深色主题取深档；
  * `ink` 用主题的墨迹色。`default` 没有这里的规则：用主题自己的强调色（明亮、暗黑、石墨为
  * Codex 的 #339cff，暖纸保留赭色）。`accent-fg` 取与强调色对比度更高的黑或白（≥ 4.5:1），
@@ -494,6 +928,231 @@
   --accent-text-hover: #eceef1;
 }
 
+[data-accent="blue"][data-theme="glass"],
+[data-accent="blue"] [data-theme="glass"]:not([data-accent]) {
+  --accent: #0285ff;
+  --accent-fg: #000000;
+  --accent-soft: #daecfe;
+  --accent-text: #0266c4;
+  --accent-text-hover: #0254a1;
+}
+[data-accent="green"][data-theme="glass"],
+[data-accent="green"] [data-theme="glass"]:not([data-accent]) {
+  --accent: #04b84c;
+  --accent-fg: #000000;
+  --accent-soft: #dbf2e9;
+  --accent-text: #037b33;
+  --accent-text-hover: #026429;
+}
+[data-accent="yellow"][data-theme="glass"],
+[data-accent="yellow"] [data-theme="glass"]:not([data-accent]) {
+  --accent: #ffc300;
+  --accent-fg: #000000;
+  --accent-soft: #f9f3e0;
+  --accent-text: #856500;
+  --accent-text-hover: #6d5300;
+}
+[data-accent="pink"][data-theme="glass"],
+[data-accent="pink"] [data-theme="glass"]:not([data-accent]) {
+  --accent: #ff66ad;
+  --accent-fg: #000000;
+  --accent-soft: #f9e8f4;
+  --accent-text: #ab4474;
+  --accent-text-hover: #8c385f;
+}
+[data-accent="orange"][data-theme="glass"],
+[data-accent="orange"] [data-theme="glass"]:not([data-accent]) {
+  --accent: #fb6a22;
+  --accent-fg: #000000;
+  --accent-soft: #f8e9e4;
+  --accent-text: #b04a18;
+  --accent-text-hover: #903d14;
+}
+[data-accent="purple"][data-theme="glass"],
+[data-accent="purple"] [data-theme="glass"]:not([data-accent]) {
+  --accent: #924ff7;
+  --accent-fg: #000000;
+  --accent-soft: #ece5fd;
+  --accent-text: #7f45d7;
+  --accent-text-hover: #6738ae;
+}
+[data-accent="ink"][data-theme="glass"],
+[data-accent="ink"] [data-theme="glass"]:not([data-accent]) {
+  --accent: #151826;
+  --accent-fg: #ffffff;
+  --accent-soft: #dddfe4;
+  --accent-text: #151826;
+  --accent-text-hover: #151826;
+}
+[data-accent="blue"][data-theme="glass_night"],
+[data-accent="blue"] [data-theme="glass_night"]:not([data-accent]) {
+  --accent: #339cff;
+  --accent-fg: #000000;
+  --accent-soft: #1e3d68;
+  --accent-text: #58aeff;
+  --accent-text-hover: #8fc9ff;
+}
+[data-accent="green"][data-theme="glass_night"],
+[data-accent="green"] [data-theme="glass_night"]:not([data-accent]) {
+  --accent: #40c977;
+  --accent-fg: #000000;
+  --accent-soft: #214945;
+  --accent-text: #40c977;
+  --accent-text-hover: #89deab;
+}
+[data-accent="yellow"][data-theme="glass_night"],
+[data-accent="yellow"] [data-theme="glass_night"]:not([data-accent]) {
+  --accent: #ffd240;
+  --accent-fg: #000000;
+  --accent-soft: #534b36;
+  --accent-text: #ffd240;
+  --accent-text-hover: #ffd753;
+}
+[data-accent="pink"][data-theme="glass_night"],
+[data-accent="pink"] [data-theme="glass_night"]:not([data-accent]) {
+  --accent: #ff8cc1;
+  --accent-fg: #000000;
+  --accent-soft: #533958;
+  --accent-text: #ff8cc1;
+  --accent-text-hover: #ffb7d8;
+}
+[data-accent="orange"][data-theme="glass_night"],
+[data-accent="orange"] [data-theme="glass_night"]:not([data-accent]) {
+  --accent: #ff8549;
+  --accent-fg: #000000;
+  --accent-soft: #533739;
+  --accent-text: #ff8c54;
+  --accent-text-hover: #ffb592;
+}
+[data-accent="purple"][data-theme="glass_night"],
+[data-accent="purple"] [data-theme="glass_night"]:not([data-accent]) {
+  --accent: #ad7bf9;
+  --accent-fg: #000000;
+  --accent-soft: #3d3566;
+  --accent-text: #bd94fa;
+  --accent-text-hover: #d2b6fc;
+}
+[data-accent="ink"][data-theme="glass_night"],
+[data-accent="ink"] [data-theme="glass_night"]:not([data-accent]) {
+  --accent: #eef1fa;
+  --accent-fg: #000000;
+  --accent-soft: #4e5367;
+  --accent-text: #eef1fa;
+  --accent-text-hover: #eef1fa;
+}
+[data-accent="blue"][data-theme="paper"],
+[data-accent="blue"] [data-theme="paper"]:not([data-accent]) {
+  --accent: #0285ff;
+  --accent-fg: #000000;
+  --accent-soft: #e1f0ff;
+  --accent-text: #0266c4;
+  --accent-text-hover: #0254a1;
+}
+[data-accent="green"][data-theme="paper"],
+[data-accent="green"] [data-theme="paper"]:not([data-accent]) {
+  --accent: #04b84c;
+  --accent-fg: #000000;
+  --accent-soft: #e1f6ea;
+  --accent-text: #037932;
+  --accent-text-hover: #026229;
+}
+[data-accent="yellow"][data-theme="paper"],
+[data-accent="yellow"] [data-theme="paper"]:not([data-accent]) {
+  --accent: #ffc300;
+  --accent-fg: #000000;
+  --accent-soft: #fff8e0;
+  --accent-text: #826300;
+  --accent-text-hover: #6b5100;
+}
+[data-accent="pink"][data-theme="paper"],
+[data-accent="pink"] [data-theme="paper"]:not([data-accent]) {
+  --accent: #ff66ad;
+  --accent-fg: #000000;
+  --accent-soft: #ffedf5;
+  --accent-text: #a84372;
+  --accent-text-hover: #8a375d;
+}
+[data-accent="orange"][data-theme="paper"],
+[data-accent="orange"] [data-theme="paper"]:not([data-accent]) {
+  --accent: #fb6a22;
+  --accent-fg: #000000;
+  --accent-soft: #ffede4;
+  --accent-text: #ad4917;
+  --accent-text-hover: #8e3c13;
+}
+[data-accent="purple"][data-theme="paper"],
+[data-accent="purple"] [data-theme="paper"]:not([data-accent]) {
+  --accent: #924ff7;
+  --accent-fg: #000000;
+  --accent-soft: #f2eafe;
+  --accent-text: #7f45d7;
+  --accent-text-hover: #6839b0;
+}
+[data-accent="ink"][data-theme="paper"],
+[data-accent="ink"] [data-theme="paper"]:not([data-accent]) {
+  --accent: #111111;
+  --accent-fg: #ffffff;
+  --accent-soft: #e2e2e2;
+  --accent-text: #111111;
+  --accent-text-hover: #111111;
+}
+[data-accent="blue"][data-theme="paper_night"],
+[data-accent="blue"] [data-theme="paper_night"]:not([data-accent]) {
+  --accent: #339cff;
+  --accent-fg: #000000;
+  --accent-soft: #223d55;
+  --accent-text: #52abff;
+  --accent-text-hover: #89c6ff;
+}
+[data-accent="green"][data-theme="paper_night"],
+[data-accent="green"] [data-theme="paper_night"]:not([data-accent]) {
+  --accent: #40c977;
+  --accent-fg: #000000;
+  --accent-soft: #254831;
+  --accent-text: #40c977;
+  --accent-text-hover: #83dca7;
+}
+[data-accent="yellow"][data-theme="paper_night"],
+[data-accent="yellow"] [data-theme="paper_night"]:not([data-accent]) {
+  --accent: #ffd240;
+  --accent-fg: #000000;
+  --accent-soft: #574b23;
+  --accent-text: #ffd240;
+  --accent-text-hover: #ffd755;
+}
+[data-accent="pink"][data-theme="paper_night"],
+[data-accent="pink"] [data-theme="paper_night"]:not([data-accent]) {
+  --accent: #ff8cc1;
+  --accent-fg: #000000;
+  --accent-soft: #573845;
+  --accent-text: #ff8cc1;
+  --accent-text-hover: #ffb4d7;
+}
+[data-accent="orange"][data-theme="paper_night"],
+[data-accent="orange"] [data-theme="paper_night"]:not([data-accent]) {
+  --accent: #ff8549;
+  --accent-fg: #000000;
+  --accent-soft: #573725;
+  --accent-text: #ff8c54;
+  --accent-text-hover: #ffb592;
+}
+[data-accent="purple"][data-theme="paper_night"],
+[data-accent="purple"] [data-theme="paper_night"]:not([data-accent]) {
+  --accent: #ad7bf9;
+  --accent-fg: #000000;
+  --accent-soft: #423453;
+  --accent-text: #bb91fa;
+  --accent-text-hover: #d0b3fc;
+}
+[data-accent="ink"][data-theme="paper_night"],
+[data-accent="ink"] [data-theme="paper_night"]:not([data-accent]) {
+  --accent: #f2efe8;
+  --accent-fg: #000000;
+  --accent-soft: #54524f;
+  --accent-text: #f2efe8;
+  --accent-text-hover: #f2efe8;
+}
+
 /* An avatar's colour: `data-tag` picks the pair, every theme its own values. Without it, the
  * neutral fill the avatars had before colours. */
 :root {
@@ -545,7 +1204,10 @@
   --color-*: initial;
 
   --color-canvas: var(--canvas);
-  --color-surface: var(--surface);
+  /* The surfaces and the nav go through their fills: translucent in 澄空, the opaque role elsewhere. */
+  --color-surface: var(--surface-fill);
+  /* Text in the surface's colour (a danger button's label) takes the opaque role, never the fill. */
+  --color-surface-solid: var(--surface);
   --color-inset: var(--inset);
   --color-inset2: var(--inset2);
   --color-border: var(--border);
@@ -570,7 +1232,9 @@
   --color-warning-soft: var(--warning-soft);
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
-  --color-nav: var(--nav);
+  --color-nav: var(--nav-fill);
+  /* Menus, popovers, dialogs and toasts: nearly opaque even where the surfaces are glass. */
+  --color-overlay: var(--overlay-fill);
   --color-nav-active: var(--nav-active);
   --color-track: var(--track);
   --color-keycap-bg: var(--keycap-bg);
@@ -594,15 +1258,18 @@
 
   --radius-*: initial;
   --radius-4: 4px;
-  --radius-6: 6px;
-  --radius-10: 10px;
-  --radius-14: 14px;
+  /* Controls, cards and dialogs take their theme's radius (6 / 10 / 14 in the classic four). */
+  --radius-6: var(--radius-control);
+  --radius-10: var(--radius-card);
+  --radius-14: var(--radius-dialog);
   --radius-20: 20px;
   --radius-pill: 999px;
 
   --shadow-*: initial;
   --shadow-pop: var(--shadow-pop);
   --shadow-win: var(--shadow-win);
+  /* The primary button's glow (澄空); none in the other themes. */
+  --shadow-primary: var(--primary-shadow);
   /* The switch thumb (Codex's), the same in every theme. */
   --shadow-thumb: 0 1px 2px 0 rgb(0 0 0 / 0.2);
 }
@@ -616,6 +1283,14 @@
 :root[data-density="compact"] {
   --row-h: 28px;
   --card-pad: 12px;
+}
+@media (prefers-reduced-transparency: reduce) {
+  [data-theme] {
+    --surface-fill: var(--surface) !important;
+    --nav-fill: var(--nav) !important;
+    --overlay-fill: var(--surface) !important;
+    --surface-blur: none !important;
+  }
 }
 :root[data-reduce-motion="true"] *,
 :root[data-reduce-motion="true"] *::before,
@@ -637,7 +1312,8 @@
   }
   body {
     margin: 0;
-    background: var(--canvas);
+    background-color: var(--canvas);
+    background-image: var(--canvas-image);
     color: var(--fg);
   }
   button,
@@ -681,8 +1357,58 @@
   }
 }
 
-@utility hairline {
-  border: 1px solid var(--border);
+/* The default 1 px edge. In the components layer, under every utility: an element's own
+ * `border-danger`, `border-fg` or `hover:border-…` wins (as a utility it came after them and hid
+ * an input's error border). */
+@layer components {
+  .hairline {
+    border: 1px solid var(--edge);
+  }
+}
+/* The window's (or the phone's) background: the canvas colour under the theme's canvas image. */
+@utility app-canvas {
+  background-color: var(--canvas);
+  background-image: var(--canvas-image);
+}
+/* A card's depth: its theme's shadow, and the frost behind a translucent surface. */
+@utility panel {
+  box-shadow: var(--card-shadow);
+  -webkit-backdrop-filter: var(--surface-blur);
+  backdrop-filter: var(--surface-blur);
+}
+/* The sidebar: flush with a rule on its right, or floating inside the window (澄空). */
+@utility sidebar-shell {
+  margin: var(--sidebar-inset);
+  height: calc(100% - 2 * var(--sidebar-inset));
+  border-style: solid;
+  border-color: var(--sidebar-edge);
+  border-width: var(--sidebar-border);
+  border-radius: var(--sidebar-radius);
+  box-shadow: var(--sidebar-shadow);
+  -webkit-backdrop-filter: var(--surface-blur);
+  backdrop-filter: var(--surface-blur);
+}
+/* The title bar: a surface strip with a rule, the canvas (墨白) or nothing at all (澄空). */
+/* A card just copied (验证码视图 › 卡片) in its theme's colours: 墨白 turns it to ink, the others keep
+ * the card and say it in the pill. The tile-copied-* values are resolved on the theme's element, so
+ * these never refer to themselves. */
+@utility tile-copied {
+  --surface-fill: var(--tile-copied-bg);
+  --edge: var(--tile-copied-edge);
+  --fg: var(--tile-copied-fg);
+  --fg-muted: var(--tile-copied-muted);
+  --fg-subtle: var(--tile-copied-muted);
+  --accent-text: var(--tile-copied-accent);
+  --accent-text-hover: var(--tile-copied-accent);
+}
+@utility titlebar {
+  background-color: var(--titlebar-fill);
+  border-bottom: 1px solid var(--titlebar-rule);
+}
+/* Overlays frost what lies under them where the theme has glass. */
+@utility overlay-frost {
+  -webkit-backdrop-filter: var(--surface-blur);
+  backdrop-filter: var(--surface-blur);
 }
 @utility eyebrow {
   font-family: var(--font-mono);

@@ -248,6 +248,33 @@ describe("Toggle / Segmented / Select", () => {
     expect(screen.getByRole("radio", { name: "A" })).toHaveClass("bg-surface");
   });
 
+  it("segmented can show icons alone, each still named, with its inner corner inside the theme's", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Segmented
+        label="验证码视图"
+        iconOnly
+        value="list"
+        onChange={onChange}
+        options={[
+          { value: "list", label: "列表", icon: "list" },
+          { value: "grid", label: "卡片", icon: "grid" },
+        ]}
+        data-testid="view"
+      />,
+    );
+    const grid = screen.getByRole("radio", { name: "卡片" });
+    expect(grid).toHaveAttribute("title", "卡片");
+    expect(grid).not.toHaveTextContent("卡片");
+    expect(grid.querySelector('[data-icon="grid"]')).not.toBeNull();
+    await user.click(grid);
+    expect(onChange).toHaveBeenCalledWith("grid");
+    expect(screen.getByTestId("view")).toHaveAttribute("role", "radiogroup");
+    // regression (澄空, 2026-10-11): a fixed 5 px inside a 12 px frame left a gap at the corners.
+    expect(grid).toHaveClass("rounded-[calc(var(--radius-control)_-_1px)]");
+  });
+
   it("select emits typed values", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

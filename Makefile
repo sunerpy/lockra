@@ -90,7 +90,7 @@ smoke-update: ## An AppImage updates itself from a local manifest (two release b
 	scripts/smoke-update-linux.sh
 
 .PHONY: showcase
-showcase: ## Screenshot the component showcase in the four themes
+showcase: ## Screenshot the component showcase in the eight themes
 	scripts/screenshot-showcase.sh
 
 .PHONY: site-screens

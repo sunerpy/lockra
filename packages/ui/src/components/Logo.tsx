@@ -1,11 +1,4 @@
-/** The app mark: the navy rounded square the family's apps share, holding a blue padlock under a
- *  pale shackle, its body showing a masked code (three dots). Drawn as SVG so it stays crisp from
- *  the 24 px sidebar to the 1024 px icon it is rendered into (apps/desktop/src-tauri/icons/icon.svg
- *  is the same drawing). Colours are the mark's own, not theme tokens: it must look the same in
- *  every theme, like the window icon does (the one hex-literal exception, DESIGN.md §1). */
-export const LOGO_NAVY = "#0B1220";
-export const LOGO_PALE = "#E7EDF5";
-export const LOGO_BLUE = "#339CFF";
+import { cx } from "../cx";
 
 export interface LogoProps {
   /** Rendered width and height in px. */
@@ -15,30 +8,37 @@ export interface LogoProps {
   label?: string;
 }
 
+/** The app mark inside the app: a padlock under its shackle, its body showing a masked code (three
+ *  dots), on the theme's own card (frosted in 澄空, paper in 墨白, a dark card at night) rather than
+ *  the app icon's tile (user choice 2026-10-11, option B of the Penpot page 「00 · Logo」). The
+ *  shackle takes the theme's ink, the body the theme's own blue (`--logo-body`, whatever the accent),
+ *  the dots `--logo-dots`. The drawing is the app icon's (apps/desktop/src-tauri/icons/icon.svg),
+ *  whose tile is the brand's blue-violet gradient. */
 export function Logo({ size = 24, className, label }: LogoProps) {
   return (
-    <svg
+    <span
       data-testid="app-logo"
-      width={size}
-      height={size}
-      viewBox="0 0 100 100"
-      role={label ? "img" : "presentation"}
+      role={label ? "img" : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
-      className={className}
-      focusable="false">
-      <rect width="100" height="100" rx="22" fill={LOGO_NAVY} />
-      <path
-        d="M37 45 V36 A13 13 0 0 1 63 36 V45"
-        fill="none"
-        stroke={LOGO_PALE}
-        strokeWidth="7"
-        strokeLinecap="round"
-      />
-      <rect x="26" y="43" width="48" height="37" rx="9" fill={LOGO_BLUE} />
-      <circle cx="38" cy="61.5" r="4.2" fill={LOGO_PALE} />
-      <circle cx="50" cy="61.5" r="4.2" fill={LOGO_PALE} />
-      <circle cx="62" cy="61.5" r="4.2" fill={LOGO_PALE} />
-    </svg>
+      style={{ width: size, height: size }}
+      className={cx(
+        "inline-flex shrink-0 overflow-hidden rounded-[22%] bg-surface hairline panel",
+        className,
+      )}>
+      <svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden focusable="false">
+        <path
+          d="M37 45 V36 A13 13 0 0 1 63 36 V45"
+          fill="none"
+          strokeWidth="7"
+          strokeLinecap="round"
+          className="stroke-fg"
+        />
+        <rect x="26" y="43" width="48" height="37" rx="9" className="fill-[var(--logo-body)]" />
+        {[38, 50, 62].map((x) => (
+          <circle key={x} cx={x} cy="61.5" r="4.2" className="fill-[var(--logo-dots)]" />
+        ))}
+      </svg>
+    </span>
   );
 }

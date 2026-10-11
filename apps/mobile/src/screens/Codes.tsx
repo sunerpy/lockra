@@ -1,7 +1,8 @@
-// The accounts and their codes: a tap copies the code, a long press or ⋯ opens the account's
-// actions, + adds accounts; with groups, the accounts are in sections that fold; a search shows
-// what it finds in every section, folded or not. The reorder button shows the list with handles:
-// the groups and the accounts inside them move by dragging the handles, an order this phone keeps.
+// The accounts and their codes, as a list or as cards two to a row (验证码视图, in Settings › 外观):
+// a tap copies the code, a long press or ⋯ opens the account's actions, + adds accounts; with
+// groups, the accounts are in sections that fold; a search shows what it finds in every section,
+// folded or not. The reorder button shows the list with handles: the groups and the accounts
+// inside them move by dragging the handles, an order this phone keeps.
 import {
   ALL_GROUPS,
   NO_GROUP,
@@ -15,6 +16,7 @@ import {
   Card,
   EmptyState,
   EntryRow,
+  EntryTile,
   Icon,
   IconButton,
   Input,
@@ -24,10 +26,11 @@ import {
   useClock,
   useCodes,
   useDispatch,
+  useFlash,
   useT,
   useUiState,
 } from "@lockra/ui";
-import { useMemo, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { useNav } from "../app/nav";
 
 export function Codes() {
@@ -45,6 +48,13 @@ export function Codes() {
   } = useUiState();
   const [query, setQuery] = useState("");
   const [reordering, setReordering] = useState(false);
+  // The row or card just copied says so for a moment.
+  const [copiedId, flash] = useFlash();
+  const cards = settings.codes_view === "grid";
+  const copy = (id: string) =>
+    void dispatch({ command: "entry_copy", id }).then((done) => {
+      if (done !== undefined) flash(id);
+    });
   const visible = useMemo(
     () => filterEntries(sortEntries(entries, settings.sort, entryOrder), query, ALL_GROUPS),
     [entries, settings.sort, entryOrder, query],
@@ -55,6 +65,21 @@ export function Codes() {
   const sections = grouped
     ? groupSections(visible, groupOrder)
     : [{ key: NO_GROUP, entries: visible }];
+  // A long press: the webview hears it as a context menu.
+  const actions = (id: string) => (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    nav.open({ name: "account", id });
+  };
+  const more = (id: string) => (
+    <IconButton
+      icon="more"
+      label={t("codes.actions")}
+      size={40}
+      onClick={() => nav.open({ name: "account", id })}
+      data-testid="row-more"
+    />
+  );
+  const next = (id: string) => () => void dispatch({ command: "entry_hotp_next", id });
   const toggleFold = (key: string) =>
     void dispatch({
       command: "view_collapse_groups",
@@ -167,7 +192,7 @@ export function Codes() {
                 title={t("codes.noMatch", { query: query.trim() })}
               />
             ) : (
-              <Card padding="none" className="p-1.5" data-testid="codes-list">
+              <Sections cards={cards}>
                 {sections.map((section) => {
                   const name = section.key === NO_GROUP ? t("codes.groupNone") : section.key;
                   const open = !grouped || searching || !folded.has(section.key);
@@ -191,39 +216,47 @@ export function Codes() {
                         </button>
                       )}
                       {open && (
-                        <div role="list" aria-label={grouped ? name : t("codes.title")}>
+                        <div
+                          role="list"
+                          aria-label={grouped ? name : t("codes.title")}
+                          className={cards ? "grid grid-cols-2 gap-2.5" : undefined}>
                           {section.entries.map((entry) => (
-                            <div role="listitem" key={entry.id}>
-                              <EntryRow
-                                entry={entry}
-                                code={codes.get(entry.id)}
-                                nowMs={now}
-                                masked={settings.hide_codes}
-                                still={motionReduced(settings)}
-                                onCopy={() =>
-                                  void dispatch({ command: "entry_copy", id: entry.id })
-                                }
-                                onNext={
-                                  entry.kind.type === "hotp"
-                                    ? () =>
-                                        void dispatch({ command: "entry_hotp_next", id: entry.id })
-                                    : undefined
-                                }
-                                // A long press: the webview hears it as a context menu.
-                                onContextMenu={(event) => {
-                                  event.preventDefault();
-                                  nav.open({ name: "account", id: entry.id });
-                                }}
-                                menu={
-                                  <IconButton
-                                    icon="more"
-                                    label={t("codes.actions")}
-                                    size={40}
-                                    onClick={() => nav.open({ name: "account", id: entry.id })}
-                                    data-testid="row-more"
-                                  />
-                                }
-                              />
+                            <div
+                              role="listitem"
+                              key={entry.id}
+                              className={cards ? "grid min-w-0" : undefined}>
+                              {cards ? (
+                                <EntryTile
+                                  size="sm"
+                                  entry={entry}
+                                  code={codes.get(entry.id)}
+                                  nowMs={now}
+                                  masked={settings.hide_codes}
+                                  still={motionReduced(settings)}
+                                  copied={
+                                    copiedId === entry.id ? t("notice.copiedKept") : undefined
+                                  }
+                                  onCopy={() => copy(entry.id)}
+                                  onNext={entry.kind.type === "hotp" ? next(entry.id) : undefined}
+                                  onContextMenu={actions(entry.id)}
+                                  menu={more(entry.id)}
+                                />
+                              ) : (
+                                <EntryRow
+                                  entry={entry}
+                                  code={codes.get(entry.id)}
+                                  nowMs={now}
+                                  masked={settings.hide_codes}
+                                  still={motionReduced(settings)}
+                                  copied={
+                                    copiedId === entry.id ? t("notice.copiedKept") : undefined
+                                  }
+                                  onCopy={() => copy(entry.id)}
+                                  onNext={entry.kind.type === "hotp" ? next(entry.id) : undefined}
+                                  onContextMenu={actions(entry.id)}
+                                  menu={more(entry.id)}
+                                />
+                              )}
                             </div>
                           ))}
                         </div>
@@ -231,11 +264,24 @@ export function Codes() {
                     </section>
                   );
                 })}
-              </Card>
+              </Sections>
             )}
           </div>
         )}
       </main>
     </div>
+  );
+}
+
+/** The list sits in one card; the cards sit on the canvas, a little apart. */
+function Sections({ cards, children }: { cards: boolean; children: ReactNode }) {
+  return cards ? (
+    <div className="flex flex-col gap-2" data-testid="codes-grid">
+      {children}
+    </div>
+  ) : (
+    <Card padding="none" className="p-1.5" data-testid="codes-list">
+      {children}
+    </Card>
   );
 }

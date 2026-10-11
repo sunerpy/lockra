@@ -8,7 +8,8 @@ export interface EntryAvatarProps {
   color?: AccountColor;
   /** Shown instead of the name's initial: one or two characters the user chose. */
   mark?: string | null;
-  size?: 24 | 32 | 40;
+  /** 28 and 36 are the cards' (验证码视图 › 卡片), on the phone and the desktop. */
+  size?: 24 | 28 | 32 | 36 | 40;
   className?: string;
 }
 
@@ -45,8 +46,19 @@ function characters(text: string): number {
 
 const TEXT_SIZE: Record<NonNullable<EntryAvatarProps["size"]>, readonly [string, string]> = {
   24: ["text-[11px]", "text-[9px]"],
+  28: ["text-[13px]", "text-[11px]"],
   32: ["text-[14px]", "text-[12px]"],
+  36: ["text-[16px]", "text-[13px]"],
   40: ["text-[16px]", "text-[14px]"],
+};
+
+/** The square's own corner: a theme's card radius (18 in 澄空) would make it a circle. */
+const RADIUS: Record<NonNullable<EntryAvatarProps["size"]>, number> = {
+  24: 10,
+  28: 8,
+  32: 10,
+  36: 10,
+  40: 10,
 };
 
 /** The account's square: its colour (DESIGN.md, "Account colours") and its mark, else the initial
@@ -66,9 +78,9 @@ export function EntryAvatar({
       aria-hidden
       data-testid="entry-avatar"
       data-tag={color === "auto" ? autoColor(issuer, account) : color}
-      style={{ width: size, height: size }}
+      style={{ width: size, height: size, borderRadius: RADIUS[size] }}
       className={cx(
-        "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-10 bg-tag-bg font-semibold whitespace-nowrap text-tag-fg select-none",
+        "inline-flex shrink-0 items-center justify-center overflow-hidden bg-tag-bg font-semibold whitespace-nowrap text-tag-fg select-none",
         characters(text) > 1 ? two : one,
         className,
       )}>

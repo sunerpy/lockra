@@ -6,7 +6,16 @@ import { z } from "zod";
 
 // ---- settings --------------------------------------------------------------------------------
 
-export const THEME_IDS = ["light", "dark", "warm", "graphite"] as const;
+export const THEME_IDS = [
+  "light",
+  "dark",
+  "warm",
+  "graphite",
+  "glass",
+  "glass_night",
+  "paper",
+  "paper_night",
+] as const;
 export const themeIdSchema = z.enum(THEME_IDS);
 export type ThemeId = z.infer<typeof themeIdSchema>;
 
@@ -34,6 +43,11 @@ export type LocaleSetting = z.infer<typeof localeSettingSchema>;
 export const SORT_ORDERS = ["name", "added", "recent", "manual"] as const;
 export const sortOrderSchema = z.enum(SORT_ORDERS);
 export type SortOrder = z.infer<typeof sortOrderSchema>;
+
+/** Rows or a grid of cards, whatever the theme (lockra-core `CodesView`). */
+export const CODES_VIEWS = ["list", "grid"] as const;
+export const codesViewSchema = z.enum(CODES_VIEWS);
+export type CodesView = z.infer<typeof codesViewSchema>;
 
 /** The choices of Settings › Security (lockra-core `settings.rs`). */
 export const AUTO_LOCK_CHOICES = [0, 1, 2, 5, 10, 15, 30, 60] as const;
@@ -68,6 +82,7 @@ export const settingsSchema = z.object({
   hide_codes: z.boolean(),
   sort: sortOrderSchema,
   group_codes: z.boolean(),
+  codes_view: codesViewSchema,
   auto_backup: autoBackupSchema,
   auto_update: z.boolean(),
   default_unlock: defaultUnlockSchema,
@@ -91,6 +106,7 @@ export function defaultSettings(): Settings {
     hide_codes: false,
     sort: "name",
     group_codes: true,
+    codes_view: "list",
     auto_backup: { enabled: false, dir: null, keep: 10 },
     auto_update: false,
     default_unlock: "biometric",
