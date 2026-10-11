@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.7](https://github.com/sunerpy/lockra/compare/v0.8.6...v0.8.7) (2026-10-11)
+
+
+### Features
+
+* 新增澄空与墨白主题和卡片视图，更换应用图标 ([#108](https://github.com/sunerpy/lockra/issues/108)) ([f2bd8d8](https://github.com/sunerpy/lockra/commit/f2bd8d862031ecc87f51338c46007a063b3d2f7f))
+
 ## [0.8.6](https://github.com/sunerpy/lockra/compare/v0.8.5...v0.8.6) (2026-10-10)
 
 
