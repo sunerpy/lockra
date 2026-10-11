@@ -17,6 +17,7 @@ import {
   statusText,
   statusVersion,
   syncStatusLine,
+  syncSummary,
   updateStatusLine,
   themeName,
   themeSubtitle,
@@ -88,6 +89,19 @@ describe("labels", () => {
     expect(noticeIsProblem({ type: "auto_locked" })).toBe(false);
   });
 
+  it("a copy names the account when the caller knows it", () => {
+    const copied = { type: "copied", entry_id: "e1", clear_after_s: 30 } as const;
+    expect(noticeText(zh, copied, "GitHub")).toBe("已复制 GitHub 的验证码 · 30 秒后清空剪贴板");
+    expect(noticeText(en, copied, "GitHub")).toBe(
+      "Copied GitHub's code · the clipboard clears in 30 s",
+    );
+    expect(noticeText(zh, { ...copied, clear_after_s: null }, "GitHub")).toBe(
+      "已复制 GitHub 的验证码",
+    );
+    // Without a name, as before.
+    expect(noticeText(zh, copied)).toBe("已复制 · 30 秒后清空剪贴板");
+  });
+
   it("what a sync run brought names the counts that are not zero, and where they came from", () => {
     const brought = {
       type: "sync_brought",
@@ -139,6 +153,34 @@ describe("labels", () => {
       tone: "danger",
       text: "同步失败：存储服务拒绝访问，请检查访问密钥或密码",
     });
+  });
+
+  it("sums a sync space up in one line for the status cards", () => {
+    const device = { tag: "t", name: "Pixel", written_at_ms: null, this_device: false };
+    const space = {
+      storage: { kind: "relay" as const, url: "https://relay.example" },
+      device_name: "本机",
+      devices: [device, { ...device, tag: "u" }, { ...device, tag: "v", this_device: true }],
+      status: { state: "synced" as const, at_ms: 1 },
+      last_sync_ms: 1,
+      rolled_back: [],
+      unreadable: [],
+      keyring_pending: false,
+      keyring_unsealed: false,
+      key_saved: true,
+    };
+    expect(syncSummary(zh, null)).toBe("未开启同步");
+    expect(syncSummary(zh, space)).toBe("已同步 · 3 台设备");
+    expect(syncSummary(en, { ...space, devices: [device] })).toBe("Synced · 1 device");
+    expect(syncSummary(zh, { ...space, status: { state: "syncing" } })).toBe("正在同步…");
+    expect(
+      syncSummary(zh, { ...space, status: { state: "failed", code: "sync_denied", at_ms: 1 } }),
+    ).toBe("同步失败");
+    // Not run yet this session: the devices as the last run left them, or nothing to say yet.
+    expect(syncSummary(zh, { ...space, status: { state: "idle" } })).toBe("已同步 · 3 台设备");
+    expect(syncSummary(zh, { ...space, status: { state: "idle" }, last_sync_ms: null })).toBe(
+      "尚未同步",
+    );
   });
 
   it("the updater's state in one line, with its lamp", () => {

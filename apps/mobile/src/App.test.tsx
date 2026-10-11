@@ -43,7 +43,8 @@ describe("the phone app", () => {
     expect(
       screen.getByText("点按 + 添加：扫描二维码、读取截图、粘贴 otpauth 链接，或手动输入密钥。"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "添加账号" })).toBeInTheDocument();
+    // The header's + and the empty state's own button.
+    expect(screen.getAllByRole("button", { name: "添加账号" })).toHaveLength(2);
   });
 
   it("unlocks with the master password and counts the wrong ones", async () => {

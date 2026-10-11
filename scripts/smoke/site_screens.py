@@ -112,7 +112,7 @@ class Capture:
 
     def quiet(self):
         """No toast on screen."""
-        self.web.gone("div.pointer-events-none.fixed.bottom-6", timeout=20)
+        self.web.gone('[data-testid="toast-viewport"]', timeout=20)
 
     def resize(self):
         self.window = until("the window", lambda: subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Lockra$"], env=self.env, capture_output=True, text=True).stdout.split())[0]

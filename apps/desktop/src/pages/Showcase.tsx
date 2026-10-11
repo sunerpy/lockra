@@ -241,7 +241,6 @@ export default function Showcase() {
                 nowMs={now}
                 onCopy={() => undefined}
                 onFavorite={() => undefined}
-                onEdit={() => undefined}
               />
               <EntryRow
                 entry={sampleEntry("w", "Microsoft", "alex@outlook.com", { digits: 8 })}

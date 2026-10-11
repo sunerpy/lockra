@@ -50,7 +50,6 @@ export function ThemeTile({
         )}>
         <span className="h-full w-7 bg-nav" />
         <span className="flex flex-1 flex-col">
-          <span className="h-2.5 w-full titlebar" />
           <span className="flex flex-1 items-center justify-center p-2">
             <span className="flex w-full flex-col gap-1.5 rounded-[8px] bg-surface p-2 hairline panel">
               <span className="flex items-center gap-1.5">

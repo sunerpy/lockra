@@ -193,8 +193,8 @@ describe("EntryRow", () => {
       nowMs: T,
       onCopy,
       onFavorite: vi.fn(),
-      onEdit: vi.fn(),
       onContextMenu,
+      menu: <button type="button">menu</button>,
     };
     const { rerender } = render(
       <EntryRow entry={entry()} {...props} selection={{ checked: false, onToggle }} />,
@@ -209,7 +209,7 @@ describe("EntryRow", () => {
     expect(onToggle).toHaveBeenCalledTimes(3);
     expect([onCopy, onContextMenu].map((f) => f.mock.calls.length)).toEqual([0, 0]);
     expect(screen.queryByTestId("row-favorite")).toBeNull();
-    expect(screen.queryByTestId("row-edit")).toBeNull();
+    expect(screen.queryByTestId("row-actions")).toBeNull();
     rerender(<EntryRow entry={entry()} {...props} selection={{ checked: true, onToggle }} />);
     expect(screen.getByRole("checkbox")).toHaveAttribute("aria-checked", "true");
     expect(screen.getByTestId("row-select")).toBeChecked();
@@ -226,6 +226,8 @@ describe("EntryRow", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "生成下一个" })).toBeNull();
+    // Its room is kept, so the codes stay in one column with the rows that have a ring.
+    expect(screen.getByTestId("row-ring-slot")).toHaveClass("size-[30px]");
     // Out of selection, a button again.
     rerender(<EntryRow entry={entry()} {...props} />);
     expect(screen.queryByRole("checkbox")).toBeNull();
@@ -250,32 +252,61 @@ describe("EntryRow", () => {
     expect(screen.queryByTestId("countdown-ring")).toBeNull();
   });
 
-  it("shows pin and edit beside the menu, and hands a right click over", async () => {
+  it("shows the pin beside the menu, with a mouse only on hover, and hands a right click over", async () => {
     const onCopy = vi.fn();
     const onFavorite = vi.fn();
-    const onEdit = vi.fn();
     const onContextMenu = vi.fn();
-    const props = { code: code(), nowMs: T, onCopy, onFavorite, onEdit, onContextMenu };
+    const menu = <button type="button">menu</button>;
+    const props = { code: code(), nowMs: T, onCopy, onFavorite, onContextMenu, menu };
     const { rerender } = render(<EntryRow entry={entry()} {...props} />);
     const pin = screen.getByRole("button", { name: "收藏" });
     expect(pin).toHaveAttribute("aria-pressed", "false");
     await userEvent.click(pin);
-    await userEvent.click(screen.getByRole("button", { name: "编辑…" }));
     expect(onFavorite).toHaveBeenCalledOnce();
-    expect(onEdit).toHaveBeenCalledOnce();
     expect(onCopy).not.toHaveBeenCalled();
+    // Board A1: the pin and the menu wait for the row (hovered, focused, or its menu open).
+    expect(screen.getByTestId("row-actions")).toHaveClass(
+      "pointer-fine:opacity-0",
+      "group-hover:opacity-100",
+      "group-focus-within:opacity-100",
+      "has-[[aria-expanded=true]]:opacity-100",
+    );
+    expect(screen.getByTestId("row-actions")).toContainElement(
+      screen.getByRole("button", { name: "menu" }),
+    );
     fireEvent.contextMenu(screen.getByTestId("entry-row"));
     expect(onContextMenu).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId("row-pinned")).toBeNull();
     rerender(<EntryRow entry={entry({ favorite: true })} {...props} />);
+    // A pinned account says so after its name whatever the pointer does; the button is the toggle.
+    expect(screen.getByTestId("row-pinned")).toHaveClass("text-warning");
     const pinned = screen.getByRole("button", { name: "收藏" });
-    // Said once: by the pressed button, not again beside the name.
-    expect(screen.getByTestId("entry-row").querySelectorAll('[data-icon="star"]')).toHaveLength(1);
     expect(pinned).toHaveAttribute("aria-pressed", "true");
     expect(pinned.querySelector("svg")).toHaveAttribute("fill", "currentColor");
+    // On the phone's cards there is no hover: they stay.
+    rerender(<EntryRow entry={entry()} {...props} card />);
+    expect(screen.getByTestId("row-actions")).not.toHaveClass("pointer-fine:opacity-0");
     // Without the handlers, no buttons.
     rerender(<EntryRow entry={entry()} code={code()} nowMs={T} onCopy={onCopy} />);
     expect(screen.queryByRole("button", { name: "收藏" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "编辑…" })).toBeNull();
+    expect(screen.queryByTestId("row-actions")).toBeNull();
+  });
+
+  it("has the boards' measures: 64 px rows in the list, cards of their own on the phone", () => {
+    const { rerender } = render(
+      <EntryRow entry={entry()} code={code()} nowMs={T} onCopy={() => undefined} />,
+    );
+    const row = screen.getByTestId("entry-row");
+    expect(row).toHaveClass("h-[calc(var(--row-h)+32px)]", "rounded-10", "hover:bg-inset");
+    expect(row).not.toHaveClass("panel");
+    expect(screen.getByTestId("entry-avatar")).toHaveStyle({ width: "40px" });
+    expect(screen.getByTestId("otp-code").style.fontSize).toBe("26px");
+    expect(screen.getByTestId("otp-code")).toHaveClass("font-semibold");
+    expect(screen.getByTestId("countdown-ring")).toHaveAttribute("width", "30");
+    rerender(<EntryRow entry={entry()} code={code()} nowMs={T} onCopy={() => undefined} card />);
+    expect(row).toHaveClass("h-[calc(var(--row-h)+38px)]", "rounded-14", "bg-surface", "panel");
+    expect(screen.getByTestId("otp-code").style.fontSize).toBe("22px");
+    expect(screen.getByTestId("countdown-ring")).toHaveAttribute("width", "26");
   });
 
   it("says it was copied in place of its code, and hints at copying on hover", () => {

@@ -1,24 +1,31 @@
-// The home page: every account with its current code, as a list or as cards (验证码视图, a setting
-// of its own whatever the theme). Click or Enter copies; ↑ ↓ move between rows, and ← → too between
-// cards; "/" or Ctrl F searches. Favourites come first, then the chosen order. With groups, the
-// accounts are in sections that fold; a right click (or the context-menu key) opens a row's menu.
-// "Select" ticks several accounts (one by one, a section, or all that the search shows) to move
-// them to a group at once. "Reorder" shows the whole list with handles: the groups and the accounts
-// inside them move by dragging or with ↑ ↓ on a handle, and the order is this device's. Selecting
-// and reordering happen in the list, whichever view is chosen.
+// The home page (board A1): its header with the search and the add menu, the account used last in a
+// card of its own beside the vault's state, the filters (全部, 收藏, each group, 未分组) with the list's
+// tools, and every account with its current code, as a list or as cards (验证码视图, a setting of its
+// own whatever the theme). Click or Enter copies; ↑ ↓ move between rows, and ← → too between cards;
+// "/" or Ctrl F searches. Favourites come first, then the chosen order. With groups, the accounts
+// are in sections that fold; a right click (or the context-menu key) opens a row's menu. "Select"
+// (in the list's ⋯ menu) ticks several accounts (one by one, a section, or all that the search
+// shows) to move them to a group at once. "Reorder" shows the whole list with handles: the groups
+// and the accounts inside them move by dragging or with ↑ ↓ on a handle, and the order is this
+// device's. Selecting and reordering happen in the list, whichever view is chosen.
 import {
   ALL_GROUPS,
   type CodesView,
   type EntryView,
+  FAVORITES,
   NO_GROUP,
   SORT_ORDERS,
   type SortOrder,
+  type SyncDeviceView,
+  UNGROUPED,
   entryGroups,
   entryLabel,
   filterEntries,
   groupSections,
+  recentEntry,
   relativeTime,
   sortEntries,
+  syncSummary,
 } from "@lockra/shared";
 import {
   Button,
@@ -27,13 +34,18 @@ import {
   EmptyState,
   EntryRow,
   EntryTile,
+  type FilterChip,
+  FilterChips,
   Icon,
   IconButton,
   Input,
   Lamp,
   Menu,
+  initial,
   type MenuPoint,
   type MenuSection,
+  PageHeader,
+  RecentCard,
   ReorderList,
   Segmented,
   Select,
@@ -43,7 +55,6 @@ import {
   useClock,
   useCodes,
   useFlash,
-  useNow,
   useT,
   useUiState,
 } from "@lockra/ui";
@@ -157,11 +168,39 @@ export function Codes() {
     group_order: groupOrder,
   } = state;
   const groups = useMemo(() => entryGroups(entries), [entries]);
-  // A group that no longer exists (its last account moved) shows everything again.
-  const activeGroup = groups.includes(group) ? group : ALL_GROUPS;
+  // The filters (board A1): everything, the pinned accounts, each group, those in no group.
+  const filters = useMemo((): FilterChip[] => {
+    const counts = new Map<string, number>();
+    for (const e of entries) counts.set(e.group ?? "", (counts.get(e.group ?? "") ?? 0) + 1);
+    const pinned = entries.filter((e) => e.favorite).length;
+    const loose = counts.get("") ?? 0;
+    return [
+      { value: ALL_GROUPS, label: t("codes.chips.all"), count: entries.length },
+      ...(pinned > 0
+        ? [
+            {
+              value: FAVORITES,
+              label: t("codes.chips.favorites"),
+              count: pinned,
+              icon: "star" as const,
+            },
+          ]
+        : []),
+      ...groups.map((g) => ({ value: g, label: g, count: counts.get(g) ?? 0, userText: true })),
+      ...(groups.length > 0 && loose > 0
+        ? [{ value: UNGROUPED, label: t("codes.groupNone"), count: loose }]
+        : []),
+    ];
+  }, [entries, groups, t]);
+  // A filter that no longer exists (its last account moved or unpinned) shows everything again.
+  const activeGroup = filters.some((f) => f.value === group) ? group : ALL_GROUPS;
+  const sorted = useMemo(
+    () => sortEntries(entries, settings.sort, entryOrder),
+    [entries, settings.sort, entryOrder],
+  );
   const visible = useMemo(
-    () => filterEntries(sortEntries(entries, settings.sort, entryOrder), query, activeGroup),
-    [entries, settings.sort, entryOrder, query, activeGroup],
+    () => filterEntries(sorted, query, activeGroup),
+    [sorted, query, activeGroup],
   );
   // What a move takes: the ticked accounts the search and the group above still show.
   const chosen = useMemo(
@@ -295,9 +334,86 @@ export function Codes() {
   const setView = (codes_view: CodesView) =>
     void dispatch({ command: "settings_set", settings: { ...settings, codes_view } });
 
+  const toolSections: MenuSection[] = [
+    { items: [{ kind: "action", id: "select", label: t("codes.select"), icon: "check" }] },
+    ...(groups.length > 0
+      ? [
+          {
+            items: [
+              {
+                kind: "check" as const,
+                id: "group-view",
+                label: t("codes.groupView"),
+                checked: settings.group_codes,
+              },
+              ...(grouped && allSections.some((key) => !folded.has(key))
+                ? [
+                    {
+                      kind: "action" as const,
+                      id: "collapse-all",
+                      label: t("codes.collapseAll"),
+                      icon: "chevronUp" as const,
+                    },
+                  ]
+                : []),
+              ...(grouped && allSections.some((key) => folded.has(key))
+                ? [
+                    {
+                      kind: "action" as const,
+                      id: "expand-all",
+                      label: t("codes.expandAll"),
+                      icon: "chevronDown" as const,
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ]
+      : []),
+  ];
+  const onTool = (id: string) => {
+    if (id === "select") startSelection();
+    else if (id === "group-view")
+      void dispatch({
+        command: "settings_set",
+        settings: { ...settings, group_codes: !settings.group_codes },
+      });
+    else if (id === "collapse-all") fold(allSections);
+    else fold([]);
+  };
+  // The card of the account used last, else the first of the list (board A1); not while searching,
+  // selecting or reordering, which are about the list.
+  const recent = recentEntry(entries) ?? sorted[0];
+  const hero = recent !== undefined && !searching && !selecting && !reordering;
+
   return (
     <div className="flex flex-col gap-4" data-testid="page-codes">
-      <StatusCard />
+      <PageHeader
+        title={t("codes.title")}
+        subtitle={<CodesFacts groups={groups.length} />}
+        actions={
+          <>
+            {entries.length > 0 && (
+              <Input
+                id={searchId}
+                size="xl"
+                pill
+                icon="search"
+                keys="/"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onSearchKey}
+                placeholder={t("codes.search")}
+                aria-label={t("codes.search")}
+                className="w-[min(26rem,36vw)]"
+                disabled={reordering}
+                data-testid="codes-search"
+              />
+            )}
+            <AddMenu />
+          </>
+        }
+      />
       {entries.length === 0 ? (
         <Card>
           <EmptyState
@@ -318,40 +434,48 @@ export function Codes() {
         </Card>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-2">
-            <Input
-              id={searchId}
-              icon="search"
-              keys="/"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={onSearchKey}
-              placeholder={t("codes.search")}
-              aria-label={t("codes.search")}
-              className="min-w-[14rem] flex-1"
-              disabled={reordering}
-              data-testid="codes-search"
-            />
-            {groups.length > 0 && (
-              <Select
-                aria-label={t("entry.group")}
+          {hero && (
+            <div
+              className="grid grid-cols-[minmax(0,5fr)_minmax(0,3fr)] gap-4"
+              data-testid="codes-hero">
+              <RecentCard
+                entry={recent}
+                code={codes.get(recent.id)}
+                nowMs={now}
+                masked={settings.hide_codes}
+                still={motionReduced(settings)}
+                onCopy={() => copy(recent)}
+                onNext={
+                  recent.kind.type === "hotp"
+                    ? () => void dispatch({ command: "entry_hotp_next", id: recent.id })
+                    : undefined
+                }
+              />
+              <VaultCard />
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2" data-testid="codes-tools">
+            {filters.length > 1 && (
+              <FilterChips
+                label={t("codes.chips.label")}
+                options={filters}
                 value={activeGroup}
                 onChange={setGroup}
                 disabled={reordering}
-                options={[
-                  { value: ALL_GROUPS, label: t("codes.allGroups") },
-                  ...groups.map((g) => ({ value: g, label: g })),
-                ]}
-                data-testid="codes-group"
+                data-testid="codes-chips"
               />
             )}
-            <Select
-              aria-label={t("codes.sortLabel")}
-              value={settings.sort}
-              onChange={setSort}
-              options={SORT_ORDERS.map((value) => ({ value, label: t(`codes.sort.${value}`) }))}
-              data-testid="codes-sort"
-            />
+            <span className="flex-1" />
+            {!selecting && !reordering && entries.length > 1 && (
+              <IconButton
+                icon="drag"
+                label={t("codes.reorder.open")}
+                size={28}
+                bordered
+                onClick={startReorder}
+                data-testid="codes-reorder"
+              />
+            )}
             <Segmented
               label={t("codes.view.label")}
               iconOnly
@@ -366,60 +490,24 @@ export function Codes() {
               }))}
               data-testid="codes-view"
             />
-            {groups.length > 0 && (
-              <IconButton
-                icon="folder"
-                label={t("codes.groupView")}
-                size={28}
-                bordered
-                pressed={settings.group_codes}
-                className="mb-0.5"
-                onClick={() =>
-                  void dispatch({
-                    command: "settings_set",
-                    settings: { ...settings, group_codes: !settings.group_codes },
-                  })
-                }
-                data-testid="codes-group-view"
-              />
-            )}
-            {grouped && (
-              <>
-                <Button
-                  variant="outline"
-                  icon="chevronUp"
-                  disabled={allSections.every((key) => folded.has(key))}
-                  onClick={() => fold(allSections)}
-                  data-testid="codes-collapse-all">
-                  {t("codes.collapseAll")}
-                </Button>
-                <Button
-                  variant="outline"
-                  icon="chevronDown"
-                  disabled={!allSections.some((key) => folded.has(key))}
-                  onClick={() => fold([])}
-                  data-testid="codes-expand-all">
-                  {t("codes.expandAll")}
-                </Button>
-              </>
-            )}
+            <Select
+              aria-label={t("codes.sortLabel")}
+              value={settings.sort}
+              onChange={setSort}
+              options={SORT_ORDERS.map((value) => ({ value, label: t(`codes.sort.${value}`) }))}
+              data-testid="codes-sort"
+            />
             {!selecting && !reordering && (
-              <>
-                <Button
-                  variant="outline"
-                  icon="check"
-                  onClick={() => startSelection()}
-                  data-testid="codes-select">
-                  {t("codes.select")}
-                </Button>
-                <Button
-                  variant="outline"
-                  icon="drag"
-                  onClick={startReorder}
-                  data-testid="codes-reorder">
-                  {t("codes.reorder.open")}
-                </Button>
-              </>
+              <Menu
+                label={t("codes.viewMenu")}
+                title={t("codes.viewMenu")}
+                align="end"
+                sections={toolSections}
+                onSelect={onTool}
+                data-testid="codes-more"
+                triggerClassName="inline-flex size-[28px] items-center justify-center rounded-6 bg-surface text-fg-muted hairline transition-colors hover:bg-inset hover:text-fg"
+                trigger={<Icon name="more" size={16} />}
+              />
             )}
           </div>
           {reordering && (
@@ -632,7 +720,6 @@ export function Codes() {
                                         : undefined
                                     }
                                     onFavorite={() => actions.run(entry, "favorite")}
-                                    onEdit={() => actions.run(entry, "edit")}
                                     onContextMenu={(event) => onRowContextMenu(event, entry)}
                                     menu={<RowMenu entry={entry} onSelect={startSelection} />}
                                     selection={
@@ -679,30 +766,90 @@ export function Codes() {
   );
 }
 
-/** Unlocked · N accounts · last backup, and the add menu. */
-function StatusCard() {
+/** The header's line of facts: the accounts, the groups and, in a sync space, how it stands. */
+function CodesFacts({ groups }: { groups: number }) {
   const t = useT();
-  const { entries, backup } = useUiState();
-  const now = useNow();
-  const accounts = t("common.accounts", { n: entries.length });
+  const { entries, sync } = useUiState();
+  const facts = [t("common.accounts", { n: entries.length })];
+  if (groups > 0) facts.push(t("codes.groupsCount", { n: groups }));
+  const state = sync.space?.status.state;
+  if (state === "synced") facts.push(t("codes.allSynced"));
+  else if (state === "syncing") facts.push(t("codes.hero.syncing"));
+  else if (state === "failed") facts.push(t("codes.hero.syncFailed"));
+  return facts.join(" · ");
+}
+
+/** 「保险库状态」 (board A1): unlocked and when it locks by itself, the last backup, the sync and the
+ *  devices of its space. */
+function VaultCard() {
+  const t = useT();
+  const { backup, sync, auto_lock_at_ms: autoLockAt } = useUiState();
+  // The second clock, as the sidebar's: the minutes until the lock must not run a minute ahead.
+  const now = useClock();
+  const unlocked = t("shell.status.unlocked");
+  const lock =
+    autoLockAt === null
+      ? unlocked
+      : `${unlocked} · ${t("codes.autoLockIn", {
+          time: t("common.minutes", { n: Math.max(1, Math.ceil((autoLockAt - now) / 60_000)) }),
+        })}`;
+  const devices = sync.space?.devices ?? [];
   return (
-    <Card
-      padding="none"
-      className="flex min-h-[52px] flex-wrap items-center gap-3 px-3.5 py-2"
-      data-testid="codes-status">
-      <Lamp tone="ok" size={10} />
-      <div className="flex min-w-[10rem] flex-1 items-baseline gap-2">
-        <span className="shrink-0 text-[15px] font-medium whitespace-nowrap text-fg">
-          {t("shell.status.unlocked")}
-        </span>
-        <span className="truncate text-[13px] text-fg-muted">
+    <section
+      aria-label={t("codes.hero.vault")}
+      className="flex min-w-0 flex-col gap-3 rounded-14 bg-surface p-6 hairline panel"
+      data-testid="codes-vault">
+      <span className="text-[12px] font-medium text-fg-muted">{t("codes.hero.vault")}</span>
+      <span className="flex min-w-0 items-center gap-2.5 text-[14px] font-medium text-fg">
+        <Lamp tone="ok" size={8} />
+        <span className="truncate">{lock}</span>
+      </span>
+      <span className="flex min-w-0 items-center gap-2.5 text-[13px] text-fg">
+        <Icon name="archive" size={16} className="shrink-0 text-fg-muted" />
+        <span className="truncate">
           {backup.last_backup_ms === null
-            ? t("codes.statusNoBackup", { accounts })
-            : t("codes.status", { accounts, backup: relativeTime(t, backup.last_backup_ms, now) })}
+            ? t("codes.hero.noBackup")
+            : t("backup.manual.last", { when: relativeTime(t, backup.last_backup_ms, now) })}
         </span>
-      </div>
-      <AddMenu />
-    </Card>
+      </span>
+      <span className="flex min-w-0 items-center gap-2.5 text-[13px] text-fg">
+        <Icon name="cloud" size={16} className="shrink-0 text-fg-muted" />
+        <span className="truncate">{syncSummary(t, sync.space)}</span>
+      </span>
+      {devices.length > 0 && <Devices devices={devices} />}
+    </section>
+  );
+}
+
+/** The colours of the devices' initials, in turn. */
+const DEVICE_COLORS = ["blue", "green", "orange", "purple", "teal"] as const;
+
+/** The space's devices: their initials side by side, then their names (this one first). */
+function Devices({ devices }: { devices: readonly SyncDeviceView[] }) {
+  const t = useT();
+  const named = [
+    ...devices.filter((d) => d.this_device),
+    ...devices.filter((d) => !d.this_device),
+  ].map((d) => ({ ...d, label: d.this_device ? t("codes.hero.thisDevice") : d.name || d.tag }));
+  return (
+    <div className="flex min-w-0 items-center gap-3" data-testid="codes-devices">
+      <span aria-hidden className="flex shrink-0">
+        {named.slice(0, 3).map((d, i) => (
+          <span
+            key={d.tag}
+            data-tag={DEVICE_COLORS[i % DEVICE_COLORS.length]}
+            className={cx(
+              "inline-flex size-7 items-center justify-center rounded-full bg-tag-bg text-[12px] font-semibold text-tag-fg ring-2 ring-[var(--canvas)]",
+              i > 0 && "-ml-2",
+            )}>
+            {initial(d.label)}
+          </span>
+        ))}
+      </span>
+      <span className="truncate text-[12px] text-fg-muted">
+        {named.map((d) => d.label).join(" · ")}
+      </span>
+    </div>
   );
 }
 
@@ -735,16 +882,17 @@ export function AddMenu() {
   return (
     <Menu
       label={t("codes.add.label")}
+      title={`${t("codes.add.label")} · Ctrl N`}
       align="end"
       sections={sections}
       onSelect={onSelect}
       data-testid="add-menu"
-      triggerClassName="inline-flex h-8 items-center gap-2 rounded-6 bg-primary px-3 text-[13px] font-medium whitespace-nowrap text-primary-fg transition-colors hover:opacity-90"
+      // The page's main action (board A1): a pill in the theme's primary colour, with its glow.
+      triggerClassName="inline-flex h-13.5 items-center gap-2 rounded-pill bg-primary px-5 text-[14px] font-medium whitespace-nowrap text-primary-fg shadow-primary transition-opacity hover:opacity-90"
       trigger={
         <>
-          <Icon name="plus" size={14} />
+          <Icon name="plus" size={18} />
           {t("codes.add.label")}
-          <Icon name="chevronDown" size={12} />
         </>
       }
     />

@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   cutMark,
+  FAVORITES,
+  UNGROUPED,
   entryGroups,
   exportBlocker,
   filterEntries,
   groupSections,
   moveItem,
   parseKind,
+  recentEntry,
   sortEntries,
 } from "./entries";
 import { mockEntry } from "./mock-backend";
@@ -56,6 +59,19 @@ describe("sortEntries / filterEntries", () => {
     expect(filterEntries(entries, "home", "")).toHaveLength(1);
     expect(filterEntries(entries, "", "home")).toHaveLength(1);
     expect(filterEntries(entries, "  ", "")).toHaveLength(3);
+  });
+
+  it("filters the pinned accounts and those in no group (the chips of the codes page)", () => {
+    expect(filterEntries(entries, "", FAVORITES).map((e) => e.account)).toEqual(["carol"]);
+    expect(filterEntries(entries, "", UNGROUPED).map((e) => e.account)).toEqual(["b", "a"]);
+    // A group named like a sentinel is still the user's group.
+    expect(filterEntries(entries, "", "home")).toHaveLength(1);
+  });
+
+  it("knows the account used last, if any", () => {
+    expect(recentEntry(entries)?.account).toBe("carol");
+    expect(recentEntry(entries.map((e) => ({ ...e, last_used_at_ms: null })))).toBeUndefined();
+    expect(recentEntry([])).toBeUndefined();
   });
 });
 

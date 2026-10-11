@@ -22,7 +22,7 @@ describe("the phone's settings", () => {
     const backend = new MockBackend({ entries: sampleEntries(), settings: { locale: "zh-cn" } });
     const { user } = renderApp({ backend });
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     expect(await screen.findByTestId("page-settings")).toBeInTheDocument();
     expect(screen.getByTestId("about-version")).toHaveTextContent("Lockra 0.1.0");
 
@@ -59,7 +59,7 @@ describe("the phone's settings", () => {
   it("lay the themes out light beside dark, pick a column while following, and choose the code view", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     await screen.findByTestId("page-settings");
     const themes = within(screen.getByRole("radiogroup", { name: "主题" }));
     expect(themes.getAllByRole("radio").map((r) => r.getAttribute("aria-label"))).toEqual([
@@ -94,7 +94,7 @@ describe("the phone's settings", () => {
   it("change the master password, the current one checked first", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     await user.click(await screen.findByTestId("settings-password"));
     expect(await screen.findByTestId("page-password")).toBeInTheDocument();
     const submit = screen.getByRole("button", { name: "修改主密码" });

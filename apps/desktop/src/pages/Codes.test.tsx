@@ -1,11 +1,30 @@
-import { MockBackend, mockEntry, sampleEntries } from "@lockra/shared/mock";
+import { MockBackend, mockEntry, mockSyncSpace, sampleEntries } from "@lockra/shared/mock";
 import { act, fireEvent, screen, within } from "@testing-library/react";
+import type { UserEvent } from "@testing-library/user-event";
 import { ready, renderApp } from "../test/render";
 
 function names(): string[] {
   return screen
     .getAllByTestId("entry-row")
     .map((row) => row.querySelector(".truncate")?.textContent ?? "");
+}
+
+/** Picks one of the list's tools from its ⋯ menu. */
+async function tool(user: UserEvent, name: string) {
+  await user.click(screen.getByTestId("codes-more"));
+  await user.click(screen.getByRole("menuitem", { name }));
+}
+
+/** The items of the list's ⋯ menu, opened and closed again. */
+async function tools(user: UserEvent): Promise<string[]> {
+  await user.click(screen.getByTestId("codes-more"));
+  const menu = screen.getByRole("menu", { name: "列表选项" });
+  const items = [...menu.querySelectorAll('[role^="menuitem"]')].map(
+    (item) =>
+      `${item.textContent ?? ""}${item.getAttribute("aria-checked") === "true" ? " ✓" : ""}`,
+  );
+  await user.keyboard("{Escape}");
+  return items;
 }
 
 describe("Codes", () => {
@@ -15,7 +34,53 @@ describe("Codes", () => {
     expect(names()[0]).toBe("GitHub");
     expect(names()).toHaveLength(sampleEntries().length);
     expect(await screen.findAllByTestId("otp-code")).not.toHaveLength(0);
-    expect(screen.getByTestId("codes-status")).toHaveTextContent("8 个账号 · 还没有备份");
+  });
+
+  it("starts with its own header: the facts, the search and the add menu (board A1)", async () => {
+    renderApp();
+    await ready();
+    const header = within(screen.getByTestId("page-header"));
+    expect(header.getByRole("heading", { level: 1, name: "验证码" })).toBeInTheDocument();
+    expect(screen.getByTestId("page-subtitle")).toHaveTextContent("8 个账号 · 1 个分组");
+    expect(header.getByTestId("codes-search")).toBeInTheDocument();
+    expect(header.getByTestId("add-menu")).toHaveAttribute("title", "添加账号 · Ctrl N");
+  });
+
+  it("shows the account used last, with the vault's state beside it", async () => {
+    const { user, backend } = renderApp();
+    await ready();
+    // AWS was copied last of the samples.
+    expect(screen.getByTestId("recent-card")).toHaveTextContent("AWS");
+    const vault = screen.getByTestId("codes-vault");
+    expect(vault).toHaveTextContent("已解锁 · 5 分钟后自动锁定");
+    expect(vault).toHaveTextContent("还没有备份");
+    expect(vault).toHaveTextContent("未开启同步");
+    // Copying from the list moves the card to that account; the card copies too.
+    const github = screen.getAllByTestId("entry-row")[0];
+    if (!github) throw new Error("no row");
+    await user.click(github);
+    expect(screen.getByTestId("recent-card")).toHaveTextContent("GitHub");
+    await user.click(screen.getByTestId("recent-card"));
+    expect(backend.calls.filter((c) => c.command === "entry_copy")).toHaveLength(2);
+    // Searching is about the list: the cards step aside.
+    await user.type(screen.getByTestId("codes-search"), "a");
+    expect(screen.queryByTestId("codes-hero")).toBeNull();
+  });
+
+  it("names the devices of the sync space on the vault card", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      settings: { locale: "zh-cn" },
+      sync: mockSyncSpace(),
+    });
+    renderApp({ backend });
+    await ready();
+    const vault = screen.getByTestId("codes-vault");
+    expect(vault).toHaveTextContent("已同步 · 2 台设备");
+    expect(screen.getByTestId("codes-devices")).toHaveTextContent("本机 · Pixel 8");
+    expect(screen.getByTestId("page-subtitle")).toHaveTextContent(
+      "8 个账号 · 1 个分组 · 已全部同步",
+    );
   });
 
   it("copies a code on click and Enter, and says when the clipboard is cleared", async () => {
@@ -24,7 +89,9 @@ describe("Codes", () => {
     const github = screen.getAllByTestId("entry-row")[0];
     if (!github) throw new Error("no row");
     await user.click(github);
-    expect(await screen.findByText("已复制 · 30 秒后清空剪贴板")).toBeInTheDocument();
+    expect(
+      await screen.findByText("已复制 GitHub 的验证码 · 30 秒后清空剪贴板"),
+    ).toBeInTheDocument();
     github.focus();
     await user.keyboard("{Enter}");
     expect(backend.calls.filter((c) => c.command === "entry_copy")).toHaveLength(2);
@@ -78,10 +145,29 @@ describe("Codes", () => {
     expect(search).toHaveFocus();
   });
 
+  it("filters with the chips: everything, the pinned ones, a group, those in none", async () => {
+    const { user } = renderApp();
+    await ready();
+    const chips = within(screen.getByTestId("codes-chips"));
+    expect(chips.getAllByRole("radio").map((chip) => chip.getAttribute("aria-label"))).toEqual([
+      "全部 8",
+      "收藏 1",
+      "工作 3",
+      "未分组 5",
+    ]);
+    await user.click(chips.getByRole("radio", { name: "收藏 1" }));
+    expect(names()).toEqual(["GitHub"]);
+    await user.click(chips.getByRole("radio", { name: "未分组 5" }));
+    expect(names()).toHaveLength(5);
+    expect(names()).not.toContain("GitHub");
+    await user.click(chips.getByRole("radio", { name: "全部 8" }));
+    expect(names()).toHaveLength(8);
+  });
+
   it("filters by group and saves the order", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.selectOptions(screen.getByTestId("codes-group"), "工作");
+    await user.click(screen.getByRole("radio", { name: "工作 3" }));
     expect(names()).toEqual(["GitHub", "AWS", "Cloudflare"]);
     await user.selectOptions(screen.getByTestId("codes-sort"), "recent");
     expect(backend.calls.at(-1)).toMatchObject({
@@ -171,12 +257,18 @@ describe("Codes", () => {
   });
 
   it("shows the time since the last backup", async () => {
-    const { backend } = renderApp();
+    // Regression (2026-10-11): the page's clock was in seconds and every backup read 「刚刚」.
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      settings: { locale: "zh-cn" },
+      now: () => Date.now() - 3.5 * 3_600_000,
+    });
+    renderApp({ backend });
     await ready();
     await act(async () => {
       await backend.saveBackup();
     });
-    expect(screen.getByTestId("codes-status")).toHaveTextContent("上次备份 刚刚");
+    expect(screen.getByTestId("codes-vault")).toHaveTextContent("上次备份 3 小时前");
   });
 });
 
@@ -206,16 +298,16 @@ describe("Codes · groups", () => {
     expect(names()).not.toContain("AWS");
   });
 
-  it("folds and unfolds every section at once", async () => {
+  it("folds and unfolds every section at once, from the list's menu", async () => {
     const { user, backend } = renderApp();
     await ready();
-    const expandAll = screen.getByRole("button", { name: "全部展开" });
-    expect(expandAll).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "全部折叠" }));
+    // Only what can happen: nothing is folded yet.
+    expect(await tools(user)).toEqual(["选择", "按分组显示 ✓", "全部折叠"]);
+    await tool(user, "全部折叠");
     expect(backend.calls.at(-1)).toEqual({ command: "view_collapse_groups", groups: ["工作", ""] });
     expect(screen.queryAllByTestId("entry-row")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "全部折叠" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "全部展开" }));
+    expect(await tools(user)).toEqual(["选择", "按分组显示 ✓", "全部展开"]);
+    await tool(user, "全部展开");
     expect(backend.calls.at(-1)).toEqual({ command: "view_collapse_groups", groups: [] });
     expect(names()).toHaveLength(8);
   });
@@ -230,15 +322,16 @@ describe("Codes · groups", () => {
     await ready();
     expect(headers()[1]).toEqual(["未分组5", "false"]);
     expect(names()).toEqual(["GitHub", "AWS", "Cloudflare"]);
-    const toggle = screen.getByRole("button", { name: "按分组显示" });
-    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByTestId("codes-more"));
+    const toggle = screen.getByRole("menuitemcheckbox", { name: "按分组显示" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
     await user.click(toggle);
     expect(backend.calls.at(-1)).toMatchObject({
       command: "settings_set",
       settings: { group_codes: false },
     });
     expect(screen.queryAllByTestId("codes-group-toggle")).toHaveLength(0);
-    expect(screen.queryByRole("button", { name: "全部折叠" })).toBeNull();
+    expect(await tools(user)).toEqual(["选择", "按分组显示"]);
     expect(names()).toHaveLength(8);
   });
 
@@ -247,16 +340,19 @@ describe("Codes · groups", () => {
       entries: [mockEntry("Solo", "me")],
       settings: { locale: "zh-cn" },
     });
-    renderApp({ backend });
+    const { user } = renderApp({ backend });
     await ready();
     expect(screen.queryAllByTestId("codes-group-toggle")).toHaveLength(0);
-    expect(screen.queryByRole("button", { name: "按分组显示" })).toBeNull();
+    expect(await tools(user)).toEqual(["选择"]);
+    // One account: nothing to filter, nothing to reorder.
+    expect(screen.queryByTestId("codes-chips")).toBeNull();
+    expect(screen.queryByTestId("codes-reorder")).toBeNull();
     expect(names()).toEqual(["Solo"]);
   });
 });
 
 describe("Codes · row actions", () => {
-  it("pins and edits from the buttons beside each row's menu", async () => {
+  it("pins from the button beside each row's menu, and edits from the menu", async () => {
     const { user, backend } = renderApp();
     await ready();
     const first = screen.getAllByTestId("entry-row")[0];
@@ -270,7 +366,10 @@ describe("Codes · row actions", () => {
     });
     const row = screen.getAllByTestId("entry-row")[0];
     if (!row) throw new Error("no row");
-    await user.click(within(row).getByRole("button", { name: "编辑…" }));
+    // Board A1: the row has the pin and the menu, no edit button of its own.
+    expect(within(row).queryByRole("button", { name: "编辑…" })).toBeNull();
+    await user.click(within(row).getByTestId("row-menu"));
+    await user.click(screen.getByRole("menuitem", { name: "编辑…" }));
     expect(screen.getByRole("dialog", { name: "编辑账号" })).toBeInTheDocument();
     expect(backend.calls.some((c) => c.command === "entry_copy")).toBe(false);
   });
@@ -316,7 +415,7 @@ describe("Codes · selecting several accounts", () => {
   it("ticks rows instead of copying them, a section and everything at once", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByRole("button", { name: "选择" }));
+    await tool(user, "选择");
     const bar = within(screen.getByTestId("codes-selection"));
     expect(bar.getByText("已选择 0 个账号")).toBeInTheDocument();
     expect(bar.getByRole("button", { name: "移到分组…" })).toBeDisabled();
@@ -347,7 +446,7 @@ describe("Codes · selecting several accounts", () => {
   it("moves the ticked accounts to a group, or out of theirs, in one command each", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByRole("button", { name: "选择" }));
+    await tool(user, "选择");
     await user.click(screen.getByRole("checkbox", { name: "选择「工作」中的全部账号" }));
     const ids = rowsOf("工作").map((row) => row.dataset.entry);
     await user.click(screen.getByRole("button", { name: "移到分组…" }));
@@ -360,7 +459,7 @@ describe("Codes · selecting several accounts", () => {
     expect(screen.queryByTestId("codes-selection")).toBeNull();
     expect(rowsOf("个人").map((row) => row.dataset.entry)).toEqual(ids);
     // Empty takes them out of their group.
-    await user.click(screen.getByRole("button", { name: "选择" }));
+    await tool(user, "选择");
     await user.click(screen.getByRole("checkbox", { name: "选择「个人」中的全部账号" }));
     await user.click(screen.getByRole("button", { name: "移到分组…" }));
     await user.click(screen.getByRole("button", { name: "移动" }));
@@ -386,7 +485,7 @@ describe("Codes · selecting several accounts", () => {
   it("selects only what a search shows", async () => {
     const { user } = renderApp();
     await ready();
-    await user.click(screen.getByRole("button", { name: "选择" }));
+    await tool(user, "选择");
     await user.type(screen.getByTestId("codes-search"), "aws");
     await user.click(screen.getByRole("button", { name: "全选" }));
     expect(screen.getByText("已选择 1 个账号")).toBeInTheDocument();
@@ -539,7 +638,7 @@ describe("Codes · cards", () => {
   it("selects and reorders in the list, and comes back to the cards", async () => {
     const { user } = cards();
     await ready();
-    await user.click(screen.getByTestId("codes-select"));
+    await tool(user, "选择");
     expect(screen.queryAllByTestId("entry-tile")).toHaveLength(0);
     expect(screen.getAllByTestId("entry-row")[0]).toHaveAttribute("role", "checkbox");
     expect(

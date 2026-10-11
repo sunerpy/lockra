@@ -22,6 +22,7 @@ import {
   CardGrid,
   DropZone,
   OptionCard,
+  PageHeader,
   Panel,
   PasswordField,
   Select,
@@ -50,12 +51,15 @@ export function Import({ dragging }: { dragging: boolean }) {
   const dispatch = useDispatch();
   return (
     <div className="flex flex-col gap-4" data-testid="page-import">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-fg-muted">{t("import.subtitle")}</p>
-        <Button icon="clipboard" onClick={() => void dispatch({ command: "import_clipboard" })}>
-          {t("import.clipboard")}
-        </Button>
-      </div>
+      <PageHeader
+        title={t("shell.nav.import")}
+        subtitle={t("import.subtitle")}
+        actions={
+          <Button icon="clipboard" onClick={() => void dispatch({ command: "import_clipboard" })}>
+            {t("import.clipboard")}
+          </Button>
+        }
+      />
       {state.import !== null && <Preview view={state.import} />}
       <CardGrid min={320}>
         <GoogleSource dragging={dragging} />

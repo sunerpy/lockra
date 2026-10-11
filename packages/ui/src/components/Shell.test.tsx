@@ -7,7 +7,10 @@ import {
   SIDEBAR_ROW_CLASS,
   SIDEBAR_ROW_EXPANDED_CLASS,
   Sidebar,
+  SidebarButton,
+  SidebarButtons,
   SidebarEntry,
+  SidebarStatus,
   TRAFFIC_LIGHTS_BRAND_INSET,
   TRAFFIC_LIGHTS_CLEARANCE,
 } from "./Sidebar";
@@ -50,7 +53,7 @@ describe("Sidebar", () => {
     await user.click(settings);
     expect(onFooter).toHaveBeenCalled();
     expect(screen.getByText("Voltip")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "主导航" })).toHaveStyle({ width: "224px" });
+    expect(screen.getByRole("navigation", { name: "主导航" })).toHaveStyle({ width: "232px" });
   });
 
   it("regression: the collapsed rail is 56 px of glyphs whose labels stay as names and tooltips", () => {
@@ -184,6 +187,51 @@ describe("ThemeSwitch", () => {
   });
 });
 
+describe("the sidebar's foot (board A1)", () => {
+  it("a status card over square buttons; the theme's button steps to the next theme", async () => {
+    const user = userEvent.setup();
+    const onLock = vi.fn();
+    const onTheme = vi.fn();
+    const { rerender } = render(
+      <div>
+        <SidebarStatus
+          title="已解锁"
+          lamp="ok"
+          lines={[{ text: "5 分钟后自动锁定" }, { icon: "cloud", text: "已同步 · 3 台设备" }]}
+        />
+        <SidebarButtons>
+          <SidebarButton icon="lock" label="锁定" shortcut="Ctrl L" onClick={onLock} />
+          <ThemeSwitch value="glass" onChange={onTheme} variant="button" />
+          <SidebarButton icon="settings" label="设置" opensDialog onClick={() => undefined} />
+        </SidebarButtons>
+      </div>,
+    );
+    expect(screen.getByTestId("sidebar-status")).toHaveTextContent(
+      "已解锁5 分钟后自动锁定已同步 · 3 台设备",
+    );
+    await user.click(screen.getByRole("button", { name: "锁定" }));
+    expect(onLock).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "锁定" })).toHaveAttribute("title", "锁定 · Ctrl L");
+    await user.click(screen.getByRole("button", { name: "切换到澄空 · 夜" }));
+    expect(onTheme).toHaveBeenCalledWith("glass_night");
+    expect(screen.getByRole("button", { name: "设置" })).toHaveAttribute("aria-haspopup", "dialog");
+    expect(screen.getByTestId("sidebar-buttons")).toHaveClass("flex-row");
+    rerender(
+      <SidebarButtons collapsed>
+        <SidebarButton icon="lock" label="锁定" onClick={onLock} />
+      </SidebarButtons>,
+    );
+    expect(screen.getByTestId("sidebar-buttons")).toHaveClass("flex-col");
+  });
+
+  it("shows no lamp beside the brand unless asked: the status card says it", () => {
+    const { rerender } = render(<Sidebar activeId="" onNavigate={vi.fn()} groups={[]} />);
+    expect(within(screen.getByTestId("sidebar-brand")).queryByRole("img")).toBeNull();
+    rerender(<Sidebar activeId="" onNavigate={vi.fn()} groups={[]} statusTone="ok" />);
+    expect(within(screen.getByTestId("sidebar-brand")).getByRole("img")).toBeInTheDocument();
+  });
+});
+
 describe("the sidebar's rows line up", () => {
   it("regression: the theme row has the box of the other entries, its glyph fills the glyph slot and its menu text starts where a label does, with one hover surface", () => {
     render(
@@ -205,8 +253,8 @@ describe("the sidebar's rows line up", () => {
     for (const cls of SIDEBAR_ROW_EXPANDED_CLASS.split(" ")) expect(entry).toHaveClass(cls);
     const step = screen.getByTestId("theme-switch-step");
     for (const cls of SIDEBAR_GLYPH_SLOT_CLASS.split(" ")) expect(step).toHaveClass(cls);
-    // 0.5 rem + 0.625 rem (the row's inset and gap) + the 16 px glyph.
-    expect(SIDEBAR_GLYPH_SLOT_CLASS).toBe("w-[calc(1.125rem_+_16px)] pl-2");
+    // 0.875 rem + 0.625 rem (the row's inset and gap) + the 18 px glyph (board A1).
+    expect(SIDEBAR_GLYPH_SLOT_CLASS).toBe("w-[calc(1.5rem_+_18px)] pl-3.5");
     const menu = screen.getByRole("combobox", { name: "主题" });
     expect(menu).toHaveClass("pl-0");
     // One hover surface for the whole row, like an entry; neither half paints its own.

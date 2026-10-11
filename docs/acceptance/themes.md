@@ -6,7 +6,8 @@ Glass: `01 桌面`, `04 桌面 · 夜`, `06` the cards), B (墨白 · Editorial:
 `04 桌面 · 夜`, `06` the list) and `00 · 主题切换` (`01 设置 · 外观`). The owner's decisions:
 
 - A and B are switchable themes that change the appearance only (colours, surfaces, radii,
-  shadows); there is one shell.
+  shadows); there is one shell. On 2026-10-11, after 0.8.7, that shell became A's layout, in
+  every theme and on the phone too (「所有主题统一换成澄空布局」, see "The 澄空 layout" below).
 - 「验证码视图」 (list or cards) is a setting of its own, the same in every theme.
 - 明亮, 暗黑, 暖纸 and 石墨 stay; 澄空 · 夜 and 墨白 · 夜 are added.
 - Following the system switches within a column (明亮 ↔ 暗黑, 澄空 ↔ 澄空 · 夜, 墨白 ↔ 墨白 · 夜);
@@ -82,7 +83,7 @@ Problems found by looking, and fixed:
 
 偏离（画板 vs 落地，供 owner 复核）：
 
-1. **Layout is not part of a theme** (decision 1): A's 「最近使用」 and 保险库状态 cards, the page
+1. **Layout is not part of a theme** (decision 1; superseded in 0.8.8, see below): A's 「最近使用」 and 保险库状态 cards, the page
    title in the body, the search in the header, the group chips and the sidebar's status card,
    and B's top navigation, title, chips and 扫描二维码 button are not built; both themes use the one
    shell (sidebar, title bar, status card, toolbar). On the phone, the header stays and the rows
@@ -109,9 +110,9 @@ Problems found by looking, and fixed:
 10. **A hovered row** takes the inset tint, as in every theme; A `01` raises it in white with a
     shadow.
 11. **Toasts** are the shared frosted toast at the bottom right; A `01` and A `04` draw a dark pill
-    in the middle.
+    in the middle (built in 0.8.8).
 12. **A row's star, pencil and ⋯** stay visible on every row, as in every theme; A `04` and B `06`
-    show the star and ⋯ on the hovered row only.
+    show the star and ⋯ on the hovered row only (built in 0.8.8, the pencil gone).
 13. **Rows are not divided**: B `06` draws a hairline between rows.
 14. **The phone card's seconds** read 「19 秒」; B `02` and B `05` write 「18s」.
 
@@ -138,6 +139,75 @@ icon**.
   (launcher icons through `tauri icon`), and the site's `docs/site/public/lockra-logo.svg`. Checked
   at 16, 24, 32, 48 and 128 px on light and dark, and as Android's adaptive, square and round
   icons.
+
+## The 澄空 layout in every theme (0.8.8)
+
+The owner, after 0.8.7: 「没有引入澄空样式的布局吗 我看还是老旧的布局设计」. Answers: every theme
+takes A's layout (themes keep changing colours and materials only), on the desktop and the phone.
+Boards A `01 桌面` (A1), `02 手机` (A2), `04 桌面 · 夜` (A4) and `05 手机 · 夜` (A5); their geometry
+came from the builders that drew them. `DESIGN.md` §2 describes what was built.
+
+Automated: `Shell.test.tsx` (ui: the status card, the square buttons and the theme button, the
+brand without a lamp, 232 px, the rows lining up), `FilterChips.test.tsx`, `RecentCard.test.tsx`,
+`lockra.test.tsx` (the rows' measures, the star after a pinned name, the pin and menu on hover,
+the phone's cards), `primitives.test.tsx` (`PageHeader`, the toast pill), `useNow.test.ts`,
+`labels.test.ts` (`syncSummary`, the copied notice with the account's name), the desktop's
+`Shell.test.tsx` (the page's own title, the bare title bar, 同步 opening Settings › 同步, the status
+card) and `Codes.test.tsx` (header, 「最近使用」 and 保险库状态, the devices, the chips, the ⋯ menu),
+the phone's `codes.test.tsx` (title, add and lock, the card, the chips, the row cards, the dock).
+
+Run here, 2026-10-11: `make check`; `make smoke-desktop` (every `screens/desktop/` screenshot taken
+again: the codes page in the eight themes at 960, 1280 and 1440, the cards, selecting, reordering,
+the long names, 200 accounts, the other pages with their headers); `make showcase`; the phone's
+development build in Chrome at 390 × 844 (`screens/phone/codes-390-{glass,glass_night,paper,light}`,
+`codes-cards-390-{glass,paper,paper_night}`), each read on its own and set beside its board.
+
+| Board              | Screenshot                                                                           | Result                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| A1 `01 桌面`       | `codes-1280-glass`, `codes-cards-1280-glass`                                         | pass with deviations L1–L8: sidebar, status card and buttons, header, both cards, chips                         |
+| A4 `04 桌面 · 夜`  | `codes-1280-glass_night`                                                             | pass with the same deviations                                                                                   |
+| A2 `02 手机`       | `screens/phone/codes-390-glass`                                                      | pass with deviations L9–L12: title, round buttons, search, the card, chips, rows, the dock                      |
+| A5 `05 手机 · 夜`  | `screens/phone/codes-390-glass_night`                                                | pass with deviations L9–L12                                                                                     |
+| (the other themes) | `codes-1280-{light,dark,paper,paper_night}`, `screens/phone/codes-390-{paper,light}` | the same layout in their own colours: the chip that is on is the accent's tint in the classic four, ink in 墨白 |
+
+Problems found by looking, and fixed:
+
+1. **The phone's chips ran under the reorder button** (they bled past the right edge as well as the
+   left); they now bleed to the left only and end at the button.
+2. **A counter row lost its ring's room while selecting**, and its code stood out of the column;
+   it keeps an empty slot of the ring's size.
+3. **The long names fell below the fold** of `codes-long-1280-light` once the cards took the top;
+   the smoke now copies that account (so 「最近使用」 shows it too) and sorts by use.
+4. **The vault card's auto-lock read a minute late** with the 30-second clock; it counts with the
+   second clock, as the sidebar does.
+5. Older, found on the way: `useNow` returned seconds and every caller read them as milliseconds,
+   so 上次备份 and the sync times always said 「刚刚」. It returns milliseconds now
+   (`useNow.test.ts`, and `Codes.test.tsx` "shows the time since the last backup" at 3½ hours).
+
+偏离（画板 vs 落地，供 owner 复核）：
+
+- L1. **Sidebar rows are about 40 px** (A1: 44) so that its foot fits a 600 px window; it is 232 px
+  wide as on the board, inside the theme's 12 px inset (A1: 16).
+- L2. **The search's key is `/`** (A1: ⌘K): `Ctrl K` opens the command palette, `/` and `Ctrl F` the
+  search. The palette has no button of its own now; the old footer's key list is gone and the keys
+  are in the tooltips.
+- L3. **The list's tools have a ⋯ menu** (选择, 按分组显示, 全部折叠, 全部展开) after A1's reorder, view
+  and sort; the tools keep the theme's control radius (A1 draws pills).
+- L4. **The two cards step aside** while searching, selecting or reordering (not on the board).
+- L5. **The theme button steps through the themes** (each click the next; its tooltip names it);
+  the full list is Settings › 外观.
+- L6. **A hovered row takes the inset tint** (A1: white with a shadow), as in every theme.
+- L7. **Rows keep the copied pill and the next code under the code** as in 0.8.7; A1's warning row
+  matches. 「最近使用」 always shows the next code under its ring, as A1 does.
+- L8. **The window buttons** are the title bar's 46 px buttons (A1 draws three small glyphs); the
+  title bar has no fill and no rule in any theme now (the classic four had a surface strip with a
+  rule, 墨白 a rule).
+- L9. **The phone's header buttons are 添加账号 and 锁定** (A2: 锁定 and 设置): 设置 is in the dock,
+  and adding by a photo, a file or a link needs a way in besides the scan button.
+- L10. **The phone's rows keep ⋯** (A2 draws none): beside the long press, the visible way to an
+  account's actions; long account names are cut sooner (「root@acme-c…」).
+- L11. **The reorder button follows the phone's chips** (A2 draws chips only).
+- L12. **The dock is on the codes screen only**; the pages it opens have their back button.
 
 ## Not checked here
 

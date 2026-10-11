@@ -39,7 +39,7 @@ describe("backups on the phone", () => {
   it("are saved under a password of their own when asked", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     await user.click(await screen.findByTestId("settings-backup"));
     expect(await screen.findByTestId("page-backup")).toBeInTheDocument();
     await user.click(within(screen.getByTestId("backup-separate")).getByRole("switch"));
@@ -57,7 +57,7 @@ describe("backups on the phone", () => {
   it("are restored account by account through the import preview", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     await user.click(await screen.findByTestId("settings-restore"));
     expect(await screen.findByTestId("page-restore")).toBeInTheDocument();
     expect(screen.getByTestId("restore-file")).toHaveTextContent("lockra-auto-20260928-091500");
@@ -73,7 +73,7 @@ describe("backups on the phone", () => {
   it("are restored in place of every account, or left", async () => {
     const { user, backend } = renderApp();
     await ready();
-    await user.click(screen.getByTestId("codes-settings"));
+    await user.click(screen.getByTestId("dock-settings"));
     await user.click(await screen.findByTestId("settings-restore"));
     await user.click(await screen.findByRole("button", { name: "取消" }));
     expect(await screen.findByTestId("page-settings")).toBeInTheDocument();

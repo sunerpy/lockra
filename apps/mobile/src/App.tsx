@@ -5,11 +5,11 @@ import { type Backend, resolveLocale } from "@lockra/shared";
 import {
   BackendProvider,
   I18nProvider,
+  NoticeBridge,
   ToasterProvider,
   ToastViewport,
   useAppearance,
   useBackend,
-  useToaster,
   useToasts,
   useUiState,
 } from "@lockra/ui";
@@ -174,17 +174,6 @@ function Pages() {
     case "reveal":
       return entry ? <Reveal entry={entry} /> : null;
   }
-}
-
-/** Core notices become toasts (inside the i18n tree, so they are translated). */
-function NoticeBridge() {
-  const { backend } = useBackend();
-  const toaster = useToaster();
-  useEffect(
-    () => backend.on((event) => event.type === "notice" && toaster.notice(event.notice)),
-    [backend, toaster],
-  );
-  return null;
 }
 
 /** The vault locks as soon as the app leaves the screen: another app, the home screen, the screen

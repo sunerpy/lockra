@@ -101,8 +101,8 @@ const STRUCTURE = [
   "row-pill-fg",
   "logo-body",
   "logo-dots",
-  "titlebar-fill",
-  "titlebar-rule",
+  "chip-on-bg",
+  "chip-on-fg",
 ];
 
 describe("tokens.css", () => {
@@ -135,7 +135,7 @@ describe("tokens.css", () => {
     expect(classic).toContain("--sidebar-inset: 0px;");
     // The classic rail keeps its rule on the right and no frame around it.
     expect(classic).toContain("--sidebar-border: 0 1px 0 0;");
-    expect(classic).toContain("--titlebar-fill: var(--surface);");
+    expect(classic).toContain("--chip-on-bg: var(--accent-soft);");
     for (const id of ["glass", "glass_night", "paper", "paper_night"]) {
       const block = themeBlock(id);
       for (const name of STRUCTURE) expect(block, `${id} ${name}`).toContain(`--${name}:`);
@@ -144,6 +144,9 @@ describe("tokens.css", () => {
     expect(themeBlock("glass")).toMatch(/--surface-fill: rgb\(255 255 255 \/ 0\.\d+\);/);
     expect(themeBlock("glass")).toMatch(/--canvas-image:\s+radial-gradient\(/);
     expect(themeBlock("paper")).toContain("--meter: var(--fg);");
+    // The chip that is on: white glass in 澄空 (board A1), ink in 墨白.
+    expect(themeBlock("glass")).toContain("--chip-on-bg: var(--nav-active);");
+    expect(themeBlock("paper")).toContain("--chip-on-bg: var(--primary);");
     expect(themeBlock("paper")).toContain("--tile-copied-bg: var(--fg);");
     // A hovered card's edge turns to ink in 墨白, as on board B1.
     expect(themeBlock("paper")).toContain("--tile-hover-edge: var(--fg);");

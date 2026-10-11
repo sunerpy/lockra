@@ -9,7 +9,7 @@ export interface EntryAvatarProps {
   /** Shown instead of the name's initial: one or two characters the user chose. */
   mark?: string | null;
   /** 28 and 36 are the cards' (验证码视图 › 卡片), on the phone and the desktop. */
-  size?: 24 | 28 | 32 | 36 | 40;
+  size?: 24 | 28 | 32 | 36 | 40 | 44;
   className?: string;
 }
 
@@ -50,6 +50,7 @@ const TEXT_SIZE: Record<NonNullable<EntryAvatarProps["size"]>, readonly [string,
   32: ["text-[14px]", "text-[12px]"],
   36: ["text-[16px]", "text-[13px]"],
   40: ["text-[16px]", "text-[14px]"],
+  44: ["text-[19px]", "text-[15px]"],
 };
 
 /** The square's own corner: a theme's card radius (18 in 澄空) would make it a circle. */
@@ -58,7 +59,8 @@ const RADIUS: Record<NonNullable<EntryAvatarProps["size"]>, number> = {
   28: 8,
   32: 10,
   36: 10,
-  40: 10,
+  40: 12,
+  44: 14,
 };
 
 /** The account's square: its colour (DESIGN.md, "Account colours") and its mark, else the initial

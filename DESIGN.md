@@ -35,7 +35,7 @@ follows the system with one of them set shows 明亮 or 暗黑, as before the pa
 A theme is more than its roles: each sets the variables below (the classic four share one block that
 keeps the look they had). They reach the components through `hairline` (the default 1 px edge, in
 the components layer so that an element's own `border-danger` or `hover:border-…` wins),
-`app-canvas`, `panel` (card shadow and frost), `sidebar-shell`, `titlebar`, `overlay-frost` and
+`app-canvas`, `panel` (card shadow and frost), `sidebar-shell`, `overlay-frost` and
 `tile-copied`, and through `bg-surface` / `bg-nav` / `bg-overlay`, `rounded-6/10/14` and
 `shadow-primary`. `bg-surface` is the fill, translucent in 澄空: text in the surface's colour (a
 danger button's label) takes `text-surface-solid`, the opaque role, and `theme.test.ts` rejects
@@ -51,7 +51,7 @@ text in the fill. `prefers-reduced-transparency` turns the frost and the translu
 | `--sidebar-inset` / `--sidebar-radius`                                        | 0 (a rule on the right)                 | 12 / 20 (it floats)                                                      | 0                                                       |
 | `--primary-shadow`                                                            | none                                    | a blue glow                                                              | none                                                    |
 | `--meter` (ring and card bar)                                                 | accent                                  | accent                                                                   | ink (`fg`)                                              |
-| `--titlebar-fill` / `--titlebar-rule`                                         | surface / border                        | transparent                                                              | canvas / border                                         |
+| `--chip-on-bg` / `--chip-on-fg` (the filter chip that is on)                  | accent-soft / accent-text               | white glass (`nav-active`) / `fg`                                        | ink: `primary` / `primary-fg`                           |
 | `--tile-copied-*` / `--tile-pill-*` (a card just copied), `--tile-hover-edge` | the card, an accent pill; the edge kept | the same                                                                 | the card turns to ink, plain text; an ink edge on hover |
 | `--row-pill-bg` / `--row-pill-fg` (a row just copied)                         | accent-soft / accent-text               | the same                                                                 | ink: `fg` / `surface`                                   |
 | `--logo-body` / `--logo-dots` (the in-app logo)                               | `#339cff` / white                       | `#3d7bff` (night `#6e9bff`) / white                                      | `#2142ff` (night `#8fa3ff`) / white                     |
@@ -80,9 +80,10 @@ against white, as in Codex: state is never carried by the fill alone.
 - `font-mono`: JetBrains Mono (codes, secrets, keycaps, file names, numbers).
 - All three ship with the app (`@fontsource-variable/*`); nothing is fetched (CSP forbids it).
 - Base size is the `--ui-font-size` knob (12–18 px, default 14; Settings › Appearance).
-- Scale: page title 14 px semibold (title bar); section label 14 px medium; descriptions 12 px
-  `fg-muted`; eyebrows 11 px mono uppercase `fg-subtle`; codes 22 px mono semibold
-  tabular (32 px in the export check list), split 3-3 (six digits), 4-4 (eight), 3-4 (seven).
+- Scale: page title 26 px bold (the page's own header; 30 px on the phone); section label 14 px
+  medium; descriptions 12 px `fg-muted`; eyebrows 11 px mono uppercase `fg-subtle`; codes mono
+  semibold tabular, 26 px in the list (22 px on the phone's cards), 54 px on 「最近使用」 (44 px on
+  the phone), 32 px in the export check list, split 3-3 (six digits), 4-4 (eight), 3-4 (seven).
 
 ### Shape, depth, motion
 
@@ -122,11 +123,21 @@ nine colours other than grey from a hash of its name, so a service has the same 
 The window is frameless (`decorations: false`; macOS keeps its traffic lights through
 `titleBarStyle: "Overlay"`), min 960 × 600.
 
-- Shell = `fixed-sidenav-shell` + `scroll-body-shell`: a 224 px sidebar (56 px icon rail when
-  collapsed) on the left; on the right a grid `grid-template-rows: auto minmax(0, 1fr) auto` of
-  the 40 px title bar, the page body and the 28 px shortcut footer.
+- One layout in every theme (boards A1, A2 of Penpot 「Lockra 界面方向」, owner's choice
+  2026-10-11): a theme changes colours and materials (Structure), never where things are.
+- Shell = `fixed-sidenav-shell` + `scroll-body-shell`: a 232 px sidebar (56 px icon rail when
+  collapsed) on the left; on the right a grid `grid-template-rows: auto minmax(0, 1fr)` of the
+  40 px title bar and the page body. The title bar is the drag strip, the update note and the
+  window buttons, with no fill and no rule; each page starts with its own `PageHeader` (title,
+  a line of facts, its main actions). There is no shortcut footer: the keys are in the buttons'
+  tooltips (锁定 · Ctrl L, 设置 · Ctrl ,, 添加账号 · Ctrl N) and in the command palette.
+- Sidebar: the groups 保险库 (验证码, with a count pill), 迁移 (导入, 导出) and 数据 (备份, and 同步,
+  which opens Settings › 同步), rows of about 40 px (the board draws 44; 40 keeps the foot on a
+  600 px window), the current one raised on the theme's card shadow. Its foot is a status card
+  (the lamp and 已解锁, the auto-lock, the sync) over three square buttons: 锁定, the theme (each
+  click the next one) and 设置. The icon rail keeps the buttons, stacked, and drops the card.
 - **Only the page body scrolls.** Its element carries `min-height: 0` (`min-h-0`), or a long list
-  pushes the footer off-screen instead of scrolling. Sidebar, title bar and footer never scroll.
+  grows the window's row instead of scrolling. Sidebar and title bar never scroll.
 - Grid tracks use `minmax(0, 1fr)`, never bare `1fr` (a bare track takes its widest content's
   width and overflows a narrow window).
 - The sidebar brand row and the title bar form one 40 px drag strip (`data-tauri-drag-region`).
@@ -136,6 +147,16 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
 - Overlays (`overlay-stack`): dialogs, the command palette, the QR viewer and toasts stack over
   the shell with a 28 % scrim; Esc closes only the top one.
 - Page body: max content width 1040 px, 24 px horizontal padding, 16 px between cards.
+- 验证码 (board A1): the header with a search pill and the 「添加账号」 pill; 「最近使用」 (the account
+  copied last) beside 「保险库状态」, 5 : 3, both hidden while searching, selecting or reordering;
+  the filters (全部, 收藏, each group, 未分组) with the list's tools (reorder, list or cards, sort and a
+  ⋯ menu for 选择, 按分组显示, 全部折叠, 全部展开); the list in one card, rows 64 px.
+- The phone (board A2): a 30 px title with 已解锁 · N 个账号 and round 添加账号 and 锁定 buttons; the
+  search pill; 「最近使用」; the filters, scrolling sideways, then reorder; each row a card of its
+  own (its ⋯ always shown: there is no hover); a floating dock (验证码, the raised 扫码 button,
+  设置) over the list, which lifts the toasts above it (`--toast-bottom`).
+- Toasts: a pill in `fg` at the bottom centre; a copy names the account
+  (「已复制 GitHub 的验证码 · 30 秒后清空剪贴板」).
 
 ## 3. Primitives
 
@@ -152,21 +173,29 @@ were the owner's choice on 2026-10-11 (Penpot 「Lockra 界面方向」 › 「0
 
 New for Lockra:
 
-| Primitive       | What it is                                                                                                         |
-| --------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `OtpCode`       | the code in mono, grouped; `masked` shows `••• •••`; `warning` tone in the last 5 s                                |
-| `CountdownRing` | 20 px ring, accent stroke shrinking over the window, warning ≤ 5 s, static when reduce-motion                      |
-| `EntryAvatar`   | rounded square (24–40 px, its own corner) with the issuer's first letter on its colour; never a brand logo         |
-| `EntryRow`      | avatar · issuer/account · code · ring · actions; the whole row copies on click/Enter; just copied, 「✓ 已复制」 in |
-|                 | the theme's pill replaces the code for 1.6 s; hovered, 「点击复制」 shows beside it (taking no room until then)    |
-| `EntryTile`     | the card of 验证码视图 › 卡片: avatar, names, star and menu over a 46 px code, a bar that empties, the next code   |
-|                 | in the last 5 s or the HOTP counter; copied, it says so for 1.6 s (`useFlash`). 300 px columns on the desktop,     |
-|                 | two to a row on the phone (`size="sm"`, 28 px code). Selecting and reordering stay in the list                     |
-| `PasswordField` | input with show/hide and an optional four-step strength meter                                                      |
-| `DropZone`      | dashed `border-strong` area; `accent-soft` fill while a drag hovers                                                |
-| `QrView`        | white plate (the QR's own quiet zone) inside a dialog, page `n / N`, prev/next                                     |
-| `StepList`      | numbered steps (mono numerals in `inset` circles) for the import sources                                           |
-| `useClock`      | a shared, second-aligned clock for countdowns (Voltip's `useNow` ticks every 30 s and only drives relative times)  |
+| Primitive       | What it is                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `OtpCode`       | the code in mono, grouped; `masked` shows `••• •••`; `warning` tone in the last 5 s                                 |
+| `CountdownRing` | a ring (20 px, stroke 2.5 by default; 30 / 3.5 in the rows, 26 / 3 on the phone's, 80 / 6 on 「最近使用」), the     |
+|                 | `--meter` stroke shrinking over the window, warning ≤ 5 s, static when reduce-motion                                |
+| `EntryAvatar`   | rounded square (24–44 px, its own corner) with the issuer's first letter on its colour; never a brand logo          |
+| `EntryRow`      | avatar · issuer/account · code · ring · pin and menu, 64 px; the whole row copies on click/Enter; a pinned account  |
+|                 | has a star after its name; with a mouse the pin and the menu show on hover or focus only; just copied,              |
+|                 | 「✓ 已复制」 in the theme's pill replaces the code for 1.6 s; hovered, 「点击复制」 shows beside it (taking no room |
+|                 | until then). `card` makes it a card of its own (the phone, 70 px)                                                   |
+| `RecentCard`    | 「最近使用」: the account copied last, its code large, the seconds in a ring with the next code under it; copies on |
+|                 | click, Enter or Space; HOTP offers its next code. `size="sm"` on the phone                                          |
+| `FilterChips`   | the codes page's filters, a radio group of pills with counts (← → Home End); `scroll` on the phone                  |
+| `PageHeader`    | a desktop page's 26 px title, its line of facts and its actions                                                     |
+| `SidebarStatus` | the sidebar's foot: a card with the lamp and the vault's state; `SidebarButton(s)` the square buttons under it      |
+| `EntryTile`     | the card of 验证码视图 › 卡片: avatar, names, star and menu over a 46 px code, a bar that empties, the next code    |
+|                 | in the last 5 s or the HOTP counter; copied, it says so for 1.6 s (`useFlash`). 300 px columns on the desktop,      |
+|                 | two to a row on the phone (`size="sm"`, 28 px code). Selecting and reordering stay in the list                      |
+| `PasswordField` | input with show/hide and an optional four-step strength meter                                                       |
+| `DropZone`      | dashed `border-strong` area; `accent-soft` fill while a drag hovers                                                 |
+| `QrView`        | white plate (the QR's own quiet zone) inside a dialog, page `n / N`, prev/next                                      |
+| `StepList`      | numbered steps (mono numerals in `inset` circles) for the import sources                                            |
+| `useClock`      | a shared, second-aligned clock in ms for countdowns (`useNow`, also ms, ticks every 30 s for relative times)        |
 
 Every interactive primitive has `default hover focus-visible active disabled` states, plus
 `loading` (buttons: spinner, label kept) and `error` (inputs: `danger` border and message below).

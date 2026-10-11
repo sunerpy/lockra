@@ -226,6 +226,16 @@ class Smoke:
     def nav(self, label):
         self.web.click(self.web.wait(xpath=f"//nav[@aria-label='主导航']//button[contains(normalize-space(), '{label}')]"))
 
+    def tool(self, label):
+        """One of the codes list's tools, from its ⋯ menu (board A1)."""
+        self.web.click(self.web.wait(css='[data-testid="codes-more"]'))
+        self.web.click(self.web.wait(xpath=f"//*[@role='menu']//*[starts-with(@role, 'menuitem')][normalize-space()='{label}']"))
+
+    def edit_first(self):
+        """The first row's 编辑…, from its menu: the row has no edit button of its own (board A1)."""
+        self.web.click(self.web.wait(css='[data-testid="entry-row"] [data-testid="row-menu"]'))
+        self.web.click(self.web.wait(xpath="//*[@role='menu']//*[@role='menuitem'][normalize-space()='编辑…']"))
+
     def settings(self, **patch):
         state = self.web.invoke({"command": "app_state"})
         self.web.invoke({"command": "settings_set", "settings": {**state["settings"], **patch}})
@@ -450,10 +460,10 @@ class Smoke:
         self.page("codes")
         web.invoke({"command": "device_unlock_disable", "password": PASSWORD})
 
-        # An account's own colour and avatar text, from the row's edit button.
+        # An account's own colour and avatar text, from the row's menu.
         self.nav("验证码")
         self.page("codes")
-        web.click(web.wait(css='[data-testid="row-edit"]'))
+        self.edit_first()
         dialog = "//*[@role='dialog']"
         web.click(web.wait(xpath=f"{dialog}//*[@role='radio'][@aria-label='紫色']"))
         web.type(web.wait(xpath=f"{dialog}//label[normalize-space()='头像文字']/following::input[1]"), "GH")
@@ -470,10 +480,10 @@ class Smoke:
             web.invoke({"command": "entry_update", "id": entry["id"], "patch": {"group": "工作"}})
         until("the sections", lambda: len(web.find_all('[data-testid="codes-group-toggle"]')) == 2)
         self.shot("codes-groups-1280-light")
-        web.click(web.wait(css='[data-testid="codes-collapse-all"]'))
+        self.tool("全部折叠")
         until("everything folded", lambda: not web.find_all('[data-testid="entry-row"]'))
         self.shot("codes-groups-folded-1280-light")
-        web.click(web.wait(css='[data-testid="codes-expand-all"]'))
+        self.tool("全部展开")
         until("everything unfolded", lambda: len(web.find_all('[data-testid="entry-row"]')) == len(entries))
         row = web.find_all('[data-testid="entry-row"]')[1]
         web.run(
@@ -487,7 +497,7 @@ class Smoke:
         self.x("key", "Escape")
         web.gone('[data-testid="row-context"]')
         # Several accounts at once: the group's two and one more, moved to a new group in one step.
-        web.click(web.wait(css='[data-testid="codes-select"]'))
+        self.tool("选择")
         web.wait('[data-testid="codes-selection"]')
         web.click(web.wait(xpath="//input[@type='checkbox'][@aria-label='选择「工作」中的全部账号']"))
         web.click(web.find_all('[data-testid="entry-row"]')[3])
@@ -503,7 +513,7 @@ class Smoke:
         until("three accounts in Home", lambda: sum(e["group"] == "Home" for e in web.invoke({"command": "app_state"})["entries"]) == 3)
         # The group picker: Lockra's own list under the field (the webview's <datalist> drew a dark
         # native box), which Esc closes before the dialog.
-        web.click(web.wait(css='[data-testid="row-edit"]'))
+        self.edit_first()
         web.click(web.wait(xpath=f"{dialog}//label[normalize-space()='分组']/following::input[1]"))
         web.wait('[data-testid="group-options"]')
         self.shot("edit-group-1280-light")
@@ -566,13 +576,18 @@ class Smoke:
         long_account = "a" * 120 + "@example.com"
         web.invoke({"command": "import_text", "text": f"otpauth://totp/{long_issuer}:{long_account}?secret=ORSXG5BAMJUXG5BA"})
         web.invoke({"command": "import_commit"})
+        # Copied last and sorted by use: the long names on 「最近使用」 and in the list's first row.
+        long = next(e for e in web.invoke({"command": "app_state"})["entries"] if e["account"] == long_account)
+        web.invoke({"command": "entry_copy", "id": long["id"]})
+        self.settings(sort="recent")
         self.nav("验证码")
         self.page("codes")
+        web.gone('[data-testid="toast-viewport"]', timeout=20)
         self.shot("codes-long-1280-light")
         self.settings(codes_view="grid")
         until("the cards", lambda: web.find_all('[data-testid="entry-tile"]'))
         self.shot("codes-long-cards-1280-light")
-        self.settings(codes_view="list")
+        self.settings(codes_view="list", sort=sort)
         until("the list", lambda: not web.find_all('[data-testid="entry-tile"]'))
         many = "\n".join(f"otpauth://totp/Service%20{i:03d}:user{i}%40example.com?secret={base64.b32encode(hashlib.sha1(str(i).encode()).digest()[:10]).decode()}" for i in range(200))
         web.invoke({"command": "import_text", "text": many})

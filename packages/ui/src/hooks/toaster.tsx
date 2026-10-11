@@ -7,12 +7,23 @@ import {
   noticeIsProblem,
   noticeText,
 } from "@lockra/shared";
+import type { EntryView } from "@lockra/shared";
+import { useBackend } from "../backend/BackendProvider";
 import type { ToastStore } from "../components/Toast";
 import { useT } from "../i18n/I18nProvider";
-import { type ReactNode, createContext, useCallback, useContext, useMemo } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 
 export interface Toaster {
-  notice: (notice: Notice) => void;
+  /** A core notice; a copy names its account when `name` is given. */
+  notice: (notice: Notice, name?: string) => void;
   error: (error: unknown) => void;
   info: (message: string) => void;
 }
@@ -25,8 +36,12 @@ export function ToasterProvider({ store, children }: { store: ToastStore; childr
   // would re-run every effect that depends on it (the export viewer refetched its page).
   const { push } = store;
   const notice = useCallback(
-    (n: Notice) => {
-      push({ message: noticeText(t, n), tone: noticeIsProblem(n) ? "danger" : "neutral" });
+    (n: Notice, name?: string) => {
+      push({
+        message: noticeText(t, n, name),
+        tone: noticeIsProblem(n) ? "danger" : "neutral",
+        ...(n.type === "copied" ? { icon: "check" as const } : {}),
+      });
     },
     [push, t],
   );
@@ -51,4 +66,29 @@ export function useToaster(): Toaster {
   const value = useContext(ToasterContext);
   if (!value) throw new Error("useToaster outside <ToasterProvider>");
   return value;
+}
+
+/** The core's notices as toasts (inside the i18n tree, so they are translated); a copy names the
+ *  account it came from. */
+export function NoticeBridge() {
+  const { backend, state } = useBackend();
+  const toaster = useToaster();
+  const entries = useRef<readonly EntryView[]>([]);
+  useEffect(() => {
+    entries.current = state?.entries ?? [];
+  }, [state]);
+  useEffect(
+    () =>
+      backend.on((event) => {
+        if (event.type !== "notice") return;
+        const notice = event.notice;
+        const entry =
+          notice.type === "copied"
+            ? entries.current.find((e) => e.id === notice.entry_id)
+            : undefined;
+        toaster.notice(notice, entry ? entry.issuer || entry.account : undefined);
+      }),
+    [backend, toaster],
+  );
+  return null;
 }
