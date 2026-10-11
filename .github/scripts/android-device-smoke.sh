@@ -56,7 +56,8 @@ read_screen() {
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$out/ui.xml" >/dev/null 2>&1
 }
 # The centre of the system dialog's Wait when one of the emulator's own apps "isn't responding"
-# (they can stall for a while after it boots, and the dialog covers the screen).
+# (they can stall for a while after it boots, and the dialog covers the screen): for a device that
+# shows the dialog although error dialogs are hidden (below).
 stalled() {
   python3 - "$out/ui.xml" <<'PY'
 import re, sys, xml.etree.ElementTree as ET
@@ -103,12 +104,12 @@ leaving() {
     sleep 1
   done
 }
-# Wait (at most 20 s) until the app's activity is stopped: it has left the screen, so its page went
+# Wait (at most 60 s) until the app's activity is stopped: it has left the screen, so its page went
 # hidden, which is what locks the vault. Brought back at once instead, it may never have left: in
 # CI on 2026-10-11 the launcher came up and the app was started again 86 ms after Home, before it
 # stopped, and the vault rightly stayed open.
 left_screen() {
-  local deadline=$((SECONDS + 20))
+  local deadline=$((SECONDS + 60))
   until adb shell dumpsys activity activities 2>/dev/null | tr -d '\r' |
     awk -v name="$package/.MainActivity" '
       index($0, "ActivityRecord{") && index($0, name) { mine = 1; next }
@@ -116,7 +117,7 @@ left_screen() {
       mine && /[^A-Za-z]m?[Ss]tate=STOPPED/ { found = 1; exit }
       END { exit !found }'; do
     running || fail "the app closed while leaving the screen"
-    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not leave the screen within 20 s"
+    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not leave the screen within 60 s"
     sleep 1
   done
 }
@@ -261,6 +262,21 @@ type_into() {
 }
 
 adb wait-for-device
+# The emulator's own apps (its launcher above all) can stop responding for a while, and the
+# dialog saying so takes the keys meant for Lockra: in CI on 2026-10-11 it came up right after a
+# read of the screen, took the text and the Back sent next, and the keyboard never closed. With error
+# dialogs hidden, Android ends such an app instead (Lockra too, were it the one: it then fails
+# here as closed). The device's own setting comes back at the end.
+hide_dialogs=$(adb shell settings get global hide_error_dialogs | tr -d '\r')
+restore_dialogs() {
+  if [ "$hide_dialogs" = null ]; then
+    adb shell settings delete global hide_error_dialogs >/dev/null 2>&1 || true
+  else
+    adb shell settings put global hide_error_dialogs "$hide_dialogs" >/dev/null 2>&1 || true
+  fi
+}
+trap restore_dialogs EXIT
+adb shell settings put global hide_error_dialogs 1
 # A build signed with another key cannot replace the installed one.
 adb uninstall "$package" >/dev/null 2>&1 || true
 adb install -r -g "$apk" >"$out/install.txt" 2>&1 || fail "the APK did not install: $(tail -3 "$out/install.txt")"
