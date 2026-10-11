@@ -1,10 +1,14 @@
 // The code list while it is reordered, on the desktop and the phone alike: the groups (their
-// sections, "no group" staying last) and, inside each, the accounts move by their handles. A move
-// is handed on as the whole new order: the accounts' ids as the list shows them (every section,
-// folded or not, in turn), or the groups' names. Pinned accounts still come first in a section.
+// sections, "no group" among them) and, inside each, the accounts move by their handles; the
+// section pinned at the top stays there. A move is handed on as the whole new order: the accounts'
+// ids as the list shows them (every section, folded or not, in turn), or the groups' names ("" for
+// no group), the pinned group first. Pinned accounts still come first in a section, or gather in
+// their own section when 收藏 is the pinned one.
 import {
   type EntryView,
+  FAVORITES,
   NO_GROUP,
+  type PinnedGroup,
   type SortOrder,
   groupSections,
   moveItem,
@@ -31,6 +35,10 @@ export interface ReorderListProps {
   onOrderGroups: (groups: string[]) => void;
   /** The section of the accounts in no group. */
   noGroupLabel: string;
+  /** The section of the pinned accounts, when 收藏 is the pinned group. */
+  favoritesLabel: string;
+  /** The group pinned at the top: its section stays first. */
+  pinned?: PinnedGroup | null;
   /** `lg` is the phone's: 44 px handles. */
   size?: "md" | "lg";
 }
@@ -46,25 +54,53 @@ export function ReorderList({
   onOrderEntries,
   onOrderGroups,
   noGroupLabel,
+  favoritesLabel,
+  pinned = null,
   size = "md",
 }: ReorderListProps) {
   const sorted = sortEntries(entries, sort, entryOrder);
   const ids = sorted.map((e) => e.id);
   const sections = grouped
-    ? groupSections(sorted, groupOrder)
+    ? groupSections(sorted, groupOrder, pinned)
     : [{ key: NO_GROUP, entries: sorted }];
-  const groups = sections.map((s) => s.key).filter((key) => key !== NO_GROUP);
+  // The pinned section stays first; the others move, no group among them.
+  const fixed =
+    grouped &&
+    sections[0] !== undefined &&
+    (sections[0].key === FAVORITES ||
+      (pinned?.type === "group" && sections[0].key === pinned.name) ||
+      (pinned?.type === "ungrouped" && sections[0].key === NO_GROUP))
+      ? sections[0]
+      : undefined;
+  const movable = fixed ? sections.slice(1) : sections;
+  const groups = movable.map((s) => s.key);
+  // A pinned group keeps the first place in the order too: unpinned later, it stays where it was.
+  const orderGroups = (order: string[]) =>
+    onOrderGroups(fixed && fixed.key !== FAVORITES ? [fixed.key, ...order] : order);
   const moveEntry = (id: string, over: string) => onOrderEntries(moveItem(ids, id, over));
   const section = (
     key: string,
     items: readonly EntryView[],
     handle?: Parameters<typeof DragHandle>[0]["handle"],
   ) => {
-    const name = key === NO_GROUP ? noGroupLabel : key;
-    const open = !grouped || !folded.has(key);
+    const favorites = key === FAVORITES;
+    const name = favorites ? favoritesLabel : key === NO_GROUP ? noGroupLabel : key;
+    // The pinned accounts' section does not fold: it is what the pin keeps in sight.
+    const open = !grouped || favorites || !folded.has(key);
     return (
       <section aria-label={grouped ? name : undefined} data-testid="reorder-section">
-        {grouped && (
+        {grouped && favorites && (
+          <div
+            className={cx(
+              "flex items-center gap-1.5 px-2 font-medium text-fg-muted",
+              size === "lg" ? "h-11 text-[13px]" : "h-8 text-[12px]",
+            )}>
+            <Icon name="star" size={size === "lg" ? 16 : 14} className="text-warning" />
+            <span className="min-w-0 truncate">{name}</span>
+            <span className="ml-auto mono text-[11px] text-fg-subtle">{items.length}</span>
+          </div>
+        )}
+        {grouped && !favorites && (
           <div className={cx("flex items-center gap-1", size === "lg" ? "h-11" : "h-8")}>
             <button
               type="button"
@@ -133,28 +169,29 @@ export function ReorderList({
       </section>
     );
   };
-  const last = sections.find((s) => s.key === NO_GROUP);
+  const only = sections[0];
   return (
     <div data-testid="reorder-list">
       {grouped ? (
         <>
+          {fixed && section(fixed.key, fixed.entries)}
           <SortableList
             ids={groups.map((g) => GROUP + g)}
             onMove={(id, over) =>
-              onOrderGroups(moveItem(groups, id.slice(GROUP.length), over.slice(GROUP.length)))
+              orderGroups(moveItem(groups, id.slice(GROUP.length), over.slice(GROUP.length)))
             }>
-            {sections
-              .filter((s) => s.key !== NO_GROUP)
-              .map((s) => (
-                <SortableItem key={s.key} id={GROUP + s.key} label={s.key}>
-                  {(handle) => section(s.key, s.entries, handle)}
-                </SortableItem>
-              ))}
+            {movable.map((s) => (
+              <SortableItem
+                key={s.key === NO_GROUP ? "\u0000" : s.key}
+                id={GROUP + s.key}
+                label={s.key === NO_GROUP ? noGroupLabel : s.key}>
+                {(handle) => section(s.key, s.entries, handle)}
+              </SortableItem>
+            ))}
           </SortableList>
-          {last && section(last.key, last.entries)}
         </>
       ) : (
-        last && section(last.key, last.entries)
+        only && section(only.key, only.entries)
       )}
     </div>
   );

@@ -11,7 +11,7 @@
 
 use lockra_core::settings::Settings;
 use lockra_core::ui::{ExportTarget, JoinSource};
-use lockra_core::{Choice, Core, CoreError, EntryDraft, EntryPatch, RestoreMode, StorageConfig};
+use lockra_core::{Choice, Core, CoreError, EntryDraft, EntryPatch, PinnedGroup, RestoreMode, StorageConfig};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -131,11 +131,17 @@ pub enum UiCommand {
         #[serde(default)]
         ids: Vec<Uuid>,
     },
-    /// The groups in the order they were dragged into.
+    /// The groups in the order they were dragged into ("" for the accounts in no group).
     ViewOrderGroups {
         /// Every group, in order.
         #[serde(default)]
         groups: Vec<String>,
+    },
+    /// Pin a group at the top of the code list, or none.
+    ViewPinGroup {
+        /// The pinned accounts, a group or the accounts in no group; none unpins.
+        #[serde(default)]
+        pinned: Option<PinnedGroup>,
     },
     /// Import pasted or typed text.
     ImportText {
@@ -292,7 +298,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 49] = [
+pub const COMMANDS: [&str; 50] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -315,6 +321,7 @@ pub const COMMANDS: [&str; 49] = [
     "view_collapse_groups",
     "view_order_entries",
     "view_order_groups",
+    "view_pin_group",
     "import_text",
     "import_clipboard",
     "import_backup_password",
@@ -415,6 +422,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::ViewCollapseGroups { groups } => unit(core.collapse_groups(groups))?,
         UiCommand::ViewOrderEntries { ids } => unit(core.order_entries(ids))?,
         UiCommand::ViewOrderGroups { groups } => unit(core.order_groups(groups))?,
+        UiCommand::ViewPinGroup { pinned } => unit(core.pin_group(pinned))?,
         UiCommand::ImportText { text } => unit(core.import_text(&text))?,
         UiCommand::ImportClipboard => unit(core.import_clipboard().await)?,
         UiCommand::ImportBackupPassword { password } => unit(core.import_backup_password(password).await)?,

@@ -150,7 +150,13 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
 - 验证码 (board A1): the header with a search pill and the 「添加账号」 pill; 「最近使用」 (the account
   copied last) beside 「保险库状态」, 5 : 3, both hidden while searching, selecting or reordering;
   the filters (全部, 收藏, each group, 未分组) with the list's tools (reorder, list or cards, sort and a
-  ⋯ menu for 选择, 按分组显示, 全部折叠, 全部展开); the list in one card, rows 64 px.
+  ⋯ menu for 选择, 按分组显示, 全部折叠, 全部展开, and 置顶 for the filter shown); the list in one
+  card, rows 64 px. Sections (with their folding headings) belong to 全部 only: any other filter is
+  one flat list.
+- The pinned group (置顶分组, Settings › 通用, this device's): its chip comes first, with a pin
+  (收藏 keeps its star), and the page opens on it; in 全部 its section heads the list, and with 收藏
+  pinned the pinned accounts gather there, out of their groups, in a section that does not fold.
+  While reordering it stays first; every other section moves, 未分组 among them.
 - The phone (board A2): a 30 px title with 已解锁 · N 个账号 and round 添加账号 and 锁定 buttons; the
   search pill; 「最近使用」; the filters, scrolling sideways, then reorder; each row a card of its
   own (its ⋯ always shown: there is no hover); a floating dock (验证码, the raised 扫码 button,

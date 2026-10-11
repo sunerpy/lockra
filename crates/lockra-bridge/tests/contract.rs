@@ -19,7 +19,7 @@ use lockra_core::ui::{
     Revealed, SharedInvite, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus,
     UpdateView,
 };
-use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, Ports};
+use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, PinnedGroup, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
 use lockra_transfer::{Incompatible, Origin, RejectReason};
 use lockra_vault::FileKind;
@@ -257,7 +257,8 @@ fn state(phase: Phase) -> UiState {
         entries: if unlocked { entries() } else { Vec::new() },
         collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
         entry_order: if unlocked { vec![id(2), id(1)] } else { Vec::new() },
-        group_order: if unlocked { vec!["Work".into()] } else { Vec::new() },
+        group_order: if unlocked { vec!["Work".into(), String::new()] } else { Vec::new() },
+        pinned_group: unlocked.then_some(PinnedGroup::Favorites),
         settings: if unlocked { settings() } else { Settings::default() },
         import: unlocked.then(import_view),
         backup: BackupView {
@@ -327,7 +328,8 @@ fn commands() -> Vec<Value> {
         json!({"command": "entry_reveal", "id": entry_id, "password": "a new password"}),
         json!({"command": "view_collapse_groups", "groups": ["Work", ""]}),
         json!({"command": "view_order_entries", "ids": [id(2).to_string(), entry_id]}),
-        json!({"command": "view_order_groups", "groups": ["Work", "Money"]}),
+        json!({"command": "view_order_groups", "groups": ["Work", "", "Money"]}),
+        json!({"command": "view_pin_group", "pinned": {"type": "group", "name": "Work"}}),
         json!({"command": "import_text", "text": "otpauth://totp/A:b?secret=GEZDGNBV"}),
         json!({"command": "import_clipboard"}),
         json!({"command": "import_backup_password", "password": "backup password"}),
@@ -594,6 +596,7 @@ async fn dispatch_answers_and_leaks_nothing() {
         json!({"command": "entry_update", "id": entry_id, "patch": {"favorite": true}}),
         json!({"command": "view_collapse_groups", "groups": [""]}),
         json!({"command": "entries_set_group", "ids": [entry_id], "group": "Work"}),
+        json!({"command": "view_pin_group", "pinned": {"type": "group", "name": "Work"}}),
         json!({"command": "entry_copy", "id": entry_id}),
         json!({"command": "import_text", "text": "otpauth://totp/Mail:me?secret=MZXW6YTBOI"}),
         json!({"command": "import_commit"}),

@@ -344,15 +344,42 @@ pub(crate) struct View {
     /// The accounts in the order they were dragged into (`SortOrder::Manual`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entry_order: Vec<Uuid>,
-    /// The groups in the order they were dragged into; groups never dragged come after, by name.
+    /// The groups in the order they were dragged into ("" for the accounts in no group); groups
+    /// never dragged come after, by name, and the accounts in no group last.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub group_order: Vec<String>,
+    /// The group shown first: its section heads the code list and the list opens on it.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "pinned_or_none")]
+    pub pinned_group: Option<PinnedGroup>,
+}
+
+/// A pin this version cannot read (a later Lockra's kind) is no pin, not a reason to lose the folds
+/// and the order beside it.
+fn pinned_or_none<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<PinnedGroup>, D::Error> {
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(serde_json::from_value(value).ok())
 }
 
 impl View {
     fn is_empty(&self) -> bool {
-        self.collapsed_groups.is_empty() && self.entry_order.is_empty() && self.group_order.is_empty()
+        self.collapsed_groups.is_empty() && self.entry_order.is_empty() && self.group_order.is_empty() && self.pinned_group.is_none()
     }
+}
+
+/// The group this device pins at the top of the code list: the pinned accounts (收藏), one group,
+/// or the accounts in no group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PinnedGroup {
+    /// The accounts pinned to the top (favourites), gathered in a section of their own.
+    Favorites,
+    /// A group, by its name.
+    Group {
+        /// The group's name.
+        name: String,
+    },
+    /// The accounts in no group.
+    Ungrouped,
 }
 
 /// A random device number (nonzero: zero marks stamps written before devices had numbers).
@@ -471,6 +498,11 @@ impl VaultData {
     /// The groups in the order they were dragged into on this device.
     pub(crate) fn group_order(&self) -> &[String] {
         self.local.as_ref().map_or(&[], |l| l.view.group_order.as_slice())
+    }
+
+    /// The group this device pins at the top of the code list.
+    pub(crate) fn pinned_group(&self) -> Option<&PinnedGroup> {
+        self.local.as_ref().and_then(|l| l.view.pinned_group.as_ref())
     }
 
     /// The sync space this device belongs to.
@@ -648,6 +680,26 @@ mod tests {
         // Anything else damaged is still a damaged vault.
         kept["entries"] = serde_json::json!("not a list");
         assert_eq!(VaultData::open(&serde_json::to_vec(&kept).unwrap()).unwrap_err().code, ErrorCode::VaultCorrupted);
+    }
+
+    #[test]
+    fn the_pinned_group_is_kept_and_one_of_a_later_kind_reads_as_none() {
+        let mut data = VaultData::new();
+        data.local_mut().view.pinned_group = Some(PinnedGroup::Group { name: "Work".into() });
+        let value: serde_json::Value = serde_json::from_slice(&data.to_bytes()).unwrap();
+        assert_eq!(value["local"]["view"]["pinned_group"], serde_json::json!({ "type": "group", "name": "Work" }));
+        assert_eq!(VaultData::open(&data.to_bytes()).unwrap().pinned_group(), Some(&PinnedGroup::Group { name: "Work".into() }));
+        // A later Lockra's kind of pin is no pin here: the vault opens, the rest of the view kept.
+        let mut later = value.clone();
+        later["local"]["view"]["pinned_group"] = serde_json::json!({ "type": "a later kind" });
+        later["local"]["view"]["group_order"] = serde_json::json!(["Work", ""]);
+        let opened = VaultData::open(&serde_json::to_vec(&later).unwrap()).unwrap();
+        assert_eq!(opened.pinned_group(), None);
+        assert_eq!(opened.group_order(), ["Work", ""]);
+        // A vault from before pins has none.
+        let mut older = value;
+        older["local"]["view"].as_object_mut().unwrap().remove("pinned_group");
+        assert_eq!(VaultData::open(&serde_json::to_vec(&older).unwrap()).unwrap().pinned_group(), None);
     }
 
     #[test]

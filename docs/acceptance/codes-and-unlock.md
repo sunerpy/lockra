@@ -133,6 +133,44 @@ To check on real devices: drag with a mouse on Windows and macOS, and with a fin
 (a tap on a handle stays a tap; the page does not scroll while a row moves); the group list's
 look in WebView2 and WKWebView; the phone's group sheet closed by the back gesture.
 
+## 未分组 in the order, the pinned group and flat filters (0.8.9)
+
+Asked for on 2026-10-11: 「使未分组能够进行拖拽排序；支持用户自定义置顶分组，例如将收藏分组置顶，APP
+显示相应内容；当显示收藏分组时，不再显示上方的小箭头分组；在桌面端、手机端适配」. The owner's answers:
+the pinned group does both (its section first in 全部, and the chip the codes page opens on, first
+among the chips), every filter but 全部 is a flat list, and 0.8.9 is released after acceptance.
+
+- **未分组 moves like a group**: `order_groups` keeps "" in the order
+  (`a_dragged_order_is_kept_for_this_device_and_makes_the_code_order_manual`), `groupSections`
+  places it where it was dragged and still last when it never was (`entries.test.ts`), and
+  `ReorderList` gives it a handle (`ReorderList.test.tsx`, `Codes.test.tsx`, the phone's
+  `codes.test.tsx`).
+- **The pinned group** is this device's, in the vault's local `view` (`pinned_group`,
+  `docs/formats.md` §2): never synced, in no backup, not in `settings.json`; a group no account has
+  pins nothing, and a later version's kind of pin reads as none without losing the folds and the
+  order beside it (`a_pinned_group_is_kept_for_this_device_only`,
+  `the_pinned_group_is_kept_and_one_of_a_later_kind_reads_as_none`; the IPC fixtures). It is set
+  in Settings › 通用 (`PinnedGroupSelect.test.tsx`, `Settings.test.tsx`, the phone's
+  `codes.test.tsx`) or, on the desktop, from the ⋯ menu for the filter shown, which also unpins.
+  Its chip comes first (a pin on a group, 收藏 keeps its star) and the page opens on it, and turns
+  to a group as it is pinned, not as it is unpinned (`entryFilters` in `entries.test.ts`,
+  `Codes.test.tsx` "Codes · filters and the pinned group"). In 全部 its section heads the list;
+  with 收藏 pinned the pinned accounts leave their groups for a 收藏 section at the top that does
+  not fold, and 全部折叠 leaves it open. While reordering the pinned section stays first, and its
+  group keeps the first place in the order handed on, so it stays there once unpinned.
+- **Flat filters**: 收藏, a group or 未分组 shows its accounts without the sections' headings
+  (`Codes.test.tsx`, `codes.test.tsx`).
+
+Run here, 2026-10-11: the desktop and phone development builds in Chrome (1280 × 800, 390 × 844)
+with the in-memory core: 收藏 pinned from the ⋯ menu on the desktop (the chip first, the 收藏 section
+at the top of 全部, GitHub out of 工作), and 工作 pinned in the phone's Settings (the screen back on
+「工作 3」, flat, its chip first with the pin); `make check`; `make smoke-desktop`, which now pins 未分组
+from the ⋯ menu in the real app (its chip first, its section first in 全部:
+`screens/desktop/codes-pinned-1280-light`) and unpins it.
+
+To check on real devices: the pin from the phone's Settings on Android (the touch list of the
+select), and the 收藏 section's drag of an account on a phone.
+
 ## Verified on real devices
 
 - **Touch ID**, by the owner on a Mac with 0.6.0 (2026-10-03): with 0.5.1 the locked screen showed

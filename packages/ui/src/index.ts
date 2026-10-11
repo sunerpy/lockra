@@ -19,6 +19,7 @@ export * from "./components/Eyebrow";
 export * from "./components/Card";
 export * from "./components/Panel";
 export * from "./components/PageHeader";
+export * from "./components/PinnedGroupSelect";
 export * from "./components/Badge";
 export * from "./components/Chip";
 export * from "./components/Button";

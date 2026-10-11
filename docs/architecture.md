@@ -181,7 +181,9 @@ in `packages/shared/src/entries.ts`, the import preview's choices in `import-pre
 and avatar text editor in `@lockra/ui`, the sync storage's form in `storage-form.ts` and
 `StorageFields`, the dragged order (`sortEntries` and `groupSections` with this device's
 `entry_order` and `group_order`, `moveItem`) and its list (`ReorderList` on `Sortable`, @dnd-kit,
-with ArrowUp and ArrowDown on a handle). The desktop picks a group with `GroupCombobox`; the phone
+with ArrowUp and ArrowDown on a handle), and the pinned group (`pinned_group`: `groupSections` puts
+its section first, `entryFilters` its chip, `pinnedFilter` the chip the list opens on; set with
+`view_pin_group` from `PinnedGroupSelect` in Settings, or the desktop's ⋯ menu). The desktop picks a group with `GroupCombobox`; the phone
 with a sheet from the bottom (`components/BottomSheet.tsx`), which holds a history entry of its own
 above its page's, so the back gesture closes the sheet first. The phone's pages that prove presence
 take the fingerprint that unlocks the vault (`app/presence.ts`): asked by itself where it is the

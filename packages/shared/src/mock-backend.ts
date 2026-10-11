@@ -36,6 +36,7 @@ import {
   MARK_CHARS,
   type Notice,
   type OtpKind,
+  type PinnedGroup,
   type Platform,
   type ResultOf,
   type Revealed,
@@ -94,6 +95,8 @@ export interface MockOptions {
   sync?: SyncSpaceView | null;
   /** The groups folded in the code list (shown once unlocked). */
   collapsedGroups?: string[];
+  /** The group pinned at the top of the code list (shown once unlocked). */
+  pinnedGroup?: PinnedGroup | null;
 }
 
 /** A release the mock's update check announces. */
@@ -461,6 +464,7 @@ export class MockBackend implements Backend {
   /** The accounts and the groups in the order they were dragged into, as the core keeps them. */
   private order: string[] = [];
   private groupOrder: string[] = [];
+  private pinned: PinnedGroup | null;
   /** The last join was by the fingerprint: the space's keyring waits for the master password. */
   private joinedUnsealed = false;
   private biometricAnswer: ErrorCode | null;
@@ -478,6 +482,7 @@ export class MockBackend implements Backend {
     this.releasePageOpens = options.releasePageOpens ?? true;
     this.space = options.sync ?? null;
     this.collapsed = options.collapsedGroups ?? [];
+    this.pinned = options.pinnedGroup ?? null;
     this.biometricAnswer = options.biometricAnswer ?? null;
     const entries = options.entries ?? [];
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
@@ -500,6 +505,7 @@ export class MockBackend implements Backend {
       collapsed_groups: phase === "unlocked" ? [...this.collapsed] : [],
       entry_order: [],
       group_order: [],
+      pinned_group: phase === "unlocked" ? this.pinned : null,
       settings: { ...defaultSettings(), ...options.settings },
       import: null,
       backup: { last_backup_ms: null, last_auto_file: null, last_auto_error: null },
@@ -890,12 +896,25 @@ export class MockBackend implements Backend {
       }
       case "view_order_groups": {
         this.requireUnlocked();
-        // As the core: groups in use, cleaned, once each.
+        // As the core: groups in use, cleaned, once each; "" (no group) moves like a group.
         const existing = new Set(this.state.entries.map((e) => e.group ?? ""));
         this.groupOrder = [...new Set(command.groups.map((g) => g.trim()))].filter(
-          (g) => g !== "" && existing.has(g),
+          (g) => g === "" || existing.has(g),
         );
         this.state.group_order = [...this.groupOrder];
+        this.publish();
+        return null;
+      }
+      case "view_pin_group": {
+        this.requireUnlocked();
+        // As the core: a group in use, its name cleaned; another name pins nothing.
+        const pinned = command.pinned;
+        if (pinned?.type === "group") {
+          const name = pinned.name.trim();
+          const used = this.state.entries.some((e) => e.group === name);
+          this.pinned = used ? { type: "group", name } : null;
+        } else this.pinned = pinned;
+        this.state.pinned_group = this.pinned;
         this.publish();
         return null;
       }
@@ -1369,6 +1388,7 @@ export class MockBackend implements Backend {
     this.state.collapsed_groups = [...this.collapsed];
     this.state.entry_order = [...this.order];
     this.state.group_order = [...this.groupOrder];
+    this.state.pinned_group = this.pinned;
     this.state.sync = { space: this.space };
     this.lockedEntries = [];
     this.state.lock = { ...this.state.lock, failed_attempts: 0, retry_at_ms: null };
@@ -1384,6 +1404,7 @@ export class MockBackend implements Backend {
     this.state.collapsed_groups = [];
     this.state.entry_order = [];
     this.state.group_order = [];
+    this.state.pinned_group = null;
     this.state.phase = "locked";
     this.state.sync = { space: null };
     this.exports.clear();

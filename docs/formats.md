@@ -89,10 +89,12 @@ deletion), so that a deletion reaches the other devices of a sync space. Replaci
 secret through an import gives it a new id (the old id is tombstoned), so its HOTP counter starts
 again with the new secret. `local` is this device's own part and never leaves the vault file (no
 backup, no sync): `clock` (its device number and the latest stamp), `view` (the groups folded in
-the code list, `{collapsed_groups}`, "" for the accounts in no group, and the order the accounts
+the code list, `{collapsed_groups}`, "" for the accounts in no group, the order the accounts
 and the groups were dragged into on this device, `{entry_order}` (ids) and `{group_order}`
-(names); each is left out while empty: group names stay inside the encrypted file, never in
-`settings.json`) and, with sync on, `sync` (the storage settings and credentials, the space id, its
+(names, "" for the accounts in no group, which move like a group since 0.8.9), and the group
+pinned at the top, `{pinned_group}`: `{"type": "favorites"}`, `{"type": "group", "name"}` or
+`{"type": "ungrouped"}`, a kind this version cannot read being no pin; each is left out while
+empty: group names stay inside the encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and credentials, the space id, its
 data key, the sync key, this device's name, its keyring and what the runs remember, among it
 `keyring_unsealed`: the keyring was sealed under random bytes by a join with the biometric check,
 and waits for the next unlock with the master password). A `sync` this version cannot read (one kept by an earlier build, or by a later

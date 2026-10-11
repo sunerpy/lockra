@@ -17,7 +17,10 @@ use crate::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeT
 use crate::ports::{BiometricError, ClipboardImage, SecretStore, SyncTransport};
 use crate::settings::{AutoBackup, Settings, SortOrder, ThemeId};
 use crate::ui::{BiometricKind, BiometricView, CandidateAction, CandidateStatus, ExportTarget, ImportSource, Notice, Phase, Platform, UiEvent};
-use crate::{AccountColor, Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, MAX_IMPORT_BYTES, Outcome, PickedFile, Ports, RestoreMode, VAULT_FILE};
+use crate::{
+    AccountColor, Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, MAX_IMPORT_BYTES, Outcome, PickedFile, PinnedGroup, Ports, RestoreMode,
+    VAULT_FILE,
+};
 
 /// 2026-09-21T13:46:40Z: an arbitrary moment well inside a 30-second window.
 const T0: u64 = 1_790_000_000_000;
@@ -1049,9 +1052,10 @@ async fn a_dragged_order_is_kept_for_this_device_and_makes_the_code_order_manual
     let state = h.core.state();
     assert_eq!(state.entry_order, [mail, github, bank]);
     assert_eq!(state.settings.sort, SortOrder::Manual);
-    // The groups as dragged: those in use, cleaned, once each ("" stays last, it is no group).
-    h.core.order_groups(vec![" Money ".into(), "Gone".into(), String::new(), "Work".into(), "Money".into()]).unwrap();
-    assert_eq!(h.core.state().group_order, ["Money", "Work"]);
+    // The groups as dragged: those in use, cleaned, once each; "" (the accounts in no group) moves
+    // like the others.
+    h.core.order_groups(vec![" Money ".into(), "Gone".into(), String::new(), "Work".into(), "Money".into(), String::new()]).unwrap();
+    assert_eq!(h.core.state().group_order, ["Money", "", "Work"]);
     // In the vault: hidden while locked, back after unlocking and after a restart.
     h.core.lock_vault();
     assert!(h.core.state().entry_order.is_empty() && h.core.state().group_order.is_empty());
@@ -1060,7 +1064,7 @@ async fn a_dragged_order_is_kept_for_this_device_and_makes_the_code_order_manual
     let restarted = h.restart();
     restarted.unlock(pw(MASTER)).await.unwrap();
     assert_eq!(restarted.state().entry_order, [mail, github, bank]);
-    assert_eq!(restarted.state().group_order, ["Money", "Work"]);
+    assert_eq!(restarted.state().group_order, ["Money", "", "Work"]);
     // Neither a backup nor the plain settings file carries it, and no backup follows a drag.
     let file = h.dir.path().join("mine.lockrabackup");
     restarted.backup_to(file.clone(), None).await.unwrap();
@@ -1069,6 +1073,49 @@ async fn a_dragged_order_is_kept_for_this_device_and_makes_the_code_order_manual
     assert!(!payload.contains("entry_order") && !payload.contains("group_order"), "{payload}");
     let plain = fs::read_to_string(h.dir.path().join("config").join("settings.json")).unwrap();
     assert!(plain.contains("\"manual\"") && !plain.contains("Money") && !plain.contains(&mail.to_string()), "{plain}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_pinned_group_is_kept_for_this_device_only() {
+    let h = Harness::unlocked().await;
+    for (issuer, group, secret) in [("GitHub", Some("Work"), SECRET), ("Mail", None, "MZXW6YTBOI")] {
+        let id = h.core.add_uri(&otpauth(issuer, "me", secret)).unwrap();
+        if let Some(group) = group {
+            h.core.update_entry(id, EntryPatch { group: Some(group.into()), ..EntryPatch::default() }).unwrap();
+        }
+    }
+    assert_eq!(h.core.state().pinned_group, None);
+    // The pinned accounts, a group in use (cleaned), or the accounts in no group; a name no account
+    // carries pins nothing.
+    h.core.pin_group(Some(PinnedGroup::Favorites)).unwrap();
+    assert_eq!(h.core.state().pinned_group, Some(PinnedGroup::Favorites));
+    h.core.pin_group(Some(PinnedGroup::Group { name: " Work ".into() })).unwrap();
+    assert_eq!(h.core.state().pinned_group, Some(PinnedGroup::Group { name: "Work".into() }));
+    h.core.pin_group(Some(PinnedGroup::Group { name: "Gone".into() })).unwrap();
+    assert_eq!(h.core.state().pinned_group, None);
+    h.core.pin_group(Some(PinnedGroup::Ungrouped)).unwrap();
+    assert_eq!(h.core.state().pinned_group, Some(PinnedGroup::Ungrouped));
+    h.core.pin_group(Some(PinnedGroup::Group { name: "Work".into() })).unwrap();
+    // In the vault: hidden while locked, back after unlocking and after a restart.
+    h.core.lock_vault();
+    assert_eq!(h.core.state().pinned_group, None);
+    assert_eq!(code_err(h.core.pin_group(None)), ErrorCode::Locked);
+    h.core.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(h.core.state().pinned_group, Some(PinnedGroup::Group { name: "Work".into() }));
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(restarted.state().pinned_group, Some(PinnedGroup::Group { name: "Work".into() }));
+    // Neither a backup nor the plain settings file carries it.
+    let file = h.dir.path().join("mine.lockrabackup");
+    restarted.backup_to(file.clone(), None).await.unwrap();
+    let backup = Sealed::open_with_password(&fs::read(&file).unwrap(), MASTER.as_bytes()).unwrap();
+    assert!(!String::from_utf8_lossy(&backup.payload).contains("pinned"));
+    // (No setting changed here, so the file may not exist at all.)
+    let plain = fs::read_to_string(h.dir.path().join("config").join("settings.json")).unwrap_or_default();
+    assert!(!plain.contains("pinned") && !plain.contains("Work"), "{plain}");
+    // Unpinned.
+    restarted.pin_group(None).unwrap();
+    assert_eq!(restarted.state().pinned_group, None);
 }
 
 #[test]

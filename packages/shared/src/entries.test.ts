@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALL_GROUPS,
   cutMark,
   FAVORITES,
   UNGROUPED,
+  entryFilters,
   entryGroups,
   exportBlocker,
   filterEntries,
   groupSections,
   moveItem,
   parseKind,
+  pinnedFilter,
+  pinnedFromFilter,
   recentEntry,
   sortEntries,
 } from "./entries";
@@ -99,6 +103,49 @@ describe("groupSections / entryGroups", () => {
     expect(keys([])).toEqual(["Home", "Work", ""]);
   });
 
+  it("moves no group where it was dragged, like a group", () => {
+    const keys = (order: readonly string[]) => groupSections(entries, order).map((s) => s.key);
+    expect(keys([""])).toEqual(["", "Home", "Work"]);
+    expect(keys(["Work", ""])).toEqual(["Work", "", "Home"]);
+    expect(keys(["Home", "Work", ""])).toEqual(["Home", "Work", ""]);
+  });
+
+  it("heads the list with the pinned section: a group, no group, or the pinned accounts", () => {
+    const sections = (pinned: Parameters<typeof groupSections>[2], order: string[] = []) =>
+      groupSections(entries, order, pinned).map((s) => [s.key, s.entries.map((e) => e.issuer)]);
+    expect(sections({ type: "group", name: "Work" }, ["Home"])).toEqual([
+      ["Work", ["b", "d"]],
+      ["Home", ["c"]],
+      ["", ["a"]],
+    ]);
+    expect(sections({ type: "ungrouped" })).toEqual([
+      ["", ["a"]],
+      ["Home", ["c"]],
+      ["Work", ["b", "d"]],
+    ]);
+    // A pin of a group no account has changes nothing.
+    expect(sections({ type: "group", name: "Gone" })).toEqual(sections(null));
+    // The pinned accounts gather in a section of their own, out of their groups: each shows once,
+    // and a group left empty has no section.
+    const pinned = [
+      mockEntry("b", "1", { group: "Work", favorite: true }),
+      mockEntry("a", "2", { favorite: true }),
+      mockEntry("c", "3", { group: "Home", favorite: true }),
+      mockEntry("d", "4", { group: "Work" }),
+    ].map((e) => e.view);
+    expect(
+      groupSections(pinned, [], { type: "favorites" }).map((s) => [
+        s.key,
+        s.entries.map((e) => e.issuer),
+      ]),
+    ).toEqual([
+      [FAVORITES, ["b", "a", "c"]],
+      ["Work", ["d"]],
+    ]);
+    // Without a pinned account, no such section.
+    expect(sections({ type: "favorites" })).toEqual(sections(null));
+  });
+
   it("moves one item to another place", () => {
     expect(moveItem(["a", "b", "c", "d"], "a", "c")).toEqual(["b", "c", "a", "d"]);
     expect(moveItem(["a", "b", "c", "d"], "d", "b")).toEqual(["a", "d", "b", "c"]);
@@ -108,6 +155,62 @@ describe("groupSections / entryGroups", () => {
 
   it("lists the groups in use, once each, sorted", () => {
     expect(entryGroups(entries)).toEqual(["Home", "Work"]);
+  });
+});
+
+describe("entryFilters / pinnedFilter", () => {
+  const entries = [
+    mockEntry("b", "1", { group: "Work", favorite: true }),
+    mockEntry("a", "2"),
+    mockEntry("c", "3", { group: "Home" }),
+    mockEntry("d", "4", { group: "Work" }),
+  ].map((e) => e.view);
+  const chips = (pinned: Parameters<typeof entryFilters>[1]) =>
+    entryFilters(entries, pinned).map(
+      (f) => `${f.value || "all"} ${f.count}${f.pinned ? " pin" : ""}`,
+    );
+
+  it("lists everything, the pinned accounts, each group and no group, with their counts", () => {
+    expect(chips(null)).toEqual(["all 4", `${FAVORITES} 1`, "Home 1", "Work 2", `${UNGROUPED} 1`]);
+    expect(entryFilters(entries, null).map((f) => f.kind)).toEqual([
+      "all",
+      "favorites",
+      "group",
+      "group",
+      "ungrouped",
+    ]);
+    // No pinned account, no group: only what is there.
+    expect(entryFilters([entries[1] as (typeof entries)[number]], null).map((f) => f.kind)).toEqual(
+      ["all"],
+    );
+  });
+
+  it("puts the pinned one first", () => {
+    expect(chips({ type: "group", name: "Work" })).toEqual([
+      "Work 2 pin",
+      "all 4",
+      `${FAVORITES} 1`,
+      "Home 1",
+      `${UNGROUPED} 1`,
+    ]);
+    expect(chips({ type: "favorites" })[0]).toBe(`${FAVORITES} 1 pin`);
+    expect(chips({ type: "ungrouped" })[0]).toBe(`${UNGROUPED} 1 pin`);
+    // A pin with nothing to show is left out.
+    expect(chips({ type: "group", name: "Gone" })).toEqual(chips(null));
+  });
+
+  it("turns a pin into a filter and back", () => {
+    expect(pinnedFilter(null)).toBe(ALL_GROUPS);
+    expect(pinnedFilter({ type: "favorites" })).toBe(FAVORITES);
+    expect(pinnedFilter({ type: "ungrouped" })).toBe(UNGROUPED);
+    expect(pinnedFilter({ type: "group", name: "Work" })).toBe("Work");
+    for (const pinned of [
+      null,
+      { type: "favorites" } as const,
+      { type: "ungrouped" } as const,
+      { type: "group", name: "Work" } as const,
+    ])
+      expect(pinnedFromFilter(pinnedFilter(pinned))).toEqual(pinned);
   });
 });
 

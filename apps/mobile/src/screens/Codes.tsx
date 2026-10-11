@@ -2,18 +2,20 @@
 // search; the account copied last in a card of its own; the filters (全部, 收藏, each group, 未分组)
 // and the reorder button; then every account, each row a card of its own, or cards two to a row
 // (验证码视图, in Settings › 外观). A tap copies the code, a long press or ⋯ opens the account's
-// actions; with groups, the accounts are in sections that fold; a search shows what it finds in
-// every section, folded or not. The reorder button shows the list with handles: the groups and the
+// actions; in 全部, with groups, the accounts are in sections that fold (the group pinned in
+// Settings first, 收藏 gathering the pinned accounts), and a search shows what it finds in every
+// section, folded or not; any other filter is one flat list, and the screen opens on the pinned
+// one. The reorder button shows the list with handles: the groups (未分组 among them) and the
 // accounts inside them move by dragging the handles, an order this phone keeps. The dock at the
 // bottom scans a QR code and opens the settings.
 import {
   ALL_GROUPS,
   FAVORITES,
   NO_GROUP,
-  UNGROUPED,
   entryGroups,
   filterEntries,
   groupSections,
+  pinnedFilter,
   recentEntry,
   sortEntries,
 } from "@lockra/shared";
@@ -23,7 +25,6 @@ import {
   EmptyState,
   EntryRow,
   EntryTile,
-  type FilterChip,
   FilterChips,
   Icon,
   type IconName,
@@ -37,6 +38,7 @@ import {
   useClock,
   useCodes,
   useDispatch,
+  useFilterChips,
   useFlash,
   useT,
   useUiState,
@@ -60,9 +62,17 @@ export function Codes() {
     collapsed_groups: collapsedGroups,
     entry_order: entryOrder,
     group_order: groupOrder,
+    pinned_group: pinned,
   } = useUiState();
   const [query, setQuery] = useState("");
-  const [group, setGroup] = useState(ALL_GROUPS);
+  const pinnedValue = pinnedFilter(pinned);
+  // The screen opens on the pinned group, and turns to a group as it is pinned.
+  const [group, setGroup] = useState(pinnedValue);
+  const [pinSeen, setPinSeen] = useState(pinnedValue);
+  if (pinSeen !== pinnedValue) {
+    setPinSeen(pinnedValue);
+    if (pinnedValue !== ALL_GROUPS) setGroup(pinnedValue);
+  }
   const [reordering, setReordering] = useState(false);
   // The row or card just copied says so for a moment.
   const [copiedId, flash] = useFlash();
@@ -72,30 +82,9 @@ export function Codes() {
       if (done !== undefined) flash(id);
     });
   const groups = useMemo(() => entryGroups(entries), [entries]);
-  // The filters, as on the desktop: everything, the pinned accounts, each group, those in none.
-  const filters = useMemo((): FilterChip[] => {
-    const counts = new Map<string, number>();
-    for (const e of entries) counts.set(e.group ?? "", (counts.get(e.group ?? "") ?? 0) + 1);
-    const pinned = entries.filter((e) => e.favorite).length;
-    const loose = counts.get("") ?? 0;
-    return [
-      { value: ALL_GROUPS, label: t("codes.chips.all"), count: entries.length },
-      ...(pinned > 0
-        ? [
-            {
-              value: FAVORITES,
-              label: t("codes.chips.favorites"),
-              count: pinned,
-              icon: "star" as const,
-            },
-          ]
-        : []),
-      ...groups.map((g) => ({ value: g, label: g, count: counts.get(g) ?? 0, userText: true })),
-      ...(groups.length > 0 && loose > 0
-        ? [{ value: UNGROUPED, label: t("codes.groupNone"), count: loose }]
-        : []),
-    ];
-  }, [entries, groups, t]);
+  // The filters, as on the desktop: everything, the pinned accounts, each group, those in none;
+  // the pinned group first.
+  const filters = useFilterChips(entries, pinned);
   // A filter that no longer exists (its last account moved or unpinned) shows everything again.
   const activeGroup = filters.some((f) => f.value === group) ? group : ALL_GROUPS;
   const sorted = useMemo(
@@ -106,12 +95,15 @@ export function Codes() {
     () => filterEntries(sorted, query, activeGroup),
     [sorted, query, activeGroup],
   );
-  const grouped = settings.group_codes && groups.length > 0;
+  // Sections in 全部 only: a filter shows its accounts as one flat list.
+  const sectioned = settings.group_codes && activeGroup === ALL_GROUPS;
   const searching = query.trim() !== "";
   const folded = new Set(collapsedGroups);
-  const sections = grouped
-    ? groupSections(visible, groupOrder)
+  const sections = sectioned
+    ? groupSections(visible, groupOrder, pinned)
     : [{ key: NO_GROUP, entries: visible }];
+  // Headings when there is something to tell apart: groups, or the pinned accounts' own section.
+  const grouped = sectioned && (groups.length > 0 || sections.some((s) => s.key !== NO_GROUP));
   // The card of the account copied last, else the first of the list; not while searching.
   const recent = recentEntry(entries) ?? sorted[0];
   // A long press: the webview hears it as a context menu.
@@ -204,6 +196,8 @@ export function Codes() {
                   void dispatch({ command: "view_order_groups", groups: order })
                 }
                 noGroupLabel={t("codes.groupNone")}
+                favoritesLabel={t("codes.chips.favorites")}
+                pinned={pinned}
               />
             </Card>
           </div>
@@ -271,13 +265,30 @@ export function Codes() {
             ) : (
               <Sections cards={cards}>
                 {sections.map((section) => {
-                  const name = section.key === NO_GROUP ? t("codes.groupNone") : section.key;
-                  const open = !grouped || searching || !folded.has(section.key);
+                  // The pinned accounts' section, at the top while 收藏 is pinned, does not fold.
+                  const favorites = section.key === FAVORITES;
+                  const name = favorites
+                    ? t("codes.chips.favorites")
+                    : section.key === NO_GROUP
+                      ? t("codes.groupNone")
+                      : section.key;
+                  const open = !grouped || searching || favorites || !folded.has(section.key);
                   return (
                     <section
                       key={section.key === NO_GROUP ? "\u0000" : section.key}
                       aria-label={grouped ? name : undefined}>
-                      {grouped && (
+                      {grouped && favorites && (
+                        <div
+                          data-testid="codes-pinned-heading"
+                          className="flex h-11 w-full items-center gap-2 px-2 text-[13px] font-medium text-fg-muted">
+                          <Icon name="star" size={16} className="text-warning" />
+                          <span className="min-w-0 truncate">{name}</span>
+                          <span className="ml-auto mono text-[12px] text-fg-subtle">
+                            {section.entries.length}
+                          </span>
+                        </div>
+                      )}
+                      {grouped && !favorites && (
                         <button
                           type="button"
                           aria-expanded={open}

@@ -9,7 +9,7 @@ use lockra_vault::FileKind;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::entry::EntryView;
+use crate::entry::{EntryView, PinnedGroup};
 use crate::error::ErrorCode;
 use crate::settings::Settings;
 
@@ -78,8 +78,12 @@ pub struct UiState {
     /// The accounts in the order they were dragged into (`SortOrder::Manual`); this device's, kept
     /// in the vault, so empty unless unlocked.
     pub entry_order: Vec<Uuid>,
-    /// The groups in the order they were dragged into; this device's, kept in the vault.
+    /// The groups in the order they were dragged into ("" for the accounts in no group); this
+    /// device's, kept in the vault.
     pub group_order: Vec<String>,
+    /// The group this device pins at the top of the code list; kept in the vault, so none unless
+    /// unlocked.
+    pub pinned_group: Option<PinnedGroup>,
     /// The settings.
     pub settings: Settings,
     /// The import being previewed.

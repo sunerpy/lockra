@@ -13,6 +13,7 @@ import {
 } from "@lockra/shared";
 import {
   Icon,
+  PinnedGroupSelect,
   Segmented,
   Select,
   THEME_COLUMNS,
@@ -23,6 +24,7 @@ import {
   systemPrefersReducedMotion,
   themePair,
   useBackend,
+  useDispatch,
   useGuarded,
   useI18n,
   useNow,
@@ -41,8 +43,9 @@ import { UpdateRow } from "../components/UpdateRow";
 export function Settings() {
   const { t } = useI18n();
   const nav = useNav();
-  const { settings, app_version: version } = useUiState();
+  const { settings, app_version: version, entries, pinned_group: pinned } = useUiState();
   const update = useUpdateSettings();
+  const dispatch = useDispatch();
   const { backend } = useBackend();
   const guarded = useGuarded();
   const pickRestore = async () => {
@@ -86,6 +89,15 @@ export function Settings() {
             onChange={(group_codes) => update({ group_codes })}
             testId="settings-groups"
           />
+          <Field label={t("codes.pin.label")} hint={t("codes.pin.hint")}>
+            <PinnedGroupSelect
+              size="lg"
+              entries={entries}
+              pinned={pinned}
+              onChange={(next) => void dispatch({ command: "view_pin_group", pinned: next })}
+              data-testid="settings-pinned-group"
+            />
+          </Field>
         </Section>
         <Section title={t("settings.section.appearance")}>
           <SwitchRow
