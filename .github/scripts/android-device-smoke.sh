@@ -103,6 +103,23 @@ leaving() {
     sleep 1
   done
 }
+# Wait (at most 20 s) until the app's activity is stopped: it has left the screen, so its page went
+# hidden, which is what locks the vault. Brought back at once instead, it may never have left: in
+# CI on 2026-10-11 the launcher came up and the app was started again 86 ms after Home, before it
+# stopped, and the vault rightly stayed open.
+left_screen() {
+  local deadline=$((SECONDS + 20))
+  until adb shell dumpsys activity activities 2>/dev/null | tr -d '\r' |
+    awk -v name="$package/.MainActivity" '
+      index($0, "ActivityRecord{") && index($0, name) { mine = 1; next }
+      index($0, "ActivityRecord{") { mine = 0 }
+      mine && /[^A-Za-z]m?[Ss]tate=STOPPED/ { found = 1; exit }
+      END { exit !found }'; do
+    running || fail "the app closed while leaving the screen"
+    [ "$SECONDS" -lt "$deadline" ] || fail "the app did not leave the screen within 20 s"
+    sleep 1
+  done
+}
 # The centre of the node labelled with one of the words: the text or description equal to it,
 # else containing it.
 centre() {
@@ -261,8 +278,9 @@ type_into "$password" 'Repeat it' '再输入一次'
 tap 'Create vault' '创建保险库'
 showing 'No accounts yet|还没有账号' 120
 
-# Leaving the app locks the vault: Home, then back to it.
+# Leaving the app locks the vault: Home, then back to it once it has left the screen.
 adb shell input keyevent KEYCODE_HOME
+left_screen
 adb shell am start -n "$package/.MainActivity" >/dev/null 2>&1 || fail "the activity did not come back"
 showing 'The vault is locked|保险库已锁定' 60
 
