@@ -22,10 +22,7 @@ Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS、Linux 和 Androi
 Lockra 只为自身的更新以及你开启的设备间端到端加密同步联网。它可以从 Google 身份验证器和 Microsoft Authenticator
 导入账号，也可以导出给它们，并把加密备份写入你选择的文件夹。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../site/public/screens/devices-zh-dark.webp" />
-  <img src="../site/public/screens/devices-zh-light.webp" alt="电脑和手机上的 Lockra，显示相同的账号和相同的验证码" />
-</picture>
+![电脑和手机上的 Lockra，显示相同的账号和相同的验证码](../site/public/screens/devices-zh-light.webp)
 
 ## 亮点
 
@@ -67,10 +64,7 @@ Lockra 只为自身的更新以及你开启的设备间端到端加密同步联�
 
 Android 应用：验证码页、添加账号和同步。
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="../site/public/screens/phones-zh-dark.webp" />
-  <img src="../site/public/screens/phones-zh-light.webp" alt="Android 应用的三个页面：验证码页、添加账号和同步" />
-</picture>
+![Android 应用的三个页面：验证码页、添加账号和同步](../site/public/screens/phones-zh-light.webp)
 
 电脑和手机上的更多页面，见[文档](https://firlab.app/lockra/zh/)。
 

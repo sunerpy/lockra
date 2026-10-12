@@ -149,7 +149,8 @@ LOCKRA_CDP=127.0.0.1:9222 make site-screens   # a Chrome started with --remote-d
 
 `LOCKRA_CDP` is required. A Chrome on another machine also needs `LOCKRA_PHONE_BIND=0.0.0.0` and
 `LOCKRA_PHONE_HOST=<this machine's address>`, for the phone dev server it loads. The two READMEs
-show `devices-*` and `phones-*` from here too.
+show `devices-<lang>-light` and `phones-<lang>-light` from here too, the light ones only, also to a
+reader in dark mode.
 
 Look at every image before committing it, and capture again when the interface's text or layout
 changes.
