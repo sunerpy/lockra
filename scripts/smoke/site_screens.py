@@ -5,13 +5,15 @@ at 1440 x 900, as <page>-<lang>-<scheme>.webp: the site's light figure in 澄空
 澄空 · 夜, Lockra's default theme on a light and on a dark system. The accounts are made up
 (example.com addresses, secrets derived from their names). Run by scripts/capture-site-screens.sh,
 which owns Xvfb, the driver and the throwaway folders; the WebDriver session is the smoke test's.
-Every wait is a condition with a deadline.
+--state gets the accounts and the moment of each codes shot, for scripts/smoke/phone_screens.mjs to
+show the same accounts and codes on the phone. Every wait is a condition with a deadline.
 """
 
 import argparse
 import base64
 import hashlib
 import io
+import json
 import os
 import subprocess
 import sys
@@ -133,11 +135,13 @@ class Capture:
         self.web.run("document.activeElement?.blur()")
 
     def shot(self, page, scheme):
-        """A screenshot once two in a row agree (the countdown ring steps once a second), as WebP."""
+        """A screenshot once two in a row agree (the countdown ring steps once a second), as WebP;
+        returns the moment it was taken, in Unix milliseconds."""
         self.rest()
         last, deadline = None, time.monotonic() + 8
         while True:
             image = self.web.screenshot()
+            taken = int(time.time() * 1000)
             if image == last or time.monotonic() > deadline:
                 break
             last = image
@@ -148,6 +152,7 @@ class Capture:
         path = os.path.join(self.args.out, f"{page}-{self.args.lang}-{scheme}.webp")
         picture.save(path, "WEBP", quality=85, method=6)
         print(f"site-screens: {path}")
+        return taken
 
     def run(self):
         web, copy = self.web, self.copy
@@ -169,6 +174,16 @@ class Capture:
         ]
         lines = [otpauth(issuer, account, secret(issuer, account), **params) for issuer, account, params in accounts]
         lines.append(otpauth(bank, card, secret("bank", card), kind="hotp", counter=12))
+        # The same accounts for the phone (the mock's mockEntry options).
+        state = {"accounts": [], "shots": {}}
+        for issuer, account, params in accounts:
+            options = {"secret": b32(secret(issuer, account)), "digits": params.get("digits", 6)}
+            if issuer in ("GitHub", "Google"):
+                options["favorite"] = True
+            if issuer in ("AWS", "Slack", "Cloudflare"):
+                options["group"] = copy["work"]
+            state["accounts"].append({"issuer": issuer, "account": account, "options": options})
+        state["accounts"].append({"issuer": bank, "account": card, "options": {"secret": b32(secret("bank", card)), "kind": {"type": "hotp", "counter": 12}}})
         web.invoke({"command": "import_text", "text": "\n".join(lines)})
         web.invoke({"command": "import_commit"})
         entries = until("eight accounts", lambda: (lambda e: e if len(e) == 8 else None)(web.invoke({"command": "app_state"})["entries"]))
@@ -190,7 +205,9 @@ class Capture:
             self.theme(theme)
             # Mid-window: no code in its last five seconds, when the next one would show beside it.
             until("the middle of a 30-second window", lambda: 5 <= time.time() % 30 <= 15, timeout=40)
-            self.shot("codes", scheme)
+            state["shots"][f"codes-{scheme}"] = self.shot("codes", scheme)
+        with open(self.args.state, "w") as f:
+            json.dump(state, f, ensure_ascii=False, indent=1)
 
         self.nav("backup")
         for scheme, theme in SCHEMES.items():
@@ -226,7 +243,7 @@ class Capture:
 
 def main():
     parser = argparse.ArgumentParser()
-    for name in ["driver", "app", "out", "encode-qr", "display", "backup-dir"]:
+    for name in ["driver", "app", "out", "encode-qr", "display", "backup-dir", "state"]:
         parser.add_argument(f"--{name}", required=True)
     parser.add_argument("--lang", required=True, choices=sorted(COPY))
     Capture(parser.parse_args()).run()

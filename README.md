@@ -4,13 +4,13 @@
 
 # Lockra
 
-### Two-factor codes on your own computer, encrypted and offline.
+### Two-factor codes on your computers and your phone, encrypted and in sync.
 
 [![CI](https://github.com/sunerpy/lockra/actions/workflows/ci.yml/badge.svg)](https://github.com/sunerpy/lockra/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/sunerpy/lockra)](https://github.com/sunerpy/lockra/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-[Features](#features) · [Install](#install) · [Quick start](#quick-start) · [Documentation](https://firlab.app/lockra/) · [Development](#development)
+[Highlights](#highlights) · [Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Quick start](#quick-start) · [Documentation](https://firlab.app/lockra/) · [Development](#development)
 
 [**English**](./README.md) · [简体中文](./docs/readme/README.zh-CN.md)
 
@@ -18,13 +18,28 @@
 
 ---
 
-Lockra is a TOTP/HOTP authenticator for Windows, macOS and Linux. Your accounts live in one
-encrypted file on your computer, and Lockra goes online only for its updates and, once you turn it
-on, for end-to-end encrypted sync. It imports from
-Google Authenticator and Microsoft Authenticator, exports back to them, and keeps encrypted backups
-in a folder you choose.
+Lockra is a TOTP/HOTP authenticator for Windows, macOS, Linux and Android. Your accounts live in
+an encrypted file on each of your devices, and Lockra goes online only for its updates and, once you
+turn it on, for end-to-end encrypted sync between them. It imports from Google Authenticator and
+Microsoft Authenticator, exports back to them, and keeps encrypted backups in a folder you choose.
 
-![Lockra's codes page](./docs/acceptance/screens/desktop/codes-1280-glass.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/site/public/screens/devices-en-dark.webp" />
+  <img src="./docs/site/public/screens/devices-en-light.webp" alt="Lockra on a computer and on a phone, showing the same accounts with the same codes" />
+</picture>
+
+## Highlights
+
+- **Every device**: one app for Windows, macOS and Linux (x64 and ARM64) and Android 8 or later,
+  with the same design, eight themes, and Chinese and English.
+- **The same accounts everywhere**: end-to-end encrypted sync through the built-in Lockra relay
+  (nothing to set up), a relay you run, an S3-compatible bucket, a WebDAV folder or, between
+  computers, a cloud drive folder. Each device encrypts before anything leaves it, so the relay or
+  storage holds ciphertext only.
+- **Pairing by QR code**: a phone joins by scanning the computer's QR code, or by pasting its
+  pairing link or invitation; a recovery key brings the space back if every device is lost.
+- **No account**: no sign-up, no telemetry and no server that can read your codes. Move your
+  accounts in from Google Authenticator or Microsoft Authenticator, and back out again.
 
 ## Features
 
@@ -53,8 +68,20 @@ in a folder you choose.
   downloads it at start and installs it when you restart. A package is installed only when it
   carries Lockra's signature, through the package Lockra was installed from (deb, rpm, AppImage,
   the Windows installer or the macOS app).
-- **Interface**: four themes, eight accents, Chinese and English, a command palette (`Ctrl K`) and
+- **Interface**: eight themes (Clear sky by default, which follows the system's light or dark
+  mode), eight accents, a list or cards, Chinese and English, a command palette (`Ctrl K`) and
   keyboard shortcuts throughout.
+
+## Screenshots
+
+The Android app: the codes page, adding an account, and sync.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/site/public/screens/phones-en-dark.webp" />
+  <img src="./docs/site/public/screens/phones-en-light.webp" alt="Three screens of the Android app: the codes page, adding an account, and sync" />
+</picture>
+
+More pages, on a computer and on the phone, are in the [documentation](https://firlab.app/lockra/).
 
 ## Install
 
@@ -73,8 +100,10 @@ in a folder you choose.
    ```
 
 2. **Download a package** from the [releases page](https://github.com/sunerpy/lockra/releases):
-   the Windows installer (x64 and ARM64), a dmg for Apple silicon or Intel Macs, or a deb, rpm or
-   AppImage for Linux (x64 and ARM64). Every release carries `SHA256SUMS` and build attestations:
+   the Windows installer (x64 and ARM64), a dmg for Apple silicon or Intel Macs, a deb, rpm or
+   AppImage for Linux (x64 and ARM64), or the APK for Android phones (ARM64, Android 8 or later;
+   [Android](https://firlab.app/lockra/guide/install#android)). Every release carries `SHA256SUMS`
+   and build attestations:
 
    ```bash
    sha256sum -c SHA256SUMS --ignore-missing

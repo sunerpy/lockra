@@ -131,7 +131,25 @@ The script builds the app, starts it under Xvfb once per language in throwaway f
 read a Google Authenticator export code from the clipboard. It captures the codes page, the
 backup page and the import preview, each in 澄空 and in 澄空 · 夜. It needs what
 `make smoke-desktop` needs (Xvfb, xdotool, xclip, tauri-driver, WebKitWebDriver) plus Pillow and
-cairosvg for Python.
+cairosvg for Python, and Node 22 or later.
+
+The phone app blocks screenshots, so its screens come from its dev build (the in-memory core) in a
+Chrome reached over the DevTools protocol: `scripts/smoke/phone_screens.mjs` gives it the same
+eight accounts, with real codes and the clock of the desktop shot, and
+`scripts/smoke/compose_screens.py` puts the screenshots together, unredrawn:
+
+| File                           | Shows                                                    |
+| ------------------------------ | -------------------------------------------------------- |
+| `devices-<lang>-<scheme>.webp` | the codes page on a computer and a phone, the same codes |
+| `phones-<lang>-<scheme>.webp`  | the phone's codes page, adding an account and sync       |
+
+```bash
+LOCKRA_CDP=127.0.0.1:9222 make site-screens   # a Chrome started with --remote-debugging-port=9222
+```
+
+`LOCKRA_CDP` is required. A Chrome on another machine also needs `LOCKRA_PHONE_BIND=0.0.0.0` and
+`LOCKRA_PHONE_HOST=<this machine's address>`, for the phone dev server it loads. The two READMEs
+show `devices-*` and `phones-*` from here too.
 
 Look at every image before committing it, and capture again when the interface's text or layout
 changes.

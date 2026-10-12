@@ -1,13 +1,13 @@
 ---
 layout: home
-title: Lockra — 适用于 Windows、macOS 和 Linux 的加密两步验证器
+title: Lockra — 适用于 Windows、macOS、Linux 和 Android 的加密两步验证器
 titleTemplate: false
-description: Lockra 把两步验证码保存在本机的一个加密文件中。可以在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，把加密备份写入你选择的文件夹，并经 Lockra 中继或你自己的存储端到端加密地同步多台设备。
+description: Lockra 把两步验证码保存在电脑和 Android 手机上的加密文件中，经端到端加密同步，每台设备上的账号保持一致。可以在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，并把加密备份写入你选择的文件夹。
 
 hero:
   name: Lockra
   text: 两步验证码，留在你自己的设备上。
-  tagline: 适用于 Windows、macOS 和 Linux 的加密验证器。从 Google 身份验证器或 Microsoft Authenticator 迁入账号，把加密备份放在你选择的位置，需要时端到端加密地同步多台设备。
+  tagline: 适用于 Windows、macOS、Linux 和 Android 的加密验证器。端到端加密同步让每台设备上的账号保持一致；可以从 Google 身份验证器或 Microsoft Authenticator 迁入账号，并把加密备份放在你选择的位置。
   actions:
     - theme: brand
       text: 下载
@@ -22,7 +22,9 @@ hero:
 home:
   facts:
     - term: 支持平台
-      text: Windows 10 和 11、macOS 11 及以上（Apple 芯片与 Intel）、Linux，均支持 x64 和 ARM64。
+      text: Windows 10 和 11、macOS 11 及以上（Apple 芯片与 Intel）、Linux，均支持 x64 和 ARM64；以及 Android 8 及以上的 ARM64 手机。
+    - term: 多端同步
+      text: 每台设备上的账号保持一致，经内置中继或你自己的存储端到端加密同步。
     - term: 你的账号
       text: 保存在每台设备的一个加密文件中。Lockra 为更新连接 GitHub，开启同步后还会连接你选择的中继或存储，除此之外不连接任何地方。
 
@@ -38,6 +40,24 @@ home:
     title: Lockra 的功能
     intro: 当前版本的全部功能，每一项都链接到详细说明的页面。
     groups:
+      - name: 设备与同步
+        items:
+          - title: Windows、macOS、Linux 和 Android
+            body: 电脑和手机上是同一个应用：Windows、macOS 和 Linux 的安装包支持 x64 与 ARM64，Android 8 及以上使用 APK 安装。
+            status: available
+            link: /zh/guide/install
+          - title: 多设备同步
+            body: 经 Lockra 中继、S3 兼容存储桶、WebDAV 文件夹，或在电脑之间经网盘同步文件夹进行端到端加密同步。保存同步空间的一方只能看到加密的文件。
+            status: available
+            link: /zh/backup/sync
+          - title: 经 Lockra 中继同步
+            body: 无需自备存储。内置中继或你自建的中继保存加密文件，无法打开其中任何一个。
+            status: available
+            link: /zh/backup/sync#经-lockra-中继同步
+          - title: 手机扫码加入
+            body: 在同步空间中的设备上显示邀请，用手机扫描即可加入，也可以粘贴配对链接。所有设备都丢失时，可以用恢复密钥找回同步空间。
+            status: available
+            link: /zh/backup/sync#添加手机
       - name: 验证码
         items:
           - title: 点击即可复制
@@ -92,14 +112,6 @@ home:
             body: 逐条合并备份中的账号，或者整体替换。替换之前，Lockra 会先保存当前保险库的副本。
             status: available
             link: /zh/backup/#从备份恢复
-          - title: 多设备同步
-            body: 经 Lockra 中继、S3 兼容存储桶或 WebDAV 文件夹进行端到端加密同步。保存同步空间的一方只能看到加密的文件。
-            status: available
-            link: /zh/backup/sync
-          - title: 经 Lockra 中继同步
-            body: 无需自备存储。内置中继或你自建的中继保存加密文件，无法打开其中任何一个；手机扫描电脑上的二维码即可加入。
-            status: available
-            link: /zh/backup/sync#经-lockra-中继同步
       - name: 安全
         items:
           - title: 主密码
@@ -237,6 +249,14 @@ home:
       - 网站图标。账号显示首字母；获取图标需要联网。
       - Steam 令牌等非标准验证码。
 ---
+
+## 多端同步
+
+Lockra 可以在 Windows、macOS、Linux 和 Android 上运行，同步让每台设备上的账号、分组和收藏保持一致。每台设备在共享的内容离开设备之前先完成加密；内置中继、自建中继、S3 兼容存储桶、WebDAV 文件夹，或电脑之间使用的网盘同步文件夹，保存的都只是密文。手机扫描电脑上的二维码即可加入，无需注册任何 Lockra 账号。
+
+<ScreenFigure src="/screens/devices-zh-light.webp" dark="/screens/devices-zh-dark.webp" width="1440" height="900" alt="电脑和手机上的 Lockra，显示相同的账号和相同的验证码。" />
+
+[多设备同步](/zh/backup/sync) · [在 Android 上安装](/zh/guide/install#android)
 
 <HomeIndex />
 

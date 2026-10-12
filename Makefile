@@ -94,7 +94,7 @@ showcase: ## Screenshot the component showcase in the eight themes
 	scripts/screenshot-showcase.sh
 
 .PHONY: site-screens
-site-screens: ## The documentation site's screenshots, from the real app under Xvfb (docs/site/README.md)
+site-screens: ## The documentation site's screenshots: the app under Xvfb, the phone app in a Chrome (LOCKRA_CDP; docs/site/README.md)
 	scripts/capture-site-screens.sh docs/site/public/screens
 
 .PHONY: linux-x64

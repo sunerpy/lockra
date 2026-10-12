@@ -93,6 +93,8 @@ Secret Service keychain such as GNOME Keyring or KWallet.
 
 <StatusTag status="available" /> Available from version 0.7.0.
 
+<ScreenFigure src="/screens/phones-en-light.webp" dark="/screens/phones-en-dark.webp" width="1440" height="900" alt="Three screens of the Android app: the codes page, adding an account, and sync." />
+
 From version 0.7.0, every release also carries `Lockra_<version>_android_arm64.apk`, for ARM64
 phones with Android 8 or later. Download it on the
 phone from the [releases page](https://github.com/sunerpy/lockra/releases) and open it; the first

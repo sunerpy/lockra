@@ -4,13 +4,13 @@
 
 # Lockra
 
-### 两步验证码保存在自己的电脑上，加密，离线。
+### 两步验证码保存在你的电脑和手机上，加密，多端同步。
 
 [![CI](https://github.com/sunerpy/lockra/actions/workflows/ci.yml/badge.svg)](https://github.com/sunerpy/lockra/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/sunerpy/lockra)](https://github.com/sunerpy/lockra/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../LICENSE)
 
-[特性](#特性) · [安装](#安装) · [快速开始](#快速开始) · [文档](https://firlab.app/lockra/zh/) · [开发](#开发)
+[亮点](#亮点) · [特性](#特性) · [截图](#截图) · [安装](#安装) · [快速开始](#快速开始) · [文档](https://firlab.app/lockra/zh/) · [开发](#开发)
 
 [English](../../README.md) · [**简体中文**](./README.zh-CN.md)
 
@@ -18,11 +18,25 @@
 
 ---
 
-Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号保存在本机的一个加密文件中，Lockra
-只为自身的更新以及你开启的端到端加密同步联网。它可以从 Google 身份验证器和 Microsoft Authenticator 导入账号，也可以导出给它们，并把
-加密备份写入你选择的文件夹。
+Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS、Linux 和 Android。账号保存在每台设备的加密文件中，
+Lockra 只为自身的更新以及你开启的设备间端到端加密同步联网。它可以从 Google 身份验证器和 Microsoft Authenticator
+导入账号，也可以导出给它们，并把加密备份写入你选择的文件夹。
 
-![Lockra 的验证码页](../acceptance/screens/desktop/codes-1280-light.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../site/public/screens/devices-zh-dark.webp" />
+  <img src="../site/public/screens/devices-zh-light.webp" alt="电脑和手机上的 Lockra，显示相同的账号和相同的验证码" />
+</picture>
+
+## 亮点
+
+- **多端支持**：同一个应用覆盖 Windows、macOS、Linux（x64 与 ARM64）和 Android 8 及以上，界面设计一致，
+  提供八套主题和中英文界面。
+- **多端同步**：经内置的 Lockra 中继（无需任何设置）、自建中继、S3 兼容存储桶、WebDAV 文件夹，或在电脑之间
+  经网盘同步文件夹，端到端加密地同步，每台设备上的账号保持一致。内容在离开设备之前就已加密，中继或存储里只有密文。
+- **扫码配对**：手机扫描电脑上的二维码即可加入，也可以粘贴配对链接或邀请码；所有设备都丢失时，可以用恢复密钥
+  找回同步空间。
+- **无需账号**：无需注册，没有遥测，也没有能读取验证码的服务器。账号可以从 Google 身份验证器或 Microsoft
+  Authenticator 迁入，也可以迁回去。
 
 ## 特性
 
@@ -43,7 +57,19 @@ Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号
 - **更新**：有新版本时，标题栏会提示，并可打开更新对话框（更新内容、带速度的下载进度、重启）；开启自动更新后，
   Lockra 在启动时下载新版本，重启时完成安装。只安装带有 Lockra 签名的安装包，并通过 Lockra 原来的安装方式
   （deb、rpm、AppImage、Windows 安装程序或 macOS 应用）完成安装。
-- **界面**：四套主题、八种强调色，中英文界面，命令面板（`Ctrl K`），全程可用键盘操作。
+- **界面**：八套主题（默认「澄空」，跟随系统的浅色与深色）、八种强调色，列表或卡片视图，中英文界面，
+  命令面板（`Ctrl K`），全程可用键盘操作。
+
+## 截图
+
+Android 应用：验证码页、添加账号和同步。
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../site/public/screens/phones-zh-dark.webp" />
+  <img src="../site/public/screens/phones-zh-light.webp" alt="Android 应用的三个页面：验证码页、添加账号和同步" />
+</picture>
+
+电脑和手机上的更多页面，见[文档](https://firlab.app/lockra/zh/)。
 
 ## 安装
 
@@ -61,7 +87,8 @@ Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS 和 Linux。账号
    ```
 
 2. **下载安装包**：在[发布页](https://github.com/sunerpy/lockra/releases)选择 Windows 安装程序（x64 与 ARM64）、
-   适用于 Apple 芯片或 Intel Mac 的 dmg，或适用于 Linux（x64 与 ARM64）的 deb、rpm、AppImage。每个版本都附带
+   适用于 Apple 芯片或 Intel Mac 的 dmg、适用于 Linux（x64 与 ARM64）的 deb、rpm、AppImage，或适用于 Android
+   手机的 APK（ARM64，Android 8 及以上；[Android](https://firlab.app/lockra/zh/guide/install#android)）。每个版本都附带
    `SHA256SUMS` 和构建证明：
 
    ```bash
