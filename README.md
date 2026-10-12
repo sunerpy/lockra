@@ -31,7 +31,7 @@ Microsoft Authenticator, exports back to them, and keeps encrypted backups in a 
 ## Highlights
 
 - **Every device**: one app for Windows, macOS and Linux (x64 and ARM64) and Android 8 or later,
-  with the same design, eight themes, and Chinese and English.
+  with the same design, eight themes, and Chinese and English. An iPhone and iPad app is planned.
 - **The same accounts everywhere**: end-to-end encrypted sync through the built-in Lockra relay
   (nothing to set up), a relay you run, an S3-compatible bucket, a WebDAV folder or, between
   computers, a cloud drive folder. Each device encrypts before anything leaves it, so the relay or
@@ -56,6 +56,11 @@ Microsoft Authenticator, exports back to them, and keeps encrypted backups in a 
 - **Backups**: encrypted `.lockrabackup` files on demand, and automatic ones into a folder (a
   OneDrive, Google Drive or iCloud folder works) a few seconds after each change, keeping the
   newest few. Restore by merging or by replacing.
+- **Phone**: the Android app (Android 8 or later, ARM64) keeps the same vault as the computer. It
+  scans QR codes with the camera or reads them from screenshots, unlocks with a fingerprint whose
+  key stays in the phone's secure hardware, locks as soon as you leave it, never allows
+  screenshots, and joins your computers' sync by scanning a QR code. An iPhone and iPad app is
+  planned ([platform notes](https://firlab.app/lockra/reference/platforms#android)).
 - **Sync**: end-to-end encrypted, between your computers and the Android app, through an
   S3-compatible bucket, a WebDAV folder, a folder your cloud drive keeps in sync or, from 0.8.1, a
   Lockra relay ([below](#sync-relay)). A phone joins by scanning the computer's QR code. Whatever

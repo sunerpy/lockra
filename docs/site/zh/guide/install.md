@@ -1,6 +1,6 @@
 # 安装
 
-本页介绍如何在 Windows、macOS 和 Linux 上下载并安装 Lockra，以及如何确认下载的文件未被篡改。
+本页介绍如何在 Windows、macOS、Linux 和 Android 上下载并安装 Lockra，以及如何确认下载的文件未被篡改。
 
 ## 一键安装
 

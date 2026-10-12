@@ -1,6 +1,7 @@
 # Platform notes
 
-This page lists what differs between Windows, macOS, Linux and the Android app.
+This page lists what differs between Windows, macOS, Linux and the Android app. An app for iPhone
+and iPad is planned ([below](#iphone-and-ipad)).
 
 ## Windows
 
@@ -75,3 +76,12 @@ asked once after the restart.
 - **Updates**: installed from the APK on the release page, **Settings › About › Check for
   updates**, and a newer release opens its page; installed from Google Play, Google Play updates it,
   and **Open in Google Play** opens Lockra's page there.
+
+## iPhone and iPad
+
+<StatusTag status="planned" />
+
+An app for iPhone and iPad is planned ([Roadmap](/roadmap#planned)). Until it exists, Lockra on a
+computer can move accounts to an authenticator on the iPhone with export codes
+([Google Authenticator](/transfer/google#moving-accounts-to-google-authenticator),
+[Microsoft Authenticator](/transfer/microsoft)).

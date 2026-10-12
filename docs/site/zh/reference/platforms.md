@@ -1,6 +1,6 @@
 # 平台说明
 
-本页列出 Windows、macOS、Linux 和 Android 应用之间的差异。
+本页列出 Windows、macOS、Linux 和 Android 应用之间的差异。iPhone 与 iPad 版在计划中（[见下文](#iphone-与-ipad)）。
 
 ## Windows
 
@@ -49,3 +49,9 @@ Mac 版改为使用 Lockra 固定的签名证书，应用内更新在安装新�
 - **剪贴板**：复制的验证码会被标记为敏感内容，输入法的剪贴板历史和粘贴预览不会显示它。
 - **备份**：保存和恢复都通过系统的文件选择器，手机上没有自动备份。Android 自带的备份和设备迁移不包含 Lockra，因此请保留 Lockra 备份。
 - **更新**：从发布页的 APK 安装时，「设置 › 关于 › 检查更新」，有新版本时会打开该版本的发布页；从 Google Play 安装时由 Google Play 更新，「在 Google Play 中打开」会打开 Lockra 在 Google Play 中的页面。
+
+## iPhone 与 iPad
+
+<StatusTag status="planned" />
+
+iPhone 与 iPad 版在计划中（[路线图](/zh/roadmap#计划中)）。在此之前，可以用电脑上的 Lockra 显示导出二维码，把账号迁移到 iPhone 上的验证器（[Google 身份验证器](/zh/transfer/google#迁移到-google-身份验证器)、[Microsoft Authenticator](/zh/transfer/microsoft)）。
