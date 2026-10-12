@@ -23,10 +23,7 @@ an encrypted file on each of your devices, and Lockra goes online only for its u
 turn it on, for end-to-end encrypted sync between them. It imports from Google Authenticator and
 Microsoft Authenticator, exports back to them, and keeps encrypted backups in a folder you choose.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/site/public/screens/devices-en-dark.webp" />
-  <img src="./docs/site/public/screens/devices-en-light.webp" alt="Lockra on a computer and on a phone, showing the same accounts with the same codes" />
-</picture>
+![Lockra on a computer and on a phone, showing the same accounts with the same codes](./docs/site/public/screens/devices-en-light.webp)
 
 ## Highlights
 
@@ -81,10 +78,7 @@ Microsoft Authenticator, exports back to them, and keeps encrypted backups in a 
 
 The Android app: the codes page, adding an account, and sync.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/site/public/screens/phones-en-dark.webp" />
-  <img src="./docs/site/public/screens/phones-en-light.webp" alt="Three screens of the Android app: the codes page, adding an account, and sync" />
-</picture>
+![Three screens of the Android app: the codes page, adding an account, and sync](./docs/site/public/screens/phones-en-light.webp)
 
 More pages, on a computer and on the phone, are in the [documentation](https://firlab.app/lockra/).
 
