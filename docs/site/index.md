@@ -1,13 +1,13 @@
 ---
 layout: home
-title: Lockra — an encrypted two-factor authenticator for Windows, macOS and Linux
+title: Lockra — an encrypted two-factor authenticator for Windows, macOS, Linux and Android
 titleTemplate: false
-description: Lockra keeps your two-factor codes in one encrypted file on your computer. Move accounts from and to Google Authenticator and Microsoft Authenticator, keep encrypted backups in a folder you choose, and sync your devices, end-to-end encrypted, through a Lockra relay or storage of your own.
+description: Lockra keeps your two-factor codes in an encrypted file on your computers and your Android phone, the same accounts on every device through end-to-end encrypted sync. Move accounts from and to Google Authenticator and Microsoft Authenticator, and keep encrypted backups in a folder you choose.
 
 hero:
   name: Lockra
   text: Two-factor codes that stay on your devices.
-  tagline: An encrypted authenticator for Windows, macOS and Linux. Move your accounts from Google Authenticator or Microsoft Authenticator, keep encrypted backups where you choose, and sync your devices, end-to-end encrypted, if you want to.
+  tagline: An encrypted authenticator for Windows, macOS, Linux and Android. Keep the same accounts on every device with end-to-end encrypted sync, move them from Google Authenticator or Microsoft Authenticator, and keep encrypted backups where you choose.
   actions:
     - theme: brand
       text: Download
@@ -22,7 +22,9 @@ hero:
 home:
   facts:
     - term: Runs on
-      text: Windows 10 and 11, macOS 11 or later (Apple silicon and Intel), and Linux, on x64 and ARM64.
+      text: Windows 10 and 11, macOS 11 or later (Apple silicon and Intel) and Linux, on x64 and ARM64, and ARM64 phones with Android 8 or later.
+    - term: In sync
+      text: The same accounts on every device, end-to-end encrypted, through the built-in relay or storage of your own.
     - term: Your accounts
       text: In one encrypted file on each device. Lockra connects to GitHub for updates and, once you turn on sync, to the relay or storage you chose; to nothing else.
 
@@ -38,6 +40,24 @@ home:
     title: What Lockra does
     intro: Everything in the current release, with a link to the page that explains it.
     groups:
+      - name: Devices and sync
+        items:
+          - title: Windows, macOS, Linux and Android
+            body: The same app on computers and phones, with installers for Windows, macOS and Linux on x64 and ARM64 and an APK for Android 8 or later.
+            status: available
+            link: /guide/install
+          - title: Sync between your devices
+            body: End-to-end encrypted, through a Lockra relay, an S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder. Whatever keeps the space sees only encrypted files.
+            status: available
+            link: /backup/sync
+          - title: Sync through a Lockra relay
+            body: No storage of your own needed. The built-in relay, or one you run yourself, keeps the encrypted files and opens none of them.
+            status: available
+            link: /backup/sync#through-a-lockra-relay
+          - title: A phone joins by scanning
+            body: Show an invitation on a device of the space and scan it with the phone, or paste its pairing link. A recovery key brings the space back if every device is lost.
+            status: available
+            link: /backup/sync#adding-a-phone
       - name: Codes
         items:
           - title: One click copies a code
@@ -92,14 +112,6 @@ home:
             body: Merge a backup's accounts one by one, or replace them all. Before replacing, Lockra keeps a copy of the current vault.
             status: available
             link: /backup/#restoring-a-backup
-          - title: Sync between your devices
-            body: End-to-end encrypted, through a Lockra relay, an S3-compatible bucket or a WebDAV folder. Whatever keeps the space sees only encrypted files.
-            status: available
-            link: /backup/sync
-          - title: Sync through a Lockra relay
-            body: No storage of your own needed. The built-in relay, or one you run yourself, keeps the encrypted files and opens none of them; a phone joins by scanning the computer's QR code.
-            status: available
-            link: /backup/sync#through-a-lockra-relay
       - name: Protection
         items:
           - title: A master password
@@ -237,6 +249,14 @@ home:
       - Website icons. Accounts show their initial; fetching icons would mean going online.
       - Non-standard codes such as Steam Guard.
 ---
+
+## Every device, in sync
+
+Lockra runs on Windows, macOS, Linux and Android, and sync keeps the same accounts, groups and pinned accounts on all of them. Each device encrypts what it shares before it leaves; the built-in relay, a relay you run, an S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder keeps only that ciphertext. A phone joins by scanning the computer's QR code, and there is no Lockra account to create.
+
+<ScreenFigure src="/screens/devices-en-light.webp" dark="/screens/devices-en-dark.webp" width="1440" height="900" alt="Lockra on a computer and on a phone, showing the same accounts with the same codes." />
+
+[Sync between devices](/backup/sync) · [Install on Android](/guide/install#android)
 
 <HomeIndex />
 
