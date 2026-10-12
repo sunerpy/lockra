@@ -11,7 +11,7 @@ the recovery codes the services gave you.
 
 ## The codes are rejected by a service
 
-Codes depend on the time. Check that the computer's clock is set automatically; a clock a minute
+Codes depend on the time. Check that the device's clock is set automatically; a clock a minute
 off produces codes the service no longer accepts. If only one account fails, compare its settings
 (digits, period, algorithm) with the service's setup page, in **Edit…** and in the import preview.
 
@@ -45,7 +45,7 @@ next change, or **Run automatic backup now**, writes a new backup.
 
 ## Does Lockra work offline?
 
-Always: codes are calculated on the computer from each account's secret and the time, with no
+Always: codes are calculated on the device from each account's secret and the time, with no
 network. Lockra goes online for updates (when you check, or at start after you turn on automatic
 updates) and, from version 0.4.0, for sync, once you set it up on storage of your own or a relay
 ([Sync between devices](/backup/sync)). Without the network, sync waits and the codes work as
@@ -53,5 +53,12 @@ before.
 
 ## Where are my accounts stored?
 
-In one encrypted file on the computer. See [Privacy](/privacy) and
+In one encrypted file on each device. See [Privacy](/privacy) and
 [Updates, uninstalling and your data](/guide/updates#where-the-files-are).
+
+## Is there an iPhone app?
+
+Not yet. Lockra runs on Windows, macOS, Linux and Android phones; an app for iPhone and iPad is
+planned ([Roadmap](/roadmap#planned)). Until then, Lockra on a computer can show export codes for
+Google Authenticator or Microsoft Authenticator on the iPhone
+([Moving accounts to Google Authenticator](/transfer/google#moving-accounts-to-google-authenticator)).

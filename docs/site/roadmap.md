@@ -5,16 +5,25 @@ out.
 
 ## Today
 
-Lockra covers what an authenticator on a computer needs: codes for every standard account, moving
-accounts from and to Google Authenticator and Microsoft Authenticator, otpauth links and lists,
-encrypted and automatic backups, end-to-end encrypted [sync between devices](/backup/sync) through
-storage of your own or a Lockra relay (the built-in one, or
-[one you run yourself](/backup/relay)), protection for the vault (with Touch ID or Windows Hello where the computer
-has it), the clipboard and the screen, and signed in-app updates with a one-line install for every
-platform. From version 0.7.0 there is an [Android app](/reference/platforms#android) too: the same
-vault on the phone, scanning QR codes with the camera or from screenshots, unlocking with a
-fingerprint, and syncing with your other devices. Suggestions are welcome in the
-[issue tracker](https://github.com/sunerpy/lockra/issues).
+Lockra covers what an authenticator needs on your computers and your phone: codes for every standard
+account, moving accounts from and to Google Authenticator and Microsoft Authenticator, otpauth links
+and lists, encrypted and automatic backups, end-to-end encrypted [sync between
+devices](/backup/sync) through storage of your own or a Lockra relay (the built-in one, or [one you
+run yourself](/backup/relay)), protection for the vault (with Touch ID or Windows Hello where the
+computer has it), the clipboard and the screen, and signed in-app updates with a one-line install
+for every platform. From version 0.7.0 there is an [Android app](/reference/platforms#android) too:
+the same vault on the phone, scanning QR codes with the camera or from screenshots, unlocking with a
+fingerprint, and syncing with your other devices. Suggestions are welcome in the [issue
+tracker](https://github.com/sunerpy/lockra/issues).
+
+## Planned
+
+### iPhone and iPad
+
+<StatusTag status="planned" />
+
+An app for iPhone and iPad, with the same vault and the same sync as on the other platforms. There
+is no date yet.
 
 ## Deliberately left out
 

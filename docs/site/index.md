@@ -193,7 +193,7 @@ home:
 
   platforms:
     title: Platforms
-    intro: Lockra is the same app on Windows, macOS and Linux, and on Android phones. The platform notes list what differs between them.
+    intro: Lockra is the same app on Windows, macOS and Linux, and on Android phones; an app for iPhone and iPad is planned. The platform notes list what differs between them.
     columns: [Platform, Packages, Remember on this device, Blocks screenshots of secrets]
     rows:
       - name: Windows 10 and 11
@@ -220,6 +220,12 @@ home:
           - An APK for ARM64
           - With the fingerprint only
           - Always
+      - name: iPhone and iPad
+        status: planned
+        cells:
+          - "—"
+          - "—"
+          - "—"
     note: The packages are not code-signed yet, so Windows and macOS ask before the first start.
 
   privacy:

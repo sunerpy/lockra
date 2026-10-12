@@ -1,7 +1,7 @@
 # Install
 
-This page explains how to download and install Lockra on Windows, macOS and Linux, and how to
-check that a download is genuine.
+This page explains how to download and install Lockra on Windows, macOS, Linux and Android, and
+how to check that a download is genuine.
 
 ## Install with one command
 
