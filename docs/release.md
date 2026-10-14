@@ -11,7 +11,13 @@ one workflow run builds, verifies and publishes everything.
 2. Every push to `main` runs `.github/workflows/release.yml`; its first job runs release-please,
    which opens or updates the release pull request `chore: release X.Y.Z` (version in
    `package.json`, an entry in `CHANGELOG.md`).
-3. Merging the release pull request creates the tag `vX.Y.Z` and a **draft** Release, and the same
+3. Before merging it, refresh what Lockra bundles from outside, in a `build(deps)` pull request of
+   its own: the latest `psl` (the Public Suffix List compiled to code, released whenever the list
+   changes: its `=x.y.z` pin in `Cargo.toml` and `cargo update -p psl`), and the data under
+   `crates/lockra-autofill/data/` (point `data/SOURCES` at the latest upstream commit, then
+   `scripts/update-vendored-data.sh`, which prints the new SHA-256 values to pin after reading the
+   change). Unchanged upstreams need no pull request.
+4. Merging the release pull request creates the tag `vX.Y.Z` and a **draft** Release, and the same
    run continues:
    - `preflight` checks out the tag, asserts it is the released commit, checks `tauri.conf.json`
      against the version (`.github/scripts/tauri-release.py check-config --expect-version`) and
@@ -28,7 +34,7 @@ one workflow run builds, verifies and publishes everything.
      checks every leg and the manifest's keys against the target manifest;
    - `publish-release` re-verifies every remote asset against `SHA256SUMS` and flips the draft to
      public, marking it latest unless it is a prerelease.
-4. A failed leg leaves the draft unpublished. Rebuild it after a fix of the workflow or an outage
+5. A failed leg leaves the draft unpublished. Rebuild it after a fix of the workflow or an outage
    with **Run workflow** (`workflow_dispatch`, `tag_name: vX.Y.Z`); a fix of the source needs a new
    version.
 

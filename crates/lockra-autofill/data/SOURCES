@@ -1,0 +1,20 @@
+# The third-party data bundled into lockra-autofill, one file per line: its path under data/, its
+# SHA-256, and the URL it is downloaded from, at a fixed commit where the source has commits.
+# scripts/update-vendored-data.sh is the only way to change these files: it downloads every file
+# and refuses the lot unless each one has the SHA-256 written here. A test (src/data.rs) checks the
+# embedded files against the same lines, so a reformatted or edited file fails the build.
+#
+# To move to a newer upstream commit: put it in the URLs, run the script, read the upstream
+# change between the two commits, then pin the SHA-256 values the script printed and run it again.
+
+# Apple's password-manager-resources (https://github.com/apple/password-manager-resources),
+# Copyright 2020 - 2026 Apple Inc., MIT licence (password-manager-resources/LICENSE.md):
+# the shared-credentials list (equivalent domains) and the per-site password rules.
+password-manager-resources/LICENSE.md 3c3ec19af02df4372c1da21197c99f40a2bc5ef1b0cb972a095aacb292d872b1 https://raw.githubusercontent.com/apple/password-manager-resources/4fba5d1baf34dff9b2ff4186d1fcc7ad8bb00af9/LICENSE.md
+password-manager-resources/password-rules.json d3dc3b25cd879b13af37d3c6bb8e5cc028c2c4a5076fb093a7b3bf0137263531 https://raw.githubusercontent.com/apple/password-manager-resources/4fba5d1baf34dff9b2ff4186d1fcc7ad8bb00af9/quirks/password-rules.json
+password-manager-resources/shared-credentials.json 8b4befcbb91544f4fbfd80ef11809f1ab2135f8a3fdf687339475dca31fa49b9 https://raw.githubusercontent.com/apple/password-manager-resources/4fba5d1baf34dff9b2ff4186d1fcc7ad8bb00af9/quirks/shared-credentials.json
+
+# The EFF's large wordlist for passphrases (https://www.eff.org/dice), by the Electronic Frontier
+# Foundation, Creative Commons Attribution 3.0 United States
+# (https://creativecommons.org/licenses/by/3.0/us/). Used unchanged; published once, in 2016.
+eff/eff_large_wordlist.txt addd35536511597a02fa0a9ff1e5284677b8883b83e986e43f15a3db996b903e https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt
