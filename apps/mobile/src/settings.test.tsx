@@ -1,4 +1,5 @@
-import { MOCK_PASSWORD, MockBackend, sampleEntries } from "@lockra/shared/mock";
+import { LockraError } from "@lockra/shared";
+import { MOCK_PASSWORD, MockBackend, mockItemView, sampleEntries } from "@lockra/shared/mock";
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import { depthOf } from "./app/nav";
 import { ready, renderApp } from "./test/render";
@@ -136,5 +137,56 @@ describe("importing files on the phone", () => {
     await user.click(form.getByRole("button", { name: "打开备份" }));
     await waitFor(() => expect(screen.queryByTestId("backup-password")).not.toBeInTheDocument());
     expect(screen.getAllByTestId("candidate").length).toBeGreaterThan(before);
+  });
+
+  it("opens a KeePass database with its key file and lists its logins apart from the codes", async () => {
+    const router = { view: mockItemView("Router", { username: "admin" }), password: "old" };
+    const backend = new MockBackend({
+      passwords: true,
+      entries: sampleEntries(),
+      items: [router],
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    await user.click(screen.getByTestId("codes-add"));
+    expect(await screen.findByText(/浏览器、密码管理器、KeePass 的导出文件/)).toBeInTheDocument();
+    await user.click(await screen.findByTestId("add-files"));
+    expect(await screen.findByTestId("page-preview")).toBeInTheDocument();
+    backend.awaitKdbx("Passwords.kdbx");
+    const form = within(await screen.findByTestId("kdbx-password"));
+    expect(form.getByText("数据库只用密钥文件保护时，密码留空。")).toBeInTheDocument();
+    // A file the picker hands over that is no key file: said at once, and nothing is chosen.
+    vi.spyOn(backend, "pickKeyFile").mockRejectedValueOnce(
+      new LockraError("import_key_file_invalid"),
+    );
+    await user.click(form.getByRole("button", { name: "选择密钥文件…" }));
+    expect(await form.findByRole("alert")).toHaveTextContent("密钥文件无效，或与密码不匹配");
+    expect(form.queryByTestId("kdbx-key-file")).not.toBeInTheDocument();
+    await user.click(form.getByRole("button", { name: "选择密钥文件…" }));
+    await waitFor(() => expect(form.queryByRole("alert")).not.toBeInTheDocument());
+    expect(await form.findByText("密钥文件：Passwords.keyx")).toBeInTheDocument();
+    await user.type(form.getByLabelText("「Passwords.kdbx」需要 KeePass 数据库的密码"), "wrong");
+    await user.click(form.getByRole("button", { name: "打开数据库" }));
+    expect(await form.findByText("密钥文件无效，或与密码不匹配")).toBeInTheDocument();
+    await user.click(form.getByRole("button", { name: "不用密钥文件" }));
+    await waitFor(() => expect(form.queryByTestId("kdbx-key-file")).not.toBeInTheDocument());
+    await user.type(
+      form.getByLabelText("「Passwords.kdbx」需要 KeePass 数据库的密码"),
+      MOCK_PASSWORD,
+    );
+    await user.click(form.getByRole("button", { name: "打开数据库" }));
+    await waitFor(() => expect(screen.queryByTestId("kdbx-password")).not.toBeInTheDocument());
+    // The login, beside the Google export's account of the same name the preview held already.
+    expect(screen.getByText("登录项 · Passwords.kdbx · github.com · 带验证码")).toBeInTheDocument();
+    expect(screen.getAllByText("验证码 · google-export-1.jpg · SHA1 · 6 · 30 秒")).toHaveLength(3);
+    const routerRow = within(
+      screen
+        .getAllByTestId("candidate")
+        .find((c) => within(c).queryByText("Router") !== null) as HTMLElement,
+    );
+    expect(routerRow.getByText("与本机不同")).toBeInTheDocument();
+    expect(routerRow.getByText("密码不同：替换后，本机的旧密码保留在历史里")).toBeInTheDocument();
+    expect(screen.getByTestId("import-commit")).toHaveTextContent(/^导入 \d+ 项$/);
   });
 });

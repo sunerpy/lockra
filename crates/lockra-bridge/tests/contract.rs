@@ -14,16 +14,16 @@ use lockra_bridge::{COMMANDS, PHONE_COMMANDS, SHELL_COMMANDS, UiCommand, dispatc
 use lockra_core::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
 use lockra_core::settings::{AccentId, AutoBackup, CodesView, DefaultUnlock, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
-    BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, CopiedPart,
-    DeviceUnlockView, Excluded, ExportPage, ExportStarted, ExportTarget, Features, GeneratorStatus, GoogleBatchView, ImportSource, ImportView, InstallMethod,
-    LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus,
-    SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    AwaitingKind, AwaitingView, BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame,
+    ConflictReason, CopiedPart, DeviceUnlockView, Excluded, ExportPage, ExportStarted, ExportTarget, Features, GeneratorStatus, GoogleBatchView, ImportSource,
+    ImportView, InstallMethod, LockView, LoginCandidateView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, StorageView, SyncDeviceView,
+    SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use lockra_core::{
     AccountColor, ActivityEvent, ActivityView, AutofillChoice, BrowserPolicy, BrowserView, ConfirmAction, ConfirmReason, ConfirmView, ConflictView, Core,
     CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, FieldView, FrameRule, GeneratedPastView, GeneratedView, GeneratorOptions, ItemRevealed,
-    ItemView, KdfCost, Lenient, Matching, Outcome, PairRequestView, PairedView, PassphraseOptions, PastView, PinnedGroup, Ports, Protection, Purpose, Refusal,
-    RevealedField, ScoreView, SiteRuleView, Tri, UrlView,
+    ItemView, KdfCost, Lenient, LoginOutcome, Matching, Outcome, PairRequestView, PairedView, PassphraseOptions, PastView, PinnedGroup, Ports, Protection,
+    Purpose, Refusal, RevealedField, ScoreView, SiteRuleView, Tri, UrlView,
 };
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
 use lockra_transfer::{Incompatible, Origin, RejectReason};
@@ -38,6 +38,10 @@ const SECRET: &str = "JBSWY3DPEHPK3PXP";
 const LOGIN_PASSWORD: &str = "hunter2-correct-horse";
 const LOGIN_NOTES: &str = "the recovery codes are 4815162342";
 const LOGIN_FIELD: &str = "pin-90210";
+/// What a password manager's export brings: its password, notes and hidden field.
+const IMPORTED_PASSWORD: &str = "imported-hunter2-correct";
+const IMPORTED_NOTES: &str = "imported notes 314159";
+const IMPORTED_FIELD: &str = "imported-pin-2718";
 
 fn id(n: u128) -> Uuid {
     Uuid::from_u128(0x0f3f_1a1e_8d4b_4c8e_9f7a_0000_0000_0000 + n)
@@ -215,6 +219,7 @@ fn import_view() -> ImportView {
             line: None,
             status,
             default_action: action,
+            login: None,
         };
     let file = |name: &str| ImportSource::File { name: name.into() };
     let mut unsupported =
@@ -225,6 +230,17 @@ fn import_view() -> ImportView {
     unsupported.line = Some(3);
     let mut hotp = candidate(5, ImportSource::Clipboard, Origin::Uri, "Bank", "card", CandidateStatus::New, CandidateAction::Add);
     hotp.kind = Some(OtpKind::Hotp { counter: 0 });
+    // A password manager's export: logins (a new one with its code right after it, one the vault
+    // holds, one of another password), and an item it does not take.
+    let export = || file("bitwarden_export.json");
+    let login = |n: u32, title: &str, username: &str, host: &str, totp: Option<u32>, status: CandidateStatus, action: CandidateAction| {
+        let mut view = candidate(n, export(), Origin::Uri, "", "", status, action);
+        (view.kind, view.algorithm, view.digits) = (None, None, None);
+        view.login = Some(LoginCandidateView { title: title.into(), username: username.into(), host: host.into(), totp });
+        view
+    };
+    let mut card = candidate(12, export(), Origin::Uri, "", "Visa", CandidateStatus::Unsupported { reason: RejectReason::CardItem }, CandidateAction::Skip);
+    (card.kind, card.algorithm, card.digits) = (None, None, None);
     ImportView {
         candidates: vec![
             candidate(0, file("google-1.png"), Origin::Google, "GitHub", "octocat", CandidateStatus::Exists { entry_id: id(1) }, CandidateAction::Skip),
@@ -243,9 +259,22 @@ fn import_view() -> ImportView {
             hotp,
             candidate(6, file("mine.lockrabackup"), Origin::Backup, "Old", "account", CandidateStatus::New, CandidateAction::Add),
             candidate(7, ImportSource::Camera, Origin::Google, "Cloud", "me@example.com", CandidateStatus::New, CandidateAction::Add),
+            login(8, "Dropbox", "alex@example.com", "www.dropbox.com", Some(9), CandidateStatus::New, CandidateAction::Add),
+            candidate(9, export(), Origin::Uri, "Dropbox", "alex@example.com", CandidateStatus::New, CandidateAction::Add),
+            login(10, "GitHub", "octocat", "github.com", None, CandidateStatus::LoginExists { item_id: id(20) }, CandidateAction::Skip),
+            login(
+                11,
+                "Router",
+                "admin",
+                "",
+                None,
+                CandidateStatus::LoginConflict { item_id: id(24), reason: ConflictReason::Password },
+                CandidateAction::Replace,
+            ),
+            card,
         ],
         google_batches: vec![GoogleBatchView { id: 412_337, size: 3, received: vec![0, 2], missing: vec![1] }],
-        awaiting_password: Some("other.lockrabackup".into()),
+        awaiting: Some(AwaitingView { name: "Passwords.kdbx".into(), kind: AwaitingKind::Kdbx, key_file: Some("Passwords.keyx".into()) }),
     }
 }
 
@@ -319,7 +348,8 @@ fn notices() -> Vec<Notice> {
         Notice::BrowserPaused { pairing: id(42), browser: "edge".into(), label: "Work".into() },
         Notice::BrowserUnlockRequested { browser: "chrome".into() },
         Notice::ClipboardCleared,
-        Notice::Imported { added: 3, replaced: 1, skipped: 2 },
+        Notice::Imported { added: 3, replaced: 1, skipped: 2, logins: LoginOutcome::default() },
+        Notice::Imported { added: 1, replaced: 0, skipped: 0, logins: LoginOutcome { added: 12, replaced: 2, skipped: 3 } },
         Notice::FileUnrecognized { name: "notes.bin".into() },
         Notice::FileUnreadable { name: "huge.png".into() },
         Notice::BackupWritten { file_name: "lockra-auto-20260921-134640.lockrabackup".into(), automatic: true },
@@ -366,6 +396,7 @@ fn commands() -> Vec<Value> {
         json!({"command": "import_text", "text": "otpauth://totp/A:b?secret=GEZDGNBV"}),
         json!({"command": "import_clipboard"}),
         json!({"command": "import_backup_password", "password": "backup password"}),
+        json!({"command": "import_key_file_clear"}),
         json!({"command": "import_commit", "choices": [{"id": 2, "action": "replace"}, {"id": 1, "action": "skip"}]}),
         json!({"command": "import_cancel"}),
         // Without a password: the biometric check that unlocks the vault, with the prompt's words.
@@ -672,6 +703,7 @@ fn response_fixtures() {
         ErrorCode::ExportExpired.into(),
         ErrorCode::SyncWrongCredentials.into(),
         ErrorCode::SyncInviteNeedsStorage.into(),
+        ErrorCode::ImportKeyFileInvalid.into(),
         ErrorCode::FeatureUnavailable.into(),
         ErrorCode::ItemNotFound.into(),
         ErrorCode::ItemInvalid.into(),
@@ -699,7 +731,7 @@ fn response_fixtures() {
                 uri: format!("otpauth://totp/GitHub:octocat?secret={SECRET}&issuer=GitHub&algorithm=SHA1&digits=6&period=30"),
                 svg: "<svg xmlns=\"http://www.w3.org/2000/svg\"/>".into(),
             },
-            "import_outcome": Outcome { added: 3, replaced: 1, skipped: 2 },
+            "import_outcome": Outcome { added: 3, replaced: 1, skipped: 2, logins: LoginOutcome { added: 12, replaced: 2, skipped: 3 } },
             "sync_key_reveal": SyncKeyView { sync_key: SYNC_KEY.into() },
             "sync_invite": SyncInvite {
                 invite: "lockra-invite:1:eyJzdG9yYWdlIjp7fX0".into(),
@@ -886,6 +918,17 @@ async fn dispatch_answers_and_leaks_nothing() {
     let history = run(json!({"command": "generator_history_reveal", "password": "correct horse battery"})).await.unwrap();
     assert_eq!(history[0]["password"].as_str(), Some(generated_password.as_str()));
     ok(run(json!({"command": "item_add", "draft": {"title": "Generated", "password": {"type": "generated"}}})).await, &mut answers);
+    // A password manager's export: its password, notes and hidden field go into the core with the
+    // file and come back only through item_reveal, neither in the preview nor in the list.
+    let export = dir.path().join("bitwarden_export.json");
+    let item = json!({"type": 1, "name": "Imported", "notes": IMPORTED_NOTES, "fields": [{"name": "PIN", "value": IMPORTED_FIELD, "type": 1}],
+        "login": {"uris": [{"uri": "https://imported.example/"}], "username": "importer", "password": IMPORTED_PASSWORD}});
+    std::fs::write(&export, json!({"encrypted": false, "folders": [], "items": [item]}).to_string()).unwrap();
+    core.import_files(vec![export]).await.unwrap();
+    ok(run(json!({"command": "app_state"})).await, &mut answers);
+    let committed = ok(run(json!({"command": "import_commit"})).await, &mut answers);
+    assert_eq!(committed["logins"]["added"], 1);
+    ok(run(json!({"command": "items_list"})).await, &mut answers);
     ok(run(json!({"command": "generator_history_clear"})).await, &mut answers);
     let rule = run(json!({"command": "app_state"})).await.unwrap()["site_rules"][0]["id"].clone();
     ok(run(json!({"command": "site_rule_remove", "id": rule})).await, &mut answers);
@@ -982,6 +1025,9 @@ async fn dispatch_answers_and_leaks_nothing() {
             LOGIN_PASSWORD,
             LOGIN_NOTES,
             LOGIN_FIELD,
+            IMPORTED_PASSWORD,
+            IMPORTED_NOTES,
+            IMPORTED_FIELD,
             &generated_password,
         ] {
             assert!(!text.contains(secret), "{secret} leaked: {text}");
@@ -999,6 +1045,7 @@ async fn dispatch_answers_and_leaks_nothing() {
     ok(run(json!({"command": "entry_delete", "id": bank})).await, &mut Vec::new());
     assert_eq!(run(json!({"command": "import_clipboard"})).await.unwrap_err().code, ErrorCode::ClipboardEmpty);
     assert_eq!(run(json!({"command": "import_backup_password", "password": "x"})).await.unwrap_err().code, ErrorCode::NoImport);
+    assert_eq!(run(json!({"command": "import_key_file_clear"})).await.unwrap_err().code, ErrorCode::NoImport);
     ok(run(json!({"command": "item_delete", "ids": [item_id]})).await, &mut Vec::new());
     ok(run(json!({"command": "vault_change_password", "current": "correct horse battery", "new": "a new password"})).await, &mut Vec::new());
     ok(run(json!({"command": "device_unlock_disable", "password": "a new password"})).await, &mut Vec::new());

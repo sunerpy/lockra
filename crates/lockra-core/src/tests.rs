@@ -28,6 +28,7 @@ const MASTER: &str = "correct horse battery";
 const SECRET: &str = "JBSWY3DPEHPK3PXP";
 
 mod browser;
+mod import_logins;
 mod items;
 mod logins;
 mod sync;
@@ -563,8 +564,8 @@ async fn pasted_text_is_previewed_then_committed() {
     assert_eq!(preview.candidates[3].line, Some(4));
     h.notices();
     let outcome = h.core.import_commit(&[]).unwrap();
-    assert_eq!(outcome, Outcome { added: 1, replaced: 0, skipped: 3 });
-    assert!(h.notices().contains(&Notice::Imported { added: 1, replaced: 0, skipped: 3 }));
+    assert_eq!(outcome, Outcome { added: 1, replaced: 0, skipped: 3, ..Outcome::default() });
+    assert!(h.notices().contains(&Notice::Imported { added: 1, replaced: 0, skipped: 3, logins: crate::LoginOutcome::default() }));
     assert_eq!(h.core.state().entries.len(), 2);
     assert!(h.core.state().import.is_none());
     assert_eq!(code_err(h.core.import_commit(&[])), ErrorCode::NoImport);
@@ -706,14 +707,14 @@ async fn a_lockra_backup_in_the_import_asks_for_its_password() {
     let h = Harness::unlocked().await;
     h.core.add_uri(&otpauth("One", "me", "GEZDGNBV")).unwrap();
     h.core.import_files(vec![backup]).await.unwrap();
-    assert_eq!(h.core.state().import.unwrap().awaiting_password.as_deref(), Some("mine.lockrabackup"));
+    assert_eq!(h.core.state().import.unwrap().awaiting.map(|a| (a.name, a.kind)), Some(("mine.lockrabackup".into(), crate::ui::AwaitingKind::Backup)));
     assert_eq!(code_err(h.core.import_backup_password(pw(MASTER)).await), ErrorCode::WrongPassword);
     h.core.import_backup_password(pw("backup password")).await.unwrap();
     let preview = h.core.state().import.unwrap();
-    assert_eq!(preview.awaiting_password, None);
+    assert_eq!(preview.awaiting, None);
     assert!(matches!(preview.candidates[0].status, CandidateStatus::Exists { .. }));
     assert_eq!(preview.candidates[1].status, CandidateStatus::New);
-    assert_eq!(h.core.import_commit(&[]).unwrap(), Outcome { added: 1, replaced: 0, skipped: 1 });
+    assert_eq!(h.core.import_commit(&[]).unwrap(), Outcome { added: 1, replaced: 0, skipped: 1, ..Outcome::default() });
     let two = h.core.state().entries.into_iter().find(|e| e.issuer == "Two").unwrap();
     assert_eq!((two.group.as_deref(), two.favorite, two.origin), (Some("Work"), true, lockra_transfer::Origin::Backup));
 }

@@ -132,6 +132,17 @@ pub async fn restore(core: &Core, picked: Result<Option<PickedFile>, PortError>)
     core.restore_open_bytes(file.name, file.bytes).await.map(|()| true)
 }
 
+/// What a key file picked means: the key of the KeePass database waiting in the import (`true`),
+/// or nothing picked (`false`).
+pub async fn key_file(core: &Core, picked: Result<Option<PickedFile>, PortError>) -> Result<bool, CoreError> {
+    let file = picked.map_err(|error| {
+        tracing::warn!(%error, "the file picker did not answer");
+        CoreError::from(ErrorCode::IoFailed)
+    })?;
+    let Some(file) = file else { return Ok(false) };
+    core.import_key_file(file).await.map(|()| true)
+}
+
 /// The plugin's answer `{ files: [{ name, data }] }`, the data in Base64.
 pub fn picked_of(answer: &Value) -> Result<Vec<PickedFile>, PortError> {
     let Some(files) = answer.get("files").and_then(Value::as_array) else { return Ok(Vec::new()) };

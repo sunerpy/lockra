@@ -5,26 +5,41 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Import and export: Google Authenticator, Microsoft Authenticator, otpauth lists and QR codes."
+description = "Import and export: Google Authenticator, Microsoft Authenticator, otpauth lists, QR codes, and the logins of browsers, password managers and KeePass."
 publish = false
 
 [lints]
 workspace = true
 
 [dependencies]
+aes.workspace = true
+cbc.workspace = true
+chacha20.workspace = true
+csv.workspace = true
 data-encoding.workspace = true
+flate2.workspace = true
 getrandom.workspace = true
+hmac.workspace = true
 image.workspace = true
 lockra-otp.workspace = true
 percent-encoding.workspace = true
 prost.workspace = true
 qrcode.workspace = true
+quick-xml.workspace = true
+rust-argon2.workspace = true
 rxing.workspace = true
 rusqlite.workspace = true
+salsa20.workspace = true
 serde.workspace = true
+# `raw_value`: the items of an export read one by one, where they lie.
+serde_json = { workspace = true, features = ["raw_value"] }
+sha2.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
+twofish.workspace = true
 zeroize.workspace = true
+zip.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
+# Writes the KeePass databases the reader is checked against (an independent implementation).
+keepass = { workspace = true, features = ["save_kdbx4"] }

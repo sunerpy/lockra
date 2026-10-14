@@ -525,6 +525,12 @@ impl VaultData {
         if self.holds_logins() || generated { VAULT_DATA_FORMAT } else { FORMAT_WITHOUT_LOGINS }
     }
 
+    /// It holds logins or deletions of logins: what a merge without the logins' preview would
+    /// lose.
+    pub(crate) fn holds_items(&self) -> bool {
+        !(self.items.is_empty() && self.item_tombstones.is_empty())
+    }
+
     /// It holds logins, site rules or their deletions: what a backup of format 3 carries.
     pub(crate) fn holds_logins(&self) -> bool {
         !(self.items.is_empty() && self.item_tombstones.is_empty() && self.site_rules.is_empty() && self.site_rule_tombstones.is_empty())

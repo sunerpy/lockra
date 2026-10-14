@@ -230,6 +230,70 @@ describe("MockBackend", () => {
     expect((await backend.getState()).import).toBeNull();
   });
 
+  it("previews a password manager's logins with their codes, and commits them linked", async () => {
+    const router = { view: mockItemView("Router", { username: "admin" }), password: "old" };
+    const backend = new MockBackend({ phase: "unlocked", passwords: true, items: [router] });
+    const { notices } = recorder(backend);
+    expect(await backend.pickImportFiles("logins")).toBe(true);
+    const preview = (await backend.getState()).import;
+    expect(
+      preview?.candidates.map((c) => [c.login?.title ?? c.issuer ?? c.account, c.status.type]),
+    ).toEqual([
+      ["GitHub", "new"],
+      ["GitHub", "new"],
+      ["Router", "login_conflict"],
+      ["", "unsupported"],
+    ]);
+    expect(preview?.candidates[0]?.login?.totp).toBe(1);
+    expect(preview?.candidates[2]?.default_action).toBe("replace");
+    expect(JSON.stringify(preview)).not.toContain("mock-imported");
+    const outcome = await backend.dispatch({ command: "import_commit" });
+    expect(outcome).toEqual({
+      added: 1,
+      replaced: 0,
+      skipped: 0,
+      logins: { added: 1, replaced: 1, skipped: 1 },
+    });
+    expect(notices().at(-1)).toEqual({ type: "imported", ...outcome });
+    const items = await backend.dispatch({ command: "items_list" });
+    const github = items.find((i) => i.title === "GitHub");
+    const code = (await backend.getState()).entries.find((e) => e.issuer === "GitHub");
+    expect(github?.totp_entry).toBe(code?.id);
+    expect(items.find((i) => i.title === "Router")?.id).toBe(router.view.id);
+    // Without password management there are no exports of logins to pick.
+    const off = new MockBackend({ phase: "unlocked" });
+    expect(await errorCode(off.pickImportFiles("logins"))).toBe("feature_unavailable");
+  });
+
+  it("opens a KeePass database waiting for its password, with a key file or without", async () => {
+    const backend = new MockBackend({ phase: "unlocked", passwords: true });
+    expect(await errorCode(backend.pickKeyFile())).toBe("no_import");
+    expect(await errorCode(backend.dispatch({ command: "import_key_file_clear" }))).toBe(
+      "no_import",
+    );
+    backend.awaitKdbx("Passwords.kdbx");
+    const awaiting = async () => (await backend.getState()).import?.awaiting;
+    expect(await awaiting()).toEqual({ name: "Passwords.kdbx", kind: "kdbx", key_file: null });
+    expect(
+      await errorCode(backend.dispatch({ command: "import_backup_password", password: "x" })),
+    ).toBe("wrong_password");
+    expect(await backend.pickKeyFile()).toBe(true);
+    expect((await awaiting())?.key_file).toBe("Passwords.keyx");
+    expect(
+      await errorCode(backend.dispatch({ command: "import_backup_password", password: "x" })),
+    ).toBe("import_key_file_invalid");
+    await backend.dispatch({ command: "import_key_file_clear" });
+    expect((await awaiting())?.key_file).toBeNull();
+    await backend.dispatch({ command: "import_backup_password", password: MOCK_PASSWORD });
+    const preview = (await backend.getState()).import;
+    expect(preview?.awaiting).toBeNull();
+    expect(preview?.candidates.filter((c) => c.login !== null)).toHaveLength(2);
+    expect(preview?.candidates[0]?.source).toEqual({ type: "file", name: "Passwords.kdbx" });
+    // A backup waiting takes no key file.
+    backend.awaitBackup("old.lockrabackup");
+    expect(await errorCode(backend.pickKeyFile())).toBe("no_import");
+  });
+
   it("scans with the camera into the preview, or says why it could not", async () => {
     const TEXTS = { prompt: "Point at a code", cancel: "Cancel" };
     const backend = new MockBackend({ phase: "unlocked" });

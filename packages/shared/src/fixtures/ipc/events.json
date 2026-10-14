@@ -195,7 +195,26 @@
       "type": "imported",
       "added": 3,
       "replaced": 1,
-      "skipped": 2
+      "skipped": 2,
+      "logins": {
+        "added": 0,
+        "replaced": 0,
+        "skipped": 0
+      }
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "imported",
+      "added": 1,
+      "replaced": 0,
+      "skipped": 0,
+      "logins": {
+        "added": 12,
+        "replaced": 2,
+        "skipped": 3
+      }
     }
   },
   {

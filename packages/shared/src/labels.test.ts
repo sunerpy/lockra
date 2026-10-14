@@ -2,6 +2,7 @@ import { ipcFixtures } from "./fixtures";
 import { createTranslator } from "./i18n";
 import {
   candidateSource,
+  conflictText,
   entryLabel,
   errorText,
   formatBytes,
@@ -25,6 +26,7 @@ import {
   themeSubtitle,
 } from "./labels";
 import {
+  CONFLICT_REASONS,
   ERROR_CODES,
   INCOMPATIBLE,
   ORIGINS,
@@ -49,6 +51,7 @@ describe("labels", () => {
       digits: null,
       status: { type: "new" },
       default_action: "add",
+      login: null,
     } as const;
     expect(candidateSource(en, { ...base, source: { type: "text" }, line: 3 })).toBe(
       "Pasted text · line 3",
@@ -69,6 +72,8 @@ describe("labels", () => {
       for (const reason of INCOMPATIBLE)
         expect(incompatibleText(t, reason)).not.toContain("incompatible.");
       for (const origin of ORIGINS) expect(originText(t, origin)).not.toContain("origin.");
+      for (const reason of CONFLICT_REASONS)
+        expect(conflictText(t, reason)).not.toContain("import.conflict.");
     }
     for (const theme of THEME_IDS) {
       expect(themeName(theme, "en")).not.toContain("theme.");
@@ -116,6 +121,26 @@ describe("labels", () => {
     expect(
       noticeText(zh, { type: "item_saved", item_id: "i", title: "GitHub", updated: false }),
     ).toBe("已在浏览器中保存「GitHub」");
+  });
+
+  it("an import's counts name the logins apart, and only when there were any", () => {
+    const none = { added: 0, replaced: 0, skipped: 0 };
+    const codes = { type: "imported", added: 2, replaced: 0, skipped: 1, logins: none } as const;
+    expect(noticeText(zh, codes)).toBe("已导入 2 个，替换 0 个，跳过 1 个");
+    const logins = { added: 3, replaced: 1, skipped: 2 };
+    expect(noticeText(zh, { ...codes, ...none, logins })).toBe(
+      "已导入 3 个登录项，替换 1 个，跳过 2 个",
+    );
+    expect(noticeText(en, { ...codes, ...none, logins })).toBe(
+      "Imported 3 logins, replaced 1, skipped 2",
+    );
+    expect(noticeText(en, { ...codes, logins })).toBe(
+      "Codes: imported 2, replaced 0, skipped 1; logins: imported 3, replaced 1, skipped 2",
+    );
+    expect(statusText(zh, { type: "login_conflict", item_id: "x", reason: "password" })).toBe(
+      "与本机不同 · 密码不同：替换后，本机的旧密码保留在历史里",
+    );
+    expect(statusText(en, { type: "login_exists", item_id: "x" })).toBe("Already here");
   });
 
   it("a copy names the account when the caller knows it", () => {

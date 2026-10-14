@@ -12,7 +12,9 @@ import type {
 } from "./schema";
 
 export type EventListener = (event: UiEvent) => void;
-export type ImportPickKind = "images" | "text" | "backup" | "any";
+/** What the import's file picker offers: images, a text list, a Lockra backup, the exports of
+ *  browsers, password managers and KeePass (`logins`), or every file. */
+export type ImportPickKind = "images" | "text" | "backup" | "logins" | "any";
 export type FrameListener = (frame: CodesFrame) => void;
 export type Unsubscribe = () => void;
 
@@ -36,6 +38,10 @@ export interface Backend {
   /** Native file picker → import, filtered for one source (`any` shows every file: Microsoft's
    *  database has no extension). `false` when the user cancelled. */
   pickImportFiles(kind?: ImportPickKind): Promise<boolean>;
+  /** Native file picker → the key file of the KeePass database waiting in the import: the core
+   *  reads it and keeps the key it brings, never the file or its path (only its name shows in the
+   *  preview). `false` when the user cancelled. */
+  pickKeyFile(): Promise<boolean>;
   /** The phone's camera → import: the QR code it reads goes to the preview in Rust. `false` when
    *  the scan was left without one. `texts` are the camera page's words, in the app's language. */
   scanImport(texts: ScanTexts): Promise<boolean>;

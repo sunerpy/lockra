@@ -1,0 +1,4 @@
+Title,URL,Username,Password,Notes,OTPAuth
+example.com (example_user),https://example.com,example_user,safari-pass-1,"Example note
+More notes on new line",otpauth://totp/Example:example_user?secret=JBSWY3DPEHPK3PXP&issuer=Example
+bank.example (me),https://bank.example/,me,safari-pass-2,,

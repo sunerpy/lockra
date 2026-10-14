@@ -1,0 +1,113 @@
+{
+  "accounts": [
+    {
+      "attrs": { "accountName": "Alex", "name": "Alex", "avatar": "", "email": "alex@example.com", "uuid": "ACCOUNTUUID", "domain": "https://my.1password.com/" },
+      "vaults": [
+        {
+          "attrs": { "uuid": "VAULTPERSONAL", "desc": "", "avatar": "", "name": "Personal", "type": "P" },
+          "items": [
+            {
+              "uuid": "ITEMLOGIN1",
+              "favIndex": 1,
+              "createdAt": 1700000000,
+              "updatedAt": 1710000000,
+              "state": "active",
+              "categoryUuid": "001",
+              "details": {
+                "loginFields": [
+                  { "value": "alex@example.com", "id": "", "name": "email", "fieldType": "E", "designation": "username" },
+                  { "value": "op-pux-pass-1", "id": "", "name": "password", "fieldType": "P", "designation": "password" },
+                  { "value": "", "id": "", "name": "remember", "fieldType": "C" },
+                  { "value": "✓", "id": "", "name": "keep", "fieldType": "C" },
+                  { "value": "1234", "id": "", "name": "pin", "fieldType": "P" }
+                ],
+                "notesPlain": "Shared with the family",
+                "sections": [
+                  {
+                    "title": "Security",
+                    "name": "Section_1",
+                    "fields": [
+                      { "title": "one-time password", "id": "TOTP_ABCDEF", "value": { "totp": "otpauth://totp/Dropbox:alex@example.com?secret=GEZDGNBVGY3TQOJQ&issuer=Dropbox" }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } },
+                      { "title": "recovery key", "id": "recovery", "value": { "concealed": "ABCD-EFGH" }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } },
+                      { "title": "security question", "id": "question", "value": { "string": "first pet" }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } },
+                      { "title": "", "id": "contact", "value": { "email": { "email_address": "support@example.com", "provider": null } }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } },
+                      { "title": "empty", "id": "empty", "value": { "string": "" }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } },
+                      { "title": "renewal", "id": "renewal", "value": { "date": 1767225600 }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } }
+                    ]
+                  },
+                  { "title": "", "name": "linked items", "hideAddAnotherField": true }
+                ],
+                "passwordHistory": [{ "value": "older-pass", "time": 1690000000 }]
+              },
+              "overview": {
+                "subtitle": "alex@example.com",
+                "urls": [
+                  { "label": "", "url": "https://www.dropbox.com/login" },
+                  { "label": "website", "url": "https://dropbox.com" }
+                ],
+                "title": "Dropbox",
+                "url": "https://www.dropbox.com/login",
+                "ps": 100,
+                "pbe": 86.4,
+                "pgrng": true,
+                "tags": ["cloud", "family"]
+              }
+            },
+            {
+              "uuid": "ITEMPASSWORD",
+              "favIndex": 0,
+              "createdAt": 1700000000,
+              "updatedAt": 1700000000,
+              "state": "archived",
+              "categoryUuid": "005",
+              "details": { "loginFields": [], "notesPlain": "", "sections": [], "passwordHistory": [], "password": "op-pux-pass-2" },
+              "overview": { "subtitle": "", "title": "Garage door", "url": "", "ps": 50 }
+            },
+            {
+              "uuid": "ITEMCARD",
+              "favIndex": 0,
+              "createdAt": 1700000000,
+              "updatedAt": 1700000000,
+              "state": "active",
+              "categoryUuid": "002",
+              "details": { "loginFields": [], "sections": [{ "title": "", "name": "", "fields": [{ "title": "number", "id": "ccnum", "value": { "creditCardNumber": "4111111111111111" }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } }] }] },
+              "overview": { "subtitle": "4111", "title": "Visa", "url": "" }
+            }
+          ]
+        },
+        {
+          "attrs": { "uuid": "VAULTSHARED", "desc": "", "avatar": "", "name": "Family", "type": "U" },
+          "items": [
+            { "uuid": "ITEMNOTE", "favIndex": 0, "createdAt": 1, "updatedAt": 1, "state": "active", "categoryUuid": "003", "details": { "notesPlain": "secret recipe" }, "overview": { "title": "Recipe" } },
+            { "uuid": "ITEMID", "favIndex": 0, "createdAt": 1, "updatedAt": 1, "state": "active", "categoryUuid": "004", "details": {}, "overview": { "title": "Alex" } },
+            { "uuid": "ITEMSSH", "favIndex": 0, "createdAt": 1, "updatedAt": 1, "state": "active", "categoryUuid": "114", "details": {}, "overview": { "title": "Server key" } },
+            { "uuid": "ITEMODD", "categoryUuid": 7, "overview": { "title": "Odd" } },
+            {
+              "uuid": "ITEMLOGIN2",
+              "favIndex": 0,
+              "createdAt": 1,
+              "updatedAt": 1,
+              "state": "active",
+              "categoryUuid": "001",
+              "details": {
+                "loginFields": [],
+                "sections": [
+                  {
+                    "title": "",
+                    "name": "",
+                    "fields": [
+                      { "title": "username", "id": "u", "value": { "string": "family" }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } },
+                      { "title": "password", "id": "p", "value": { "concealed": "op-pux-pass-3" }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } },
+                      { "title": "code", "id": "TOTP_2", "value": { "totp": "GEZDGNBVGY3TQOJQ" }, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } }
+                    ]
+                  }
+                ]
+              },
+              "overview": { "subtitle": "", "title": "Streaming", "url": "https://tv.example.com" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+url,username,password,totp,extra,name,grouping,fav
+https://www.amazon.com/ap/signin,alex@example.com,lp-pass-1,MZXW6YTBOI,Gift cards in the drawer,Amazon,Shopping\Online,1
+http://sn,,,,"NoteType:Credit Card
+Name on Card:Alex",Visa,(none),0
+http://sn,,,,Door code is 1234,Door,(none),0
+https://router.local,admin,lp-pass-2,,,Router,(none),0

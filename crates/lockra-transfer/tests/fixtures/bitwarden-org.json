@@ -1,0 +1,32 @@
+{
+  "encrypted": false,
+  "collections": [
+    {
+      "id": "c1",
+      "organizationId": "o1",
+      "name": "Engineering",
+      "externalId": null
+    }
+  ],
+  "items": [
+    {
+      "id": "i1",
+      "organizationId": "o1",
+      "collectionIds": [
+        "c1"
+      ],
+      "type": 1,
+      "name": "CI",
+      "favorite": false,
+      "login": {
+        "uris": [
+          {
+            "uri": "https://ci.example.com"
+          }
+        ],
+        "username": "bot",
+        "password": "bw-org-pass"
+      }
+    }
+  ]
+}

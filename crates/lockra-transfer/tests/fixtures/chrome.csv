@@ -1,0 +1,5 @@
+name,url,username,password,note
+GitHub,https://github.com/login,octocat,chrome-pass-1,"First line, with a comma
+Second line with ""quotes"""
+,https://www.example.com/,user@example.com,chrome-pass-2,
+,android://Kx9vQaBc==@com.example.app/,app-user,chrome-pass-3,

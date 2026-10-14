@@ -1,0 +1,5 @@
+folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp
+Work,1,login,GitHub,Work account,"PIN: 4242
+Customer no.: C-77",1,"https://github.com,https://gist.github.com",octocat,bw-pass-1,JBSWY3DPEHPK3PXP
+,,login,Mail,,,0,https://mail.example.com,me@example.com,bw-pass-2,
+Personal,,note,Wi-Fi at home,The password is on the router,,0,,,,

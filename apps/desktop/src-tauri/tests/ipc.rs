@@ -206,6 +206,20 @@ fn the_code_stream_subscribes_through_a_channel() {
 }
 
 #[test]
+fn a_key_file_dialog_opens_only_for_a_keepass_database_waiting_in_the_import() {
+    let shell = shell();
+    // No vault, nothing waiting, a backup waiting: the core answers before any dialog opens.
+    assert_eq!(shell.invoke("import_pick_key_file", json!({})).unwrap_err()["code"], "no_vault");
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    assert_eq!(shell.invoke("import_pick_key_file", json!({})).unwrap_err()["code"], "no_import");
+    let backup = shell._dir.path().join("mine.lockrabackup");
+    tauri::async_runtime::block_on(shell.core().backup_to(backup.clone(), None)).unwrap();
+    tauri::async_runtime::block_on(shell.core().import_files(vec![backup])).unwrap();
+    assert_eq!(shell.state()["import"]["awaiting"]["kind"], "backup");
+    assert_eq!(shell.invoke("import_pick_key_file", json!({})).unwrap_err()["code"], "no_import");
+}
+
+#[test]
 fn the_password_is_checked_before_a_plain_export_opens_its_dialog() {
     let shell = shell();
     shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();

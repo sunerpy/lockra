@@ -80,15 +80,18 @@ async fn the_state_says_which_features_this_build_offers() {
     assert_eq!(crate::ui::Features::default().passwords, cfg!(debug_assertions), "a release build turns it on when it ships");
 }
 
+/// A build without password management cannot show the logins in the preview (PR 6 shows them
+/// where it is on: tests/import_logins.rs).
 #[tokio::test(start_paused = true)]
-async fn a_merged_restore_of_a_backup_with_logins_is_refused_and_stays_open_for_a_replace() {
+async fn without_password_management_a_merged_restore_of_a_backup_with_logins_is_refused_and_stays_open_for_a_replace() {
     let source = Harness::unlocked().await;
     source.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
     add_login(&source, "GitHub", "in the backup");
     let file = source.dir.path().join("with-logins.lockrabackup");
     source.core.backup_to(file.clone(), None).await.unwrap();
 
-    let h = Harness::unlocked().await;
+    let h = harness_with_features(crate::ui::Features { passwords: false });
+    h.core.create_vault(pw(MASTER)).await.unwrap();
     h.core.add_uri(&otpauth("Mine", "m", "MFRGGZDF")).unwrap();
     h.core.restore_open(file.clone()).await.unwrap();
     // Not half restored: the codes would arrive and the logins not, and say nothing.

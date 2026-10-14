@@ -53,11 +53,12 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 10] = [
+pub const COMMANDS: [&str; 11] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
+    "import_pick_key_file",
     "backup_save",
     "backup_pick_dir",
     "restore_pick",
@@ -210,6 +211,7 @@ async fn import_pick_files<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>,
             Some("images") => builder.add_filter("Images", &["png", "jpg", "jpeg", "webp"]),
             Some("text") => builder.add_filter("Text", &["txt"]),
             Some("backup") => builder.add_filter("Lockra", &["lockrabackup", "lockra"]),
+            Some("logins") => builder.add_filter("Password exports", &["csv", "json", "1pux", "kdbx"]),
             _ => builder,
         };
         builder.blocking_pick_files()
@@ -218,6 +220,19 @@ async fn import_pick_files<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>,
     let Some(files) = picked else { return Ok(false) };
     let paths: Vec<PathBuf> = files.into_iter().filter_map(to_path).collect();
     core.import_files(paths).await?;
+    Ok(true)
+}
+
+/// Choose the key file of the KeePass database waiting in the import: the open dialog (only when
+/// one waits), then the core reads the file and keeps the key it brings, never the file or its
+/// path. `false` when cancelled.
+#[tauri::command]
+async fn import_pick_key_file<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<bool, CoreError> {
+    core.import_awaits_key_file()?;
+    let dialog = app.dialog().clone();
+    let picked = on_dialog_thread(move || dialog.file().blocking_pick_file()).await?;
+    let Some(path) = picked.and_then(to_path) else { return Ok(false) };
+    core.import_key_file_from(path).await?;
     Ok(true)
 }
 
@@ -382,6 +397,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             codes_subscribe,
             codes_unsubscribe,
             import_pick_files,
+            import_pick_key_file,
             backup_save,
             backup_pick_dir,
             restore_pick,

@@ -1,7 +1,8 @@
-// Add accounts: scan a QR code, read photos of them, import files, paste otpauth links, read the
+// Add accounts: scan a QR code, read photos of them, import files (with password management, the
+// exports of browsers, password managers and KeePass too), paste otpauth links, read the
 // clipboard (all go through the import preview, where nothing is added before the user confirms),
 // or type one in by hand.
-import { Button, Card, Textarea, useDispatch, useT } from "@lockra/ui";
+import { Button, Card, Textarea, useDispatch, useT, useUiState } from "@lockra/ui";
 import { useState } from "react";
 import { useNav } from "../app/nav";
 import { usePhoneImport } from "../app/phone-import";
@@ -12,6 +13,7 @@ export function Add() {
   const t = useT();
   const nav = useNav();
   const dispatch = useDispatch();
+  const state = useUiState();
   const { scan, pickImages, pickFiles } = usePhoneImport();
   const [links, setLinks] = useState("");
   const fromPhone = async (read: () => Promise<boolean>) => {
@@ -48,7 +50,9 @@ export function Add() {
           <ActionRow
             icon="fileText"
             label={t("mobile.add.files")}
-            hint={t("mobile.add.filesHint")}
+            hint={t(
+              state.features.passwords ? "mobile.add.filesHintLogins" : "mobile.add.filesHint",
+            )}
             onClick={() => void fromPhone(pickFiles)}
             testId="add-files"
           />

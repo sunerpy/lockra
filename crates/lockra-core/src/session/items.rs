@@ -35,7 +35,7 @@ fn purpose_of(field: &Field) -> Purpose {
 }
 
 impl Core {
-    fn passwords_on(&self) -> CoreResult<()> {
+    pub(super) fn passwords_on(&self) -> CoreResult<()> {
         if self.shared.config.features.passwords { Ok(()) } else { Err(ErrorCode::FeatureUnavailable.into()) }
     }
 

@@ -221,6 +221,12 @@ export const REJECT_REASONS = [
   "invalid_secret",
   "encrypted_secret",
   "unsupported_account_type",
+  "card_item",
+  "identity_item",
+  "note_item",
+  "other_item",
+  "encrypted_export",
+  "too_large",
 ] as const;
 export const rejectReasonSchema = z.enum(REJECT_REASONS);
 export type RejectReason = z.infer<typeof rejectReasonSchema>;
@@ -279,18 +285,39 @@ export const importSourceSchema = z.discriminatedUnion("type", [
 ]);
 export type ImportSource = z.infer<typeof importSourceSchema>;
 
+/** What differs between a login of the import and the vault's: the password, the code linked,
+ *  or (a backup's login) the login itself since. */
+export const CONFLICT_REASONS = ["password", "code", "changed"] as const;
+export const conflictReasonSchema = z.enum(CONFLICT_REASONS);
+export type ConflictReason = z.infer<typeof conflictReasonSchema>;
+
 export const candidateStatusSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("new") }),
   z.object({ type: z.literal("exists"), entry_id: idSchema }),
   z.object({ type: z.literal("conflict"), entry_id: idSchema }),
   z.object({ type: z.literal("duplicate") }),
   z.object({ type: z.literal("unsupported"), reason: rejectReasonSchema }),
+  /** A login the vault holds already. */
+  z.object({ type: z.literal("login_exists"), item_id: idSchema }),
+  /** A login whose vault version differs; replacing is the default. */
+  z.object({ type: z.literal("login_conflict"), item_id: idSchema, reason: conflictReasonSchema }),
 ]);
 export type CandidateStatus = z.infer<typeof candidateStatusSchema>;
 
 export const CANDIDATE_ACTIONS = ["add", "skip", "replace"] as const;
 export const candidateActionSchema = z.enum(CANDIDATE_ACTIONS);
 export type CandidateAction = z.infer<typeof candidateActionSchema>;
+
+/** A login the import found: its title, user name and site; its secrets stay in the core. */
+export const loginCandidateSchema = z.object({
+  title: z.string(),
+  username: z.string(),
+  /** The host of its first web address; empty when it has none. */
+  host: z.string(),
+  /** The candidate of its code, when it brings one. */
+  totp: z.number().int().nonnegative().nullable(),
+});
+export type LoginCandidate = z.infer<typeof loginCandidateSchema>;
 
 export const candidateViewSchema = z.object({
   id: z.number().int().nonnegative(),
@@ -304,6 +331,8 @@ export const candidateViewSchema = z.object({
   line: z.number().int().nullable(),
   status: candidateStatusSchema,
   default_action: candidateActionSchema,
+  /** A login, not an account. */
+  login: loginCandidateSchema.nullable(),
 });
 export type CandidateView = z.infer<typeof candidateViewSchema>;
 
@@ -315,10 +344,20 @@ export const googleBatchViewSchema = z.object({
 });
 export type GoogleBatchView = z.infer<typeof googleBatchViewSchema>;
 
+export const AWAITING_KINDS = ["backup", "kdbx"] as const;
+/** A file of the import waiting for its password: a Lockra backup, or a KeePass database, which
+ *  may take a key file too (chosen through `pickKeyFile`; its name only comes here). */
+export const awaitingViewSchema = z.object({
+  name: z.string(),
+  kind: z.enum(AWAITING_KINDS),
+  key_file: z.string().nullable(),
+});
+export type AwaitingView = z.infer<typeof awaitingViewSchema>;
+
 export const importViewSchema = z.object({
   candidates: z.array(candidateViewSchema),
   google_batches: z.array(googleBatchViewSchema),
-  awaiting_password: z.string().nullable(),
+  awaiting: awaitingViewSchema.nullable(),
 });
 export type ImportView = z.infer<typeof importViewSchema>;
 
@@ -349,6 +388,7 @@ export const ERROR_CODES = [
   "import_empty",
   "import_unrecognized",
   "import_unreadable",
+  "import_key_file_invalid",
   "clipboard_empty",
   "clipboard_failed",
   "camera_denied",
@@ -886,6 +926,15 @@ export const uiStateSchema = z.object({
 });
 export type UiState = z.infer<typeof uiStateSchema>;
 
+/** What an import's commit did with the logins: added, replaced in the vault (a password, a code
+ *  linked, a backup's version), and left out (with the other apps' items it does not take). */
+export const loginOutcomeSchema = z.object({
+  added: z.number().int(),
+  replaced: z.number().int(),
+  skipped: z.number().int(),
+});
+export type LoginOutcome = z.infer<typeof loginOutcomeSchema>;
+
 export const noticeSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("copied"),
@@ -935,6 +984,8 @@ export const noticeSchema = z.discriminatedUnion("type", [
     added: z.number().int(),
     replaced: z.number().int(),
     skipped: z.number().int(),
+    /** What became of the logins (and of the other apps' items left out). */
+    logins: loginOutcomeSchema,
   }),
   z.object({ type: z.literal("file_unrecognized"), name: z.string() }),
   z.object({ type: z.literal("file_unreadable"), name: z.string() }),
@@ -1016,6 +1067,7 @@ export const importOutcomeSchema = z.object({
   added: z.number().int(),
   replaced: z.number().int(),
   skipped: z.number().int(),
+  logins: loginOutcomeSchema,
 });
 export type ImportOutcome = z.infer<typeof importOutcomeSchema>;
 
@@ -1256,6 +1308,8 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("import_text"), text: z.string() }),
   z.object({ command: z.literal("import_clipboard") }),
   z.object({ command: z.literal("import_backup_password"), password }),
+  /** Forget the key file chosen for the KeePass database waiting in the import. */
+  z.object({ command: z.literal("import_key_file_clear") }),
   z.object({ command: z.literal("import_commit"), choices: z.array(choiceSchema).optional() }),
   z.object({ command: z.literal("import_cancel") }),
   z.object({
@@ -1406,6 +1460,7 @@ export const SHELL_COMMAND_NAMES = [
   "codes_subscribe",
   "codes_unsubscribe",
   "import_pick_files",
+  "import_pick_key_file",
   "backup_save",
   "backup_pick_dir",
   "restore_pick",
@@ -1420,6 +1475,7 @@ export const PHONE_COMMAND_NAMES = [
   "codes_subscribe",
   "codes_unsubscribe",
   "import_pick_files",
+  "import_pick_key_file",
   "import_scan",
   "backup_save",
   "restore_pick",

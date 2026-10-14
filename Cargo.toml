@@ -34,6 +34,9 @@ unwrap_used = "warn"
 expect_used = "warn"
 
 [workspace.dependencies]
+# KeePass databases (crates/lockra-transfer/src/kdbx): AES-256-CBC for the payload and the AES-KDF,
+# with `cbc`; the versions the keepass crate builds on, which writes the tests' databases.
+aes = "=0.9.3"
 # Key derivation for the master password (docs/formats.md): Argon2id, RFC 9106.
 argon2 = { version = "=0.6.0", default-features = false, features = ["alloc", "zeroize"] }
 # The clipboard: codes are written with the "exclude from history" hints (docs/security.md).
@@ -45,12 +48,19 @@ arboard = { version = "=3.6.1", default-features = false, features = [
 bytes = "=1.12.1"
 cap-fs-ext = "=4.0.3"
 cap-std = "=4.0.3"
+cbc = "=0.2.1"
+# KeePass: ChaCha20 for the payload and the protected values.
+chacha20 = "=0.10.2"
 chacha20poly1305 = { version = "=0.11.0", default-features = false, features = ["alloc"] }
+# Browsers' and password managers' CSV exports (crates/lockra-transfer/src/csv_logins.rs).
+csv = "=1.4.0"
 # Base64 in its standard and URL-safe forms (Google's migration payload, Microsoft's secrets).
 data-encoding = "=2.11.1"
 getrandom = "=0.3.4"
 # The sync keyring and the per-object keys (docs/formats.md, "Sync"): HKDF-SHA256, RFC 5869.
 hkdf = "=0.13.0"
+# KeePass's gzip and 1Password's zip (deflate), read up to a limit; the Rust backend.
+flate2 = "=1.1.10"
 # Reading a sync object as a stream, to stop at its size (crates/lockra-remote).
 futures-util = { version = "=0.3.34", default-features = false }
 hmac = "=0.13.0"
@@ -61,6 +71,8 @@ hyper = { version = "=1.11.1", default-features = false, features = ["server", "
 hyper-util = { version = "=0.1.21", default-features = false, features = ["tokio"] }
 # Screenshots and photos of export QR codes: decoding only, PNG / JPEG / WebP.
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
+# Tests only: it writes the KeePass databases lockra-transfer's own reader is checked against.
+keepass = { version = "=0.15.2", default-features = false }
 keyring = "=4.2.0"
 # The sync storage (crates/lockra-remote): S3-compatible and WebDAV through one client. No default
 # features: only the two services, reqwest on rustls without its own crypto provider (ring, as the
@@ -92,6 +104,8 @@ reqwest = { version = "=0.13.5", default-features = false, features = [
 # `#[derive(prost::Message)]`, so there is no protoc and no build script.
 prost = { version = "=0.14.4", default-features = false, features = ["derive", "std"] }
 qrcode = { version = "=0.14.1", default-features = false, features = ["svg"] }
+# KeePass's XML and its key files, read as events (no serde, no DTD).
+quick-xml = "=0.42.0"
 # Saved URLs with the regular-expression rule (crates/lockra-autofill), compiled with a size limit.
 regex = "=1.13.1"
 rxing = { version = "=0.9.3", default-features = false, features = [
@@ -102,7 +116,11 @@ rxing = { version = "=0.9.3", default-features = false, features = [
 ] }
 # Microsoft Authenticator's PhoneFactor database; `bundled` builds SQLite from C on every target.
 rusqlite = { version = "=0.40.2", features = ["bundled"] }
+# KeePass's Argon2d and Argon2id, its lanes on threads of their own (KeePassXC sets one per core).
+rust-argon2 = "=3.0.0"
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std"] }
+# KeePass: Salsa20 for the protected values of older databases.
+salsa20 = "=0.11.0"
 # Release versions compared on the phone (its update check).
 semver = "=1.0.28"
 serde = { version = "=1.0.229", features = ["derive"] }
@@ -134,11 +152,15 @@ tokio = { version = "=1.53.1", features = [
 ] }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
+# KeePass: Twofish-CBC for the payload (a cipher KeePassXC offers).
+twofish = "=0.8.0"
 url = "=2.5.8"
 # Grapheme clusters: an account's mark is at most two characters as people count them.
 unicode-segmentation = "=1.13.3"
 uuid = { version = "=1.26.1", features = ["v4", "serde"] }
 zeroize = { version = "=1.9.0", features = ["derive", "serde"] }
+# 1Password's 1PUX export: reading deflated entries only (flate2's Rust backend, above).
+zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2"] }
 # Password strength (crates/lockra-autofill); without `builder`, which only adds derive_builder.
 zxcvbn = { version = "=3.1.1", default-features = false }
 

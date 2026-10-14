@@ -17,7 +17,7 @@ use lockra_sync::{
     Invite, Outcome as SyncOutcome, RemoteStore, Space, SpaceAccess, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, devices_dir, find_space, merge,
     open_keyring, open_space, remove_device, seal_keyring, step, step_with,
 };
-use lockra_transfer::{Item, Origin, detect, microsoft, qr, text};
+use lockra_transfer::{Found, Item, Origin, bitwarden, csv_logins, detect, kdbx, microsoft, onepux, qr, text};
 use lockra_vault::{DeviceCheck, DeviceKey, DeviceSlot, FileKind, KdfCost, Opened, Sealed, read_header, write_atomic};
 use parking_lot::{Mutex, MutexGuard};
 use tokio::sync::{Notify, broadcast};
@@ -30,7 +30,7 @@ use crate::browser::BrowserRuntime;
 use crate::entry::{Entry, EntryDraft, EntryPatch, PinnedGroup, VAULT_DATA_FORMAT, VaultData, clean_mark, clean_name, random_device};
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
-use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
+use crate::import::{Awaiting, Choice, ImportSession, Outcome};
 use crate::logins::SiteRuleView;
 use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, StorageWatch, SyncTransport, Updater};
 use crate::settings::{Settings, SettingsStore, SortOrder};
@@ -39,9 +39,9 @@ use crate::sync::{
     SyncLocal, Working, config_error, device_name, storage_view, sync_error,
 };
 use crate::ui::{
-    BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, Features,
-    GeneratorStatus, ImportSource, InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, SyncInvite, SyncKeyView,
-    SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    AwaitingKind, BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget,
+    Features, GeneratorStatus, ImportSource, InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, SyncInvite,
+    SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
 
@@ -997,7 +997,8 @@ impl Core {
     /// Read picked or dropped files into the import preview.
     pub async fn import_files(&self, paths: Vec<PathBuf>) -> CoreResult<()> {
         self.ensure_unlocked()?;
-        let found = blocking(move || Ok(read_import_files(&paths))).await?;
+        let logins = self.shared.config.features.passwords;
+        let found = blocking(move || Ok(read_import_files(&paths, logins))).await?;
         self.stage_files(found)
     }
 
@@ -1005,6 +1006,7 @@ impl Core {
     /// or dropped ones: the photo picker hands over their bytes, not a path.
     pub async fn import_picked(&self, files: Vec<PickedFile>) -> CoreResult<()> {
         self.ensure_unlocked()?;
+        let logins = self.shared.config.features.passwords;
         let found = blocking(move || {
             let mut notices = Vec::new();
             let mut read = Vec::new();
@@ -1015,7 +1017,7 @@ impl Core {
                     read.push((file.name, file.bytes));
                 }
             }
-            Ok(read_import_bytes(read, notices))
+            Ok(read_import_bytes(read, notices, logins))
         })
         .await?;
         self.stage_files(found)
@@ -1110,25 +1112,111 @@ impl Core {
         Ok(())
     }
 
-    /// Open the Lockra backup waiting in the import with its password and list its entries.
+    /// Open the file waiting in the import with its password and list what it holds: a Lockra
+    /// backup's entries (and its logins, where password management is on), or a KeePass
+    /// database's entries, with the key file chosen for it.
     pub async fn import_backup_password(&self, password: Zeroizing<String>) -> CoreResult<()> {
-        let (bytes, name) = {
+        let passwords = self.shared.config.features.passwords;
+        let (bytes, name, kind, key_file) = {
             let st = self.lock();
             let awaiting = unlocked(&st)?.import.as_ref().and_then(|i| i.awaiting.as_ref()).ok_or(ErrorCode::NoImport)?;
-            (awaiting.bytes.clone(), awaiting.name.clone())
+            (awaiting.bytes.clone(), awaiting.name.clone(), awaiting.kind, awaiting.key_file.as_ref().map(|(_, key)| Arc::clone(key)))
         };
-        let data = blocking(move || {
-            let opened = Sealed::open_with_password(&bytes, password.as_bytes())?;
-            VaultData::open(&opened.payload)
-        })
-        .await?;
+        let source = ImportSource::File { name };
+        let staged: Staged = match kind {
+            AwaitingKind::Backup => {
+                let data = blocking(move || {
+                    let opened = Sealed::open_with_password(&bytes, password.as_bytes())?;
+                    VaultData::open(&opened.payload)
+                })
+                .await?;
+                // Without password management its logins have nowhere to go: refused rather than
+                // half imported, the backup still waiting.
+                if !passwords && data.holds_items() {
+                    return Err(ErrorCode::FeatureUnavailable.into());
+                }
+                Staged::Backup(data.entries, data.items)
+            }
+            AwaitingKind::Kdbx => {
+                let with_key_file = key_file.is_some();
+                let found = blocking(move || {
+                    kdbx::read(&bytes, &password, key_file.as_deref()).map_err(|error| {
+                        CoreError::from(match error {
+                            kdbx::KdbxError::WrongKey if with_key_file => ErrorCode::ImportKeyFileInvalid,
+                            kdbx::KdbxError::WrongKey => ErrorCode::WrongPassword,
+                            kdbx::KdbxError::Unsupported | kdbx::KdbxError::TooCostly | kdbx::KdbxError::Damaged | kdbx::KdbxError::TooLarge => {
+                                ErrorCode::ImportUnreadable
+                            }
+                        })
+                    })
+                })
+                .await?;
+                Staged::Logins(found)
+            }
+        };
         {
             let mut st = self.lock();
             let import = unlocked_mut(&mut st)?.import.as_mut().ok_or(ErrorCode::NoImport)?;
             import.awaiting = None;
-            import.add_backup(&ImportSource::File { name }, data.entries);
+            match staged {
+                Staged::Backup(entries, items) => import.add_backup(&source, entries, items),
+                Staged::Logins(found) => import.add_logins(&source, found),
+            }
         }
         self.changed();
+        Ok(())
+    }
+
+    /// Whether a KeePass database waits in the import, for a key file to go with it; a shell asks
+    /// before it opens its file dialog.
+    pub fn import_awaits_key_file(&self) -> CoreResult<()> {
+        self.passwords_on()?;
+        let st = self.lock();
+        let awaiting = unlocked(&st)?.import.as_ref().and_then(|i| i.awaiting.as_ref()).ok_or(ErrorCode::NoImport)?;
+        if awaiting.kind == AwaitingKind::Kdbx { Ok(()) } else { Err(ErrorCode::NoImport.into()) }
+    }
+
+    /// Read the key file at `path` (picked in the shell's dialog) for the KeePass database waiting
+    /// in the import.
+    pub async fn import_key_file_from(&self, path: PathBuf) -> CoreResult<()> {
+        self.import_awaits_key_file()?;
+        let name = file_name(&path);
+        let bytes = blocking(move || read_limited(&path).map_err(|_| CoreError::from(ErrorCode::ImportKeyFileInvalid))).await?;
+        self.import_key_file(PickedFile { name, bytes: Zeroizing::new(bytes) }).await
+    }
+
+    /// Take `file` as the key file of the KeePass database waiting in the import (the phone's
+    /// picker hands over its bytes): its key is kept, not the file, and its name for the preview.
+    pub async fn import_key_file(&self, file: PickedFile) -> CoreResult<()> {
+        self.import_awaits_key_file()?;
+        if file.bytes.len() as u64 > MAX_IMPORT_BYTES {
+            return Err(ErrorCode::ImportKeyFileInvalid.into());
+        }
+        let PickedFile { name, bytes } = file;
+        let key = blocking(move || kdbx::KeyFile::from_bytes(&bytes).map_err(|_| CoreError::from(ErrorCode::ImportKeyFileInvalid))).await?;
+        {
+            let mut st = self.lock();
+            let awaiting = unlocked_mut(&mut st)?.import.as_mut().and_then(|i| i.awaiting.as_mut()).ok_or(ErrorCode::NoImport)?;
+            if awaiting.kind != AwaitingKind::Kdbx {
+                return Err(ErrorCode::NoImport.into());
+            }
+            awaiting.key_file = Some((name, Arc::new(key)));
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// Forget the key file chosen for the KeePass database waiting in the import.
+    pub fn import_key_file_clear(&self) -> CoreResult<()> {
+        self.import_awaits_key_file()?;
+        let cleared = {
+            let mut st = self.lock();
+            let awaiting = unlocked_mut(&mut st)?.import.as_mut().and_then(|i| i.awaiting.as_mut()).ok_or(ErrorCode::NoImport)?;
+            awaiting.key_file.take().is_some()
+        };
+        if cleared {
+            self.changed();
+        }
         Ok(())
     }
 
@@ -1142,9 +1230,13 @@ impl Core {
             let before = session.data.clone();
             let outcome = import.commit(&mut session.data, choices, now);
             self.save(&mut st, true, move |s| s.data = before)?;
+            // Logins added or changed: the webview asks for the list again.
+            if outcome.logins.added + outcome.logins.replaced > 0 {
+                touch_items(&mut st);
+            }
             outcome
         };
-        self.notice(Notice::Imported { added: outcome.added, replaced: outcome.replaced, skipped: outcome.skipped });
+        self.notice(Notice::Imported { added: outcome.added, replaced: outcome.replaced, skipped: outcome.skipped, logins: outcome.logins });
         self.changed();
         Ok(outcome)
     }
@@ -1349,10 +1441,10 @@ impl Core {
         let now = self.now_ms();
         let notice = {
             let mut st = self.lock();
-            // A merge goes through the import preview, which does not show logins yet: a backup
-            // with logins is refused rather than half restored, and stays open for a restore that
-            // replaces.
-            if mode == RestoreMode::Merge && matches!(st.phase, PhaseState::Unlocked(_)) && !(data.items.is_empty() && data.item_tombstones.is_empty()) {
+            // A merge goes through the import preview, which shows logins only where password
+            // management is on: elsewhere a backup with logins is refused rather than half
+            // restored, and stays open for a restore that replaces.
+            if mode == RestoreMode::Merge && matches!(st.phase, PhaseState::Unlocked(_)) && !self.shared.config.features.passwords && data.holds_items() {
                 return Err(ErrorCode::FeatureUnavailable.into());
             }
             let restore = st.restore.take().ok_or(ErrorCode::NoRestore)?;
@@ -1391,8 +1483,14 @@ impl Core {
                             self.save(&mut st, true, move |s| s.data.site_rules = before)?;
                             touch_items(&mut st);
                         }
+                        // The logins go to the preview with the accounts; their deletions are left
+                        // out, as the accounts' are.
                         let session = unlocked_mut(&mut st)?;
-                        session.import.get_or_insert_with(ImportSession::default).add_backup(&ImportSource::File { name: restore.name }, data.entries);
+                        session.import.get_or_insert_with(ImportSession::default).add_backup(
+                            &ImportSource::File { name: restore.name },
+                            data.entries,
+                            data.items,
+                        );
                         None
                     }
                     RestoreMode::Replace => {
@@ -2818,8 +2916,21 @@ async fn scheduler(shared: Arc<Shared>) {
 
 /// One source's findings, applied to the import session under the lock.
 enum Batch {
-    Items { source: ImportSource, origin: Origin, items: Vec<Item> },
-    Google { source: ImportSource, batch: lockra_transfer::google::Batch, items: Vec<Item> },
+    Items {
+        source: ImportSource,
+        origin: Origin,
+        items: Vec<Item>,
+    },
+    Google {
+        source: ImportSource,
+        batch: lockra_transfer::google::Batch,
+        items: Vec<Item>,
+    },
+    /// A browser's or a password manager's export.
+    Logins {
+        source: ImportSource,
+        found: Vec<Found>,
+    },
 }
 
 impl Batch {
@@ -2827,18 +2938,25 @@ impl Batch {
         match self {
             Self::Items { source, origin, items } => import.add(&source, origin, items),
             Self::Google { source, batch, items } => import.add_google(&source, batch, items),
+            Self::Logins { source, found } => import.add_logins(&source, found),
         }
     }
 
     /// The items name no line of their source.
     fn forget_lines(&mut self) {
-        let (Self::Items { items, .. } | Self::Google { items, .. }) = self;
+        let (Self::Items { items, .. } | Self::Google { items, .. }) = self else { return };
         for item in items {
             if let Item::Rejected { line, .. } = item {
                 *line = None;
             }
         }
     }
+}
+
+/// What a file waiting for its password held, once opened.
+enum Staged {
+    Backup(Vec<Entry>, Vec<crate::item::VaultItem>),
+    Logins(Vec<Found>),
 }
 
 /// A file picked on the phone: its name and what it holds.
@@ -2851,7 +2969,7 @@ pub struct PickedFile {
 
 struct FoundFiles {
     batches: Vec<Batch>,
-    awaiting: Option<AwaitingBackup>,
+    awaiting: Option<Awaiting>,
     notices: Vec<Notice>,
 }
 
@@ -2865,7 +2983,7 @@ fn text_batches(source: &ImportSource, text: &str) -> Vec<Batch> {
         .collect()
 }
 
-fn read_import_files(paths: &[PathBuf]) -> FoundFiles {
+fn read_import_files(paths: &[PathBuf], logins: bool) -> FoundFiles {
     let mut notices = Vec::new();
     let mut read = Vec::new();
     for path in paths {
@@ -2875,16 +2993,18 @@ fn read_import_files(paths: &[PathBuf]) -> FoundFiles {
             Err(_) => notices.push(Notice::FileUnreadable { name }),
         }
     }
-    read_import_bytes(read, notices)
+    read_import_bytes(read, notices, logins)
 }
 
 /// What the files hold, by what their bytes are; `notices` already says which could not be read.
-fn read_import_bytes(read: Vec<(String, Zeroizing<Vec<u8>>)>, notices: Vec<Notice>) -> FoundFiles {
+/// With `logins` (password management on), the exports of browsers, password managers and
+/// KeePass are recognised too, before the lists of links.
+fn read_import_bytes(read: Vec<(String, Zeroizing<Vec<u8>>)>, notices: Vec<Notice>, logins: bool) -> FoundFiles {
     let mut found = FoundFiles { batches: Vec::new(), awaiting: None, notices };
     let files: Vec<(String, Zeroizing<Vec<u8>>, detect::Kind)> = read
         .into_iter()
         .map(|(name, bytes)| {
-            let kind = detect::detect(&bytes);
+            let kind = if logins { detect::detect_with_logins(&bytes) } else { detect::detect(&bytes) };
             (name, bytes, kind)
         })
         .collect();
@@ -2916,9 +3036,29 @@ fn read_import_bytes(read: Vec<(String, Zeroizing<Vec<u8>>)>, notices: Vec<Notic
             },
             detect::Kind::Lockra => {
                 if found.awaiting.is_none() {
-                    found.awaiting = Some(AwaitingBackup { name: name.clone(), bytes: bytes.clone() });
+                    found.awaiting = Some(Awaiting::new(name.clone(), bytes.clone(), AwaitingKind::Backup));
                 }
             }
+            // A KeePass database waits for its password like a backup; one Lockra will not open (an
+            // older version, a key derivation past its limits) is said at once.
+            detect::Kind::Kdbx => match kdbx::check(bytes) {
+                Ok(()) if found.awaiting.is_none() => found.awaiting = Some(Awaiting::new(name.clone(), bytes.clone(), AwaitingKind::Kdbx)),
+                Ok(()) => {}
+                Err(_) => found.notices.push(Notice::FileUnreadable { name: name.clone() }),
+            },
+            detect::Kind::Zip => match onepux::read(bytes) {
+                Ok(logins) => found.batches.push(Batch::Logins { source, found: logins }),
+                Err(onepux::OnePuxError::NotOnePux) => found.notices.push(Notice::FileUnrecognized { name: name.clone() }),
+                Err(_) => found.notices.push(Notice::FileUnreadable { name: name.clone() }),
+            },
+            detect::Kind::Bitwarden => match bitwarden::read(bytes) {
+                Ok(logins) => found.batches.push(Batch::Logins { source, found: logins }),
+                Err(_) => found.notices.push(Notice::FileUnreadable { name: name.clone() }),
+            },
+            detect::Kind::Csv(format) => match csv_logins::read(bytes, *format) {
+                Ok(logins) => found.batches.push(Batch::Logins { source, found: logins }),
+                Err(_) => found.notices.push(Notice::FileUnreadable { name: name.clone() }),
+            },
             detect::Kind::SqliteWal => {}
             detect::Kind::Unknown => found.notices.push(Notice::FileUnrecognized { name: name.clone() }),
         }
