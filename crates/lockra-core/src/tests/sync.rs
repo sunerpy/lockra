@@ -442,7 +442,7 @@ async fn what_a_run_brings_is_told_with_the_devices_it_came_from() {
     let mut phone = device(&transport);
     phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
-    assert_eq!(brought(&mut phone), [Notice::SyncBrought { added: 3, updated: 0, removed: 0, devices: vec!["Desktop".into()] }]);
+    assert_eq!(brought(&mut phone), [Notice::SyncBrought { added: 3, updated: 0, removed: 0, logins: 0, devices: vec!["Desktop".into()] }]);
 
     // A rename, a deletion and a new account on the phone, told on the desktop.
     let id_of = |h: &Harness, issuer: &str| h.core.state().entries.iter().find(|e| e.issuer == issuer).unwrap().id;
@@ -454,7 +454,7 @@ async fn what_a_run_brings_is_told_with_the_devices_it_came_from() {
     desktop.core.sync_now().unwrap();
     settle().await;
     assert_eq!(issuers(&desktop), ["GitHub Enterprise", "Mail", "Wiki"]);
-    assert_eq!(brought(&mut desktop), [Notice::SyncBrought { added: 1, updated: 1, removed: 1, devices: vec!["Phone".into()] }]);
+    assert_eq!(brought(&mut desktop), [Notice::SyncBrought { added: 1, updated: 1, removed: 1, logins: 0, devices: vec!["Phone".into()] }]);
     // A run that brings nothing tells nothing.
     desktop.core.sync_now().unwrap();
     settle().await;
@@ -467,7 +467,7 @@ async fn what_a_run_brings_is_told_with_the_devices_it_came_from() {
     desktop.core.sync_now().unwrap();
     settle().await;
     assert!(matches!(space(&desktop).status, SyncStatus::Failed { .. }), "{:?}", space(&desktop).status);
-    assert_eq!(brought(&mut desktop), [Notice::SyncBrought { added: 1, updated: 0, removed: 0, devices: vec![] }]);
+    assert_eq!(brought(&mut desktop), [Notice::SyncBrought { added: 1, updated: 0, removed: 0, logins: 0, devices: vec![] }]);
     desktop.core.sync_now().unwrap();
     settle().await;
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));

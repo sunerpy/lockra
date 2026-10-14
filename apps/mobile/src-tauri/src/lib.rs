@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use lockra_bridge::{UiCommand, dispatch};
 use lockra_core::ports::{Biometrics, Clipboard, CodeSink, PortError, SecretStore, SyncTransport, SystemClock, Updater};
-use lockra_core::ui::{CodesFrame, Platform, UI_EVENT_NAME, UiEvent};
+use lockra_core::ui::{CodesFrame, Features, Platform, UI_EVENT_NAME, UiEvent};
 use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports, StorageConfig};
 use serde_json::Value;
 use tauri::ipc::Channel;
@@ -288,8 +288,14 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let secrets: Arc<dyn SecretStore> = options.secrets.clone().unwrap_or_else(|| Arc::new(keystore));
             let clipboard: Arc<dyn Clipboard> = options.clipboard.clone().unwrap_or_else(|| Arc::new(clipboard::PhoneClipboard::new(app.handle().clone())));
             let biometrics: Arc<dyn Biometrics> = options.biometrics.clone().unwrap_or_else(|| Arc::new(fingerprint));
-            let config =
-                CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
+            let config = CoreConfig {
+                data_dir,
+                config_dir,
+                app_version: app.package_info().version.to_string(),
+                kdf: options.kdf,
+                platform: Platform::current(),
+                features: Features::default(),
+            };
             let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::Storages));
             let phone = Arc::new(updater::PhoneUpdater::new(&app.package_info().version.to_string()));
             let updater: Arc<dyn Updater> = options.updater.clone().unwrap_or_else(|| phone.clone());

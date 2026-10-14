@@ -15,9 +15,9 @@ use lockra_core::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain,
 use lockra_core::settings::{AccentId, AutoBackup, CodesView, DefaultUnlock, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded,
-    ExportPage, ExportStarted, ExportTarget, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform, RestoreView,
-    Revealed, SharedInvite, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus,
-    UpdateView,
+    ExportPage, ExportStarted, ExportTarget, Features, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform,
+    RestoreView, Revealed, SharedInvite, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState,
+    UpdateStatus, UpdateView,
 };
 use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, PinnedGroup, Ports};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
@@ -243,6 +243,8 @@ fn state(phase: Phase) -> UiState {
     UiState {
         app_version: "0.1.0".into(),
         platform: Platform::Linux,
+        // A release build before password management ships, while locked; a debug build otherwise.
+        features: Features { passwords: phase != Phase::Locked },
         phase,
         data_dir: "/home/user/.local/share/dev.lockra.desktop".into(),
         lock: LockView {
@@ -295,8 +297,8 @@ fn notices() -> Vec<Notice> {
         Notice::AutoLocked,
         Notice::ExportExpired { session: id(100) },
         Notice::DeviceUnlockTurnedOff,
-        Notice::SyncBrought { added: 2, updated: 1, removed: 0, devices: vec!["MacBook".into(), "Pixel 8".into()] },
-        Notice::SyncBrought { added: 0, updated: 0, removed: 1, devices: vec![] },
+        Notice::SyncBrought { added: 2, updated: 1, removed: 0, logins: 3, devices: vec!["MacBook".into(), "Pixel 8".into()] },
+        Notice::SyncBrought { added: 0, updated: 0, removed: 1, logins: 0, devices: vec![] },
     ]
 }
 
@@ -462,6 +464,7 @@ fn response_fixtures() {
         ErrorCode::ExportExpired.into(),
         ErrorCode::SyncWrongCredentials.into(),
         ErrorCode::SyncInviteNeedsStorage.into(),
+        ErrorCode::FeatureUnavailable.into(),
         ErrorCode::Internal.into(),
     ];
     check(
@@ -563,6 +566,7 @@ async fn dispatch_answers_and_leaks_nothing() {
         app_version: "0.1.0".into(),
         kdf: KdfCost::FAST_INSECURE,
         platform: Platform::Linux,
+        features: Features { passwords: true },
     };
     let updater = Arc::new(FakeUpdater::installed(InstallMethod::Deb));
     *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));

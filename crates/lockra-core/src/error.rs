@@ -136,6 +136,9 @@ pub enum ErrorCode {
     SyncDataCorrupted,
     /// The space was written by a newer Lockra.
     SyncUnsupported,
+    /// This build does not offer it yet: password management before it ships, or a backup with
+    /// logins merged before the preview can show them (a restore that replaces still takes them).
+    FeatureUnavailable,
     /// Anything else (a bug); details are in the log.
     Internal,
 }

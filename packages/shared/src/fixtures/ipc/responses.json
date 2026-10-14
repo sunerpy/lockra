@@ -43,6 +43,9 @@
       "code": "sync_invite_needs_storage"
     },
     {
+      "code": "feature_unavailable"
+    },
+    {
       "code": "internal"
     }
   ],

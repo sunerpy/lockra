@@ -64,6 +64,8 @@ export type MockScan = string | null | { error: ErrorCode };
 
 export interface MockOptions {
   phase?: UiState["phase"];
+  /** The build offers password management (off by default, as a release build before it ships). */
+  passwords?: boolean;
   entries?: MockEntry[];
   password?: string;
   settings?: Partial<Settings>;
@@ -490,6 +492,7 @@ export class MockBackend implements Backend {
     this.state = {
       app_version: "0.1.0",
       platform: options.platform ?? "linux",
+      features: { passwords: options.passwords ?? false },
       phase,
       data_dir: "/home/user/.local/share/dev.lockra.desktop",
       lock: {

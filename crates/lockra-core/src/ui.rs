@@ -57,6 +57,22 @@ pub enum Phase {
     Unlocked,
 }
 
+/// What this build offers of what is still being finished. A release build turns a feature on
+/// only once it ships; a debug build and the tests have everything on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct Features {
+    /// Password management: logins, the generator, the browser extension. Off: the commands
+    /// answer `feature_unavailable` and the interface shows none of it, while the vault keeps
+    /// reading, keeping and syncing what devices with it wrote.
+    pub passwords: bool,
+}
+
+impl Default for Features {
+    fn default() -> Self {
+        Self { passwords: cfg!(debug_assertions) }
+    }
+}
+
 /// Everything the webview renders.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct UiState {
@@ -64,6 +80,8 @@ pub struct UiState {
     pub app_version: String,
     /// The host.
     pub platform: Platform,
+    /// What this build offers of what is still being finished.
+    pub features: Features,
     /// Session phase.
     pub phase: Phase,
     /// Where the vault and its `.prev` copy live (Settings › About shows it).
@@ -702,6 +720,8 @@ pub enum Notice {
         updated: u32,
         /// Accounts deleted on another device.
         removed: u32,
+        /// Logins new, changed or deleted, counted only where password management is on.
+        logins: u32,
         /// The devices the changes came from, as they name themselves; empty when the run failed
         /// after taking them in.
         devices: Vec<String>,

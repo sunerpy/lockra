@@ -326,6 +326,7 @@ export const ERROR_CODES = [
   "sync_folder_missing",
   "sync_data_corrupted",
   "sync_unsupported",
+  "feature_unavailable",
   "internal",
 ] as const;
 export const errorCodeSchema = z.enum(ERROR_CODES);
@@ -530,9 +531,17 @@ export const pinnedGroupSchema = z.discriminatedUnion("type", [
 ]);
 export type PinnedGroup = z.infer<typeof pinnedGroupSchema>;
 
+/** What this build offers of what is still being finished (lockra-core `Features`): a release
+ *  build turns password management on once it ships; the interface hides what is off. */
+export const featuresSchema = z.object({
+  passwords: z.boolean(),
+});
+export type Features = z.infer<typeof featuresSchema>;
+
 export const uiStateSchema = z.object({
   app_version: z.string(),
   platform: platformSchema,
+  features: featuresSchema,
   phase: phaseSchema,
   data_dir: z.string(),
   lock: lockViewSchema,
@@ -583,6 +592,8 @@ export const noticeSchema = z.discriminatedUnion("type", [
     added: z.number().int(),
     updated: z.number().int(),
     removed: z.number().int(),
+    /** Logins new, changed or deleted; counted only where password management is on. */
+    logins: z.number().int(),
     devices: z.array(z.string()),
   }),
 ]);

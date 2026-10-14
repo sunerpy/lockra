@@ -12,6 +12,8 @@ mod entry;
 mod error;
 mod export;
 mod import;
+mod item;
+mod lenient;
 pub mod ports;
 mod session;
 pub mod settings;
@@ -30,6 +32,11 @@ pub use entry::{AccountColor, Entry, EntryDraft, EntryPatch, EntryView, ExportCo
 pub use error::{CoreError, CoreResult, ErrorCode};
 pub use export::EXPORT_IDLE;
 pub use import::{Choice, Outcome};
+pub use item::{
+    AutofillPrefs, Field, ItemKind, MAX_FIELDS, MAX_HISTORY, MAX_NOTES_BYTES, MAX_URLS, Matching, PastValue, Protection, Purpose, SiteRule, SiteRuleKind, Tri,
+    UrlRule, VaultItem,
+};
+pub use lenient::Lenient;
 pub use lockra_sync::StorageConfig;
 pub use lockra_vault::KdfCost;
 pub use session::{AUTO_BACKUP_DEBOUNCE, Core, CoreConfig, FREE_ATTEMPTS, MAX_IMPORT_BYTES, MIN_PASSWORD_CHARS, PickedFile, Ports, RestoreMode, VAULT_FILE};

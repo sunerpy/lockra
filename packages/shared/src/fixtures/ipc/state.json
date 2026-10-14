@@ -11,6 +11,9 @@
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [],
     "entry_order": [],
+    "features": {
+      "passwords": false
+    },
     "group_order": [],
     "import": null,
     "lock": {
@@ -77,6 +80,9 @@
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [],
     "entry_order": [],
+    "features": {
+      "passwords": true
+    },
     "group_order": [],
     "import": null,
     "lock": {
@@ -144,6 +150,9 @@
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [],
     "entry_order": [],
+    "features": {
+      "passwords": false
+    },
     "group_order": [],
     "import": null,
     "lock": {
@@ -312,6 +321,9 @@
       "0f3f1a1e-8d4b-4c8e-9f7a-000000000002",
       "0f3f1a1e-8d4b-4c8e-9f7a-000000000001"
     ],
+    "features": {
+      "passwords": true
+    },
     "group_order": [
       "Work",
       ""

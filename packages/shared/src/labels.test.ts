@@ -108,10 +108,18 @@ describe("labels", () => {
       added: 2,
       updated: 1,
       removed: 0,
+      logins: 0,
       devices: ["MacBook", "Pixel 8"],
     } satisfies Notice;
     expect(noticeText(zh, brought)).toBe("已从 MacBook、Pixel 8 同步：新增 2 个，修改 1 个");
     expect(noticeText(en, brought)).toBe("Synced from MacBook, Pixel 8: 2 added, 1 changed");
+    // Logins after the accounts, when there are any.
+    const logins = { ...brought, added: 1, updated: 0, logins: 3 };
+    expect(noticeText(zh, logins)).toBe("已从 MacBook、Pixel 8 同步：新增 1 个，3 个登录项有变化");
+    expect(noticeText(en, logins)).toBe("Synced from MacBook, Pixel 8: 1 added, 3 logins changed");
+    expect(noticeText(en, { ...logins, added: 0 })).toBe(
+      "Synced from MacBook, Pixel 8: 3 logins changed",
+    );
     const failed = { ...brought, added: 0, updated: 0, removed: 3, devices: [] };
     expect(noticeText(zh, failed)).toBe("已同步来自其他设备的更改：删除 3 个");
     expect(noticeText(en, failed)).toBe("Synced changes from other devices: 3 removed");

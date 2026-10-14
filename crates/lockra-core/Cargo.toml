@@ -24,7 +24,9 @@ lockra-transfer.workspace = true
 lockra-vault.workspace = true
 parking_lot.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+# `raw_value`: a part of the vault's local part is read where it lies, leniently (src/lenient.rs).
+serde_json = { workspace = true, features = ["raw_value"] }
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
@@ -34,6 +36,7 @@ zeroize.workspace = true
 
 [dev-dependencies]
 image.workspace = true
+proptest.workspace = true
 lockra-vault = { workspace = true, features = ["test-kdf"] }
 qrcode = { workspace = true, features = ["image"] }
 rusqlite.workspace = true
