@@ -168,6 +168,11 @@ extension").
   extension can reach it; off, closing the window quits as it always has. Another start brings the
   window up, except one for the browser; on macOS the Dock's icon does too (`RunEvent::Reopen`).
   The Linux packages depend on libayatana-appindicator for the tray.
+- The interface: Settings › 浏览器 (`apps/desktop/src/pages/settings/Browser.tsx`) turns the
+  integration and running in the background on and off, and shows the browsers, the pairings, the
+  policy, the site lists and the activity; the requests that wait for the user, a pairing to
+  approve or a fill to confirm, come up over anything open (`features/browser/BrowserRequests.tsx`),
+  and the shell brings the window up with them (`background::brings_window_up`).
 - The extension (`apps/extension`): the background worker holds the connection
   (`background/connection.ts`: reconnecting with a backoff; after `start_app`, a hello every second
   for thirty seconds), Noise in TypeScript (`noise/`), the content scripts that find the fields and
