@@ -1,4 +1,10 @@
-import { MOCK_PASSWORD } from "@lockra/shared/mock";
+import {
+  MOCK_PASSWORD,
+  MockBackend,
+  type MockOptions,
+  sampleEntries,
+  sampleItems,
+} from "@lockra/shared/mock";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { depthOf } from "./app/nav";
 import { ready, renderApp } from "./test/render";
@@ -131,5 +137,83 @@ describe("exporting on the phone", () => {
     if (!open) throw new Error("no account can go to Microsoft Authenticator");
     await user.click(open);
     expect(screen.getByTestId("export-count").textContent).not.toBe(before);
+  });
+});
+
+/** The app with password management on, the sample accounts and their twelve logins. */
+function renderLogins(mock: MockOptions = {}) {
+  const entries = sampleEntries();
+  const backend = new MockBackend({
+    entries,
+    passwords: true,
+    items: sampleItems(entries),
+    ...mock,
+    settings: { locale: "zh-cn" },
+  });
+  return renderApp({ backend });
+}
+
+async function openLogins(user: ReturnType<typeof renderApp>["user"]) {
+  await openExport(user);
+  await user.click(
+    within(screen.getByTestId("export-kind")).getByRole("radio", { name: "登录项" }),
+  );
+  await screen.findByTestId("export-logins");
+}
+
+describe("exporting logins on the phone", () => {
+  it("is not offered without password management", async () => {
+    const { user } = renderApp();
+    await ready();
+    await openExport(user);
+    expect(screen.queryByTestId("export-kind")).not.toBeInTheDocument();
+  });
+
+  it("saves the chosen logins as a KeePass database under a password typed twice", async () => {
+    const { user, backend } = renderLogins();
+    await ready();
+    await openLogins(user);
+    const count = screen.getByTestId("export-count");
+    expect(count).toHaveTextContent("已选 12 个");
+    expect(within(screen.getByTestId("export-logins")).getAllByText(/带验证码/)).toHaveLength(4);
+    await user.click(
+      within(screen.getByTestId("export-logins")).getByRole("checkbox", {
+        name: "GitHub: octocat",
+      }),
+    );
+    expect(count).toHaveTextContent("已选 11 个");
+    const save = screen.getByTestId("export-items-save");
+    expect(save).toHaveTextContent("保存数据库…");
+    await user.type(screen.getByLabelText("数据库密码"), "a database password");
+    await user.type(screen.getByLabelText("再输入一次"), "something else");
+    expect(screen.getByText("两次输入的密码不一致")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("主密码"), MOCK_PASSWORD);
+    expect(save).toBeDisabled();
+    await user.clear(screen.getByLabelText("再输入一次"));
+    await user.type(screen.getByLabelText("再输入一次"), "a database password");
+    await user.click(save);
+    expect(await screen.findByRole("status")).toHaveTextContent("已保存：lockra-logins.kdbx");
+    expect(backend.exportedItems.at(-1)).toMatchObject({ format: "kdbx" });
+    expect(backend.exportedItems.at(-1)?.ids).toHaveLength(11);
+  });
+
+  it("saves a plain CSV once its risk is accepted, the fingerprint for the password left empty", async () => {
+    const { user, backend } = renderLogins(FINGERPRINT);
+    await ready();
+    await openLogins(user);
+    await user.click(
+      within(screen.getByRole("radiogroup", { name: "导出为" })).getByRole("radio", {
+        name: /明文 CSV 文件/,
+      }),
+    );
+    expect(screen.queryByLabelText("数据库密码")).not.toBeInTheDocument();
+    const save = screen.getByTestId("export-items-save");
+    expect(save).toHaveTextContent("保存 CSV 文件…");
+    expect(save).toBeDisabled();
+    await user.click(within(screen.getByTestId("export-items-plain-ok")).getByRole("switch"));
+    await user.click(save);
+    expect(await screen.findByRole("status")).toHaveTextContent("已保存：lockra-logins.csv");
+    expect(backend.biometricReasons).toEqual(["导出登录项"]);
+    expect(backend.exportedItems.at(-1)).toMatchObject({ format: "csv" });
   });
 });

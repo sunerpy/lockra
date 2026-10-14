@@ -397,6 +397,7 @@ export const ERROR_CODES = [
   "camera_unavailable",
   "export_expired",
   "export_nothing",
+  "export_acknowledge_needed",
   "no_restore",
   "backup_dir_missing",
   "backup_dir_unavailable",
@@ -1053,6 +1054,12 @@ export const EXPORT_TARGETS = ["google", "microsoft"] as const;
 export const exportTargetSchema = z.enum(EXPORT_TARGETS);
 export type ExportTarget = z.infer<typeof exportTargetSchema>;
 
+/** What logins export to (`export_items_file`): a KeePass database (KDBX 4) under a password of
+ *  its own, or Bitwarden's plain CSV. */
+export const ITEMS_EXPORT_FORMATS = ["kdbx", "csv"] as const;
+export const itemsExportFormatSchema = z.enum(ITEMS_EXPORT_FORMATS);
+export type ItemsExportFormat = z.infer<typeof itemsExportFormatSchema>;
+
 export const entryAddedSchema = z.object({ id: idSchema });
 export type EntryAdded = z.infer<typeof entryAddedSchema>;
 
@@ -1483,6 +1490,7 @@ export const SHELL_COMMAND_NAMES = [
   "backup_pick_dir",
   "restore_pick",
   "export_otpauth_file",
+  "export_items_file",
   "sync_key_save",
   "sync_pick_folder",
   "browser_enable",
@@ -1501,6 +1509,7 @@ export const PHONE_COMMAND_NAMES = [
   "backup_save",
   "restore_pick",
   "export_otpauth_file",
+  "export_items_file",
   "sync_scan_join",
   "sync_key_save",
   "update_open_release",

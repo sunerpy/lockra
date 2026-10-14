@@ -33,7 +33,7 @@ use lockra_core::ports::{
     Biometrics, Clipboard, CodeSink, MemorySecretStore, NoSecretStore, NoUpdater, PortError, SecretStore, SyncTransport, SystemClock, Updater,
 };
 use lockra_core::ui::{BiometricKind, CodesFrame, Features, Phase, Platform, UI_EVENT_NAME, UiEvent};
-use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports};
+use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, ItemsFormat, KdfCost, Ports};
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, DragDropEvent, Emitter as _, Manager as _, Runtime, State, WebviewWindow, WindowEvent};
@@ -55,7 +55,7 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 14] = [
+pub const COMMANDS: [&str; 15] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -65,6 +65,7 @@ pub const COMMANDS: [&str; 14] = [
     "backup_pick_dir",
     "restore_pick",
     "export_otpauth_file",
+    "export_items_file",
     "sync_key_save",
     "sync_pick_folder",
     "browser_enable",
@@ -324,6 +325,34 @@ async fn export_otpauth_file<R: Runtime>(
     Ok(Some(core.export_otpauth_file(&entry_ids, password, path).await?))
 }
 
+/// Save the logins `ids` as a KeePass database or Bitwarden's plain CSV: the core checks the user
+/// is there (the master password, or without it Touch ID or Windows Hello asked with `reason`)
+/// and what was chosen, and makes the file, before the save dialog opens; the webview hears the
+/// file's name only. `None` when the dialog was cancelled.
+#[tauri::command]
+#[allow(clippy::too_many_arguments, reason = "a command's arguments are the webview's named fields")]
+async fn export_items_file<R: Runtime>(
+    app: AppHandle<R>,
+    core: State<'_, Core>,
+    ids: Vec<Uuid>,
+    format: ItemsFormat,
+    password: Option<Zeroizing<String>>,
+    reason: Option<String>,
+    acknowledged: bool,
+    kdbx_password: Option<Zeroizing<String>>,
+) -> Result<Option<String>, CoreError> {
+    let file = core.export_items(&ids, format, password, reason, acknowledged, kdbx_password).await?;
+    let (filter, extension) = match file.format() {
+        ItemsFormat::Kdbx => ("KeePass", "kdbx"),
+        ItemsFormat::Csv => ("CSV", "csv"),
+    };
+    let name = file.name();
+    let dialog = app.dialog().clone();
+    let picked = on_dialog_thread(move || dialog.file().add_filter(filter, &[extension]).set_file_name(name).blocking_save_file()).await?;
+    let Some(path) = picked.and_then(to_path) else { return Ok(None) };
+    Ok(Some(core.export_items_write(file, path).await?))
+}
+
 /// Forward every core event to the webview; a vault that is no longer unlocked lifts the
 /// screen-capture protection (auto-lock locks with a secret view open).
 async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core, tray: bool) {
@@ -431,6 +460,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             backup_pick_dir,
             restore_pick,
             export_otpauth_file,
+            export_items_file,
             sync_key_save,
             sync_pick_folder,
             browser::service::browser_enable,

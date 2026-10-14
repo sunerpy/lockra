@@ -494,6 +494,7 @@
     "backup_save",
     "restore_pick",
     "export_otpauth_file",
+    "export_items_file",
     "sync_scan_join",
     "sync_key_save",
     "update_open_release"
@@ -508,6 +509,7 @@
     "backup_pick_dir",
     "restore_pick",
     "export_otpauth_file",
+    "export_items_file",
     "sync_key_save",
     "sync_pick_folder",
     "browser_enable",

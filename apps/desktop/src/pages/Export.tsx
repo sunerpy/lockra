@@ -1,6 +1,8 @@
 // Send accounts to a phone: Google Authenticator's migration codes, one standard code per account
-// for Microsoft Authenticator, or a plain otpauth list file. Every way out asks for the master
-// password again; the codes themselves open in the export viewer (an overlay of the shell).
+// for Microsoft Authenticator, or a plain otpauth list file; with password management, the logins
+// too, to a file other password managers import (features/items/LoginsExport.tsx). Every way out
+// asks for the master password again; the codes themselves open in the export viewer (an overlay
+// of the shell).
 import {
   type ExportWay,
   entryLabel,
@@ -17,6 +19,7 @@ import {
   PageHeader,
   Panel,
   PasswordField,
+  Segmented,
   Toggle,
   cx,
   useBackend,
@@ -26,8 +29,42 @@ import {
 import { type SubmitEvent, useState } from "react";
 import { useSubmit } from "../app/dispatch";
 import { useShell } from "../app/shell-state";
+import { LoginsExport } from "../features/items/LoginsExport";
+
+/** What the page exports: the accounts' codes, or (with password management) the logins. */
+type ExportKind = "codes" | "logins";
 
 export function Export() {
+  const t = useT();
+  const { features } = useUiState();
+  const [kind, setKind] = useState<ExportKind>("codes");
+  const logins = features.passwords && kind === "logins";
+  return (
+    <div className="flex flex-col gap-4" data-testid="page-export">
+      <PageHeader
+        title={t("shell.nav.export")}
+        subtitle={logins ? t("export.logins.subtitle") : t("export.subtitle")}
+        actions={
+          features.passwords ? (
+            <Segmented
+              label={t("export.kind.label")}
+              value={kind}
+              onChange={setKind}
+              options={(["codes", "logins"] as const).map((value) => ({
+                value,
+                label: t(`export.kind.${value}`),
+              }))}
+              data-testid="export-kind"
+            />
+          ) : undefined
+        }
+      />
+      {logins ? <LoginsExport /> : <CodesExport />}
+    </div>
+  );
+}
+
+function CodesExport() {
   const t = useT();
   const { entries } = useUiState();
   const { backend } = useBackend();
@@ -83,8 +120,7 @@ export function Export() {
     { id: "file", icon: "fileText", title: t("export.file.title"), body: t("export.file.body") },
   ];
   return (
-    <div className="flex flex-col gap-4" data-testid="page-export">
-      <PageHeader title={t("shell.nav.export")} subtitle={t("export.subtitle")} />
+    <>
       <CardGrid min={240} role="listbox" aria-label={t("export.target")}>
         {ways.map((w) => (
           <OptionCard
@@ -208,6 +244,6 @@ export function Export() {
           </p>
         )}
       </Panel>
-    </div>
+    </>
   );
 }

@@ -24,14 +24,14 @@ use std::sync::Arc;
 use lockra_bridge::{UiCommand, dispatch};
 use lockra_core::ports::{Biometrics, Clipboard, CodeSink, PortError, SecretStore, SyncTransport, SystemClock, Updater};
 use lockra_core::ui::{CodesFrame, Features, Platform, UI_EVENT_NAME, UiEvent};
-use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports, StorageConfig};
+use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, ItemsFormat, KdfCost, Ports, StorageConfig};
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
 use zeroize::Zeroizing;
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
-pub const COMMANDS: [&str; 12] = [
+pub const COMMANDS: [&str; 13] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -41,6 +41,7 @@ pub const COMMANDS: [&str; 12] = [
     "backup_save",
     "restore_pick",
     "export_otpauth_file",
+    "export_items_file",
     "sync_scan_join",
     "sync_key_save",
     "update_open_release",
@@ -191,6 +192,30 @@ async fn export_otpauth_file<R: Runtime>(
     files::listed(saved)
 }
 
+/// Save the logins `ids` as a KeePass database or Bitwarden's plain CSV where the user picks: the
+/// core checks the user is there (the master password, or without it the fingerprint asked with
+/// `reason`) and what was chosen, and makes the file, before the picker opens; the webview hears
+/// the file's name only. `None` when the picker was left.
+#[tauri::command]
+#[allow(clippy::too_many_arguments, reason = "a command's arguments are the webview's named fields")]
+async fn export_items_file<R: Runtime>(
+    app: AppHandle<R>,
+    core: State<'_, Core>,
+    ids: Vec<uuid::Uuid>,
+    format: ItemsFormat,
+    password: Option<Zeroizing<String>>,
+    reason: Option<String>,
+    acknowledged: bool,
+    kdbx_password: Option<Zeroizing<String>>,
+) -> Result<Option<String>, CoreError> {
+    let file = core.export_items(&ids, format, password, reason, acknowledged, kdbx_password).await?;
+    let picker = files::Files::new(app);
+    let saved = tauri::async_runtime::spawn_blocking(move || picker.save(file.name(), file.mime(), file.bytes()))
+        .await
+        .map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    files::listed(saved)
+}
+
 /// Scan a QR code with the camera into the import preview; `false` when left without one.
 /// `prompt` and `cancel` are the camera page's words, in the webview's language.
 #[tauri::command]
@@ -284,6 +309,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             backup_save,
             restore_pick,
             export_otpauth_file,
+            export_items_file,
             sync_scan_join,
             sync_key_save,
             update_open_release

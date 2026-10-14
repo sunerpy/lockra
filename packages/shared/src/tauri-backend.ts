@@ -8,6 +8,7 @@ import { z } from "zod";
 import {
   type Backend,
   type EventListener,
+  type ExportItemsFile,
   type FrameListener,
   type ImportPickKind,
   LockraError,
@@ -198,6 +199,19 @@ export class TauriBackend implements Backend {
         entryIds: [...entryIds],
         password: password ?? null,
         reason: reason ?? null,
+      }),
+    );
+  }
+
+  async exportItemsFile(args: ExportItemsFile): Promise<string | null> {
+    return fileNameSchema.parse(
+      await this.call("export_items_file", {
+        ids: [...args.ids],
+        format: args.format,
+        password: args.password ?? null,
+        reason: args.reason ?? null,
+        acknowledged: args.acknowledged,
+        kdbxPassword: args.kdbxPassword ?? null,
       }),
     );
   }

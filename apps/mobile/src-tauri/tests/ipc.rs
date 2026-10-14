@@ -231,6 +231,27 @@ fn a_backup_goes_out_and_comes_back_through_the_file_picker() {
 }
 
 #[test]
+fn logins_export_through_the_file_picker_once_the_user_and_a_plain_file_s_risk_are_checked() {
+    let shell = shell();
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    let draft = json!({ "title": "GitHub", "username": "octocat", "password": { "type": "set", "value": "hunter2-do-not-leak" } });
+    let id = shell.dispatch(json!({ "command": "item_add", "draft": draft })).unwrap()["id"].clone();
+    let export = |format: &str, password: Option<&str>, acknowledged: bool, kdbx: Option<&str>| {
+        let reason = password.is_none().then_some("export the logins");
+        let body = json!({ "ids": [id.clone()], "format": format, "password": password, "reason": reason, "acknowledged": acknowledged, "kdbxPassword": kdbx });
+        shell.invoke("export_items_file", body).unwrap_err()["code"].clone()
+    };
+    assert_eq!(export("csv", Some(PASSWORD), false, None), "export_acknowledge_needed");
+    assert_eq!(export("csv", Some("wrong password"), true, None), "wrong_password");
+    assert_eq!(export("kdbx", Some(PASSWORD), false, Some("short")), "password_too_short");
+    // Without the master password, the fingerprint that unlocks this vault: none here.
+    assert_eq!(export("csv", None, true, None), "biometric_unavailable");
+    // Checked, the file goes to the file picker, which this build does not have.
+    assert_eq!(export("csv", Some(PASSWORD), true, None), "io_failed");
+    assert_eq!(export("kdbx", Some(PASSWORD), false, Some("a database password")), "io_failed");
+}
+
+#[test]
 fn the_code_stream_subscribes_through_a_channel_and_stops() {
     let shell = shell();
     // Spelled in two halves: the scaffold check reads a literal double-underscore token as a

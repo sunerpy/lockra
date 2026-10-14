@@ -114,10 +114,11 @@ pub fn saved(core: &Core, saved: Result<Option<String>, PortError>) -> Result<Op
     Ok(name)
 }
 
-/// What a list's save means: its name, or nothing when the picker was left.
+/// What an export's save means (a list of accounts, a file of logins): its name, or nothing when
+/// the picker was left.
 pub fn listed(saved: Result<Option<String>, PortError>) -> Result<Option<String>, CoreError> {
     saved.map_err(|error| {
-        tracing::warn!(%error, "the list could not be saved");
+        tracing::warn!(%error, "the export could not be saved");
         CoreError::from(ErrorCode::IoFailed)
     })
 }

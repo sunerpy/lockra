@@ -35,7 +35,7 @@ expect_used = "warn"
 
 [workspace.dependencies]
 # KeePass databases (crates/lockra-transfer/src/kdbx): AES-256-CBC for the payload and the AES-KDF,
-# with `cbc`; the versions the keepass crate builds on, which writes the tests' databases.
+# with `cbc`; the versions the keepass crate builds on, which writes the exported databases.
 aes = "=0.9.3"
 # Key derivation for the master password (docs/formats.md): Argon2id, RFC 9106.
 argon2 = { version = "=0.6.0", default-features = false, features = ["alloc", "zeroize"] }
@@ -71,7 +71,8 @@ hyper = { version = "=1.11.1", default-features = false, features = ["server", "
 hyper-util = { version = "=0.1.21", default-features = false, features = ["tokio"] }
 # Screenshots and photos of export QR codes: decoding only, PNG / JPEG / WebP.
 image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
-# Tests only: it writes the KeePass databases lockra-transfer's own reader is checked against.
+# Writes the KeePass databases logins export to (`save_kdbx4`, in lockra-transfer), and those its
+# own reader is checked against; Lockra reads KeePass databases itself, within its limits.
 keepass = { version = "=0.15.2", default-features = false }
 keyring = "=4.2.0"
 # The sync storage (crates/lockra-remote): S3-compatible and WebDAV through one client. No default

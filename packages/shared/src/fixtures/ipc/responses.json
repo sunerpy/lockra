@@ -37,6 +37,9 @@
       "code": "export_expired"
     },
     {
+      "code": "export_acknowledge_needed"
+    },
+    {
       "code": "sync_wrong_credentials"
     },
     {

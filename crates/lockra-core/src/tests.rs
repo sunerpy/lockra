@@ -28,6 +28,7 @@ const MASTER: &str = "correct horse battery";
 const SECRET: &str = "JBSWY3DPEHPK3PXP";
 
 mod browser;
+mod export_items;
 mod import_logins;
 mod items;
 mod logins;

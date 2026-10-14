@@ -34,6 +34,21 @@ impl KdfCost {
     /// Argon2's minimum: for test suites only, never compiled into an application build.
     #[cfg(any(test, feature = "test-kdf"))]
     pub const FAST_INSECURE: Self = Self { m_kib: 8, t: 1, p: 1 };
+
+    /// Memory, KiB (another file's key derivation at this cost: a KeePass export's).
+    pub fn memory_kib(self) -> u32 {
+        self.m_kib
+    }
+
+    /// Passes.
+    pub fn passes(self) -> u32 {
+        self.t
+    }
+
+    /// Lanes.
+    pub fn lanes(self) -> u32 {
+        self.p
+    }
 }
 
 /// The KDF entry of a header: algorithm, cost and salt. The sync keyring (lockra-sync) uses the

@@ -115,6 +115,46 @@ describe("TauriBackend", () => {
     expect(f.calls.at(-1)?.[0]).toBe("codes_unsubscribe");
   });
 
+  it("exports logins through the shell, which answers with the file's name alone", async () => {
+    const f = fake({ export_items_file: "lockra-logins.kdbx" });
+    const backend = new TauriBackend(f.transport);
+    const kdbx = {
+      ids: ["a", "b"],
+      format: "kdbx",
+      password: "pw",
+      acknowledged: false,
+      kdbxPassword: "database password",
+    } as const;
+    expect(await backend.exportItemsFile(kdbx)).toBe("lockra-logins.kdbx");
+    // Without a password: the fingerprint, with the prompt's words.
+    const csv = { ids: ["a"], format: "csv", reason: "export", acknowledged: true } as const;
+    expect(await backend.exportItemsFile(csv)).toBe("lockra-logins.kdbx");
+    expect(f.calls.map(([c, a]) => [c, a])).toEqual([
+      [
+        "export_items_file",
+        {
+          ids: ["a", "b"],
+          format: "kdbx",
+          password: "pw",
+          reason: null,
+          acknowledged: false,
+          kdbxPassword: "database password",
+        },
+      ],
+      [
+        "export_items_file",
+        {
+          ids: ["a"],
+          format: "csv",
+          password: null,
+          reason: "export",
+          acknowledged: true,
+          kdbxPassword: null,
+        },
+      ],
+    ]);
+  });
+
   it("calls the shell commands with their arguments", async () => {
     const f = fake({
       import_pick_files: true,
