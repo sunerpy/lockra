@@ -62,6 +62,10 @@ frontend-dist-dirs: ## The web apps' output folders: the shells' generate_contex
 android-clippy: frontend-dist-dirs ## clippy -D warnings for aarch64-linux-android: every workspace crate the phone links (needs NDK_HOME)
 	./scripts/clippy-android.sh
 
+.PHONY: extension
+extension: ## The browser extension's Chrome, Edge and Firefox zips, deterministic, in apps/extension/dist
+	$(PNPM) --filter @lockra/extension run package
+
 .PHONY: android-apk
 android-apk: ## The phone app's debug APK for arm64 (needs ANDROID_HOME, NDK_HOME and JDK 21)
 	cd apps/mobile && $(PNPM) tauri android build --debug --target aarch64 --apk

@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Lockra",
+    "description": "The extension's name in the browser and the stores."
+  },
+  "description": {
+    "message": "Fill passwords and codes from Lockra on your computer. The extension itself keeps no logins.",
+    "description": "The extension's one-line description."
+  },
+  "commandFill": {
+    "message": "Fill a login for this site",
+    "description": "The fill shortcut's name on the browser's shortcuts page."
+  }
+}

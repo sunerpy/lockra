@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Render apps/desktop/src-tauri/icons/icon.svg to a 1024 px PNG and let the Tauri CLI derive every
-# platform icon from it, then write a 16/32/48 px contact sheet to check the small sizes by eye.
+# platform icon from it, render the browser extension's (apps/extension/public/icons, 16–128 px),
+# then write a 16/32/48 px contact sheet to check the small sizes by eye.
 # Needs python3 with cairosvg and Pillow, and the Tauri CLI (`pnpm --filter @lockra/desktop tauri`).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -11,6 +12,10 @@ python3 -c 'import cairosvg, sys; cairosvg.svg2png(url=sys.argv[1], write_to=sys
 (cd apps/desktop && pnpm exec tauri icon "$work/icon.png" -o src-tauri/icons >/dev/null 2>&1)
 # Desktop only: the mobile sets the CLI also writes are not shipped.
 rm -rf "$icons/android" "$icons/ios"
+python3 -c 'import cairosvg, sys
+for size in (16, 32, 48, 128):
+    cairosvg.svg2png(url=sys.argv[1], write_to=f"{sys.argv[2]}/icon-{size}.png", output_width=size, output_height=size)' \
+  "$icons/icon.svg" apps/extension/public/icons
 python3 - "$work/icon.png" "${1:-$work/contact-sheet.png}" <<'PY'
 import sys
 from PIL import Image

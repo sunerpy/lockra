@@ -1,6 +1,8 @@
 // Simplified Chinese: the source of truth for the key set (`Messages = typeof zhCN`). Every
 // user-visible string of the webview lives here or in `en.ts`; product names, file names, keycaps
 // and code identifiers stay literal in the components.
+import { extensionZhCN } from "./extension.zh-CN";
+
 export const zhCN = {
   common: {
     cancel: "取消",
@@ -1425,6 +1427,8 @@ export const zhCN = {
   showcase: {
     title: "组件展示（仅开发版）",
   },
+  /** The browser extension (apps/extension): extension.zh-CN.ts. */
+  extension: extensionZhCN,
 };
 
 export type Messages = typeof zhCN;

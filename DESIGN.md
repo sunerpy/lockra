@@ -210,6 +210,21 @@ Every interactive primitive has `default hover focus-visible active disabled` st
 Everything a mouse does is reachable by keyboard; icon-only buttons carry an `aria-label` and a
 tooltip.
 
+### The browser extension
+
+`apps/extension` draws with the same `tokens.css`, following the browser's light or dark scheme
+(澄空 or 澄空 · 夜; no theme crosses the protocol). Boards 30–35 of Penpot 「Lockra 密码管理」.
+
+- **Popup**: 360 × 540 in every state. A 52 px header (logo, the lamp and Lockra's state, the
+  options), the content (only it scrolls), a 44 px footer (the fill shortcut's keys, a short hint
+  that truncates, 「打开 Lockra」). The site's logins in one card, rows of 60 px, the first the
+  default (`nav-active`, ↵, a primary 填充). The other states are centred: a 56 px icon on the
+  theme's card, a 17 px title, a line, one action, a note.
+- **Inline menu and prompts**: drawn in an extension frame on any page, so opaque (`surface`, not
+  glass) with a 1 px border and `shadow-pop`: the menu 340 px wide (at least the field's), 6 px under
+  the field, `rounded-10`, rows of 52 px; the save and update prompts 360 px at the page's top
+  right, `rounded-14`.
+
 ## 4. Content states
 
 Each region handles: empty, loading (first state not yet received), partial (Google batch with

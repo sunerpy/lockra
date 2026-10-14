@@ -18,6 +18,28 @@ The Android app (`apps/mobile`) also needs JDK 21, the Android SDK with platform
 (`ANDROID_HOME`, `NDK_HOME`) and the Rust target `aarch64-linux-android`; `make android-apk` builds
 its debug APK and `make android-clippy` lints the crates it links for the phone.
 
+### The browser extension
+
+`pnpm --filter @lockra/extension build` builds `apps/extension` into `apps/extension/dist/`:
+`chromium` (Chrome and Edge as the stores get it, without a key), `chromium-dev` (the same with the
+development key, so that it always has the id `egbpficliljjnpkjbigonldakfllebco`) and `firefox`.
+`make extension` also writes the three store zips there, deterministic (sorted entries, fixed
+times).
+
+- **Chrome or Edge**: open `chrome://extensions` (`edge://extensions`), turn on developer mode,
+  choose _Load unpacked_ and pick `apps/extension/dist/chromium-dev`. Branded Chrome ignores the
+  `--load-extension` switch from 137 on; loading it by hand works.
+- **Firefox** (140 or later): open `about:debugging#/runtime/this-firefox`, choose _Load Temporary
+  Add-on…_ and pick `apps/extension/dist/firefox/manifest.json`. Its id is `lockra@firlab.app` in
+  every build.
+
+The extension reaches Lockra through the native-messaging host `dev.lockra.browser` (the desktop
+app in host mode, which writes the browsers' manifests when browser integration is on). The ids
+those manifests allow are defined once, in `crates/lockra-browser/src/ids.rs`; a debug build of
+Lockra also allows the development id. Only the development key's public half is in the repository
+(`apps/extension/manifest/dev.json`): an unpacked build needs nothing else, and nothing is signed
+with it.
+
 ## Before you open a pull request
 
 ```bash

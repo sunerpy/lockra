@@ -7,8 +7,9 @@
 #   replaces the plain test run because it runs the same tests, and the shell's own tests
 #   (tests/ipc.rs on Tauri's mock runtime) run beside it.
 # - `frontend` runs the tests with each package's coverage floor (vitest thresholds, 85 %).
-# - `repo` runs the repository's static gates: no colour literals in components, a release web
-#   bundle without development code, actionlint and shellcheck.
+# - `repo` runs the repository's static gates: no colour literals in components, no window message
+#   listener, a release web bundle without development code, the browser extension's sizes and
+#   contents, actionlint and shellcheck.
 # - `deny` checks licences, bans, sources and RustSec advisories of the shipped graph.
 # - `smoke` drives the real app under Xvfb (scripts/smoke-desktop-linux.sh): it types a master
 #   password, imports from the clipboard, compares a copied code with RFC 6238, decodes the
@@ -256,9 +257,17 @@ jobs:
       - name: No colour literals in components
         run: scripts/check-no-literal-colors.sh
 
+      - name: No window message listeners
+        run: scripts/check-no-window-message.sh
+
       # Builds the release web bundle and fails on development code or a remote URL in it.
       - name: Release web bundle
         run: scripts/check-web-bundle.sh
+
+      # Builds the browser extension: the content script under 30 KB gzip, the popup under 150 KB,
+      # no console output, no remote URL, the root version in every manifest.
+      - name: Browser extension bundle
+        run: scripts/check-extension-bundle.sh
 
       - name: actionlint
         run: actionlint

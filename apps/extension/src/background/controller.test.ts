@@ -1,0 +1,855 @@
+// @vitest-environment node
+// The background end to end on fakes: a fake Lockra behind the native port, a fake browser with tabs,
+// frames and content scripts. The inline menu, a fill through it with the click checks, the save and
+// update prompts, the code of a second step, the shortcut and its round of accounts, the popup, and
+// site access.
+import { FakeApp } from "../test/fake-app";
+import { FakeBrowser, type FakePortEnd } from "../test/fake-browser";
+import { ManualClock } from "../test/clock";
+import { generateKeyPair, type KeyPair } from "../noise/crypto";
+import { Connection, type Keys, type PairingRecord } from "./connection";
+import { Controller } from "./controller";
+import type { BackgroundMessage, InlineView, PopupEvent, PopupState } from "../shared/messages";
+
+class MemoryKeys implements Keys {
+  pair: KeyPair | null = null;
+  record: PairingRecord | null = null;
+  async staticPair(): Promise<KeyPair> {
+    this.pair ??= await generateKeyPair();
+    return this.pair;
+  }
+  async pairing(): Promise<PairingRecord | null> {
+    return this.record;
+  }
+  async setPairing(record: PairingRecord | null): Promise<void> {
+    this.record = record;
+  }
+}
+
+const ITEM = "5c0fe1a2-0b3c-4d5e-8f60-000000000001";
+const ITEM2 = "5c0fe1a2-0b3c-4d5e-8f60-000000000002";
+
+function summary(id: string, change: Record<string, unknown> = {}) {
+  return {
+    item_id: id,
+    title: "GitHub",
+    username: id === ITEM ? "octocat" : "octocat-work",
+    email: "",
+    has_password: true,
+    has_totp: true,
+    protection: "fill",
+    favorite: false,
+    downgrade: false,
+    matches: true,
+    ...change,
+  };
+}
+
+const POLICY = {
+  fill_otp: true,
+  copy_otp: true,
+  auto_submit: false,
+  confirm_fill: false,
+  cross_origin_frames: "never",
+  on_page_load: false,
+};
+
+function queryAnswer(items: unknown[], change: Record<string, unknown> = {}) {
+  return {
+    site: "example.com",
+    level: "host",
+    items,
+    never_fill: false,
+    never_save: false,
+    cross_origin: false,
+    policy: POLICY,
+    save: null,
+    ...change,
+  };
+}
+
+async function setup() {
+  const app = await FakeApp.start();
+  const browser = new FakeBrowser();
+  const clock = new ManualClock();
+  const keys = new MemoryKeys();
+  const connection = new Connection({
+    connectNative: app.connect,
+    keys,
+    clock,
+    client: async () => ({
+      browser: "chrome",
+      label: "",
+      extension: browser.runtime.id,
+      version: "0.10.0",
+      page_access: browser.granted,
+    }),
+  });
+  const controller = new Controller({
+    api: browser,
+    connection,
+    clock,
+    extensionVersion: "0.10.0",
+  });
+  controller.install();
+  connection.start();
+  await vi.waitFor(() => expect(connection.view.link).toBe("ready"));
+  await connection.pair();
+  await vi.waitFor(() => expect(connection.view.pairing.stage).toBe("waiting"));
+  const pairing = await app.approve();
+  await vi.waitFor(() => expect(connection.view.session).toBe("open"));
+  app.handlers.query = (request) =>
+    request.purpose === "save"
+      ? queryAnswer([summary(ITEM)], {
+          save: {
+            action: request.username === "octocat" ? "update" : "save",
+            item_id: request.username === "octocat" ? ITEM : null,
+          },
+        })
+      : queryAnswer([summary(ITEM), summary(ITEM2)]);
+  app.handlers.fill = (request) => ({
+    item_id: request.item_id,
+    username: request.item_id === ITEM ? "octocat" : "octocat-work",
+    password: "s3cret",
+    fields: [],
+    otp: null,
+    submit: false,
+  });
+  const contentGot: BackgroundMessage[] = [];
+  let verify = { ok: true };
+  browser.content.set("1:0", (message) => {
+    contentGot.push(message as BackgroundMessage);
+    const m = message as BackgroundMessage;
+    if (m.kind === "frame.verify") return verify;
+    if (m.kind === "fill") return { filled: 2 };
+    return undefined;
+  });
+  return {
+    app,
+    browser,
+    clock,
+    keys,
+    connection,
+    controller,
+    pairing,
+    contentGot,
+    refuseClicks: () => {
+      verify = { ok: false, reason: "covered" } as typeof verify;
+    },
+  };
+}
+
+type Context = Awaited<ReturnType<typeof setup>>;
+
+/** The inline frame `token` connects from frame 5 under the page, as the browser reports it. */
+function inlineFrame(context: Context, token: string, frameId = 5, parent = 0): FakePortEnd {
+  const { browser } = context;
+  const frames = browser.frames.get(1) ?? [];
+  if (!frames.some((f) => f.frameId === frameId)) {
+    frames.push({
+      frameId,
+      parentFrameId: parent,
+      url: browser.runtime.getURL(`inline.html#${token}`),
+      documentId: `doc-${frameId}`,
+    });
+  }
+  const port = browser.connectPort("lockra-inline", {
+    id: browser.runtime.id,
+    tab: { id: 1, url: browser.openTabs[0]?.url },
+    frameId,
+    url: browser.runtime.getURL(`inline.html#${token}`),
+  });
+  port.send({ kind: "hello", token });
+  return port;
+}
+
+function lastView(port: FakePortEnd): InlineView | undefined {
+  const views = port.received.filter(
+    (m): m is { kind: "view"; view: InlineView } => (m as { kind: string }).kind === "view",
+  );
+  return views.at(-1)?.view;
+}
+
+describe("the inline menu", () => {
+  it("opens for a sign-in field with the app's matches, and fills the chosen login after the click checks", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    expect(answer.token).toMatch(/^[0-9a-f]{32}$/);
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "query",
+      purpose: "fill",
+      frame_url: "https://www.example.com/login",
+      top_url: "https://www.example.com/login",
+    });
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toEqual({
+        view: "list",
+        site: "example.com",
+        items: [
+          { title: "GitHub", username: "octocat", downgrade: false },
+          { title: "GitHub", username: "octocat-work", downgrade: false },
+        ],
+        active: 0,
+      }),
+    );
+    frame.send({ kind: "visible", visible: true });
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 1 },
+      point: { x: 20, y: 60 },
+      trusted: true,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+    const verify = contentGot.find((m) => m.kind === "frame.verify");
+    expect(verify).toEqual({
+      kind: "frame.verify",
+      token: answer.token,
+      point: { x: 20, y: 60 },
+      trusted: true,
+      visible: true,
+    });
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "fill",
+      item_id: ITEM2,
+      trigger: "inline_menu",
+      allow_http: false,
+    });
+    expect(contentGot.find((m) => m.kind === "fill")).toEqual({
+      kind: "fill",
+      values: {
+        username: "octocat-work",
+        password: "s3cret",
+        fields: [],
+        otp: null,
+        submit: false,
+      },
+    });
+    // The fill went to the frame's document, and the menu closed.
+    expect(browser.sent.find((s) => (s.message as { kind: string }).kind === "fill")).toMatchObject(
+      { tabId: 1, frameId: 0, documentId: "doc-0" },
+    );
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "frame.close")).toBe(true));
+  });
+
+  it("shows nothing to a frame without the token, or one that is not under the page's frame", async () => {
+    const context = await setup();
+    const { browser } = context;
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const stranger = inlineFrame(context, "00000000000000000000000000000000", 6);
+    await vi.waitFor(() => expect(stranger.closed).toBe(true));
+    expect(lastView(stranger)).toBeUndefined();
+    // The right token from a frame the page put elsewhere (under frame 6, not the page's frame).
+    browser.frames
+      .get(1)
+      ?.push({ frameId: 8, parentFrameId: 6, url: "https://ads.example/", documentId: "doc-8" });
+    const misplaced = inlineFrame(context, answer.token, 9, 8);
+    await vi.waitFor(() => expect(misplaced.closed).toBe(true));
+    expect(lastView(misplaced)).toBeUndefined();
+  });
+
+  it("closes without filling when a click fails the checks", async () => {
+    const context = await setup();
+    const { browser, app, contentGot, refuseClicks } = context;
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    refuseClicks();
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: { x: 1, y: 1 },
+      trusted: true,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "frame.close")).toBe(true));
+    expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+    // A frame occluded by its own IntersectionObserver's account is refused too, whatever the page says.
+    const again = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const second = inlineFrame(context, again.token, 7);
+    await vi.waitFor(() => expect(lastView(second)?.view).toBe("list"));
+    second.send({ kind: "visible", visible: false });
+    second.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: { x: 1, y: 1 },
+      trusted: true,
+    });
+    await vi.waitFor(() => expect(second.closed).toBe(true));
+    expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+  });
+
+  it("asks first when the policy says so, and warns before filling an https login into an http page", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.query = () =>
+      queryAnswer([summary(ITEM, { downgrade: true })], {
+        policy: { ...POLICY, confirm_fill: true },
+      });
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: null,
+      trusted: true,
+    });
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toEqual({
+        view: "confirm",
+        item: { title: "GitHub", username: "octocat", downgrade: true },
+      }),
+    );
+    frame.send({ kind: "action", action: { type: "fill" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("http"));
+    expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+    frame.send({ kind: "action", action: { type: "allow_http" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+    expect(app.requests.at(-1)).toMatchObject({ op: "fill", item_id: ITEM, allow_http: true });
+  });
+
+  it("is not offered for a frame of another site unless the policy asks, nor on a never-fill site", async () => {
+    const context = await setup();
+    const { browser, app } = context;
+    app.handlers.query = () => queryAnswer([summary(ITEM)], { cross_origin: true });
+    expect(await browser.fromContent({ kind: "content.focus", form: "login" })).toEqual({
+      token: null,
+    });
+    app.handlers.query = () => queryAnswer([], { never_fill: true });
+    expect(await browser.fromContent({ kind: "content.focus", form: "login" })).toEqual({
+      token: null,
+    });
+    app.handlers.query = () =>
+      queryAnswer([summary(ITEM)], {
+        cross_origin: true,
+        policy: { ...POLICY, cross_origin_frames: "ask" },
+      });
+    expect(
+      (
+        (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+          token: string | null;
+        }
+      ).token,
+    ).not.toBeNull();
+  });
+
+  it("offers a generated password on a sign-up form, saves it as a new login and fills both fields", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    let made = 0;
+    app.handlers.generate = (request) => ({
+      password: `Generated-${++made}`,
+      username: "alice",
+      item_id: request.save ? ITEM : null,
+    });
+    app.handlers.save = () => ({ item_id: ITEM2 });
+    const answer = (await browser.fromContent({
+      kind: "content.focus",
+      form: "signup",
+      signup: { rules: "minlength: 20;", minlength: 8, maxlength: 64, username: "new-user" },
+    })) as { token: string };
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "generate",
+      rules: "minlength: 20;",
+      minlength: 8,
+      maxlength: 64,
+      save: null,
+    });
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toEqual({
+        view: "signup",
+        site: "www.example.com",
+        password: "Generated-1",
+        username: "new-user",
+        rules: true,
+      }),
+    );
+    frame.send({ kind: "action", action: { type: "regenerate" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ password: "Generated-2" }));
+    frame.send({ kind: "action", action: { type: "use" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "save",
+      username: "new-user",
+      password: "Generated-2",
+      title: "",
+      group: null,
+    });
+    expect(contentGot.find((m) => m.kind === "fill")).toEqual({
+      kind: "fill",
+      values: {
+        username: "new-user",
+        password: "Generated-2",
+        fields: [],
+        otp: null,
+        submit: false,
+        newPassword: true,
+      },
+    });
+  });
+});
+
+describe("saving what a form submitted", () => {
+  it("asks to save a new login at the top right, with the user name of the step before", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.save = () => ({ item_id: ITEM2 });
+    await browser.fromContent({ kind: "content.username", username: "alice" });
+    await browser.fromContent({
+      kind: "content.submitted",
+      username: "",
+      password: "hunter2",
+      signup: false,
+    });
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "query",
+      purpose: "save",
+      username: "alice",
+      password: "hunter2",
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "prompt.open")).toBe(true));
+    const open = contentGot.find((m) => m.kind === "prompt.open") as { token: string };
+    const frame = inlineFrame(context, open.token);
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toEqual({
+        view: "save",
+        site: "example.com",
+        title: "example.com",
+        username: "alice",
+        password: "hunter2",
+      }),
+    );
+    frame.send({
+      kind: "action",
+      action: { type: "save", title: "Example", username: "alice", group: "Work" },
+      point: { x: 300, y: 200 },
+      trusted: true,
+    });
+    await vi.waitFor(() => expect(app.requests.at(-1)?.op).toBe("save"));
+    expect(app.requests.at(-1)).toMatchObject({
+      title: "Example",
+      username: "alice",
+      password: "hunter2",
+      group: "Work",
+      frame_url: "https://www.example.com/login",
+    });
+    await vi.waitFor(() => expect(frame.closed).toBe(true));
+  });
+
+  it("asks to update a login whose password changed, shows the prompt again on the next page, and keeps quiet when told", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.update = () => ({});
+    app.handlers.site_rule = () => ({});
+    await browser.fromContent({
+      kind: "content.submitted",
+      username: "octocat",
+      password: "n3w",
+      signup: false,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "prompt.open")).toBe(true));
+    // The page navigated: the next document asks at its start, and gets the prompt again.
+    const start = (await browser.fromContent({ kind: "content.start", top: true })) as {
+      prompt: string;
+    };
+    expect(start.prompt).toMatch(/^[0-9a-f]{32}$/);
+    const frame = inlineFrame(context, start.prompt);
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toEqual({
+        view: "update",
+        site: "example.com",
+        item: { title: "GitHub", username: "octocat", downgrade: false },
+      }),
+    );
+    frame.send({ kind: "action", action: { type: "update" }, point: null, trusted: true });
+    await vi.waitFor(() =>
+      expect(app.requests.at(-1)).toMatchObject({ op: "update", item_id: ITEM, password: "n3w" }),
+    );
+    expect(
+      (
+        (await browser.fromContent({ kind: "content.start", top: true })) as {
+          prompt: string | null;
+        }
+      ).prompt,
+    ).toBeNull();
+
+    await browser.fromContent({
+      kind: "content.submitted",
+      username: "bob",
+      password: "pw",
+      signup: false,
+    });
+    await vi.waitFor(() =>
+      expect(contentGot.filter((m) => m.kind === "prompt.open")).toHaveLength(2),
+    );
+    const second = contentGot.findLast((m) => m.kind === "prompt.open") as { token: string };
+    const prompt = inlineFrame(context, second.token, 6);
+    await vi.waitFor(() => expect(lastView(prompt)?.view).toBe("save"));
+    prompt.send({ kind: "action", action: { type: "never" }, point: null, trusted: true });
+    await vi.waitFor(() =>
+      expect(app.requests.at(-1)).toMatchObject({ op: "site_rule", kind: "never_save" }),
+    );
+  });
+
+  it("offers nothing when the app advises nothing", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.query = () => queryAnswer([], { save: { action: "none", item_id: null } });
+    await browser.fromContent({
+      kind: "content.submitted",
+      username: "x",
+      password: "y",
+      signup: false,
+    });
+    await browser.fromContent({
+      kind: "content.submitted",
+      username: "x",
+      password: "",
+      signup: false,
+    });
+    expect(contentGot.some((m) => m.kind === "prompt.open")).toBe(false);
+  });
+});
+
+describe("the code of a second step", () => {
+  it("is filled on the next page of the tab where a login was just filled", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.otp = () => ({ code: "654321", copied: true });
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      otp: false,
+    });
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: null,
+      trusted: true,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      otp: true,
+    });
+    await browser.fromContent({ kind: "content.otp" });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill.otp")).toBe(true));
+    expect(app.requests.at(-1)).toMatchObject({ op: "otp", item_id: ITEM });
+    expect(contentGot.find((m) => m.kind === "fill.otp")).toEqual({
+      kind: "fill.otp",
+      code: "654321",
+    });
+    // Five minutes on, nothing is asked any more.
+    context.clock.advance(5 * 60_000);
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      otp: false,
+    });
+  });
+});
+
+describe("the shortcut", () => {
+  it("fills the focused frame's likeliest login, and the next one when pressed again soon", async () => {
+    const context = await setup();
+    const { browser, app, contentGot, clock } = context;
+    browser.frames.get(1)?.push({
+      frameId: 3,
+      parentFrameId: 0,
+      url: "https://www.example.com/frame",
+      documentId: "doc-3",
+    });
+    browser.probes.set(0, { focused: true, editable: false, framed: true });
+    browser.probes.set(3, { focused: true, editable: true, framed: false });
+    const third: typeof contentGot = [];
+    browser.content.set("1:3", (message) => {
+      third.push(message as BackgroundMessage);
+      return { filled: 2 };
+    });
+    browser.commands.onCommand.emit("fill-login", browser.openTabs[0]);
+    await vi.waitFor(() => expect(third.some((m) => m.kind === "fill")).toBe(true));
+    expect(app.requests.findLast((r) => r.op === "fill")).toMatchObject({
+      item_id: ITEM,
+      trigger: "shortcut",
+      frame_url: "https://www.example.com/frame",
+      top_url: "https://www.example.com/login",
+    });
+    // Without site access the content script is put in the frame on demand.
+    expect(browser.injected.at(-1)).toEqual({
+      target: { tabId: 1, frameIds: [3] },
+      files: ["content.js"],
+    });
+    browser.commands.onCommand.emit("fill-login", browser.openTabs[0]);
+    await vi.waitFor(() => expect(app.requests.filter((r) => r.op === "fill")).toHaveLength(2));
+    expect(app.requests.findLast((r) => r.op === "fill")).toMatchObject({ item_id: ITEM2 });
+    clock.advance(10_000);
+    browser.commands.onCommand.emit("fill-login", browser.openTabs[0]);
+    await vi.waitFor(() => expect(app.requests.filter((r) => r.op === "fill")).toHaveLength(3));
+    expect(app.requests.findLast((r) => r.op === "fill")).toMatchObject({ item_id: ITEM });
+    expect(contentGot.some((m) => m.kind === "fill")).toBe(false);
+  });
+
+  it("shows the in-page confirmation when the policy asks first", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    browser.probes.set(0, { focused: true, editable: true, framed: false });
+    app.handlers.query = () =>
+      queryAnswer([summary(ITEM)], { policy: { ...POLICY, confirm_fill: true } });
+    browser.commands.onCommand.emit("fill-login", browser.openTabs[0]);
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "menu.open")).toBe(true));
+    const open = contentGot.find((m) => m.kind === "menu.open") as { token: string };
+    const frame = inlineFrame(context, open.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("confirm"));
+    expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+    frame.send({
+      kind: "action",
+      action: { type: "fill" },
+      point: { x: 10, y: 10 },
+      trusted: true,
+    });
+    await vi.waitFor(() =>
+      expect(app.requests.at(-1)).toMatchObject({ op: "fill", trigger: "shortcut" }),
+    );
+  });
+
+  it("opens the popup when Lockra cannot answer (locked)", async () => {
+    const context = await setup();
+    const { app, browser } = context;
+    await app.lock();
+    await vi.waitFor(() => expect(context.connection.view.app?.state).toBe("locked"));
+    browser.probes.set(0, { focused: true, editable: true, framed: false });
+    browser.commands.onCommand.emit("fill-login", browser.openTabs[0]);
+    await vi.waitFor(() => expect(browser.popupOpened).toBe(1));
+  });
+});
+
+describe("the popup", () => {
+  function popup(context: Context): {
+    port: FakePortEnd;
+    states: () => PopupState[];
+    events: () => PopupEvent[];
+  } {
+    const port = context.browser.connectPort("lockra-popup", {
+      id: context.browser.runtime.id,
+      url: context.browser.runtime.getURL("popup.html"),
+    });
+    const events = () => port.received as PopupEvent[];
+    const states = () =>
+      events()
+        .filter((e): e is Extract<PopupEvent, { kind: "state" }> => e.kind === "state")
+        .map((e) => e.state);
+    return { port, states, events };
+  }
+
+  it("lists the current site's logins and fills one into the focused frame", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    browser.probes.set(0, { focused: false, editable: true, framed: false });
+    const { port, states, events } = popup(context);
+    port.send({ kind: "hello" });
+    await vi.waitFor(() => expect(states().at(-1)?.site?.items).toHaveLength(2));
+    const state = states().at(-1);
+    expect(state).toMatchObject({
+      screen: "ready",
+      appVersion: "0.10.0",
+      extensionVersion: "0.10.0",
+      shortcut: "Ctrl+Shift+L",
+      pageAccess: false,
+    });
+    expect(state?.site).toMatchObject({ site: "example.com", fillable: true });
+    // The list stays in storage.session for the next opening, and goes as Lockra locks.
+    expect(browser.storage.session.data.get("snapshot")).toMatchObject({
+      url: "https://www.example.com/login",
+    });
+    port.send({ kind: "fill", itemId: ITEM, allowHttp: false });
+    await vi.waitFor(() =>
+      expect(events().some((e) => e.kind === "result" && e.outcome === "done")).toBe(true),
+    );
+    expect(app.requests.at(-1)).toMatchObject({ op: "fill", item_id: ITEM, trigger: "popup" });
+    expect(contentGot.some((m) => m.kind === "fill")).toBe(true);
+    await app.lock();
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("locked"));
+    expect(browser.storage.session.data.has("snapshot")).toBe(false);
+  });
+
+  it("searches every login, copies through Lockra, and words a refusal", async () => {
+    const context = await setup();
+    const { app } = context;
+    app.handlers.search = () => ({ items: [summary(ITEM, { matches: false })] });
+    app.handlers.copy = () => ({});
+    const { port, events } = popup(context);
+    port.send({ kind: "search", text: "git" });
+    await vi.waitFor(() => expect(events().some((e) => e.kind === "search")).toBe(true));
+    expect(events().find((e) => e.kind === "search")).toMatchObject({ text: "git", error: null });
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "search",
+      text: "git",
+      top_url: "https://www.example.com/login",
+    });
+    port.send({ kind: "copy", itemId: ITEM, part: { type: "password" } });
+    await vi.waitFor(() =>
+      expect(events().some((e) => e.kind === "result" && e.action === "copy")).toBe(true),
+    );
+    expect(events().find((e) => e.kind === "result" && e.action === "copy")).toMatchObject({
+      outcome: "done",
+      part: "password",
+    });
+    app.handlers.copy = () => ({ error: "protected" });
+    port.send({ kind: "copy", itemId: ITEM, part: { type: "password" } });
+    await vi.waitFor(() => expect(events().filter((e) => e.kind === "result")).toHaveLength(2));
+    expect(events().findLast((e) => e.kind === "result")).toMatchObject({ outcome: "protected" });
+  });
+
+  it("asks before filling an https login into an http page", async () => {
+    const context = await setup();
+    const { app, browser } = context;
+    browser.probes.set(0, { focused: false, editable: true, framed: false });
+    app.handlers.query = () => queryAnswer([summary(ITEM, { downgrade: true })]);
+    const { port, states, events } = popup(context);
+    port.send({ kind: "hello" });
+    await vi.waitFor(() => expect(states().at(-1)?.site?.items).toHaveLength(1));
+    port.send({ kind: "fill", itemId: ITEM, allowHttp: false });
+    await vi.waitFor(() =>
+      expect(events().some((e) => e.kind === "result" && e.outcome === "http_downgrade")).toBe(
+        true,
+      ),
+    );
+    expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+    port.send({ kind: "fill", itemId: ITEM, allowHttp: true });
+    await vi.waitFor(() =>
+      expect(app.requests.at(-1)).toMatchObject({ op: "fill", allow_http: true }),
+    );
+  });
+
+  it("follows pairing, unlocking and starting Lockra", async () => {
+    const context = await setup();
+    const { app, connection } = context;
+    const { port, states } = popup(context);
+    port.send({ kind: "hello" });
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("ready"));
+    await connection.forget();
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("unpaired"));
+    port.send({ kind: "pair" });
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("pairing"));
+    await vi.waitFor(() => expect(states().at(-1)?.pairing?.code).toBe(app.code));
+    port.send({ kind: "pair.cancel" });
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("unpaired"));
+    await app.lock();
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("locked"));
+    port.send({ kind: "unlock" });
+    await vi.waitFor(() => expect(states().at(-1)?.unlockAsked).toBe(true));
+    await app.quit();
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("not_running"));
+    port.send({ kind: "start", show: false });
+    await vi.waitFor(() => expect(states().at(-1)?.starting).toBe(true));
+    expect(app.posted.some((m) => m.plain?.op === "start_app")).toBe(true);
+  });
+
+  it("opens the extensions page to update the extension", async () => {
+    const context = await setup();
+    const { port } = popup(context);
+    port.send({ kind: "extensions" });
+    await vi.waitFor(() =>
+      expect(context.browser.created).toEqual([
+        "chrome://extensions/?id=testextensionidtestextensionidte",
+      ]),
+    );
+  });
+});
+
+describe("site access", () => {
+  it("registers the content script when granted, unregisters it when revoked, and says so in the hello", async () => {
+    const context = await setup();
+    const { browser, app } = context;
+    const hellos = () => app.posted.filter((m) => m.plain?.op === "hello");
+    const before = hellos().length;
+    browser.granted = true;
+    browser.permissions.onAdded.emit({ origins: ["<all_urls>"] });
+    await vi.waitFor(() => expect(browser.registered.map((s) => s.id)).toEqual(["lockra-content"]));
+    expect(browser.registered[0]).toMatchObject({
+      allFrames: true,
+      persistAcrossSessions: true,
+      js: ["content.js"],
+    });
+    await vi.waitFor(() => expect(hellos()).toHaveLength(before + 1));
+    expect(hellos().at(-1)?.plain?.page_access).toBe(true);
+    browser.granted = false;
+    browser.permissions.onRemoved.emit({ origins: ["<all_urls>"] });
+    await vi.waitFor(() => expect(browser.registered).toEqual([]));
+    await vi.waitFor(() => expect(hellos().at(-1)?.plain?.page_access).toBe(false));
+  });
+
+  it("checks the registration at startup and after an update", async () => {
+    const context = await setup();
+    const { browser } = context;
+    browser.granted = true;
+    browser.runtime.onStartup.emit();
+    await vi.waitFor(() => expect(browser.registered).toHaveLength(1));
+    browser.registered = [];
+    browser.runtime.onInstalled.emit({ reason: "update" });
+    await vi.waitFor(() => expect(browser.registered).toHaveLength(1));
+  });
+});
+
+describe("messages the background does not take", () => {
+  it("ignores other senders and unknown kinds", async () => {
+    const context = await setup();
+    const { browser } = context;
+    expect(
+      await browser.fromContent(
+        { kind: "content.focus", form: "login" },
+        { id: "another-extension" },
+      ),
+    ).toBeUndefined();
+    expect(await browser.fromContent({ kind: "nonsense" })).toBeUndefined();
+    expect(await browser.fromContent("text")).toBeUndefined();
+    // A tab closing forgets what it had.
+    browser.tabs.onRemoved.emit(1);
+  });
+});
+
+describe("the extension's own pages", () => {
+  it("are known by the extension's id and their path, whatever id the address carries", async () => {
+    const context = await setup();
+    const { browser } = context;
+    const dynamic = "chrome-extension://0f7d3e1c-dynamic-session-id/popup.html";
+    const page = browser.connectPort("lockra-popup", { id: browser.runtime.id, url: dynamic });
+    page.send({ kind: "hello" });
+    await vi.waitFor(() =>
+      expect(page.received.some((m) => (m as { kind: string }).kind === "state")).toBe(true),
+    );
+    // A content script naming the popup's port, a page of another extension, another path: no.
+    const content = browser.connectPort("lockra-popup", {
+      id: browser.runtime.id,
+      url: "https://evil.example/popup.html",
+      tab: { id: 1 },
+    });
+    const stranger = browser.connectPort("lockra-popup", {
+      id: "other",
+      url: browser.runtime.getURL("popup.html"),
+    });
+    const elsewhere = browser.connectPort("lockra-options", {
+      id: browser.runtime.id,
+      url: browser.runtime.getURL("popup.html"),
+    });
+    const nameless = browser.connectPort("lockra-popup", {
+      id: browser.runtime.id,
+      url: "not a url",
+    });
+    await vi.waitFor(() =>
+      expect([content, stranger, elsewhere, nameless].every((p) => p.closed)).toBe(true),
+    );
+  });
+});

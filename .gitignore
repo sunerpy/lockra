@@ -8,6 +8,8 @@ coverage/
 # The web bundle: `vite build` writes it, a debug `cargo check` does not need it.
 apps/desktop/dist/
 apps/mobile/dist/
+# The browser extension's builds and zips (make extension).
+apps/extension/dist/
 
 # Tauri: generated capability schemas
 apps/desktop/src-tauri/gen/

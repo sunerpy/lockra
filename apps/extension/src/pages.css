@@ -1,0 +1,10 @@
+/* The popup and the options page: Tailwind on the app's tokens (DESIGN.md), the browser's light or
+ * dark scheme picking 澄空 or 澄空 · 夜 (src/shared/scheme.ts). */
+@import "tailwindcss";
+@import "../../../packages/ui/src/tokens.css";
+@source "../../../packages/ui/src";
+
+html,
+body {
+  margin: 0;
+}
