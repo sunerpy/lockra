@@ -5,6 +5,7 @@ import type {
   Algorithm,
   CandidateStatus,
   CandidateView,
+  ConflictReason,
   ErrorCode,
   Incompatible,
   Notice,
@@ -43,9 +44,16 @@ export function originText(t: TFunction, origin: Origin): string {
 }
 
 export function statusText(t: TFunction, status: CandidateStatus): string {
-  return status.type === "unsupported"
-    ? `${t("import.status.unsupported")} · ${rejectText(t, status.reason)}`
-    : t(`import.status.${status.type}`);
+  if (status.type === "unsupported")
+    return `${t("import.status.unsupported")} · ${rejectText(t, status.reason)}`;
+  if (status.type === "login_conflict")
+    return `${t("import.status.login_conflict")} · ${conflictText(t, status.reason)}`;
+  return t(`import.status.${status.type}`);
+}
+
+/** What differs between a login of the import and the vault's, and what replacing does. */
+export function conflictText(t: TFunction, reason: ConflictReason): string {
+  return t(`import.conflict.${reason}`);
 }
 
 /** Where a found account came from: the file, the clipboard, the pasted text or the camera, and
@@ -124,11 +132,7 @@ export function noticeText(t: TFunction, notice: Notice, name?: string): string 
     case "browser_unlock_requested":
       return t("notice.browserUnlockRequested", { browser: browserName(notice.browser) });
     case "imported":
-      return t("notice.imported", {
-        added: notice.added,
-        replaced: notice.replaced,
-        skipped: notice.skipped,
-      });
+      return importedText(t, notice);
     case "file_unrecognized":
       return t("notice.fileUnrecognized", { name: notice.name });
     case "file_unreadable":
@@ -150,6 +154,25 @@ export function noticeText(t: TFunction, notice: Notice, name?: string): string 
     case "sync_brought":
       return syncBroughtText(t, notice);
   }
+}
+
+function anyCount(counts: { added: number; replaced: number; skipped: number }): boolean {
+  return counts.added + counts.replaced + counts.skipped > 0;
+}
+
+/** What a commit did: the accounts' counts as before, the logins' alone when only logins were
+ *  found, both when the import held both. */
+function importedText(t: TFunction, notice: Extract<Notice, { type: "imported" }>): string {
+  const codes = { added: notice.added, replaced: notice.replaced, skipped: notice.skipped };
+  const logins = notice.logins;
+  if (!anyCount(logins)) return t("notice.imported", codes);
+  if (!anyCount(codes)) return t("notice.importedLogins", logins);
+  return t("notice.importedBoth", {
+    ...codes,
+    loginsAdded: logins.added,
+    loginsReplaced: logins.replaced,
+    loginsSkipped: logins.skipped,
+  });
 }
 
 /** `已从 Pixel 8 同步：新增 2 个，修改 1 个`: what a sync run brought, the counts that are not zero

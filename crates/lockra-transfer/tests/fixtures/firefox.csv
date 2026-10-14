@@ -1,0 +1,4 @@
+"url","username","password","httpRealm","formActionOrigin","guid","timeCreated","timeLastUsed","timePasswordChanged"
+"chrome://FirefoxAccounts","0123456789abcdef","{""version"":1,""accountData"":{}}","Firefox Accounts credentials",,"{0f3f1a1e-8d4b-4c8e-9f7a-000000000001}","1612345678900","1612345678900","1612345678900"
+"https://accounts.example.com","foo","firefox-pass-1",,"https://accounts.example.com","{d61e37fa-2bc4-469a-bd66-41fd3b0005e0}","1612345678900","1612345678900","1612345678900"
+"https://intranet.example.com:8443","bar","firefox-pass-2","Intranet",,"{0f3f1a1e-8d4b-4c8e-9f7a-000000000002}","1612345678900","1612345678900","1612345678900"

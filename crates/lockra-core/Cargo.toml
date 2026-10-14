@@ -37,9 +37,12 @@ zeroize.workspace = true
 
 [dev-dependencies]
 image.workspace = true
+# The KeePass databases and 1Password's zips the import tests read.
+keepass = { workspace = true, features = ["save_kdbx4"] }
 proptest.workspace = true
 lockra-vault = { workspace = true, features = ["test-kdf"] }
 qrcode = { workspace = true, features = ["image"] }
 rusqlite.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["test-util"] }
+zip.workspace = true

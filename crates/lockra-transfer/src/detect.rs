@@ -1,6 +1,8 @@
 //! What a file is, judged from its first bytes (the file name is not trusted).
 
+use crate::csv_logins::{self, CsvFormat};
 use crate::microsoft::{SQLITE_MAGIC, is_wal};
+use crate::{bitwarden, kdbx};
 
 /// The kind of a file handed to the import.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,11 +17,20 @@ pub enum Kind {
     Image,
     /// UTF-8 text: `otpauth://` and `otpauth-migration://` lines.
     Text,
+    /// A KeePass 2 database (KDBX).
+    Kdbx,
+    /// A zip: 1Password's 1PUX export when it holds `export.data`.
+    Zip,
+    /// Bitwarden's JSON export.
+    Bitwarden,
+    /// A browser's or a password manager's CSV export.
+    Csv(CsvFormat),
     /// Anything else.
     Unknown,
 }
 
-/// The kind of `bytes`.
+/// The kind of `bytes` among the formats of codes alone (what a build without password
+/// management reads).
 pub fn detect(bytes: &[u8]) -> Kind {
     if bytes.starts_with(SQLITE_MAGIC) {
         Kind::Sqlite
@@ -37,6 +48,22 @@ pub fn detect(bytes: &[u8]) -> Kind {
         if lower.contains("otpauth://") || lower.contains("otpauth-migration://") { Kind::Text } else { Kind::Unknown }
     } else {
         Kind::Unknown
+    }
+}
+
+/// The kind of `bytes`, the logins' formats included: those come before the `otpauth://` text,
+/// since Safari's and 1Password's CSV exports carry `otpauth://` links of their own.
+pub fn detect_with_logins(bytes: &[u8]) -> Kind {
+    if bytes.starts_with(&kdbx::MAGIC) {
+        Kind::Kdbx
+    } else if bytes.starts_with(b"PK\x03\x04") || bytes.starts_with(b"PK\x05\x06") {
+        Kind::Zip
+    } else if bitwarden::recognize(bytes) {
+        Kind::Bitwarden
+    } else if let Some(format) = csv_logins::recognize(bytes) {
+        Kind::Csv(format)
+    } else {
+        detect(bytes)
     }
 }
 
@@ -58,5 +85,27 @@ mod tests {
         assert_eq!(detect(b"just some notes"), Kind::Unknown);
         assert_eq!(detect(&[0xc3, 0x28]), Kind::Unknown);
         assert_eq!(detect(b""), Kind::Unknown);
+    }
+
+    #[test]
+    fn the_logins_formats_come_first_and_only_when_asked_for() {
+        let safari = include_bytes!("../tests/fixtures/safari.csv");
+        let bitwarden = include_bytes!("../tests/fixtures/bitwarden.json");
+        let kdbx = [&kdbx::MAGIC[..], b"\x01\x00\x04\x00"].concat();
+        // Safari's CSV carries otpauth links: read as CSV, not as a list of links.
+        assert_eq!(detect_with_logins(safari), Kind::Csv(CsvFormat::Safari));
+        assert_eq!(detect_with_logins(bitwarden), Kind::Bitwarden);
+        assert_eq!(detect_with_logins(&kdbx), Kind::Kdbx);
+        assert_eq!(detect_with_logins(b"PK\x03\x04rest"), Kind::Zip);
+        assert_eq!(detect_with_logins(b"PK\x05\x06"), Kind::Zip);
+        // Without password management, what it is today: links in a text, or nothing it reads.
+        assert_eq!(detect(safari), Kind::Text);
+        assert_eq!(detect(&kdbx), Kind::Unknown);
+        assert_eq!(detect(b"PK\x03\x04rest"), Kind::Unknown);
+        assert_eq!(detect(bitwarden), Kind::Text, "its codes are otpauth links too");
+        // The codes' own formats are what they were.
+        assert_eq!(detect_with_logins(b"otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Kind::Text);
+        assert_eq!(detect_with_logins(b"LKRABAK1...."), Kind::Lockra);
+        assert_eq!(detect_with_logins(b"just some notes"), Kind::Unknown);
     }
 }

@@ -31,11 +31,12 @@ use tauri::{AppHandle, Emitter as _, Manager as _, Runtime, State};
 use zeroize::Zeroizing;
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `PHONE_COMMANDS`).
-pub const COMMANDS: [&str; 11] = [
+pub const COMMANDS: [&str; 12] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
+    "import_pick_key_file",
     "import_scan",
     "backup_save",
     "restore_pick",
@@ -111,6 +112,17 @@ async fn import_pick_files<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>,
         .await
         .map_err(|_| CoreError::from(ErrorCode::Internal))?;
     files::import(&core, picked).await
+}
+
+/// Choose the key file of the KeePass database waiting in the import with the system's file picker
+/// (only when one waits): the core keeps the key it brings, not the file. `false` when none was
+/// picked.
+#[tauri::command]
+async fn import_pick_key_file<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<bool, CoreError> {
+    core.import_awaits_key_file()?;
+    let picker = files::Files::new(app);
+    let picked = tauri::async_runtime::spawn_blocking(move || picker.pick_file()).await.map_err(|_| CoreError::from(ErrorCode::Internal))?;
+    files::key_file(&core, picked).await
 }
 
 /// Save a backup where the user picks (the system's file picker): under the master password, or
@@ -267,6 +279,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             codes_subscribe,
             codes_unsubscribe,
             import_pick_files,
+            import_pick_key_file,
             import_scan,
             backup_save,
             restore_pick,

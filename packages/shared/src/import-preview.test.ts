@@ -15,6 +15,7 @@ function candidate(id: number, status: CandidateView["status"]): CandidateView {
     line: id + 1,
     status,
     default_action: status.type === "new" ? "add" : "skip",
+    login: null,
   };
 }
 
@@ -24,6 +25,13 @@ describe("actionsFor", () => {
     expect(actionsFor({ type: "conflict", entry_id: "x" })).toEqual(["add", "replace", "skip"]);
     expect(actionsFor({ type: "exists", entry_id: "x" })).toEqual([]);
     expect(actionsFor({ type: "unsupported", reason: "md5_algorithm" })).toEqual([]);
+  });
+
+  it("lets a login that differs from the vault's replace it, be added beside it, or be skipped", () => {
+    const differs = { type: "login_conflict", item_id: "x", reason: "password" } as const;
+    expect(actionsFor(differs)).toEqual(["add", "replace", "skip"]);
+    expect(actionsFor({ type: "login_exists", item_id: "x" })).toEqual([]);
+    expect(actionsFor({ type: "unsupported", reason: "card_item" })).toEqual([]);
   });
 });
 
@@ -36,7 +44,7 @@ describe("importChoices / takenCount", () => {
       candidate(3, { type: "new" }),
     ],
     google_batches: [],
-    awaiting_password: null,
+    awaiting: null,
   };
 
   it("sends a choice for every account the user decides on, the default where they did not", () => {

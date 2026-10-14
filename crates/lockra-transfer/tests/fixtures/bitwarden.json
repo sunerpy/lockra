@@ -1,0 +1,168 @@
+{
+  "encrypted": false,
+  "folders": [
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-0000000000f1",
+      "name": "Work"
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-0000000000f2",
+      "name": "Home"
+    }
+  ],
+  "items": [
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000101",
+      "organizationId": null,
+      "folderId": "0f3f1a1e-8d4b-4c8e-9f7a-0000000000f1",
+      "type": 1,
+      "reprompt": 1,
+      "name": "GitHub",
+      "notes": "Recovery codes are in the safe",
+      "favorite": true,
+      "fields": [
+        {
+          "name": "PIN",
+          "value": "4242",
+          "type": 1,
+          "linkedId": null
+        },
+        {
+          "name": "Customer no.",
+          "value": "C-77",
+          "type": 0,
+          "linkedId": null
+        },
+        {
+          "name": "Remember me",
+          "value": "true",
+          "type": 2,
+          "linkedId": null
+        },
+        {
+          "name": "Linked",
+          "value": null,
+          "type": 3,
+          "linkedId": 100
+        }
+      ],
+      "login": {
+        "fido2Credentials": [],
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://github.com/login"
+          },
+          {
+            "match": 1,
+            "uri": "https://gist.github.com"
+          },
+          {
+            "match": 2,
+            "uri": "https://github.com/settings"
+          },
+          {
+            "match": 3,
+            "uri": "https://github.com/session"
+          },
+          {
+            "match": 4,
+            "uri": "^https://(www\\.)?github\\.com/"
+          },
+          {
+            "match": 5,
+            "uri": "https://status.github.com"
+          },
+          {
+            "match": 0,
+            "uri": "https://github.io"
+          }
+        ],
+        "username": "octocat",
+        "password": "bw-json-pass-1",
+        "totp": "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"
+      },
+      "collectionIds": null,
+      "revisionDate": "2026-09-01T08:00:00.000Z",
+      "creationDate": "2026-01-01T08:00:00.000Z",
+      "deletedDate": null
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000102",
+      "folderId": "0f3f1a1e-8d4b-4c8e-9f7a-0000000000f2",
+      "type": 1,
+      "reprompt": 0,
+      "name": "GitHub (second account)",
+      "notes": null,
+      "favorite": false,
+      "login": {
+        "uris": [
+          {
+            "match": null,
+            "uri": "https://github.com"
+          }
+        ],
+        "username": "octocat-work",
+        "password": "bw-json-pass-2",
+        "totp": "JBSWY3DPEHPK3PXP"
+      }
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000103",
+      "folderId": null,
+      "type": 1,
+      "name": "Router",
+      "favorite": false,
+      "login": {
+        "uris": null,
+        "username": "admin",
+        "password": "bw-json-pass-3",
+        "totp": null
+      }
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000104",
+      "type": 2,
+      "name": "Wi-Fi",
+      "notes": "on the router",
+      "secureNote": {
+        "type": 0
+      }
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000105",
+      "type": 3,
+      "name": "Visa",
+      "card": {
+        "cardholderName": "Alex",
+        "number": "4111111111111111"
+      }
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000106",
+      "type": 4,
+      "name": "Me",
+      "identity": {
+        "firstName": "Alex"
+      }
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000107",
+      "type": 5,
+      "name": "Deploy key",
+      "sshKey": {
+        "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----"
+      }
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000108",
+      "type": 8,
+      "name": "Passport"
+    },
+    {
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000109",
+      "type": "unexpected",
+      "name": "Damaged"
+    }
+  ]
+}

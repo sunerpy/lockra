@@ -149,6 +149,56 @@ fn a_vault_is_made_and_a_code_copied_through_the_phone_shell() {
     assert_eq!(state["lock"]["device_unlock"]["biometric"]["kind"], Value::Null);
 }
 
+/// A KeePass database's header (KDBX 4, AES-256, gzip, a quick AES-KDF): enough to wait in the
+/// import for its password; nothing here opens it.
+fn kdbx_header() -> Vec<u8> {
+    let field = |out: &mut Vec<u8>, data: &[u8]| {
+        out.extend_from_slice(&u32::try_from(data.len()).unwrap().to_le_bytes());
+        out.extend_from_slice(data);
+    };
+    let aes_kdf = [0xc9, 0xd9, 0xf3, 0x9a, 0x62, 0x8a, 0x44, 0x60, 0xbf, 0x74, 0x0d, 0x08, 0xc1, 0x8a, 0x4f, 0xea];
+    let mut kdf = vec![0x00, 0x01];
+    for (kind, name, value) in [(0x42u8, &b"$UUID"[..], &aes_kdf[..]), (0x05, b"R", &8u64.to_le_bytes()), (0x42, b"S", &[3; 32])] {
+        kdf.push(kind);
+        field(&mut kdf, name);
+        field(&mut kdf, value);
+    }
+    kdf.push(0);
+    let aes256 = [0x31, 0xc1, 0xf2, 0xe6, 0xbf, 0x71, 0x43, 0x50, 0xbe, 0x58, 0x05, 0x21, 0x6a, 0xfc, 0x5a, 0xff];
+    let mut out = vec![0x03, 0xd9, 0xa2, 0x9a, 0x67, 0xfb, 0x4b, 0xb5, 0x01, 0x00, 0x04, 0x00];
+    for (id, data) in [(2u8, aes256.to_vec()), (3, 1u32.to_le_bytes().to_vec()), (4, vec![7; 32]), (7, vec![9; 16]), (11, kdf), (0, b"\r\n\r\n".to_vec())] {
+        out.push(id);
+        field(&mut out, &data);
+    }
+    out
+}
+
+#[test]
+fn a_key_file_the_picker_hands_over_goes_with_the_keepass_database_waiting() {
+    let shell = shell();
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    let core = shell.core();
+    // Nothing waits: neither the picker nor what it hands over is taken.
+    assert_eq!(shell.invoke("import_pick_key_file", json!({})).unwrap_err(), json!({ "code": "no_import" }));
+    let key = || PickedFile { name: "Passwords.keyx".into(), bytes: Zeroizing::new(b"any file can be a key file".to_vec()) };
+    assert_eq!(tauri::async_runtime::block_on(files::key_file(&core, Ok(Some(key())))).unwrap_err().code, ErrorCode::NoImport);
+    let database = PickedFile { name: "Passwords.kdbx".into(), bytes: Zeroizing::new(kdbx_header()) };
+    assert!(tauri::async_runtime::block_on(files::import(&core, Ok(vec![database]))).unwrap());
+    assert_eq!(shell.import()["awaiting"], json!({ "name": "Passwords.kdbx", "kind": "kdbx", "key_file": null }));
+    assert!(!tauri::async_runtime::block_on(files::key_file(&core, Ok(None))).unwrap());
+    assert_eq!(tauri::async_runtime::block_on(files::key_file(&core, Err(PortError("gone".into())))).unwrap_err().code, ErrorCode::IoFailed);
+    let empty = PickedFile { name: "empty".into(), bytes: Zeroizing::new(Vec::new()) };
+    assert_eq!(tauri::async_runtime::block_on(files::key_file(&core, Ok(Some(empty)))).unwrap_err().code, ErrorCode::ImportKeyFileInvalid);
+    assert!(tauri::async_runtime::block_on(files::key_file(&core, Ok(Some(key())))).unwrap());
+    assert_eq!(shell.import()["awaiting"]["key_file"], "Passwords.keyx");
+    // The key file's bytes stay in Rust.
+    assert!(!shell.dispatch(json!({ "command": "app_state" })).unwrap().to_string().contains("any file can be"));
+    shell.dispatch(json!({ "command": "import_key_file_clear" })).unwrap();
+    assert_eq!(shell.import()["awaiting"]["key_file"], Value::Null);
+    // This build has no file picker, and the command says so.
+    assert_eq!(shell.invoke("import_pick_key_file", json!({})).unwrap_err(), json!({ "code": "io_failed" }));
+}
+
 #[test]
 fn a_backup_goes_out_and_comes_back_through_the_file_picker() {
     let shell = shell();

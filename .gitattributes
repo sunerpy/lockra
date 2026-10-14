@@ -1,0 +1,3 @@
+# The import fixtures are read byte for byte by the tests (CRLF where the app that writes them
+# writes CRLF, binary files): no line-ending conversion on checkout, on Windows either.
+crates/lockra-transfer/tests/fixtures/** -text
