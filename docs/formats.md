@@ -2,8 +2,8 @@
 
 What Lockra writes and reads. The code is the authority: `crates/lockra-vault` (container),
 `crates/lockra-core` (entries, settings, backups), `crates/lockra-transfer` (Google, Microsoft,
-otpauth lists, QR codes), `crates/lockra-otp` (codes and URIs), `crates/lockra-sync` (the sync
-objects).
+otpauth lists, QR codes, other apps' logins), `crates/lockra-otp` (codes and URIs),
+`crates/lockra-sync` (the sync objects).
 
 ## 1. The container (vault and backups)
 
@@ -221,10 +221,12 @@ Automatic backups go to the chosen folder 3 seconds after the last change, named
 oldest files **of that pattern** are deleted; nothing else in the folder is touched. A folder that
 cannot be written is reported in the app and tried again at the next change.
 
-Restoring into a vault: _merge_ puts the backup's accounts into the import preview and adds its
-site rules quietly (the later version of each winning, the backup's deletions left out); a backup
-with logins or deletions of logins is refused (`feature_unavailable`) until the preview shows
-logins, rather than restoring its codes alone, and stays open for a _replace_. _Replace_ first
+Restoring into a vault: _merge_ puts the backup's accounts and logins into the import preview
+(§11, the logins linked to their codes through the map of the accounts they end as) and adds its
+site rules quietly (the later version of each winning, the backup's deletions left out). Where
+password management is off, a backup with logins or deletions of logins is refused
+(`feature_unavailable`) rather than restoring its codes alone, and stays open for a _replace_; so
+is opening such a backup in the import. _Replace_ first
 writes the current vault as `pre-restore-YYYYMMDD-HHMMSS.lockrabackup` in the data directory.
 Restoring on the welcome screen makes the backup the vault and its password the master password. A
 vault file (`.lockra`) can be restored the same way. With sync on, _replace_ is a change made at
@@ -516,3 +518,125 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
 as snow makes them (`noise.json`): the extension's implementation is checked against them, and they
 are compared byte for byte (`UPDATE_BROWSER_FIXTURES=1 cargo test -p lockra-browser --test protocol`
 after a deliberate change).
+
+## 11. Logins from other apps
+
+Where password management is on (`UiState.features.passwords`), the import reads the logins of
+browsers, password managers and KeePass beside the accounts (`crates/lockra-transfer`: `csv_logins`,
+`bitwarden`, `onepux`, `kdbx`; `crates/lockra-core/src/import.rs`). Where it is off, none of these
+formats is recognised: such a file is read as it was before (unrecognised, or a text whose lines
+are no `otpauth://` URIs). The export half of this section comes with the export of logins.
+
+### What a file is
+
+A file's kind comes from its bytes, these before the `otpauth://` text (Safari's and 1Password's
+CSV carry `otpauth://` links of their own):
+
+| Kind                   | Recognised by                                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------------------------- |
+| KeePass database       | `03 D9 A2 9A 67 FB 4B B5` (KDBX 4 only)                                                         |
+| 1Password 1PUX         | a zip (`PK\x03\x04`) holding `export.data`; another zip is unrecognised                         |
+| Bitwarden JSON         | an object whose `encrypted` is a boolean, beside `items` (or, encrypted, `data`)                |
+| Chrome and Edge CSV    | `name,url,username,password[,note]`                                                             |
+| Firefox CSV            | `url,username,password,httpRealm,formActionOrigin,…`                                            |
+| Safari / Passwords CSV | `Title,URL,Username,Password,Notes,OTPAuth` (older: `Title,Url,Username,Password`)              |
+| Bitwarden CSV          | `folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,…` (or `collections`) |
+| 1Password CSV          | `Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes`                              |
+| LastPass CSV           | `url,username,password,totp,extra,name,grouping,fav`                                            |
+
+Header names compare in any case; a CSV whose header is none of these goes on to be read as text.
+The input is limited to 64 MiB a file, what a compressed file expands to as well (1PUX's
+`export.data`, a KeePass payload), and a zip to 10 000 entries: past them the file is unreadable.
+
+### What a login becomes
+
+| Source's                                     | Lockra's login                                                                                                                                                                                        |
+| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| name, title                                  | `title` (without one, Chrome's and Firefox's take the URL's host)                                                                                                                                     |
+| user name                                    | the `username` field                                                                                                                                                                                  |
+| password                                     | the `password` field, hidden                                                                                                                                                                          |
+| URLs                                         | `urls`, at most 32, each `domain` unless the source says: Bitwarden's URI match `0` domain, `1` host, `2` starts with, `3` exact, `4` regex, `5` never                                                |
+| notes (LastPass's `extra`)                   | `notes`                                                                                                                                                                                               |
+| folder, collection, grouping, KeePass groups | `group`: a nested group as its path (`Work/Servers`), the root group left out; 1PUX names the vault when the export has several                                                                       |
+| favourite                                    | `favorite`                                                                                                                                                                                            |
+| tags                                         | `tags` (separated by commas, semicolons or tabs), at most 32                                                                                                                                          |
+| custom fields                                | custom fields; hidden ones (Bitwarden's hidden, 1Password's concealed and passwords, KeePass's protected strings) stay hidden; Bitwarden's linked fields, holding no value of their own, are left out |
+| Bitwarden's re-prompt                        | `protection: confirm`                                                                                                                                                                                 |
+| the app                                      | `source`: `chrome`, `firefox`, `safari`, `bitwarden`, `1password`, `lastpass`, `kdbx`                                                                                                                 |
+
+A login is a set of new writes (§2): each part gets a fresh write id and a stamp of the commit.
+One past what a login holds (a password or a field's value over 4 KiB, notes over 64 KiB, more
+than 64 fields) is listed as left out, `too_large`, with its code.
+
+Left out and listed, for a later Lockra: payment cards and bank accounts (`card_item`), identities,
+passports and licences (`identity_item`), secure notes (`note_item`), other kinds such as SSH keys
+and documents (`other_item`), and an encrypted Bitwarden export as a whole (`encrypted_export`).
+An item of a shape the reader does not know is `other_item`, not a reason to refuse the file.
+
+### Codes
+
+A login's code is a candidate of its own, right after the login: an `otpauth://` URI (named after
+the login where the URI names nobody), or a bare Base32 secret (Bitwarden, LastPass, 1Password)
+read as TOTP, SHA1, six digits, 30 s. KeePass keeps one in `otp` (a URI, or KeeOtp's
+`key=…&size=…&step=…&otpHashMode=…`), in KeePass 2's `TimeOtp-Secret[-Base32|-Hex|-Base64]` with
+`TimeOtp-Length`, `-Period`, `-Algorithm` (and `HmacOtp-*` with `HmacOtp-Counter` for HOTP), or in
+the older `TOTP Seed` and `TOTP Settings` (`30;6`; `30;S`, Steam's, is not taken). A code that does
+not read is listed as unsupported with its reason; the login links nothing then. An imported code
+is an account of `origin: uri`, never an origin of its own: devices of 0.9 do not read one.
+
+The commit takes the codes first and maps each candidate to the account it ends as: a new one, the
+vault's account of the same secret, the account an earlier candidate of the same secret ends as,
+the account that replaces one of the same name; a code skipped, kept beside an account of its name
+with another secret, or unsupported ends as none. Then each login is
+linked through that map: a code that ends as none links nothing, and the source's own id never
+stays. Two logins of one code link the same account.
+
+### Logins in the preview
+
+A login is compared by its site, its user name and its password. Its site is the host of its
+first URL that is a web address (`WebUrl`), else its first URL as written, else its title (a
+KeePass entry without a URL); user names compare trimmed. Its code is compared as it would be
+mapped, with the codes' default choices: a code the import would add is a new account.
+
+| Status           | When                                                                                                                 | Default |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- | ------- |
+| `new`            | none of the below                                                                                                    | add     |
+| `login_exists`   | the vault has the same site, user name and password, and its code is the same or the import has none for it          | skip    |
+| `duplicate`      | an earlier login of this import has the same site, user name and password                                            | skip    |
+| `login_conflict` | the vault's login of the same site and user name has another password (`password`) or another code, or none (`code`) | replace |
+
+_Replace_ writes the import's password into the vault's login (the one it replaces goes into the
+history) or links the import's code (the account linked before stays in the code list); a code
+the import maps to no account leaves the login's link as it is. _Add_ keeps both. The commit
+compares the logins with the vault as the preview showed it: two logins of one site in one import
+are two logins, not one replacing the other.
+
+A backup's login (a merge, or a backup opened in the import) is compared by its id first: the same
+id and the same content (everything but the link, the stamps, the write ids, the history and the
+times) is `login_exists` when its code maps to the account it links here, `login_conflict`
+(`code`) otherwise; the same id and other content is `login_conflict` (`changed`), and replacing
+takes the backup's version back as a restore that replaces does (§4, write ids kept, new stamps).
+A login whose id this vault does not hold compares as any other; a new one gets a new id and new
+stamps, as a backup's account does, so that no deletion of this vault or of its space removes it.
+
+### KeePass databases
+
+A KDBX 4 database waits in the import for its password, as a backup does (`ImportView.awaiting`,
+`kind: kdbx`), and for its key file if it takes one: the shell's `import_pick_key_file` opens the
+system's file dialog (on the phone, its file picker) and the core keeps the key the file brings,
+32 bytes, and its name for the preview; `import_key_file_clear` forgets it. The composite key is
+SHA-256 of SHA-256(password) (left out when the password is empty and a key file is given) and the
+key file's key: an XML key file of version 1.0 (Base64) or 2.0 (hex, its four-byte `Hash` checked),
+32 bytes as they are, 64 hex digits, or any other file's SHA-256. An empty file, or an XML key file
+that does not read, is refused at once (`import_key_file_invalid`). A wrong key is `wrong_password`
+without a key file, `import_key_file_invalid` with one (the two cannot be told apart).
+
+Lockra reads the database itself: the ciphers AES-256-CBC, Twofish-CBC and ChaCha20; gzip or none;
+the inner streams ChaCha20 and Salsa20; the key derivations AES-KDF, Argon2d and Argon2id (its
+lanes in parallel). Before any work, the header is checked and the key derivation bounded: Argon2
+at most 1 GiB, 4 096 passes, 64 lanes and 64 GiB of memory times passes, the AES-KDF at most 2^30
+rounds; a database past them, of KDBX 3.1 or earlier, or of a cipher it does not know, is said to
+be unreadable as the file is added. The header's SHA-256 and HMAC, then every block's HMAC, are
+checked; the payload expands to at most 64 MiB; the XML is read as events, its protected values
+unmasked in document order (the entries' histories included). The entries of the recycle bin
+(`Meta/RecycleBinUUID`, while `RecycleBinEnabled`) are left out; `KP2A_URL*` strings are more URLs.

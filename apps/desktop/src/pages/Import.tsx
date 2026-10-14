@@ -1,13 +1,16 @@
 // Bring accounts in: the four sources (Google's migration QR codes, Microsoft's PhoneFactor
-// database, otpauth links, a Lockra backup) and the preview of what was found, which nothing
-// reaches the vault before the user confirms.
+// database, otpauth links, a Lockra backup), with password management the exports of browsers,
+// password managers and KeePass too, and the preview of what was found, which nothing reaches the
+// vault before the user confirms.
 import {
+  type AwaitingView,
   type CandidateAction,
   type CandidateStatus,
   type CandidateView,
   type ImportView,
   actionsFor,
   candidateSource,
+  conflictText,
   errorText,
   importChoices,
   parametersText,
@@ -43,7 +46,15 @@ const STATUS_TONE: Record<CandidateStatus["type"], BadgeTone> = {
   conflict: "warn",
   duplicate: "neutral",
   unsupported: "danger",
+  login_exists: "neutral",
+  login_conflict: "warn",
 };
+
+/** A found account's or login's name, as the preview lists it. */
+function candidateName(c: CandidateView): string {
+  if (c.login !== null) return c.login.title || c.login.host || c.login.username || "—";
+  return c.issuer || c.account || "—";
+}
 
 export function Import({ dragging }: { dragging: boolean }) {
   const t = useT();
@@ -66,6 +77,7 @@ export function Import({ dragging }: { dragging: boolean }) {
         <MicrosoftSource />
         <TextSource />
         <BackupSource />
+        {state.features.passwords && <LoginsSource />}
       </CardGrid>
     </div>
   );
@@ -74,7 +86,7 @@ export function Import({ dragging }: { dragging: boolean }) {
 function usePick() {
   const { backend } = useBackend();
   const guarded = useGuarded();
-  return (kind: "images" | "text" | "backup" | "any") =>
+  return (kind: "images" | "text" | "backup" | "logins" | "any") =>
     void guarded(() => backend.pickImportFiles(kind));
 }
 
@@ -179,6 +191,23 @@ function BackupSource() {
   );
 }
 
+function LoginsSource() {
+  const t = useT();
+  const pick = usePick();
+  return (
+    <div data-testid="source-logins" className="contents">
+      <OptionCard icon="key" title={t("import.logins.title")}>
+        <div className="flex flex-col items-start gap-3">
+          <p className="text-[12px] leading-[18px] text-fg-muted">{t("import.logins.body")}</p>
+          <Button icon="key" onClick={() => pick("logins")}>
+            {t("import.logins.pick")}
+          </Button>
+        </div>
+      </OptionCard>
+    </div>
+  );
+}
+
 function Preview({ view }: { view: ImportView }) {
   const t = useT();
   const dispatch = useDispatch();
@@ -189,17 +218,35 @@ function Preview({ view }: { view: ImportView }) {
   const choose = (id: number, action: CandidateAction) =>
     setChoices((current) => new Map(current).set(id, action));
   const commit = () => void dispatch({ command: "import_commit", choices: list });
+  const logins = view.candidates.some((c) => c.login !== null);
   const columns: TableColumn<CandidateView>[] = [
     {
       id: "account",
       header: t("import.preview.account"),
       minWidth: 160,
-      cell: (c) => ({
-        type: "two",
-        primary: c.issuer || c.account || "—",
-        secondary: c.issuer ? c.account : "",
-      }),
+      cell: (c) =>
+        c.login === null
+          ? {
+              type: "two",
+              primary: c.issuer || c.account || "—",
+              secondary: c.issuer ? c.account : "",
+            }
+          : { type: "two", primary: candidateName(c), secondary: c.login.username },
     },
+    ...(logins
+      ? [
+          {
+            id: "type",
+            header: t("import.preview.type"),
+            fit: true,
+            cell: (c: CandidateView) => ({
+              type: "badge" as const,
+              text: t(c.login === null ? "import.preview.typeCode" : "import.preview.typeLogin"),
+              tone: c.login === null ? ("neutral" as const) : ("accent" as const),
+            }),
+          },
+        ]
+      : []),
     {
       id: "source",
       header: t("import.preview.source"),
@@ -213,9 +260,16 @@ function Preview({ view }: { view: ImportView }) {
       cell: (c) => ({
         type: "mono",
         text:
-          c.kind && c.algorithm && c.digits
-            ? parametersText(t, c.kind, c.algorithm, c.digits)
-            : "—",
+          c.login !== null
+            ? [
+                c.login.host || "—",
+                c.login.totp === null ? undefined : t("import.preview.withCode"),
+              ]
+                .filter((part) => part !== undefined)
+                .join(" · ")
+            : c.kind && c.algorithm && c.digits
+              ? parametersText(t, c.kind, c.algorithm, c.digits)
+              : "—",
         muted: true,
       }),
     },
@@ -233,6 +287,13 @@ function Preview({ view }: { view: ImportView }) {
               {rejectText(t, c.status.reason)}
             </span>
           )}
+          {c.status.type === "login_conflict" && (
+            <span
+              className="truncate text-[12px] text-fg-muted"
+              title={conflictText(t, c.status.reason)}>
+              {conflictText(t, c.status.reason)}
+            </span>
+          )}
         </span>
       ),
     },
@@ -246,7 +307,7 @@ function Preview({ view }: { view: ImportView }) {
         return (
           <Select
             size="sm"
-            aria-label={`${t("import.preview.action")} · ${c.issuer || c.account}`}
+            aria-label={`${t("import.preview.action")} · ${candidateName(c)}`}
             value={actionOf(c)}
             onChange={(action) => choose(c.id, action)}
             options={actions.map((value) => ({ value, label: t(`import.action.${value}`) }))}
@@ -260,7 +321,9 @@ function Preview({ view }: { view: ImportView }) {
       eyebrow={t("import.preview.title")}
       right={
         <span className="mono text-fg-subtle">
-          {t("common.accounts", { n: view.candidates.length })}
+          {logins
+            ? t("import.preview.items", { n: view.candidates.length })
+            : t("common.accounts", { n: view.candidates.length })}
         </span>
       }
       data-testid="import-preview">
@@ -272,7 +335,8 @@ function Preview({ view }: { view: ImportView }) {
               ` · ${t("import.preview.googleMissing", { missing: batch.missing.map((i) => i + 1).join(", ") })}`}
           </Banner>
         ))}
-        {view.awaiting_password !== null && <BackupPassword name={view.awaiting_password} />}
+        {view.awaiting?.kind === "backup" && <BackupPassword name={view.awaiting.name} />}
+        {view.awaiting?.kind === "kdbx" && <KdbxPassword awaiting={view.awaiting} />}
         {view.candidates.length > 0 && (
           <Table
             columns={columns}
@@ -292,7 +356,11 @@ function Preview({ view }: { view: ImportView }) {
             disabled={taken === 0}
             onClick={commit}
             data-testid="import-commit">
-            {taken === 0 ? t("import.preview.nothing") : t("import.preview.commit", { n: taken })}
+            {taken === 0
+              ? t("import.preview.nothing")
+              : logins
+                ? t("import.preview.commitItems", { n: taken })
+                : t("import.preview.commit", { n: taken })}
           </Button>
         </div>
       </div>
@@ -328,6 +396,65 @@ function BackupPassword({ name }: { name: string }) {
       <Button variant="primary" type="submit" loading={submit.busy} disabled={password === ""}>
         {t("import.preview.awaitingSubmit")}
       </Button>
+    </form>
+  );
+}
+
+/** A KeePass database in the import waits for its password, and its key file if it takes one:
+ *  the file is picked in a native dialog and read in Rust; only its name comes back. */
+function KdbxPassword({ awaiting }: { awaiting: AwaitingView }) {
+  const t = useT();
+  const { backend } = useBackend();
+  const guarded = useGuarded();
+  const dispatch = useDispatch();
+  const [password, setPassword] = useState("");
+  const submit = useSubmit();
+  // A database a key file alone protects opens with the password left empty.
+  const ready = password !== "" || awaiting.key_file !== null;
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (!ready) return;
+    await submit.run(() => backend.dispatch({ command: "import_backup_password", password }));
+    setPassword("");
+  };
+  return (
+    <form
+      onSubmit={(e) => void onSubmit(e)}
+      className="flex flex-col gap-3 rounded-10 bg-inset p-3"
+      data-testid="kdbx-password">
+      <div className="flex flex-wrap items-end gap-2">
+        <PasswordField
+          label={t("import.preview.awaitingKdbx", { name: awaiting.name })}
+          value={password}
+          onChange={setPassword}
+          autoFocus
+          className="min-w-[16rem] flex-1"
+          error={submit.error === undefined ? undefined : errorText(t, submit.error)}
+        />
+        <Button icon="key" onClick={() => void guarded(() => backend.pickKeyFile())}>
+          {t("import.preview.keyFile")}
+        </Button>
+        <Button variant="primary" type="submit" loading={submit.busy} disabled={!ready}>
+          {t("import.preview.awaitingKdbxSubmit")}
+        </Button>
+      </div>
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-[12px] text-fg-muted">
+        {awaiting.key_file === null ? (
+          <span>{t("import.preview.keyFileHint")}</span>
+        ) : (
+          <>
+            <span className="truncate" data-testid="kdbx-key-file">
+              {t("import.preview.keyFileChosen", { name: awaiting.key_file })}
+            </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void dispatch({ command: "import_key_file_clear" })}>
+              {t("import.preview.keyFileClear")}
+            </Button>
+          </>
+        )}
+      </div>
     </form>
   );
 }

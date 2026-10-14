@@ -41,6 +41,7 @@ import {
   type GeneratorOptions,
   type GoogleBatchView,
   type ImportOutcome,
+  type AwaitingView,
   type Incompatible,
   type InstallMethod,
   type ItemDraft,
@@ -189,6 +190,19 @@ export function mockItemView(title: string, fields: Partial<ItemView> = {}): Ite
   };
 }
 
+/** A login of a password manager's export, as the mock's import adds it. */
+function importedLogin(title: string, username: string, url: string, password: string): MockItem {
+  return {
+    view: mockItemView(title, {
+      username,
+      has_password: true,
+      urls: [{ url, matching: "domain" }],
+      source: "bitwarden",
+    }),
+    password,
+  };
+}
+
 /** A release the mock's update check announces. */
 export interface MockRelease {
   version: string;
@@ -199,6 +213,8 @@ export interface MockRelease {
 }
 
 export const MOCK_PASSWORD = "correct horse battery";
+/** The key file `pickKeyFile` chooses. */
+export const MOCK_KEY_FILE = "Passwords.keyx";
 /** The storage secret the mock accepts (any other is refused, like wrong credentials). */
 export const MOCK_STORAGE_SECRET = "storage secret";
 /** The folder the mock's dialog chooses unless told otherwise. */
@@ -554,6 +570,8 @@ export function sampleItems(entries: readonly MockEntry[] = []): MockItem[] {
 interface MockCandidate {
   view: CandidateView;
   secret: string;
+  /** A login's: what the commit adds (its code linked by `view.login.totp`). */
+  login?: MockItem;
 }
 
 interface MockExport {
@@ -737,7 +755,7 @@ export class MockBackend implements Backend {
   private frameTimer: ReturnType<typeof setTimeout> | undefined;
   private candidates: MockCandidate[] = [];
   private batches: GoogleBatchView[] = [];
-  private awaiting: string | null = null;
+  private awaiting: AwaitingView | null = null;
   private exports = new Map<string, MockExport>();
   private restoreEntries: MockEntry[] | null = null;
   private clipboard: string | undefined;
@@ -894,8 +912,14 @@ export class MockBackend implements Backend {
     return true;
   }
 
-  async pickImportFiles(_kind?: ImportPickKind): Promise<boolean> {
+  async pickImportFiles(kind?: ImportPickKind): Promise<boolean> {
     this.requireUnlocked();
+    if (kind === "logins") {
+      this.requirePasswords();
+      this.addLoginCandidates({ type: "file", name: "bitwarden_export.json" });
+      this.publishImport();
+      return true;
+    }
     const source = { type: "file" as const, name: "google-export-1.jpg" };
     const accounts: [string, string][] = [
       ["Dropbox", "alex@example.com"],
@@ -918,6 +942,15 @@ export class MockBackend implements Backend {
       );
     }
     this.batches = [{ id: 412_337, size: 2, received: [0], missing: [1] }];
+    this.publishImport();
+    return true;
+  }
+
+  async pickKeyFile(): Promise<boolean> {
+    this.requireUnlocked();
+    this.requirePasswords();
+    if (this.awaiting?.kind !== "kdbx") throw new LockraError("no_import");
+    this.awaiting = { ...this.awaiting, key_file: MOCK_KEY_FILE };
     this.publishImport();
     return true;
   }
@@ -1255,6 +1288,18 @@ export class MockBackend implements Backend {
       case "import_backup_password":
         this.requireUnlocked();
         if (this.awaiting === null) throw new LockraError("no_import");
+        if (this.awaiting.kind === "kdbx") {
+          // A KeePass database opens with the mock's password, with or without a key file.
+          if (command.password !== MOCK_PASSWORD)
+            throw new LockraError(
+              this.awaiting.key_file === null ? "wrong_password" : "import_key_file_invalid",
+            );
+          const name = this.awaiting.name;
+          this.awaiting = null;
+          this.addLoginCandidates({ type: "file", name });
+          this.publishImport();
+          return null;
+        }
         this.checkPassword(command.password);
         this.awaiting = null;
         for (const entry of sampleEntries().slice(0, 2)) {
@@ -1268,6 +1313,13 @@ export class MockBackend implements Backend {
             entry.view.digits,
           );
         }
+        this.publishImport();
+        return null;
+      case "import_key_file_clear":
+        this.requireUnlocked();
+        this.requirePasswords();
+        if (this.awaiting?.kind !== "kdbx") throw new LockraError("no_import");
+        this.awaiting = { ...this.awaiting, key_file: null };
         this.publishImport();
         return null;
       case "import_commit":
@@ -2019,6 +2071,7 @@ export class MockBackend implements Backend {
             line: index + 1,
             status: { type: "unsupported", reason: "not_otpauth" },
             default_action: "skip",
+            login: null,
           },
         });
       }
@@ -2066,17 +2119,97 @@ export class MockBackend implements Backend {
         line: null,
         status,
         default_action: action,
+        login: null,
       },
+    });
+  }
+
+  /** What a password manager's export holds, as the core lists it: a login with its code right
+   *  after it, a login the vault may hold already, and a card it does not take. */
+  private addLoginCandidates(source: CandidateView["source"]): void {
+    const candidate = (
+      view: Omit<CandidateView, "id" | "source" | "origin" | "line">,
+      item?: MockItem,
+    ) =>
+      this.candidates.push({
+        secret: "",
+        view: { id: this.candidates.length, source, origin: "uri", line: null, ...view },
+        login: item,
+      });
+    const blank = { issuer: "", account: "", kind: null, algorithm: null, digits: null } as const;
+    const github = importedLogin(
+      "GitHub",
+      "octocat",
+      "https://github.com/login",
+      "mock-imported-1",
+    );
+    candidate(
+      {
+        ...blank,
+        status: { type: "new" },
+        default_action: "add",
+        login: {
+          title: "GitHub",
+          username: "octocat",
+          host: "github.com",
+          totp: this.candidates.length + 1,
+        },
+      },
+      github,
+    );
+    this.addCandidate(
+      source,
+      "uri",
+      "GitHub",
+      "octocat",
+      "GEZDGNBVGY3TQOJQ",
+      { type: "totp", period: 30 },
+      6,
+    );
+    const router = importedLogin("Router", "admin", "https://router.local", "mock-imported-2");
+    const existing = this.items.find((i) => i.view.title === "Router");
+    candidate(
+      {
+        ...blank,
+        status: existing
+          ? { type: "login_conflict", item_id: existing.view.id, reason: "password" }
+          : { type: "new" },
+        default_action: existing ? "replace" : "add",
+        login: { title: "Router", username: "admin", host: "router.local", totp: null },
+      },
+      router,
+    );
+    candidate({
+      ...blank,
+      account: "Visa",
+      status: { type: "unsupported", reason: "card_item" },
+      default_action: "skip",
+      login: null,
     });
   }
 
   private commit(choices: readonly Choice[]): ImportOutcome {
     this.requireUnlocked();
     if (this.state.import === null) throw new LockraError("no_import");
-    const outcome: ImportOutcome = { added: 0, replaced: 0, skipped: 0 };
+    const outcome: ImportOutcome = {
+      added: 0,
+      replaced: 0,
+      skipped: 0,
+      logins: { added: 0, replaced: 0, skipped: 0 },
+    };
+    // The codes first, each mapped to the account it ends as; then the logins, linked through it.
+    const accounts = new Map<number, string>();
+    const logins: MockCandidate[] = [];
     for (const candidate of this.candidates) {
       const view = candidate.view;
       const action = choices.find((c) => c.id === view.id)?.action ?? view.default_action;
+      if (
+        view.login !== null ||
+        (view.status.type === "unsupported" && view.status.reason.endsWith("_item"))
+      ) {
+        logins.push(candidate);
+        continue;
+      }
       if (
         view.kind === null ||
         view.digits === null ||
@@ -2096,7 +2229,7 @@ export class MockBackend implements Backend {
           outcome.replaced += 1;
         }
       } else {
-        this.addEntry(
+        const id = this.addEntry(
           view.issuer,
           view.account,
           candidate.secret,
@@ -2107,9 +2240,34 @@ export class MockBackend implements Backend {
           null,
           false,
         );
+        accounts.set(view.id, id);
         outcome.added += 1;
       }
     }
+    for (const candidate of logins) {
+      const view = candidate.view;
+      const action = choices.find((c) => c.id === view.id)?.action ?? view.default_action;
+      const item = candidate.login;
+      const link =
+        view.login?.totp === null || view.login === null
+          ? undefined
+          : accounts.get(view.login.totp);
+      if (item === undefined || action === "skip" || view.status.type === "login_exists") {
+        outcome.logins.skipped += 1;
+      } else if (action === "replace" && view.status.type === "login_conflict") {
+        const itemId = view.status.item_id;
+        const target = this.items.find((i) => i.view.id === itemId);
+        if (target) {
+          target.password = item.password;
+          if (link !== undefined) target.view.totp_entry = link;
+          outcome.logins.replaced += 1;
+        }
+      } else {
+        this.items.push({ ...item, view: { ...item.view, totp_entry: link ?? null } });
+        outcome.logins.added += 1;
+      }
+    }
+    if (logins.length > 0) this.itemsChanged();
     this.clearImport();
     this.changed();
     this.notice({ type: "imported", ...outcome });
@@ -2590,7 +2748,7 @@ export class MockBackend implements Backend {
     this.state.import = {
       candidates: this.candidates.map((c) => c.view),
       google_batches: this.batches,
-      awaiting_password: this.awaiting,
+      awaiting: this.awaiting,
     };
     this.publish();
   }
@@ -2603,7 +2761,14 @@ export class MockBackend implements Backend {
 
   /** Test hook: put a Lockra backup into the import, waiting for its password. */
   awaitBackup(name: string): void {
-    this.awaiting = name;
+    this.awaiting = { name, kind: "backup", key_file: null };
+    this.publishImport();
+  }
+
+  /** Test hook: put a KeePass database into the import, waiting for its password (the mock's,
+   *  `MOCK_PASSWORD`) and, if the user wants, a key file. */
+  awaitKdbx(name: string): void {
+    this.awaiting = { name, kind: "kdbx", key_file: null };
     this.publishImport();
   }
 

@@ -524,7 +524,11 @@
       ""
     ],
     "import": {
-      "awaiting_password": "other.lockrabackup",
+      "awaiting": {
+        "key_file": "Passwords.keyx",
+        "kind": "kdbx",
+        "name": "Passwords.kdbx"
+      },
       "candidates": [
         {
           "account": "octocat",
@@ -538,6 +542,7 @@
             "type": "totp"
           },
           "line": null,
+          "login": null,
           "origin": "google",
           "source": {
             "name": "google-1.png",
@@ -560,6 +565,7 @@
             "type": "totp"
           },
           "line": null,
+          "login": null,
           "origin": "google",
           "source": {
             "name": "google-1.png",
@@ -581,6 +587,7 @@
             "type": "totp"
           },
           "line": null,
+          "login": null,
           "origin": "microsoft",
           "source": {
             "name": "PhoneFactor",
@@ -603,6 +610,7 @@
             "type": "totp"
           },
           "line": null,
+          "login": null,
           "origin": "microsoft",
           "source": {
             "name": "PhoneFactor",
@@ -621,6 +629,7 @@
           "issuer": "",
           "kind": null,
           "line": 3,
+          "login": null,
           "origin": "uri",
           "source": {
             "type": "text"
@@ -642,6 +651,7 @@
             "type": "hotp"
           },
           "line": null,
+          "login": null,
           "origin": "uri",
           "source": {
             "type": "clipboard"
@@ -662,6 +672,7 @@
             "type": "totp"
           },
           "line": null,
+          "login": null,
           "origin": "backup",
           "source": {
             "name": "mine.lockrabackup",
@@ -683,12 +694,130 @@
             "type": "totp"
           },
           "line": null,
+          "login": null,
           "origin": "google",
           "source": {
             "type": "camera"
           },
           "status": {
             "type": "new"
+          }
+        },
+        {
+          "account": "",
+          "algorithm": null,
+          "default_action": "add",
+          "digits": null,
+          "id": 8,
+          "issuer": "",
+          "kind": null,
+          "line": null,
+          "login": {
+            "host": "www.dropbox.com",
+            "title": "Dropbox",
+            "totp": 9,
+            "username": "alex@example.com"
+          },
+          "origin": "uri",
+          "source": {
+            "name": "bitwarden_export.json",
+            "type": "file"
+          },
+          "status": {
+            "type": "new"
+          }
+        },
+        {
+          "account": "alex@example.com",
+          "algorithm": "sha1",
+          "default_action": "add",
+          "digits": 6,
+          "id": 9,
+          "issuer": "Dropbox",
+          "kind": {
+            "period": 30,
+            "type": "totp"
+          },
+          "line": null,
+          "login": null,
+          "origin": "uri",
+          "source": {
+            "name": "bitwarden_export.json",
+            "type": "file"
+          },
+          "status": {
+            "type": "new"
+          }
+        },
+        {
+          "account": "",
+          "algorithm": null,
+          "default_action": "skip",
+          "digits": null,
+          "id": 10,
+          "issuer": "",
+          "kind": null,
+          "line": null,
+          "login": {
+            "host": "github.com",
+            "title": "GitHub",
+            "totp": null,
+            "username": "octocat"
+          },
+          "origin": "uri",
+          "source": {
+            "name": "bitwarden_export.json",
+            "type": "file"
+          },
+          "status": {
+            "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+            "type": "login_exists"
+          }
+        },
+        {
+          "account": "",
+          "algorithm": null,
+          "default_action": "replace",
+          "digits": null,
+          "id": 11,
+          "issuer": "",
+          "kind": null,
+          "line": null,
+          "login": {
+            "host": "",
+            "title": "Router",
+            "totp": null,
+            "username": "admin"
+          },
+          "origin": "uri",
+          "source": {
+            "name": "bitwarden_export.json",
+            "type": "file"
+          },
+          "status": {
+            "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000018",
+            "reason": "password",
+            "type": "login_conflict"
+          }
+        },
+        {
+          "account": "Visa",
+          "algorithm": null,
+          "default_action": "skip",
+          "digits": null,
+          "id": 12,
+          "issuer": "",
+          "kind": null,
+          "line": null,
+          "login": null,
+          "origin": "uri",
+          "source": {
+            "name": "bitwarden_export.json",
+            "type": "file"
+          },
+          "status": {
+            "reason": "card_item",
+            "type": "unsupported"
           }
         }
       ],

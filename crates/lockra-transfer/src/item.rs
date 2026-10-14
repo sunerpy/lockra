@@ -19,7 +19,8 @@ pub enum Origin {
     Backup,
 }
 
-/// Why an account in the source cannot be imported.
+/// Why an account, or another app's item, in the source cannot be imported. Shown in the preview
+/// only, never stored: a later Lockra may add reasons freely.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RejectReason {
@@ -45,6 +46,18 @@ pub enum RejectReason {
     EncryptedSecret,
     /// A Microsoft account type that has no portable secret (work or school accounts).
     UnsupportedAccountType,
+    /// A password manager's payment card or bank account: a later Lockra imports those.
+    CardItem,
+    /// A password manager's identity, passport or licence: a later Lockra imports those.
+    IdentityItem,
+    /// A password manager's secure note: a later Lockra imports those.
+    NoteItem,
+    /// A password manager's item of another kind (an SSH key, a document, a server, …).
+    OtherItem,
+    /// An export encrypted by the app that wrote it (Bitwarden's encrypted JSON).
+    EncryptedExport,
+    /// A login past what one holds: a value over 4 KiB, notes over 64 KiB, more than 64 fields.
+    TooLarge,
 }
 
 impl From<&UriError> for RejectReason {

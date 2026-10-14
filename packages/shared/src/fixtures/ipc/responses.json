@@ -43,6 +43,9 @@
       "code": "sync_invite_needs_storage"
     },
     {
+      "code": "import_key_file_invalid"
+    },
+    {
       "code": "feature_unavailable"
     },
     {
@@ -110,6 +113,11 @@
   ],
   "import_outcome": {
     "added": 3,
+    "logins": {
+      "added": 12,
+      "replaced": 2,
+      "skipped": 3
+    },
     "replaced": 1,
     "skipped": 2
   },

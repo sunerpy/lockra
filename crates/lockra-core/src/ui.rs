@@ -507,13 +507,40 @@ pub enum CandidateStatus {
         /// The entry it collides with.
         entry_id: Uuid,
     },
-    /// The same account appears earlier in this import.
+    /// The same account (or login) appears earlier in this import.
     Duplicate,
     /// Cannot be imported.
     Unsupported {
         /// Why.
         reason: RejectReason,
     },
+    /// A login: the same one is in the vault (the same site, user name and password, and the
+    /// same code or none from the import; for a backup's, the same login unchanged).
+    LoginExists {
+        /// The vault's login.
+        item_id: Uuid,
+    },
+    /// A login: the vault's of the same site and user name differs from it (or, for a backup's,
+    /// the same login changed since). Replacing is the default.
+    LoginConflict {
+        /// The vault's login.
+        item_id: Uuid,
+        /// What differs.
+        reason: ConflictReason,
+    },
+}
+
+/// What differs between a login of the import and the vault's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictReason {
+    /// The password: replacing writes the import's, the vault's goes into the history.
+    Password,
+    /// The code linked (or the vault's has none): replacing links the import's; the account
+    /// linked before stays in the code list.
+    Code,
+    /// A backup's version of the same login, changed since: replacing takes the backup's back.
+    Changed,
 }
 
 /// What to do with a candidate on commit.
@@ -524,7 +551,8 @@ pub enum CandidateAction {
     Add,
     /// Leave out.
     Skip,
-    /// Replace the conflicting entry's secret and parameters (its group and pin stay).
+    /// Replace the conflicting entry's secret and parameters (its group and pin stay); for a
+    /// login, take the import's password or code (or a backup's version) into the vault's.
     Replace,
 }
 
@@ -553,6 +581,21 @@ pub struct CandidateView {
     pub status: CandidateStatus,
     /// The action taken when the commit names no other.
     pub default_action: CandidateAction,
+    /// A login, not an account: its title, user name and site (its secrets stay in the core).
+    pub login: Option<LoginCandidateView>,
+}
+
+/// A login found by the import, as the preview shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct LoginCandidateView {
+    /// Its name.
+    pub title: String,
+    /// The user name.
+    pub username: String,
+    /// The host of its first web address; empty when it has none.
+    pub host: String,
+    /// The candidate of its code (the account it is linked to once imported), when it brings one.
+    pub totp: Option<u32>,
 }
 
 /// One Google export: which of its codes arrived.
@@ -575,8 +618,29 @@ pub struct ImportView {
     pub candidates: Vec<CandidateView>,
     /// Google exports seen, with their missing codes.
     pub google_batches: Vec<GoogleBatchView>,
-    /// A Lockra backup waiting for its password before its entries can be listed.
-    pub awaiting_password: Option<String>,
+    /// A file waiting for its password before what it holds can be listed.
+    pub awaiting: Option<AwaitingView>,
+}
+
+/// A file of the import waiting for its password.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AwaitingView {
+    /// Its name.
+    pub name: String,
+    /// What it is.
+    pub kind: AwaitingKind,
+    /// The name of the key file chosen for it (a KeePass database's); the file stays in the core.
+    pub key_file: Option<String>,
+}
+
+/// What kind of file waits for its password.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AwaitingKind {
+    /// A Lockra backup.
+    Backup,
+    /// A KeePass database, which may take a key file too.
+    Kdbx,
 }
 
 /// Backup status.
@@ -765,6 +829,8 @@ pub enum Notice {
         replaced: u32,
         /// Candidates left out.
         skipped: u32,
+        /// What became of the logins.
+        logins: crate::import::LoginOutcome,
     },
     /// A file in the import was not recognized.
     FileUnrecognized {

@@ -52,7 +52,19 @@ describe("IPC fixtures", () => {
     );
     expect(failures.map(([name]) => name)).toEqual([]);
     const candidates = uiStateSchema.parse(ipcFixtures.state.unlocked).import?.candidates;
-    expect(candidates).toHaveLength(8);
+    expect(candidates).toHaveLength(13);
+    // Logins with their code right after them, beside the accounts; the file waiting is KeePass's.
+    expect(candidates?.filter((c) => c.login !== null).map((c) => c.status.type)).toEqual([
+      "new",
+      "login_exists",
+      "login_conflict",
+    ]);
+    expect(candidates?.[8]?.login?.totp).toBe(9);
+    expect(uiStateSchema.parse(ipcFixtures.state.unlocked).import?.awaiting).toEqual({
+      name: "Passwords.kdbx",
+      kind: "kdbx",
+      key_file: "Passwords.keyx",
+    });
     expect(candidates?.map((c) => c.source.type)).toEqual(
       expect.arrayContaining(["file", "text", "clipboard", "camera"]),
     );
@@ -114,6 +126,7 @@ describe("IPC fixtures", () => {
       added: 3,
       replaced: 1,
       skipped: 2,
+      logins: { added: 12, replaced: 2, skipped: 3 },
     });
     expect(codesFrameSchema.parse(r.codes_frame).codes[1]?.next_code).toBeNull();
     expect(codesFrameSchema.parse(r.codes_frame_locked).codes).toEqual([]);

@@ -58,6 +58,9 @@ pub enum ErrorCode {
     ImportUnrecognized,
     /// A file the import could not read (too large, unreadable, damaged).
     ImportUnreadable,
+    /// The key file chosen for a KeePass database is not one, or does not open it with the
+    /// password given.
+    ImportKeyFileInvalid,
     /// The clipboard holds neither an image with a QR code nor text with a URI.
     ClipboardEmpty,
     /// The clipboard could not be read or written.

@@ -134,6 +134,9 @@
       "password": "backup password"
     },
     {
+      "command": "import_key_file_clear"
+    },
+    {
       "choices": [
         {
           "action": "replace",
@@ -485,6 +488,7 @@
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
+    "import_pick_key_file",
     "import_scan",
     "backup_save",
     "restore_pick",
@@ -498,6 +502,7 @@
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
+    "import_pick_key_file",
     "backup_save",
     "backup_pick_dir",
     "restore_pick",

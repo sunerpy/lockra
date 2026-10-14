@@ -153,11 +153,14 @@ pub enum UiCommand {
     },
     /// Import the clipboard.
     ImportClipboard,
-    /// Open the Lockra backup waiting in the import.
+    /// Open the file waiting in the import: a Lockra backup, or a KeePass database (with the key
+    /// file chosen through the shell's `import_pick_key_file`).
     ImportBackupPassword {
         /// Its password.
         password: Zeroizing<String>,
     },
+    /// Forget the key file chosen for the KeePass database waiting in the import.
+    ImportKeyFileClear,
     /// Apply the import.
     ImportCommit {
         /// Per-candidate choices; the rest take their default.
@@ -448,7 +451,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 72] = [
+pub const COMMANDS: [&str; 73] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -475,6 +478,7 @@ pub const COMMANDS: [&str; 72] = [
     "import_text",
     "import_clipboard",
     "import_backup_password",
+    "import_key_file_clear",
     "import_commit",
     "import_cancel",
     "export_start",
@@ -525,11 +529,12 @@ pub const COMMANDS: [&str; 72] = [
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
 /// open a native file dialog first.
-pub const SHELL_COMMANDS: [&str; 10] = [
+pub const SHELL_COMMANDS: [&str; 11] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
+    "import_pick_key_file",
     "backup_save",
     "backup_pick_dir",
     "restore_pick",
@@ -540,11 +545,12 @@ pub const SHELL_COMMANDS: [&str; 10] = [
 
 /// The Tauri commands of the phone shell: the dispatcher, the code stream, and the actions that
 /// open the photo picker, the file picker or the camera first; what they read stays in Rust.
-pub const PHONE_COMMANDS: [&str; 11] = [
+pub const PHONE_COMMANDS: [&str; 12] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
+    "import_pick_key_file",
     "import_scan",
     "backup_save",
     "restore_pick",
@@ -607,6 +613,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::ImportText { text } => unit(core.import_text(&text))?,
         UiCommand::ImportClipboard => unit(core.import_clipboard().await)?,
         UiCommand::ImportBackupPassword { password } => unit(core.import_backup_password(password).await)?,
+        UiCommand::ImportKeyFileClear => unit(core.import_key_file_clear())?,
         UiCommand::ImportCommit { choices } => json!(core.import_commit(&choices)?),
         UiCommand::ImportCancel => {
             core.import_cancel();

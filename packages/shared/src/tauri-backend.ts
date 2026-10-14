@@ -120,6 +120,10 @@ export class TauriBackend implements Backend {
     return z.boolean().parse(await this.call("import_pick_files", { kind }));
   }
 
+  async pickKeyFile(): Promise<boolean> {
+    return z.boolean().parse(await this.call("import_pick_key_file"));
+  }
+
   async scanImport(texts: ScanTexts): Promise<boolean> {
     return z
       .boolean()
