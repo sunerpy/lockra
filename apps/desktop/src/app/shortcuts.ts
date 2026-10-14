@@ -1,10 +1,13 @@
-// The global shortcuts of the unlocked app (DESIGN.md, footer): Ctrl/⌘ K palette, N add, L lock,
-// "," settings, F or "/" search. "/" only fires outside text fields.
+// The global shortcuts of the unlocked app (DESIGN.md, footer): Ctrl/⌘ K palette, N add (an account,
+// or a login on the passwords page), G the password generator, L lock, "," settings, F or "/"
+// search. "/" only fires outside text fields.
 import { useEffect } from "react";
 
 export interface ShortcutHandlers {
   palette: () => void;
   add: () => void;
+  /** The password generator (where password management is offered). */
+  generate: () => void;
   lock: () => void;
   settings: () => void;
   search: () => void;
@@ -28,6 +31,8 @@ export function shortcutFor(
         return "palette";
       case "n":
         return "add";
+      case "g":
+        return "generate";
       case "l":
         return "lock";
       case ",":

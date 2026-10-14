@@ -442,6 +442,28 @@ impl Core {
         Ok(())
     }
 
+    /// Fold `groups` in the password list ("" for the logins in no group) and unfold the others.
+    /// This device's view, kept in the vault's local part: never synced, never in a backup.
+    pub fn collapse_item_groups(&self, groups: Vec<String>) -> CoreResult<()> {
+        self.passwords_on()?;
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            let existing: std::collections::BTreeSet<String> = session.data.items.iter().filter_map(|i| i.group.clone()).collect();
+            let folded: std::collections::BTreeSet<String> =
+                groups.iter().map(|g| g.trim().to_owned()).filter(|g| g.is_empty() || existing.contains(g)).collect();
+            let folded: Vec<String> = folded.into_iter().collect();
+            let current = session.data.local.as_ref().map(|l| l.item_view.collapsed_groups.clone()).unwrap_or_default();
+            if current == folded {
+                return Ok(());
+            }
+            let previous = std::mem::replace(&mut session.data.local_mut().item_view.collapsed_groups, folded);
+            self.save(&mut st, false, move |s| s.data.local_mut().item_view.collapsed_groups = previous)?;
+        }
+        self.changed();
+        Ok(())
+    }
+
     /// Remove a site rule.
     pub fn site_rule_remove(&self, id: Uuid) -> CoreResult<()> {
         self.passwords_on()?;

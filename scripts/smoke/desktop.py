@@ -11,7 +11,9 @@ and 200-account states; Touch ID turned on from the unlock screen's pointer and 
 (the debug build's stand-in check); an account's colour and avatar text, folded groups, a row's
 right-click menu, several accounts ticked and moved to a group at once, the group picker's list, and
 accounts reordered by a handle; the newer themes (澄空, 墨白 and their nights) as a list and as cards, a
-card and a row just copied, and Settings › 外观's grid of eight themes.
+card and a row just copied, and Settings › 外观's grid of eight themes; the passwords page (a debug
+build offers password management) with logins whose password, copied from the list by Rust, is on
+the X clipboard.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -36,7 +38,8 @@ URI = f"otpauth://totp/{ISSUER}:{ACCOUNT}?secret={SECRET}&issuer={ISSUER}"
 PASSWORD = "smoke test pass phrase"
 SIZES = [(960, 600), (1280, 800), (1440, 900)]
 THEMES = ["light", "dark"]
-PAGES = [("codes", "验证码"), ("import", "导入"), ("export", "导出"), ("backup", "备份")]
+PAGES = [("codes", "验证码"), ("passwords", "密码"), ("import", "导入"), ("export", "导出"), ("backup", "备份")]
+LOGIN_PASSWORD = "x7#Kq9!vLm2@Rt4z"
 ELEMENT = "element-6066-11e4-a52e-4f735466cecf"
 
 
@@ -353,6 +356,27 @@ class Smoke:
         ]
         web.invoke({"command": "import_text", "text": "\n".join(lines)})
         web.invoke({"command": "import_commit"})
+        # Logins for the passwords page; GitHub's goes with the GitHub account's codes.
+        entries = {e["issuer"]: e["id"] for e in web.invoke({"command": "app_state"})["entries"]}
+        logins = [
+            {"title": "GitHub", "username": "octocat", "email": "octocat@github.com", "password": {"type": "set", "value": LOGIN_PASSWORD},
+             "urls": [{"url": "https://github.com/login"}], "group": "工作", "tags": ["开发", "常用"], "favorite": True, "totp_entry": entries["GitHub"]},
+            {"title": "招商银行", "username": "6222 •••• 1234", "password": {"type": "set", "value": "Cmb#880613"},
+             "urls": [{"url": "https://pbsz.ebank.cmbchina.com", "matching": "host"}], "group": "个人", "protection": "confirm", "color": "red", "mark": "招"},
+            {"title": "Figma", "email": "alex@acme.dev", "password": {"type": "set", "value": "Figma#Design42"}, "urls": [{"url": "https://www.figma.com"}], "group": "工作"},
+            {"title": "路由器", "username": "admin", "password": {"type": "set", "value": "router-admin"}, "urls": [{"url": "http://192.168.1.1", "matching": "host"}]},
+        ]
+        for draft in logins:
+            web.invoke({"command": "item_add", "draft": draft})
+        self.nav("密码")
+        self.page("passwords")
+        # The first login's row copies its password; Rust puts it on the clipboard.
+        row = web.wait(xpath="//*[@data-testid='password-row'][.//*[normalize-space()='GitHub']]")
+        web.click(row)
+        web.wait('[data-testid="item-detail"]')
+        web.click(web.wait(xpath="//*[@data-testid='password-row'][.//*[normalize-space()='GitHub']]//*[@data-testid='row-copy-password']"))
+        until("the login's password on the clipboard", lambda: self.clipboard() == LOGIN_PASSWORD)
+        print("smoke: a login's password, copied from the list, is on the X clipboard")
         self.nav("验证码")
         self.page("codes")
         for width, height in SIZES:

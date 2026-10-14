@@ -134,6 +134,7 @@ fn settings() -> Settings {
         default_unlock: DefaultUnlock::Password,
         biometric_offer: false,
         browser_integration: true,
+        item_sort: lockra_core::settings::ItemSort::Recent,
         generator: GeneratorOptions::Passphrase(PassphraseOptions { words: 5, separator: " ".into(), capitalize: true, number: true }),
     }
 }
@@ -278,6 +279,7 @@ fn state(phase: Phase) -> UiState {
             Vec::new()
         },
         generator: GeneratorStatus { history_count: if unlocked { 3 } else { 0 } },
+        item_collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
         browser: if unlocked { browser() } else { BrowserView { available: true, enabled: true, ..BrowserView::default() } },
         collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
         entry_order: if unlocked { vec![id(2), id(1)] } else { Vec::new() },
@@ -419,6 +421,7 @@ fn commands() -> Vec<Value> {
         json!({"command": "password_score", "password": "correct horse battery staple"}),
         json!({"command": "site_rule_add", "kind": "equivalent", "domains": ["example.com", "example.co.uk"]}),
         json!({"command": "site_rule_remove", "id": id(30).to_string()}),
+        json!({"command": "view_collapse_items", "groups": ["", "Work"]}),
         json!({"command": "browser_pair_approve", "id": id(40).to_string(), "password": "a new password"}),
         json!({"command": "browser_pair_deny", "id": id(40).to_string()}),
         json!({"command": "browser_fill_confirm", "id": id(41).to_string(), "reason": "fill Bank in Firefox"}),
@@ -886,6 +889,7 @@ async fn dispatch_answers_and_leaks_nothing() {
     ok(run(json!({"command": "generator_history_clear"})).await, &mut answers);
     let rule = run(json!({"command": "app_state"})).await.unwrap()["site_rules"][0]["id"].clone();
     ok(run(json!({"command": "site_rule_remove", "id": rule})).await, &mut answers);
+    ok(run(json!({"command": "view_collapse_items", "groups": ["", "Gone"]})).await, &mut answers);
     // The browser extension's commands, without an extension: what can run does, the rest says why.
     for command in [
         json!({"command": "browser_resume"}),

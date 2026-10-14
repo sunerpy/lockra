@@ -2618,6 +2618,12 @@ impl Core {
                 PhaseState::Unlocked(session) => session.data.site_rules.iter().map(SiteRuleView::of).collect(),
                 _ => Vec::new(),
             },
+            item_collapsed_groups: match &st.phase {
+                PhaseState::Unlocked(session) if self.shared.config.features.passwords => {
+                    session.data.local.as_ref().map(|l| l.item_view.collapsed_groups.clone()).unwrap_or_default()
+                }
+                _ => Vec::new(),
+            },
             generator: GeneratorStatus { history_count: items::generator_history_count(st) },
             browser: self.browser_view(st),
             collapsed_groups,

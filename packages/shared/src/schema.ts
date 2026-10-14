@@ -114,6 +114,11 @@ export function defaultGeneratorOptions(): GeneratorOptions {
   };
 }
 
+/** The order of the password list (lockra-core `ItemSort`); favourites always come first. */
+export const ITEM_SORTS = ["name", "recent", "modified", "added"] as const;
+export const itemSortSchema = z.enum(ITEM_SORTS);
+export type ItemSort = z.infer<typeof itemSortSchema>;
+
 export const settingsSchema = z.object({
   theme: themeIdSchema,
   follow_system_theme: z.boolean(),
@@ -135,6 +140,8 @@ export const settingsSchema = z.object({
   biometric_offer: z.boolean(),
   /** What the password generator makes unless told otherwise: the last options chosen. */
   generator: generatorOptionsSchema,
+  /** The order of the password list. */
+  item_sort: itemSortSchema,
   /** The browser extension's integration is on. Only the shell changes it (after writing the
    *  browsers' manifests); `settings_set` leaves it as it is. */
   browser_integration: z.boolean(),
@@ -162,6 +169,7 @@ export function defaultSettings(): Settings {
     default_unlock: "biometric",
     biometric_offer: true,
     generator: defaultGeneratorOptions(),
+    item_sort: "name",
     browser_integration: false,
   };
 }
@@ -853,6 +861,8 @@ export const uiStateSchema = z.object({
   items_count: z.number().int().nonnegative(),
   /** The site rules; empty unless unlocked. */
   site_rules: z.array(siteRuleViewSchema),
+  /** The groups folded in the password list ("" for the logins in no group); this device's. */
+  item_collapsed_groups: z.array(z.string()),
   /** The password generator: how many passwords its history holds (0 unless unlocked). */
   generator: z.object({ history_count: z.number().int().nonnegative() }),
   /** The browser extension. */
@@ -1354,6 +1364,8 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
     domains: z.array(z.string()),
   }),
   z.object({ command: z.literal("site_rule_remove"), id: idSchema }),
+  /** Fold these groups of the password list, unfold the others (this device's view). */
+  z.object({ command: z.literal("view_collapse_items"), groups: z.array(z.string()) }),
   /** The user compared the codes: approve with the master password or the biometric check. */
   z.object({
     command: z.literal("browser_pair_approve"),

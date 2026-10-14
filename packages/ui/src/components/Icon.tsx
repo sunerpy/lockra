@@ -83,6 +83,20 @@ const PATHS = {
   paper: "M6 3h9l3 3v15H6zM15 3v3h3M9 11h6M9 15h6",
   image: "M4 5h16v14H4zM4 16l5-5 4 4 2.5-2.5L20 16M15 9h.01",
   video: "M3 6h12v12H3zM15 10l6-3v10l-6-3z",
+  // Password management (Penpot 「Lockra 密码管理」, NEW_ICONS of its generator).
+  tag: "M3 4v7l9.5 9.5a1.5 1.5 0 0 0 2.1 0l5.9-5.9a1.5 1.5 0 0 0 0-2.1L11 3H4a1 1 0 0 0-1 1zM7.5 7.5h.01",
+  dice: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01",
+  puzzle: "M10 4.5a2 2 0 1 1 4 0V6h4v4h-1.5a2 2 0 1 0 0 4H18v4H6v-4h1.5a2 2 0 1 0 0-4H6V6h4z",
+  ban: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
+  bellOff:
+    "M8.7 3.9A6 6 0 0 1 18 9c0 2.5.5 4.4 1.3 5.8M17 17H4c1.4-1.4 2-3.6 2-8 0-.5 0-1 .1-1.4M10.3 20a2 2 0 0 0 3.4 0M3 3l18 18",
+  power: "M12 3v9M18.4 6.6a9 9 0 1 1-12.8 0",
+  shieldCheck: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4",
+  shieldAlert: "M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM12 8v4M12 16h.01",
+  shieldOff:
+    "M12 3l8 3v6c0 1.3-.2 2.4-.6 3.4M6.3 6.3 4 6v6c0 5 3.5 8 8 9 2-.4 3.8-1.3 5.2-2.6M3 3l18 18",
+  field: "M3 7h18v10H3zM7 12h.01M11 12h.01M15 12h.01",
+  browser: "M3 5h18v14H3zM3 9h18M6 7h.01M9 7h.01",
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -2,6 +2,7 @@
 // are separate entry points so a release bundle never pulls them in.
 export * from "./backend";
 export * from "./entries";
+export * from "./items";
 export * from "./i18n";
 export * from "./import-preview";
 export * from "./labels";

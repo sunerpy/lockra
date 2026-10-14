@@ -16,6 +16,7 @@ import {
   noteUserLock,
   useBackend,
   useClock,
+  useItems,
   useT,
   useUiState,
 } from "@lockra/ui";
@@ -28,11 +29,14 @@ import { type PageId, ShellStateProvider, isPageId, useShell } from "../app/shel
 import { useShortcuts } from "../app/shortcuts";
 import { EntryDialogs } from "../features/entries/EntryDialogs";
 import { ExportViewer } from "../features/export/ExportViewer";
+import { ItemDialogs } from "../features/items/ItemDialogs";
+import { VerifyProvider } from "../features/items/verify";
 import { UpdateBadge, UpdateDialog } from "../features/update/UpdateDialog";
 import { Backup } from "../pages/Backup";
 import { Codes } from "../pages/Codes";
 import { Export } from "../pages/Export";
 import { Import } from "../pages/Import";
+import { Passwords } from "../pages/Passwords";
 import { SettingsDialog } from "../pages/settings/SettingsDialog";
 import { WindowFrame } from "./WindowFrame";
 
@@ -41,7 +45,9 @@ const COLLAPSE_KEY = "lockra.sidebar.collapsed";
 export function Shell({ initialPage }: { initialPage?: PageId }) {
   return (
     <ShellStateProvider initialPage={initialPage}>
-      <ShellLayout />
+      <VerifyProvider>
+        <ShellLayout />
+      </VerifyProvider>
     </ShellStateProvider>
   );
 }
@@ -54,6 +60,10 @@ function ShellLayout() {
   const dispatch = useDispatch();
   const now = useClock();
   const dragging = useFileDrag();
+  const passwords = state.features.passwords;
+  const logins = useItems();
+  // Without password management (a release build, for now) the page is not offered.
+  const page = shell.page === "passwords" && !passwords ? "codes" : shell.page;
   const [collapsed, setCollapsed] = useState(
     () => globalThis.localStorage?.getItem(COLLAPSE_KEY) === "1",
   );
@@ -75,12 +85,16 @@ function ShellLayout() {
   const handlers = useMemo(
     () => ({
       palette: () => shell.setPaletteOpen(true),
-      add: () => shell.open({ type: "add_manual" }),
+      // Ctrl N adds what the page lists: a login on the passwords page, an account elsewhere.
+      add: () => shell.open(page === "passwords" ? { type: "item_new" } : { type: "add_manual" }),
+      generate: () => {
+        if (passwords) shell.open({ type: "generator" });
+      },
       lock,
       settings: () => shell.open({ type: "settings", section: "general" }),
       search: shell.focusSearch,
     }),
-    [shell, lock],
+    [shell, lock, page, passwords],
   );
   useShortcuts(handlers, shell.overlay === null && !shell.paletteOpen);
   const commands = useCommands();
@@ -90,6 +104,16 @@ function ShellLayout() {
       title: t("shell.group.vault"),
       items: [
         { id: "codes", label: t("shell.nav.codes"), icon: "key", count: state.entries.length },
+        ...(passwords
+          ? [
+              {
+                id: "passwords",
+                label: t("shell.nav.passwords"),
+                icon: "lock" as const,
+                count: logins?.length,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -177,7 +201,7 @@ function ShellLayout() {
       }}>
       <Sidebar
         groups={groups}
-        activeId={shell.page}
+        activeId={page}
         onNavigate={(id) => {
           if (id === "sync") shell.open({ type: "settings", section: "sync" });
           else if (isPageId(id)) shell.navigate(id);
@@ -201,12 +225,13 @@ function ShellLayout() {
         right={<UpdateBadge onOpen={() => shell.setUpdateOpen(true)} />}>
         <main className="relative min-h-0 overflow-y-auto" data-testid="page-body">
           <div className="mx-auto w-full max-w-[1040px] px-6 pt-1 pb-8">
-            {shell.page === "codes" && <Codes />}
-            {shell.page === "import" && <Import dragging={dragging} />}
-            {shell.page === "export" && <Export />}
-            {shell.page === "backup" && <Backup />}
+            {page === "codes" && <Codes />}
+            {page === "passwords" && <Passwords />}
+            {page === "import" && <Import dragging={dragging} />}
+            {page === "export" && <Export />}
+            {page === "backup" && <Backup />}
           </div>
-          {dragging && shell.page !== "import" && (
+          {dragging && page !== "import" && (
             <div
               className="pointer-events-none absolute inset-3 flex items-center justify-center rounded-14 border border-dashed border-accent bg-accent-soft/80 text-[14px] font-medium text-accent-text"
               data-testid="drop-overlay">
@@ -223,6 +248,7 @@ function ShellLayout() {
         placeholder={t("ui.palette.placeholder")}
       />
       <EntryDialogs />
+      <ItemDialogs />
       {shell.overlay?.type === "export" && <ExportViewer started={shell.overlay.started} />}
       {shell.overlay?.type === "settings" && <SettingsDialog section={shell.overlay.section} />}
       <UpdateDialog open={shell.updateOpen} onClose={() => shell.setUpdateOpen(false)} />

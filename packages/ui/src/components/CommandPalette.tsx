@@ -4,6 +4,13 @@ import { useT } from "../i18n/I18nProvider";
 import { Icon, type IconName } from "./Icon";
 import { Keycap, Keycaps } from "./Keycap";
 
+/** One of an item's own actions (a login: copy the password, the user name, the code, show it). */
+export interface CommandAction {
+  id: string;
+  label: string;
+  run: () => void;
+}
+
 export interface CommandItem {
   id: string;
   group: string;
@@ -15,6 +22,8 @@ export interface CommandItem {
   hint?: string;
   disabled?: boolean;
   disabledHint?: string;
+  /** What Enter does on it, the first by default; Tab moves to the next one. Without them `run`. */
+  actions?: readonly CommandAction[];
   run: () => void;
 }
 
@@ -60,6 +69,8 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
   const t = useT();
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
+  // The action Enter runs on the highlighted item, among its own (a login's).
+  const [action, setAction] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const results = useMemo(() => filterCommands(items, query), [items, query]);
   const groups = useMemo(() => {
@@ -79,8 +90,12 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
 
   const move = (delta: number) => {
     if (results.length === 0) return;
+    setAction(0);
     setCursor((c) => (c + delta + results.length) % results.length);
   };
+  const actions = current?.actions ?? [];
+  const chosen = actions[Math.min(action, Math.max(0, actions.length - 1))];
+  const cycle = (delta: number) => setAction((a) => (a + delta + actions.length) % actions.length);
   const jumpGroup = () => {
     if (!current) return;
     const idx = groups.indexOf(current.group);
@@ -88,9 +103,10 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
     const nextIndex = results.findIndex((r) => r.group === nextGroup);
     if (nextIndex >= 0) setCursor(nextIndex);
   };
-  const run = (item: CommandItem | undefined) => {
+  const run = (item: CommandItem | undefined, choice?: CommandAction) => {
     if (!item || item.disabled) return;
-    item.run();
+    if (choice) choice.run();
+    else item.run();
     onClose();
   };
 
@@ -116,10 +132,12 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
             move(-1);
           } else if (e.key === "Tab") {
             e.preventDefault();
-            jumpGroup();
+            // On a login, Tab goes through its actions; elsewhere it jumps to the next group.
+            if (actions.length > 1) cycle(e.shiftKey ? -1 : 1);
+            else jumpGroup();
           } else if (e.key === "Enter") {
             e.preventDefault();
-            run(current);
+            run(current, chosen);
           } else if (e.key === "Escape") {
             e.preventDefault();
             onClose();
@@ -166,10 +184,11 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
                         aria-selected={active}
                         aria-disabled={item.disabled || undefined}
                         onMouseEnter={() => {
+                          if (results.indexOf(item) !== cursor) setAction(0);
                           setCursor(results.indexOf(item));
                         }}
                         onClick={() => {
-                          run(item);
+                          run(item, active ? chosen : item.actions?.[0]);
                         }}
                         className={cx(
                           "mx-2 flex h-10 cursor-pointer items-center gap-3 rounded-6 px-2 text-[13px]",
@@ -182,7 +201,34 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
                         <span className="min-w-0 flex-1 truncate" title={item.label}>
                           <Highlight text={item.label} query={query} />
                         </span>
-                        {item.disabled && item.disabledHint ? (
+                        {active && item.actions !== undefined && item.actions.length > 0 ? (
+                          <span
+                            className="flex shrink-0 items-center gap-1"
+                            data-testid="palette-actions">
+                            {item.actions.map((a) => {
+                              const on = a.id === chosen?.id;
+                              return (
+                                <span
+                                  key={a.id}
+                                  data-testid="palette-action"
+                                  data-active={on || undefined}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    run(item, a);
+                                  }}
+                                  className={cx(
+                                    "inline-flex h-[22px] items-center gap-1 rounded-6 px-2 text-[11.5px] whitespace-nowrap",
+                                    on
+                                      ? "bg-accent-soft text-accent-text shadow-[inset_0_0_0_1.5px_var(--accent-text)]"
+                                      : "bg-inset2 text-fg-muted",
+                                  )}>
+                                  {a.label}
+                                  {on && <Keycap>↵</Keycap>}
+                                </span>
+                              );
+                            })}
+                          </span>
+                        ) : item.disabled && item.disabledHint ? (
                           <span className="mono shrink-0 text-[11px] whitespace-nowrap text-fg-subtle">
                             {item.disabledHint}
                           </span>
@@ -201,7 +247,7 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
           ))}
         </ul>
         <div className="mono flex h-8 items-center justify-between border-t border-border px-4 text-[10px] text-fg-subtle">
-          <span>{t("ui.palette.footer")}</span>
+          <span>{t(actions.length > 1 ? "ui.palette.footerActions" : "ui.palette.footer")}</span>
           <span>{t("ui.palette.results", { n: results.length })}</span>
         </div>
       </div>

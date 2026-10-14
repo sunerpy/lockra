@@ -35,6 +35,7 @@
     },
     "group_order": [],
     "import": null,
+    "item_collapsed_groups": [],
     "items_count": 0,
     "items_rev": 8,
     "lock": {
@@ -82,6 +83,7 @@
       },
       "group_codes": true,
       "hide_codes": false,
+      "item_sort": "name",
       "locale": "system",
       "reduce_motion": false,
       "sort": "name",
@@ -137,6 +139,7 @@
     },
     "group_order": [],
     "import": null,
+    "item_collapsed_groups": [],
     "items_count": 0,
     "items_rev": 8,
     "lock": {
@@ -188,6 +191,7 @@
       },
       "group_codes": true,
       "hide_codes": false,
+      "item_sort": "name",
       "locale": "system",
       "reduce_motion": false,
       "sort": "name",
@@ -240,6 +244,7 @@
     },
     "group_order": [],
     "import": null,
+    "item_collapsed_groups": [],
     "items_count": 0,
     "items_rev": 8,
     "lock": {
@@ -287,6 +292,7 @@
       },
       "group_codes": true,
       "hide_codes": false,
+      "item_sort": "name",
       "locale": "system",
       "reduce_motion": false,
       "sort": "name",
@@ -700,6 +706,10 @@
         }
       ]
     },
+    "item_collapsed_groups": [
+      "",
+      "Work"
+    ],
     "items_count": 2,
     "items_rev": 7,
     "lock": {
@@ -746,6 +756,7 @@
       },
       "group_codes": false,
       "hide_codes": true,
+      "item_sort": "recent",
       "locale": "zh-cn",
       "reduce_motion": true,
       "sort": "recent",

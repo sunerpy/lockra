@@ -1,4 +1,10 @@
-import { type EntryView, type PinnedGroup, entryFilters } from "@lockra/shared";
+import {
+  type EntryView,
+  type ItemView,
+  type PinnedGroup,
+  entryFilters,
+  itemFilters,
+} from "@lockra/shared";
 import { type KeyboardEvent, useMemo, useRef } from "react";
 import { cx } from "../cx";
 import { useT } from "../i18n/I18nProvider";
@@ -44,6 +50,30 @@ export function useFilterChips(
         ...(f.kind === "group" ? { userText: true } : {}),
       })),
     [entries, pinned, t],
+  );
+}
+
+/** The password page's filters as chips: 全部, 收藏, each group, 未分组 (no pin there yet). */
+export function useItemFilterChips(items: readonly ItemView[]): FilterChip[] {
+  const t = useT();
+  return useMemo(
+    () =>
+      itemFilters(items).map((f) => ({
+        value: f.value,
+        count: f.count,
+        label:
+          f.kind === "all"
+            ? t("codes.chips.all")
+            : f.kind === "favorites"
+              ? t("codes.chips.favorites")
+              : f.kind === "ungrouped"
+                ? t("codes.groupNone")
+                : f.value,
+        pinned: false,
+        ...(f.kind === "favorites" ? { icon: "star" as const } : {}),
+        ...(f.kind === "group" ? { userText: true } : {}),
+      })),
+    [items, t],
   );
 }
 

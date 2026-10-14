@@ -18,7 +18,8 @@ const TONE_CLASS: Record<BadgeTone, string> = {
   ok: "bg-surface text-fg hairline",
   accent: "bg-accent-soft text-accent-text",
   danger: "bg-danger-soft text-danger",
-  warn: "bg-warning-soft text-warning",
+  // `warning` is under 4.5:1 at a badge's 11 px; its text role is not.
+  warn: "bg-warning-soft text-warning-text",
   info: "bg-info-soft text-info",
   ink: "bg-primary text-primary-fg",
 };

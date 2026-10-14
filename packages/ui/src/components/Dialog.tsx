@@ -14,6 +14,9 @@ export interface DialogProps {
   /** Footer hint, defaults to `Esc 取消`. */
   hint?: ReactNode;
   width?: number;
+  /** A long form: the title and the buttons stay, the body between them scrolls, the dialog at
+   *  most 720 px high and 24 px from the window's edges. */
+  scroll?: boolean;
 }
 
 /** The open dialogs, the most recent last: Esc closes only that one (a confirmation over an editor
@@ -31,6 +34,7 @@ export function Dialog({
   onClose,
   hint,
   width = 420,
+  scroll = false,
 }: DialogProps) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
@@ -84,16 +88,32 @@ export function Dialog({
         }}
         className={cx(
           "flex flex-col gap-4 rounded-14 bg-overlay p-6 outline-none hairline shadow-pop overlay-frost",
+          scroll && "max-h-[min(720px,calc(100vh-48px))] gap-0 p-0",
         )}
         style={{ width }}>
-        <h2 id={titleId} className="text-[16px] font-semibold text-fg">
+        <h2
+          id={titleId}
+          className={cx("text-[16px] font-semibold text-fg", scroll && "px-6 pt-6 pb-3.5")}>
           {title}
         </h2>
         {children !== undefined && (
-          <div className="text-[13px] leading-5 text-fg-muted">{children}</div>
+          <div
+            className={cx(
+              "text-[13px] leading-5 text-fg-muted",
+              scroll && "min-h-0 flex-1 overflow-y-auto px-6 pb-4",
+            )}
+            data-testid={scroll ? "dialog-body" : undefined}>
+            {children}
+          </div>
         )}
-        {facts !== undefined && <div className="mono text-[11px] text-fg-subtle">{facts}</div>}
-        <div className="flex items-center justify-between gap-3">
+        {facts !== undefined && (
+          <div className={cx("mono text-[11px] text-fg-subtle", scroll && "px-6")}>{facts}</div>
+        )}
+        <div
+          className={cx(
+            "flex items-center justify-between gap-3",
+            scroll && "border-t border-border px-6 pt-3.5 pb-6",
+          )}>
           <span className="mono flex items-center gap-1.5 text-[10px] text-fg-subtle">
             {hint ?? (
               <>

@@ -3,14 +3,17 @@
 owns the server (the Versity S3 gateway in Docker), Xvfb, the drivers and two data folders, and runs
 one phase per app start:
 
-  a  device A: a vault with two accounts; Settings › Sync, fill in the S3 form and start syncing;
-     no key on screen, the reminder instead, which shows the recovery key behind the master
-     password; it is kept (in the work folder, for device B).
+  a  device A: a vault with two accounts and a login that goes with one of them (a debug build
+     offers password management); Settings › Sync, fill in the S3 form and start syncing; no key
+     on screen, the reminder instead, which shows the recovery key behind the master password; it
+     is kept (in the work folder, for device B).
   b  device B, no vault: the welcome screen's "join sync", recovering with the storage and the
-     recovery key; A's accounts arrive; B renames one, deletes the other and adds a third. B's
-     first snapshot is fetched from the storage for phase c.
-  c  device A again: unlock, the changes arrive, both devices are listed; then B's older snapshot
-     is put back on the storage and A refuses it as a rollback.
+     recovery key; A's accounts and login arrive (the login still with its account); B renames
+     one account, deletes the other and adds a third, changes the login's password and adds a
+     second login. B's first snapshot is fetched from the storage for phase c.
+  c  device A again: unlock, the changes arrive (the login's old password in its history), both
+     devices are listed; then B's older snapshot is put back on the storage and A refuses it as
+     a rollback.
 
 Then the same through a Lockra relay (lockra-relay on 127.0.0.1, its data folder read back):
 
@@ -69,6 +72,8 @@ REGION = "us-east-1"
 GITHUB = "otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub"
 MAIL = "otpauth://totp/Mail:me%40example.com?secret=GEZDGNBVGY3TQOJQ&issuer=Mail"
 BANK = "otpauth://totp/Bank:card?secret=MZXW6YTBOI&issuer=Bank"
+LOGIN = "smoke login pass 1"
+LOGIN_NEW = "smoke login pass 2"
 
 
 class S3:
@@ -202,6 +207,16 @@ class Phase:
     def issuers(self):
         return sorted(e["issuer"] for e in self.state()["entries"])
 
+    def logins(self):
+        return sorted(i["title"] for i in self.web.invoke({"command": "items_list"}))
+
+    def login(self, title):
+        return next(i for i in self.web.invoke({"command": "items_list"}) if i["title"] == title)
+
+    def password_of(self, title, history=False):
+        parts = {"password": True, "history": history}
+        return self.web.invoke({"command": "item_reveal", "id": self.login(title)["id"], "parts": parts})
+
     def open_sync(self):
         self.web.click(self.web.wait(css='[data-testid="sidebar-settings"]'))
         self.web.click(self.web.wait(xpath="//*[@role='tab'][normalize-space()='同步']"))
@@ -251,6 +266,9 @@ class Phase:
         self.light()
         web.invoke({"command": "entry_add_uri", "uri": GITHUB})
         web.invoke({"command": "entry_add_uri", "uri": MAIL})
+        github = next(e["id"] for e in self.state()["entries"] if e["issuer"] == "GitHub")
+        draft = {"title": "GitHub", "username": "octocat", "password": {"type": "set", "value": LOGIN}, "urls": [{"url": "https://github.com"}], "totp_entry": github}
+        web.invoke({"command": "item_add", "draft": draft})
         self.open_sync()
         self.shot("sync-off-light")
         # Joining a space from a vault: this device's master password, and another one apart.
@@ -287,7 +305,7 @@ class Phase:
             sys.exit(f"smoke-sync: the storage holds {objects}")
         for key_name in objects:
             body = self.s3.get(key_name)
-            for clear in [b"GitHub", b"octocat", b"JBSWY3DPEHPK3PXP", "台式机".encode()]:
+            for clear in [b"GitHub", b"octocat", b"JBSWY3DPEHPK3PXP", LOGIN.encode(), b"github.com", "台式机".encode()]:
                 if clear in body:
                     sys.exit(f"smoke-sync: {clear!r} is readable in {key_name}")
         self.shot("sync-on-light")
@@ -314,6 +332,10 @@ class Phase:
         self.synced_after(before)
         self.light()
         until("A's accounts on B", lambda: self.issuers() == ["GitHub", "Mail"])
+        until("A's login on B", lambda: self.logins() == ["GitHub"])
+        github = next(e["id"] for e in self.state()["entries"] if e["issuer"] == "GitHub")
+        if self.login("GitHub").get("totp_entry") != github or self.password_of("GitHub")["password"] != LOGIN:
+            sys.exit(f"smoke-sync: A's login on B: {self.login('GitHub')}")
         # B's own first snapshot, for the rollback in phase c.
         tag = next(d["tag"] for d in self.state()["sync"]["space"]["devices"] if d["this_device"])
         own = next(k for k in self.s3.keys(f"{PREFIX}/lockra-sync-v1/") if k.endswith(f"/devices/{tag}.lks"))
@@ -326,12 +348,14 @@ class Phase:
         web.invoke({"command": "entry_update", "id": entries["GitHub"], "patch": {"issuer": "GitHub Enterprise"}})
         web.invoke({"command": "entry_delete", "id": entries["Mail"]})
         web.invoke({"command": "entry_add_uri", "uri": BANK})
+        web.invoke({"command": "item_update", "id": self.login("GitHub")["id"], "patch": {"password": {"type": "set", "value": LOGIN_NEW}}})
+        web.invoke({"command": "item_add", "draft": {"title": "Bank", "username": "card", "password": {"type": "set", "value": "bank pass"}}})
         before = int(time.time() * 1000)
         web.invoke({"command": "sync_now"})
         self.synced_after(before)
         self.open_sync()
         self.shot("sync-on-b-light")
-        print("smoke-sync: B recovered with the recovery key, got A's accounts, and renamed, deleted and added one")
+        print("smoke-sync: B recovered with the recovery key, got A's accounts and login, and renamed, deleted and added an account, changed the login and added one")
         web.quit()
 
     def c(self):
@@ -341,10 +365,18 @@ class Phase:
         web.invoke({"command": "vault_unlock", "password": PASSWORD})
         space = self.synced_after(before)
         until("B's changes on A", lambda: self.issuers() == ["Bank", "GitHub Enterprise"])
+        until("B's logins on A", lambda: self.logins() == ["Bank", "GitHub"])
+        revealed = self.password_of("GitHub", history=True)
+        if revealed["password"] != LOGIN_NEW or [p["value"] for p in revealed["history"]] != [LOGIN]:
+            sys.exit(f"smoke-sync: the login's password on A: {revealed['password']!r}, history {revealed['history']}")
+        web.invoke({"command": "secret_view_closed"})
+        web.click(web.wait(xpath="//nav[@aria-label='主导航']//button[contains(normalize-space(), '密码')]"))
+        web.wait(css="[data-testid=page-passwords]")
+        self.shot("sync-passwords-light")
         names = [(d["name"], d["this_device"]) for d in space["devices"]]
         if names != [("台式机", True), ("笔记本", False)]:
             sys.exit(f"smoke-sync: device A lists {names}")
-        print("smoke-sync: A has B's rename, deletion and new account, and lists both devices")
+        print("smoke-sync: A has B's rename, deletion and new account, B's login changes (the old password in the history), and lists both devices")
 
         # The storage serves B's first snapshot again: A refuses it.
         with open(os.path.join(self.args.work, "b-key")) as f:
@@ -356,8 +388,8 @@ class Phase:
         space = self.synced_after(before)
         if space["rolled_back"] != [next(d["tag"] for d in space["devices"] if not d["this_device"])]:
             sys.exit(f"smoke-sync: the rollback was not reported: {space['rolled_back']}")
-        if self.issuers() != ["Bank", "GitHub Enterprise"]:
-            sys.exit(f"smoke-sync: the rollback changed A's accounts: {self.issuers()}")
+        if self.issuers() != ["Bank", "GitHub Enterprise"] or self.logins() != ["Bank", "GitHub"]:
+            sys.exit(f"smoke-sync: the rollback changed A's accounts or logins: {self.issuers()}, {self.logins()}")
         self.open_sync()
         banner = web.wait(css="[data-testid=sync-rolled-back]")
         if "笔记本" not in web.text(banner):

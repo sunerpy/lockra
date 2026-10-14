@@ -48,6 +48,7 @@ const ROLES = [
   "dangerSoft",
   "warning",
   "warningSoft",
+  "warningText",
   "info",
   "infoSoft",
   "nav",
@@ -327,6 +328,16 @@ describe("accent colours (Codex's blue, ChatGPT's accent choices)", () => {
       contrast(base.info ?? "", base.infoSoft ?? ""),
       `${theme} info on info-soft`,
     ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(THEMES)("warning text reads at 4.5:1 in the %s theme", (theme) => {
+    // The conflict badge, a warning badge's label: small text, so 4.5:1 on whatever it sits on.
+    const p = palette(theme, "default");
+    for (const background of ["surface", "canvas", "inset", "inset2", "warningSoft"])
+      expect(
+        contrast(p.warningText ?? "", p[background] ?? ""),
+        `${theme} warning-text on ${background}`,
+      ).toBeGreaterThanOrEqual(4.5);
   });
 
   it.each(THEMES)("a danger button's label reads in the %s theme", (theme) => {

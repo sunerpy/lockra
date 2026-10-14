@@ -108,6 +108,21 @@ pub enum SortOrder {
     Manual,
 }
 
+/// The order of the password list; favourites always come first.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ItemSort {
+    /// Title, then user name, case-insensitive.
+    #[default]
+    Name,
+    /// Most recently copied or filled first.
+    Recent,
+    /// Most recently changed first.
+    Modified,
+    /// Newest first.
+    Added,
+}
+
 /// Where automatic backups go and how many are kept.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -186,6 +201,8 @@ pub struct Settings {
     pub biometric_offer: bool,
     /// What the password generator makes unless told otherwise: the last options chosen.
     pub generator: GeneratorOptions,
+    /// The order of the password list.
+    pub item_sort: ItemSort,
     /// The browser extension's integration is on: Lockra listens for the extensions and keeps
     /// their native-messaging manifests. Only the shell changes it (`Core::browser_set_enabled`),
     /// after writing or removing the manifests; the webview's settings leave it as it is. What the
@@ -225,6 +242,7 @@ impl Default for Settings {
             default_unlock: DefaultUnlock::default(),
             biometric_offer: true,
             generator: GeneratorOptions::default(),
+            item_sort: ItemSort::default(),
             browser_integration: false,
         }
     }
