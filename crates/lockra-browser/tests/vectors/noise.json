@@ -1,0 +1,47 @@
+{
+  "about": "Made by snow 0.10.0 with fixed ephemeral keys (tests/protocol.rs). The extension's Noise must produce the initiator's messages byte for byte, read the responder's, and agree on the hashes, the code and the channel messages.",
+  "app_static": {
+    "private": "070e151c232a31383f464d545b626970777e858c939aa1a8afb6bdc4cbd2d9e0",
+    "public": "ae9d5a093df22f27409be49f96cc0d3598dc677d6a0f51ad1d2b124e7c13597e"
+  },
+  "extension_static": {
+    "private": "c3cad1d8dfe6edf4fb020910171e252c333a41484f565d646b727980878e959c",
+    "public": "b50ead4a349b09d88fd61f4a1e6cc035c72bc74acaf948969dd4c335ff50b632"
+  },
+  "pairing": {
+    "code": "188274",
+    "handshake_hash": "19f225d2948e03a31200f741916e9362ba7c8b1e65183204340993f11c4ba210",
+    "initiator_ephemeral": "21282f363d444b525960676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa",
+    "initiator_first_message": "643ab463a1bb1d5c06e2437cfccb6246ea360dd143e52816aa2f97cac56f99596fe26ccace4ad211",
+    "initiator_first_message_plain": "007b22726571223a312c226f70223a22737461747573227d",
+    "messages": [
+      "e78c360839ab7dd049acfc051b9ebc3de7e90ed2c597c254088dcaad6db50473",
+      "15b60993864de96e8a012b00d4ae5b281f917e5d0e76f6a4d8ab8ed3f831a81aff9e3764d1a80d6e16fe9e7dd1eb05f933b7474ad476ad3b178a7f69e3c0e26c25d7591886a30c7bb806922281c8f591761a3cdb3e7ef2009b2aa5c44dff4893",
+      "c2880f0e6eb67b167e881e4562a1b7a9212521219395731cba82291137ee6a9ee0910c44f4492d08a319aa32b4f343a6baab20c9fb70d7aee6f0c5be53d03ab1"
+    ],
+    "pattern": "Noise_XX_25519_AESGCM_SHA256",
+    "responder_ephemeral": "656c737a81888f969da4abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e",
+    "responder_first_message": "41d7a7703be0ff72e81b88b8c8db1c362490e267f586b00f4361074d0718a3e9b44744f7e994bfc265f5aae2c29dbd6fa9efaa8981c1dcff52ab3e9ea6de52f46400bcb152a9d3f8b960b6712c8042baf58e",
+    "responder_first_message_plain": "007b2270757368223a227265616479222c2270616972696e67223a2235633066653161322d306233632d346435652d386636302d303030303030303030303039227d"
+  },
+  "pairing_code_info": "lockra pairing code",
+  "pairing_code_of_zero_hash": "721180",
+  "prologue": "lockra-browser/1",
+  "session": {
+    "handshake_hash": "a502e1ae3f7764add24d37c04b2c693e728699012328fd936e52c39f9dfda794",
+    "initiator_ephemeral": "676e757c838a91989fa6adb4bbc2c9d0d7dee5ecf3fa01080f161d242b323940",
+    "initiator_messages": [
+      "b6044033ba7b9fb9c3491c6f29eea766e279589728229aece9ec137c059b631893330367da57bde9",
+      "901eff62020790ffc1b5ca1dcc4a4f563635a7668207eb253267d0c8a73c807983b429b9d2ba45bf"
+    ],
+    "initiator_messages_plain": "007b22726571223a312c226f70223a22737461747573227d",
+    "messages": [
+      "b423806f64a7c98f31d2872e45f4d76e087e50ac34db33021429e9d6fd03337398a37a3a1866941ec328fb65bfede07c",
+      "3d3e803ded04c319690b9644b2a339aea3d382f6d1766ed21be6abe8510b3e79ccef8649841ba36f8dac993ff228ee79"
+    ],
+    "pattern": "Noise_KK_25519_AESGCM_SHA256",
+    "responder_ephemeral": "abb2b9c0c7ced5dce3eaf1f8ff060d141b222930373e454c535a61686f767d84",
+    "responder_first_message": "3ce555714054ae1758c06a5da5be588e37027c51b1265b36cd29dedc45f84e597cf57db302aa0e9efe2870f44b3fc1d1bc96fa0d11209eecd5be3f54dd55501b250dc8b8f251fbc4b41bb9c2bcff331e5994",
+    "responder_first_message_plain": "007b2270757368223a227265616479222c2270616972696e67223a2235633066653161322d306233632d346435652d386636302d303030303030303030303039227d"
+  }
+}

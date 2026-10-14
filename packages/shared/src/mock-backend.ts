@@ -15,7 +15,12 @@ import {
   type Unsubscribe,
 } from "./backend";
 import {
+  type ActivityView,
   type BiometricKind,
+  type BrowserPolicy,
+  type BrowserView,
+  type ConfirmView,
+  type PairRequestView,
   type CandidateAction,
   type CandidateView,
   type Choice,
@@ -115,6 +120,32 @@ export interface MockOptions {
   pinnedGroup?: PinnedGroup | null;
   /** The logins (shown once unlocked; password management must be on). */
   items?: MockItem[];
+  /** The browser extension's pairings, waiting requests, policy and activity (shown once
+   *  unlocked). */
+  browser?: Partial<Pick<BrowserView, "paired" | "pairing" | "confirms" | "policy" | "activity">>;
+}
+
+/** The browser extension's defaults (lockra-core `BrowserPolicy::default()`). */
+export function defaultBrowserPolicy(): BrowserPolicy {
+  return {
+    fill_otp: true,
+    copy_otp: true,
+    auto_submit: false,
+    confirm_fill: false,
+    cross_origin_frames: "never",
+    on_page_load: false,
+  };
+}
+
+/** Whether `next` lets the extensions do more than `policy` (that asks for proof). */
+export function riskierPolicy(policy: BrowserPolicy, next: BrowserPolicy): boolean {
+  return (
+    (next.on_page_load && !policy.on_page_load) ||
+    (next.auto_submit && !policy.auto_submit) ||
+    (next.fill_otp && !policy.fill_otp) ||
+    (policy.confirm_fill && !next.confirm_fill) ||
+    (next.cross_origin_frames === "ask" && policy.cross_origin_frames === "never")
+  );
 }
 
 /** A login of the mock: its view and its secrets. */
@@ -543,6 +574,7 @@ export class MockBackend implements Backend {
   private siteRules: SiteRuleView[] = [];
   private generated: { password: string; site: string | null } | null = null;
   private generatedHistory: GeneratedPastView[] = [];
+  private browser: Pick<BrowserView, "paired" | "pairing" | "confirms" | "policy" | "activity">;
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -561,6 +593,13 @@ export class MockBackend implements Backend {
     this.biometricAnswer = options.biometricAnswer ?? null;
     this.passwords = options.passwords ?? false;
     this.items = options.items ?? [];
+    this.browser = {
+      paired: options.browser?.paired ?? [],
+      pairing: options.browser?.pairing ?? [],
+      confirms: options.browser?.confirms ?? [],
+      policy: options.browser?.policy ?? defaultBrowserPolicy(),
+      activity: options.browser?.activity ?? [],
+    };
     const entries = options.entries ?? [];
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
     const phase = options.phase ?? (entries.length > 0 ? "unlocked" : "no_vault");
@@ -584,6 +623,15 @@ export class MockBackend implements Backend {
       items_count: phase === "unlocked" ? this.items.length : 0,
       site_rules: [],
       generator: { history_count: 0 },
+      browser: {
+        available: false,
+        enabled: false,
+        paired: [],
+        pairing: [],
+        confirms: [],
+        policy: defaultBrowserPolicy(),
+        activity: [],
+      },
       collapsed_groups: phase === "unlocked" ? [...this.collapsed] : [],
       entry_order: [],
       group_order: [],
@@ -597,6 +645,7 @@ export class MockBackend implements Backend {
       sync: { space: phase === "unlocked" ? this.space : null },
     };
     this.lockedEntries = phase === "unlocked" ? [] : entries.map((e) => e.view);
+    this.state.browser = this.browserView();
     this.refreshAutoLock();
   }
 
@@ -1239,6 +1288,83 @@ export class MockBackend implements Backend {
         this.itemsChanged();
         return null;
       }
+      case "browser_pair_approve": {
+        this.requireBrowser();
+        const request = this.browser.pairing.find((p) => p.id === command.id);
+        if (request === undefined || request.expires_at_ms <= this.now())
+          throw new LockraError("browser_pair_expired");
+        this.confirmPresence(command.password, command.reason);
+        this.browser.pairing = this.browser.pairing.filter((p) => p.id !== command.id);
+        this.browser.paired = [
+          ...this.browser.paired.filter(
+            (p) => p.extension !== request.extension || p.browser !== request.browser,
+          ),
+          {
+            id: nextId(),
+            browser: request.browser,
+            label: request.label,
+            extension: request.extension,
+            paired_at_ms: this.now(),
+            last_seen_ms: null,
+            connected: false,
+            page_access: null,
+            paused: false,
+          },
+        ];
+        this.recordBrowser(request.browser, request.label, "paired");
+        this.browserChanged();
+        return null;
+      }
+      case "browser_pair_deny":
+        this.requireBrowser();
+        if (!this.browser.pairing.some((p) => p.id === command.id))
+          throw new LockraError("browser_pair_expired");
+        this.browser.pairing = this.browser.pairing.filter((p) => p.id !== command.id);
+        this.browserChanged();
+        return null;
+      case "browser_fill_confirm": {
+        this.requireBrowser();
+        const waiting = this.browser.confirms.find((c) => c.id === command.id);
+        if (waiting === undefined || waiting.expires_at_ms <= this.now())
+          throw new LockraError("browser_pair_expired");
+        if (waiting.needs_proof) this.confirmPresence(command.password, command.reason);
+        this.browser.confirms = this.browser.confirms.filter((c) => c.id !== command.id);
+        this.browserChanged();
+        return null;
+      }
+      case "browser_fill_deny":
+        this.requireBrowser();
+        if (!this.browser.confirms.some((c) => c.id === command.id))
+          throw new LockraError("browser_pair_expired");
+        this.browser.confirms = this.browser.confirms.filter((c) => c.id !== command.id);
+        this.browserChanged();
+        return null;
+      case "browser_unpair": {
+        this.requireBrowser();
+        const paired = this.browser.paired.find((p) => p.id === command.id);
+        if (paired === undefined) throw new LockraError("browser_not_paired");
+        this.browser.paired = this.browser.paired.filter((p) => p.id !== command.id);
+        this.recordBrowser(paired.browser, paired.label, "unpaired");
+        this.browserChanged();
+        return null;
+      }
+      case "browser_resume":
+        this.requireBrowser();
+        this.browser.paired = this.browser.paired.map((p) => ({ ...p, paused: false }));
+        this.browserChanged();
+        return null;
+      case "browser_activity_clear":
+        this.requireBrowser();
+        this.browser.activity = [];
+        this.browserChanged();
+        return null;
+      case "browser_set_policy":
+        this.requireBrowser();
+        if (riskierPolicy(this.browser.policy, command.policy))
+          this.confirmPresence(command.password, command.reason);
+        this.browser.policy = structuredClone(command.policy);
+        this.browserChanged();
+        return null;
       case "sync_disable":
         this.requireSpace();
         this.setSpace(null);
@@ -1551,6 +1677,7 @@ export class MockBackend implements Backend {
     this.state.sync = { space: this.space };
     this.lockedEntries = [];
     this.state.lock = { ...this.state.lock, failed_attempts: 0, retry_at_ms: null };
+    this.state.browser = this.browserView();
     this.refreshAutoLock();
     this.publish();
     this.pushFrame();
@@ -1559,6 +1686,10 @@ export class MockBackend implements Backend {
   private lock(): void {
     if (this.state.phase !== "unlocked") return;
     this.generated = null;
+    this.browser.pairing = [];
+    this.browser.confirms = [];
+    this.browser.activity = [];
+    this.browser.paired = this.browser.paired.map((p) => ({ ...p, connected: false }));
     this.state.items_rev += 1;
     this.state.items_count = 0;
     this.state.site_rules = [];
@@ -1574,6 +1705,7 @@ export class MockBackend implements Backend {
     this.exports.clear();
     this.clearImport();
     this.state.auto_lock_at_ms = null;
+    this.state.browser = this.browserView();
     this.publish();
     this.pushFrame();
   }
@@ -1823,6 +1955,101 @@ export class MockBackend implements Backend {
   private requirePasswords(): void {
     if (!this.passwords) throw new LockraError("feature_unavailable");
     this.requireUnlocked();
+  }
+
+  /** The browser extension's commands: password management on, the desktop, unlocked. */
+  private requireBrowser(): void {
+    if (!this.passwords) throw new LockraError("feature_unavailable");
+    if (this.state.platform === "android") throw new LockraError("browser_unavailable");
+    this.requireUnlocked();
+  }
+
+  /** Settings › Browser as the core shows it: the switch always, the rest once unlocked. */
+  private browserView(): BrowserView {
+    const available = this.passwords && this.state.platform !== "android";
+    const enabled = available && this.state.settings.browser_integration;
+    if (!available || this.state.phase !== "unlocked")
+      return {
+        available,
+        enabled,
+        paired: [],
+        pairing: [],
+        confirms: [],
+        policy: defaultBrowserPolicy(),
+        activity: [],
+      };
+    const now = this.now();
+    return {
+      available,
+      enabled,
+      paired: structuredClone(this.browser.paired),
+      pairing: this.browser.pairing.filter((p) => p.expires_at_ms > now).map((p) => ({ ...p })),
+      confirms: this.browser.confirms
+        .filter((c) => c.expires_at_ms > now)
+        .map((c) => structuredClone(c)),
+      policy: structuredClone(this.browser.policy),
+      activity: structuredClone(this.browser.activity),
+    };
+  }
+
+  private browserChanged(): void {
+    this.changed();
+  }
+
+  private recordBrowser(browser: string, label: string, event: ActivityView["event"]): void {
+    this.browser.activity = [
+      {
+        at_ms: this.now(),
+        browser,
+        label,
+        site: "",
+        event,
+        refusal: null,
+        item_id: null,
+        title: null,
+      },
+      ...this.browser.activity,
+    ].slice(0, 100);
+  }
+
+  /** Test hook: an extension finished the pairing handshake, as the channel would tell the core. */
+  simulatePairRequest(
+    request: Omit<PairRequestView, "id" | "expires_at_ms"> & { expires_at_ms?: number },
+  ): string {
+    const id = nextId();
+    this.browser.pairing.push({
+      ...request,
+      id,
+      expires_at_ms: request.expires_at_ms ?? this.now() + 120_000,
+    });
+    this.changed();
+    this.notice({
+      type: "browser_pair_requested",
+      id,
+      browser: request.browser,
+      code: request.code,
+    });
+    return id;
+  }
+
+  /** Test hook: an extension asks to fill or copy a login that waits for the user. */
+  simulateConfirm(
+    view: Omit<ConfirmView, "id" | "expires_at_ms"> & { expires_at_ms?: number },
+  ): string {
+    const id = nextId();
+    this.browser.confirms.push({
+      ...view,
+      id,
+      expires_at_ms: view.expires_at_ms ?? this.now() + 60_000,
+    });
+    this.changed();
+    this.notice({
+      type: "browser_confirm_requested",
+      id,
+      browser: view.browser,
+      title: view.title,
+    });
+    return id;
   }
 
   /** The logins or the site rules changed: the list is to be asked for again. */
@@ -2179,6 +2406,7 @@ export class MockBackend implements Backend {
   }
 
   private changed(): void {
+    this.state.browser = this.browserView();
     this.refreshAutoLock();
     this.publish();
     this.pushFrame();

@@ -177,6 +177,43 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   another app that Lockra cannot watch, so the vault stays unlocked behind it until the auto-lock
   time.
 
+## Browser extension
+
+Password management's browser extension (behind the `passwords` switch until it ships) is a thin
+client: it keeps no vault and caches no secret, and every decision is the core's.
+
+- **The channel.** The extension reaches the running app through native messaging, a host process
+  that only passes frames between its stdio and the app's local socket. Both are treated as
+  untrusted pipes: Noise encrypts end to end between the extension and the app (docs/formats.md
+  §10), so whoever takes over the socket or the named pipe can make a connection fail, not read or
+  forge one. Pairing is `Noise_XX` with a six-digit code drawn from the handshake hash on both
+  screens, which the user compares before approving in Lockra with the master password or the
+  biometric check; a party in the middle would show different codes. Each session is `Noise_KK`
+  between the paired keys with fresh ephemeral keys. At most three pairing requests wait, for two
+  minutes each. The app's static key is in the vault's local part (never synced, never in a
+  backup) and stays in the app's memory, never in the webview.
+- **Locked means nothing.** While locked the app answers only `hello` and the request to unlock
+  (at most every ten seconds); locking ends every session, refuses every waiting request and
+  empties the activity list. A browser's requests never restart the idle timer.
+- **What a request gets** is decided in `crates/lockra-core/src/session/browser.rs`, from what the
+  extension's background script took from the browser (the frame's address, the tab's, the frame's
+  ancestors), never from the page: only the logins at the best match level for the frame's own
+  address (the never-fill list is checked first); nothing in a frame of another site unless the
+  user set that rule to ask, and then Lockra asks; an `https` login on an `http` page only once the
+  user agreed in the page; a `no_extension` login never; a `confirm` login only after the master
+  password or the biometric check in Lockra (and copying its password from the popup the same); a
+  linked code for a second step only on the site just filled, for five minutes.
+- **Filling as a page loads** is off unless the user turns it on (a warning, then the master
+  password or the biometric check), and then only in the page itself (no frame), on `https` or
+  where the login was saved for `http`, with exactly one match, for a `fill` login whose own
+  setting is not off; never a code, never a submit.
+- **Rate limits.** A session gets at most 10 answers carrying a secret a minute, 120 queries a
+  minute and secrets of 20 sites in ten minutes; past that its pairing is paused until the user
+  resumes it in Lockra (the window says so).
+- **The policy** is in the vault, so editing `settings.json` cannot turn a risky option on; any
+  change that lets the extensions do more asks for the proof. `browser_integration` in
+  `settings.json` only says whether Lockra listens.
+
 ## Updates
 
 - **Off the network by default.** A check runs when the user chooses **Check for updates**, and
@@ -396,6 +433,11 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   and joins the vault to a sync space: whoever passes the check (any finger enrolled on the phone)
   can take every account off it, as whoever knows the master password can. The check proves that
   an enrolled finger is there, nothing more.
+- The browser extension: malware running as the same user can copy the extension's key out of
+  the browser's profile and act as the paired extension, within the rate limits and the protection
+  levels; a script on a site a login matches (by its registrable domain, unless the user chose a
+  closer rule) can read what is filled there, and with filling as pages load it needs no click; the
+  extension's strings cannot be wiped from memory.
 - A forgotten master password cannot be recovered; _reset_ keeps the old file but cannot open it.
 - Sync: whoever holds an invitation (its QR code photographed, a relay space's pairing link, or
   the sealed text together with its code) holds the space, as a device does, with no password to

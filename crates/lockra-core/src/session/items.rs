@@ -49,6 +49,11 @@ impl Core {
     /// Add a login; its id. The secrets come from the webview (or, for the password, from the
     /// generator's last one) and never go back but through `item_reveal`.
     pub fn item_add(&self, draft: ItemDraft) -> CoreResult<Uuid> {
+        self.add_item(draft, false)
+    }
+
+    /// [`Self::item_add`]; `quiet`: the browser extension's, which does not restart the idle timer.
+    pub(super) fn add_item(&self, draft: ItemDraft, quiet: bool) -> CoreResult<Uuid> {
         self.passwords_on()?;
         let now = self.now_ms();
         let id = {
@@ -91,7 +96,11 @@ impl Core {
             }
             check_field_count(&item)?;
             session.data.items.push(item);
+            let idle = st.last_activity;
             self.save(&mut st, true, move |s| s.data.items.retain(|i| i.id != id))?;
+            if quiet {
+                st.last_activity = idle;
+            }
             touch_items(&mut st);
             id
         };
@@ -102,6 +111,12 @@ impl Core {
     /// Change a login. Every part the patch names takes a write of its own: the metadata one, each
     /// field one, so that a change made at the same time elsewhere to another part stays.
     pub fn item_update(&self, id: Uuid, patch: ItemPatch) -> CoreResult<()> {
+        self.update_item(id, patch, false)
+    }
+
+    /// [`Self::item_update`]; `quiet`: the browser extension's, which does not restart the idle
+    /// timer.
+    pub(super) fn update_item(&self, id: Uuid, patch: ItemPatch, quiet: bool) -> CoreResult<()> {
         self.passwords_on()?;
         let now = self.now_ms();
         {
@@ -201,11 +216,15 @@ impl Core {
             }
             check_field_count(&item)?;
             session.data.items[index] = item;
+            let idle = st.last_activity;
             self.save(&mut st, true, move |s| {
                 if let Some(slot) = s.data.items.iter_mut().find(|i| i.id == id) {
                     *slot = before;
                 }
             })?;
+            if quiet {
+                st.last_activity = idle;
+            }
             touch_items(&mut st);
         }
         self.changed();
@@ -389,6 +408,12 @@ impl Core {
 
     /// Add a site rule (or widen the one about the same single domain).
     pub fn site_rule_add(&self, kind: SiteRuleKind, domains: &[String]) -> CoreResult<()> {
+        self.add_site_rule(kind, domains, false)
+    }
+
+    /// [`Self::site_rule_add`]; `quiet`: the browser extension's, which does not restart the idle
+    /// timer.
+    pub(super) fn add_site_rule(&self, kind: SiteRuleKind, domains: &[String], quiet: bool) -> CoreResult<()> {
         self.passwords_on()?;
         let domains = clean_domains(domains)?;
         if kind == SiteRuleKind::Equivalent && domains.len() < 2 {
@@ -406,7 +431,11 @@ impl Core {
                 Some(own) => *own = rule,
                 None => session.data.site_rules.push(rule),
             }
+            let idle = st.last_activity;
             self.save(&mut st, true, move |s| s.data.site_rules = before)?;
+            if quiet {
+                st.last_activity = idle;
+            }
             touch_items(&mut st);
         }
         self.changed();

@@ -1021,6 +1021,9 @@ export const en: Messages = {
     item_read_only: "This login comes from a newer Lockra; it can be viewed here, not changed",
     generator_rules_unsatisfiable:
       "No password meets this site's rules with these options; loosen them",
+    browser_unavailable: "The browser extension cannot be used on this device",
+    browser_not_paired: "This browser extension is not paired, or its pairing was removed",
+    browser_pair_expired: "This request has expired; start it again in the browser",
     feature_unavailable:
       "This version cannot do that yet; restore a backup that holds passwords with Replace",
     internal: "An internal error occurred",
@@ -1071,6 +1074,12 @@ export const en: Messages = {
       generated: "generated password",
     },
     clipboardCleared: "Clipboard cleared",
+    itemSaved: "Saved “{title}” from the browser",
+    itemUpdated: "Changed the password of “{title}” from the browser",
+    browserPairRequested: "{browser} asks to connect, code {code}",
+    browserConfirmRequested: "{browser} asks to fill “{title}”",
+    browserPaused: "“{name}” asked too often and is paused",
+    browserUnlockRequested: "{browser} asks Lockra to unlock",
     imported: "Imported {added}, replaced {replaced}, skipped {skipped}",
     fileUnrecognized: "“{name}” is not recognized",
     fileUnreadable: "“{name}” cannot be read",

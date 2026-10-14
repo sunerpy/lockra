@@ -9,6 +9,8 @@ import {
   incompatibleText,
   noticeIsProblem,
   noticeText,
+  browserName,
+  pairingCode,
   originText,
   parametersText,
   rejectText,
@@ -87,6 +89,33 @@ describe("labels", () => {
     );
     expect(noticeIsProblem({ type: "backup_failed", code: "io_failed" })).toBe(true);
     expect(noticeIsProblem({ type: "auto_locked" })).toBe(false);
+  });
+
+  it("names browsers and groups pairing codes as both sides show them", () => {
+    expect([
+      browserName("chrome"),
+      browserName("edge"),
+      browserName("vivaldi"),
+      browserName(""),
+    ]).toEqual(["Chrome", "Edge", "vivaldi", "?"]);
+    expect([pairingCode("123456"), pairingCode("12")]).toEqual(["123 456", "12"]);
+    expect(
+      noticeText(zh, {
+        type: "browser_pair_requested",
+        id: "r",
+        browser: "chrome",
+        code: "123456",
+      }),
+    ).toBe("Chrome 请求连接，代码 123 456");
+    expect(
+      noticeText(en, { type: "browser_paused", pairing: "p", browser: "edge", label: "" }),
+    ).toBe("“Edge” asked too often and is paused");
+    expect(
+      noticeText(en, { type: "browser_paused", pairing: "p", browser: "edge", label: "Work" }),
+    ).toBe("“Edge · Work” asked too often and is paused");
+    expect(
+      noticeText(zh, { type: "item_saved", item_id: "i", title: "GitHub", updated: false }),
+    ).toBe("已在浏览器中保存「GitHub」");
   });
 
   it("a copy names the account when the caller knows it", () => {

@@ -58,6 +58,15 @@
       "code": "generator_rules_unsatisfiable"
     },
     {
+      "code": "browser_unavailable"
+    },
+    {
+      "code": "browser_not_paired"
+    },
+    {
+      "code": "browser_pair_expired"
+    },
+    {
       "code": "internal"
     }
   ],

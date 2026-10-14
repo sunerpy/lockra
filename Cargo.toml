@@ -11,6 +11,7 @@ members = [
   "crates/lockra-remote",
   "crates/lockra-relay",
   "crates/lockra-autofill",
+  "crates/lockra-browser",
   "apps/desktop/src-tauri",
   "apps/mobile/src-tauri",
 ]
@@ -108,9 +109,29 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 sha1 = "=0.11.0"
 sha2 = "=0.11.0"
+# The browser extension's channel (crates/lockra-browser): Noise XX to pair, KK for each session, on
+# X25519, AES-GCM and SHA-256 (docs/formats.md §10; AES-GCM because the extension has it in
+# WebCrypto). No defaults, and not `std`, which would pull in ring's and BLAKE2's resolvers.
+# `use-chacha20poly1305` is only there because 0.10.0 imports `KeyInit` for AES-GCM under that
+# feature alone (src/resolvers/default.rs); the protocol never uses ChaCha20-Poly1305.
+snow = { version = "=0.10.0", default-features = false, features = [
+  "use-curve25519",
+  "use-aes-gcm",
+  "use-chacha20poly1305",
+  "use-sha2",
+  "use-getrandom",
+] }
 tempfile = "=3.27.0"
 thiserror = "=2.0.21"
-tokio = { version = "=1.53.1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+# `net` and `io-util`: the browser extension's local socket and named pipe (crates/lockra-browser).
+tokio = { version = "=1.53.1", features = [
+  "macros",
+  "rt-multi-thread",
+  "sync",
+  "time",
+  "net",
+  "io-util",
+] }
 tracing = "=0.1.44"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter"] }
 url = "=2.5.8"
@@ -130,6 +151,7 @@ lockra-sync = { path = "crates/lockra-sync" }
 lockra-remote = { path = "crates/lockra-remote" }
 lockra-relay = { path = "crates/lockra-relay" }
 lockra-autofill = { path = "crates/lockra-autofill" }
+lockra-browser = { path = "crates/lockra-browser" }
 
 [profile.release]
 lto = "thin"

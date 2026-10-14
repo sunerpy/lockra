@@ -573,7 +573,7 @@ impl Core {
             group: request.group.clone(),
             ..ItemDraft::default()
         };
-        let id = self.item_add(draft).map_err(|_| Refusal::Invalid)?;
+        let id = self.add_item(draft, true).map_err(|_| Refusal::Invalid)?;
         self.saved(session, &site, id, title, false);
         Ok(id)
     }
@@ -600,7 +600,7 @@ impl Core {
             }
             title
         };
-        self.item_update(request.item_id, ItemPatch { password: SecretChange::Set { value: request.password }, ..ItemPatch::default() })
+        self.update_item(request.item_id, ItemPatch { password: SecretChange::Set { value: request.password }, ..ItemPatch::default() }, true)
             .map_err(|_| Refusal::Invalid)?;
         self.saved(session, &site, request.item_id, title, true);
         Ok(())
@@ -649,7 +649,7 @@ impl Core {
                     urls: vec![UrlDraft { url: origin(&frame.frame), matching: Matching::Domain }],
                     ..ItemDraft::default()
                 };
-                let id = self.item_add(draft).map_err(|_| Refusal::Invalid)?;
+                let id = self.add_item(draft, true).map_err(|_| Refusal::Invalid)?;
                 self.saved(session, &site, id, title, false);
                 Some(id)
             }
@@ -675,7 +675,7 @@ impl Core {
             let st = self.lock();
             active(&st, session, false)?;
         }
-        self.site_rule_add(kind, &[site_of(&frame.frame)]).map_err(|_| Refusal::Invalid)
+        self.add_site_rule(kind, &[site_of(&frame.frame)], true).map_err(|_| Refusal::Invalid)
     }
 
     /// The popup's search over every login the extensions may see, at most [`SEARCH_MAX`]; those

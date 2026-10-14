@@ -440,3 +440,79 @@ GET    <relay>/v1/                                              {service: "lockr
   with `Retry-After` past a rate; `503` with `Retry-After` while a space being removed was in use.
   Every other error is `{"error": "<code>"}` with its status. Every answer carries
   `Cache-Control: no-store`.
+
+## 10. The browser extension's channel
+
+The extension keeps no vault. It reaches the running app through native messaging: the browser
+starts the host (`lockra-desktop` in host mode, the shell's part), which only passes frames between
+its stdio and the app's local socket. Noise encrypts end to end between the extension and the app,
+so the host and the socket are untrusted pipes (`crates/lockra-browser`; the shell's listener and
+the host are PR 9 of the password plan).
+
+- **Frames.** A 4-byte length, then that many bytes of JSON: the machine's byte order on stdio
+  (native messaging), little-endian on the socket. At most 1 MiB either way, what a browser accepts
+  from a host; a longer length, or a stream that ends inside a frame, ends the connection.
+- **The envelope** is `{"v": 1, "t": "hello" | "hs" | "msg", "d": "<base64>"}`, and `"p": "<pairing
+id>"` on the first message of a session's handshake. `hello` carries a plain JSON message, `hs` a
+  Noise handshake message, `msg` an encrypted fragment. Another `v`, JSON that does not read, or a
+  `d` that is not base64 ends the connection.
+- **Before a handshake** (plain, `op`-tagged): the extension's
+  `{"op": "hello", "proto_min", "proto_max", "browser", "label", "extension", "version",
+"page_access"}` is answered with `{"op": "hello", "proto_min", "proto_max", "proto", "app_version",
+"state"}`, `proto` the newest version both speak or `null` (the ranges then tell which side needs
+  an update) and `state` one of `no_vault`, `locked`, `unlocked`. `{"op": "unlock_request"}` asks
+  Lockra to come up with its unlock screen, at most once every ten seconds
+  (`{"op": "unlock", "accepted"}`). The app says `{"op": "state", "state"}` when it locks or
+  unlocks, and `{"op": "error", "error"}` for what it cannot answer: `hello_first`, `version`,
+  `bad_message`, `locked`, `not_paired`, `busy`, `unavailable`. While locked nothing else is
+  answered: the static key is in the vault.
+- **Pairing**: `Noise_XX_25519_AESGCM_SHA256`, the prologue `lockra-browser/1`. The extension
+  initiates; the app answers with its static key (made the first time, kept in the vault's local
+  part, `local.browser.key`). When the third message is in, both sides show six digits: HKDF-SHA256
+  of the handshake hash (no salt, info `lockra pairing code`), its first four bytes as a big-endian
+  number, modulo a million, with leading zeros. The app pushes `pair_pending`; the request waits in
+  Lockra, at most three at a time, for two minutes, until the user compares the codes and approves
+  with the master password or the biometric check. Then `{"push": "paired", "pairing": "<id>"}`,
+  or `{"push": "pair_failed", "reason": "denied" | "expired" | "busy" | "locked"}`, and the
+  connection is back before a handshake. The vault keeps the pairing (`local.browser.paired`: id,
+  browser, label, extension id, the extension's public key, when) and never syncs or backs it up.
+- **Sessions**: `Noise_KK_25519_AESGCM_SHA256` between the two static keys, the same prologue, new
+  ephemeral keys on each connection (forward secrecy). The first message names its pairing (`p`);
+  a pairing Lockra does not have, or keys that do not match it, get `not_paired`. Once open, the app
+  pushes `{"push": "ready", "pairing"}`.
+- **Messages over a channel** are JSON of at most 512 KiB in at most eight Noise messages of at most
+  65 535 bytes (eight full fragments carry 524 144 bytes). Each fragment's plaintext begins with a
+  flag byte, 1 when more follow, 0 on the last; a ninth fragment, a longer message or another flag
+  ends the connection.
+- **Requests** are `{"req": <n>, "op": "<op>", …}`; their answers repeat the number:
+  `{"req", "ok": true, "result"}` or `{"req", "ok": false, "error": "<refusal>"}`. The ops are
+  `status`, `query` (the logins of the best match for a frame, without secrets; with
+  `"purpose": "save"` and the submitted user name and password, whether to offer saving or
+  updating), `fill` (one login's secrets), `otp` (the code of a login filled on this site in the
+  last five minutes, for a second step), `copy` (a part on the clipboard, written by the app),
+  `save`, `update`, `generate` (a password to the page's `passwordrules`, `minlength` and
+  `maxlength` or the bundled rules, saved at once as a new login when asked), `site_rule` (never
+  save or never fill the frame's site) and `search`. Each names its frame with `frame_url`,
+  `top_url` and `frame_chain` (the ancestors, nearest first), which the extension's background
+  script takes from the browser, never from the page. A request this version cannot read gets
+  `invalid` when its number can be read. `fill` and `copy` may wait for the user (a login of the
+  `confirm` level; a frame of another site under the `ask` rule), and other requests are answered
+  meanwhile.
+- **Refusals**: `unavailable`, `locked`, `not_paired`, `paused`, `busy`, `invalid`, `never_fill`,
+  `never_save`, `no_match`, `cross_origin`, `http_downgrade`, `protected`, `denied`, `expired`,
+  `rate_limited`, `not_found`.
+- **Pushes** besides the pairing ones: `revoked` when the user removes the pairing (the session
+  ends). As the vault locks, every session ends and the connection hears `{"op": "state",
+"state": "locked"}`.
+- **The policy** (`local.browser.policy`, never in `settings.json`): `fill_otp` and `copy_otp`
+  (on), `auto_submit`, `confirm_fill`, `on_page_load` (off) and `cross_origin_frames` (`never` or
+  `ask`; a value of a later version reads as `never`). A change that lets the extensions do more
+  asks for the master password or the biometric check. `settings.json`'s `browser_integration`
+  only says whether the shell listens and keeps the browsers' manifests; only the shell changes
+  it.
+
+`crates/lockra-browser/tests/vectors/` holds every message as these types write it
+(`protocol.json`) and both handshakes with fixed keys, their hashes, the code and channel messages
+as snow makes them (`noise.json`): the extension's implementation is checked against them, and they
+are compared byte for byte (`UPDATE_BROWSER_FIXTURES=1 cargo test -p lockra-browser --test protocol`
+after a deliberate change).

@@ -192,6 +192,7 @@
         "auto_lock_minutes": 10,
         "auto_update": true,
         "biometric_offer": false,
+        "browser_integration": true,
         "clipboard_clear_seconds": 20,
         "codes_view": "grid",
         "default_unlock": "password",
@@ -429,6 +430,46 @@
     {
       "command": "site_rule_remove",
       "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000001e"
+    },
+    {
+      "command": "browser_pair_approve",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000028",
+      "password": "a new password"
+    },
+    {
+      "command": "browser_pair_deny",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000028"
+    },
+    {
+      "command": "browser_fill_confirm",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000029",
+      "reason": "fill Bank in Firefox"
+    },
+    {
+      "command": "browser_fill_deny",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000029"
+    },
+    {
+      "command": "browser_unpair",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000002a"
+    },
+    {
+      "command": "browser_resume"
+    },
+    {
+      "command": "browser_activity_clear"
+    },
+    {
+      "command": "browser_set_policy",
+      "password": "a new password",
+      "policy": {
+        "auto_submit": false,
+        "confirm_fill": true,
+        "copy_otp": false,
+        "cross_origin_frames": "ask",
+        "fill_otp": true,
+        "on_page_load": false
+      }
     }
   ],
   "phone_commands": [

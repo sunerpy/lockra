@@ -456,6 +456,10 @@ async fn a_busy_extension_does_not_keep_the_vault_open() {
         advance(Duration::from_secs(60)).await;
         let _ = h.core.browser_query(session, QueryRequest { facts: facts("https://github.com/"), ..QueryRequest::default() });
         let _ = h.core.browser_fill(session, fill_at("https://github.com/")).await;
+        let save = SaveRequest { facts: facts("https://new.example/"), username: "me".into(), password: pw("p"), ..SaveRequest::default() };
+        let _ = h.core.browser_save(session, save);
+        let rule = SiteRuleRequest { kind: Some(SiteRuleKind::NeverSave), facts: facts("https://other.example/") };
+        let _ = h.core.browser_site_rule(session, rule);
     }
     advance(Duration::from_secs(1)).await;
     assert_eq!(h.core.state().phase, Phase::Locked, "locked after the idle time, the requests notwithstanding");

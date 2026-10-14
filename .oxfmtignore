@@ -46,3 +46,7 @@ apps/desktop/src-tauri/gen/
 # Third-party data, byte for byte as published and pinned by SHA-256
 # (crates/lockra-autofill/data/SOURCES, scripts/update-vendored-data.sh).
 crates/lockra-autofill/data/
+
+# The browser extension's contract vectors, written by crates/lockra-browser/tests/protocol.rs
+# and compared byte for byte.
+crates/lockra-browser/tests/vectors/

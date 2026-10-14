@@ -34,7 +34,7 @@ pub use browser::{
     ActivityEvent, ActivityView, BrowserPolicy, BrowserView, CONFIRM_TTL, ClientInfo, ConfirmAction, ConfirmReason, ConfirmView, CopyRequest, FILLS_PER_MINUTE,
     FillAnswer, FillField, FillRequest, FrameFacts, FrameRule, GenerateAnswer, GenerateRequest, GenerateSave, ItemSummary, MAX_PENDING_PAIRS, OtpAnswer,
     OtpRequest, PAIR_TTL, PairRequestView, PairedView, QUERIES_PER_MINUTE, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SITES_PER_TEN_MINUTES, SaveAction,
-    SaveAdvice, SaveRequest, SearchRequest, SessionId, SiteRuleRequest, StatusAnswer, Trigger,
+    SaveAdvice, SaveRequest, SearchRequest, SessionId, SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
 };
 pub use entry::{AccountColor, Entry, EntryDraft, EntryPatch, EntryView, ExportCompat, Local, MARK_CHARS, PinnedGroup, VAULT_DATA_FORMAT, VaultData};
 pub use error::{CoreError, CoreResult, ErrorCode};
@@ -45,7 +45,7 @@ pub use item::{
     UrlRule, VaultItem,
 };
 pub use lenient::Lenient;
-pub use lockra_autofill::{GeneratorOptions, PassphraseOptions, PasswordOptions};
+pub use lockra_autofill::{GeneratorOptions, MatchLevel, PassphraseOptions, PasswordOptions};
 pub use lockra_sync::StorageConfig;
 pub use lockra_vault::KdfCost;
 pub use logins::{

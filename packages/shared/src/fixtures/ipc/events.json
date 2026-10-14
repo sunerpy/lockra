@@ -28,6 +28,22 @@
       "generator": {
         "history_count": 0
       },
+      "browser": {
+        "available": true,
+        "enabled": true,
+        "paired": [],
+        "pairing": [],
+        "confirms": [],
+        "policy": {
+          "fill_otp": true,
+          "copy_otp": true,
+          "auto_submit": false,
+          "confirm_fill": false,
+          "cross_origin_frames": "never",
+          "on_page_load": false
+        },
+        "activity": []
+      },
       "collapsed_groups": [],
       "entry_order": [],
       "group_order": [],
@@ -63,7 +79,8 @@
           "symbols": true,
           "avoid_ambiguous": false,
           "exclude": ""
-        }
+        },
+        "browser_integration": false
       },
       "import": null,
       "backup": {
@@ -119,6 +136,49 @@
       "item_id": null,
       "part": "generated",
       "clear_after_s": null
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "item_saved",
+      "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+      "title": "GitHub",
+      "updated": true
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "browser_pair_requested",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000028",
+      "browser": "chrome",
+      "code": "123456"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "browser_confirm_requested",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000029",
+      "browser": "firefox",
+      "title": "Bank"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "browser_paused",
+      "pairing": "0f3f1a1e-8d4b-4c8e-9f7a-00000000002a",
+      "browser": "edge",
+      "label": "Work"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "browser_unlock_requested",
+      "browser": "chrome"
     }
   },
   {

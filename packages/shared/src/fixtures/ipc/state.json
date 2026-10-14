@@ -7,6 +7,22 @@
       "last_auto_file": null,
       "last_backup_ms": null
     },
+    "browser": {
+      "activity": [],
+      "available": true,
+      "confirms": [],
+      "enabled": true,
+      "paired": [],
+      "pairing": [],
+      "policy": {
+        "auto_submit": false,
+        "confirm_fill": false,
+        "copy_otp": true,
+        "cross_origin_frames": "never",
+        "fill_otp": true,
+        "on_page_load": false
+      }
+    },
     "collapsed_groups": [],
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [],
@@ -47,6 +63,7 @@
       "auto_lock_minutes": 5,
       "auto_update": false,
       "biometric_offer": true,
+      "browser_integration": false,
       "clipboard_clear_seconds": 30,
       "codes_view": "list",
       "default_unlock": "biometric",
@@ -92,6 +109,22 @@
       "last_auto_file": null,
       "last_backup_ms": null
     },
+    "browser": {
+      "activity": [],
+      "available": true,
+      "confirms": [],
+      "enabled": true,
+      "paired": [],
+      "pairing": [],
+      "policy": {
+        "auto_submit": false,
+        "confirm_fill": false,
+        "copy_otp": true,
+        "cross_origin_frames": "never",
+        "fill_otp": true,
+        "on_page_load": false
+      }
+    },
     "collapsed_groups": [],
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [],
@@ -136,6 +169,7 @@
       "auto_lock_minutes": 5,
       "auto_update": false,
       "biometric_offer": true,
+      "browser_integration": false,
       "clipboard_clear_seconds": 30,
       "codes_view": "list",
       "default_unlock": "biometric",
@@ -178,6 +212,22 @@
       "last_auto_file": null,
       "last_backup_ms": null
     },
+    "browser": {
+      "activity": [],
+      "available": true,
+      "confirms": [],
+      "enabled": true,
+      "paired": [],
+      "pairing": [],
+      "policy": {
+        "auto_submit": false,
+        "confirm_fill": false,
+        "copy_otp": true,
+        "cross_origin_frames": "never",
+        "fill_otp": true,
+        "on_page_load": false
+      }
+    },
     "collapsed_groups": [],
     "data_dir": "/home/user/.local/share/dev.lockra.desktop",
     "entries": [],
@@ -218,6 +268,7 @@
       "auto_lock_minutes": 5,
       "auto_update": false,
       "biometric_offer": true,
+      "browser_integration": false,
       "clipboard_clear_seconds": 30,
       "codes_view": "list",
       "default_unlock": "biometric",
@@ -265,6 +316,93 @@
       },
       "last_auto_file": "lockra-auto-20260921-114640.lockrabackup",
       "last_backup_ms": 1789992800000
+    },
+    "browser": {
+      "activity": [
+        {
+          "at_ms": 1789999999000,
+          "browser": "chrome",
+          "event": "filled",
+          "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+          "label": "Work",
+          "refusal": null,
+          "site": "github.com",
+          "title": "GitHub"
+        },
+        {
+          "at_ms": 1789999998000,
+          "browser": "chrome",
+          "event": "refused",
+          "item_id": null,
+          "label": "Work",
+          "refusal": "cross_origin",
+          "site": "evil.example",
+          "title": null
+        }
+      ],
+      "available": true,
+      "confirms": [
+        {
+          "action": "fill",
+          "browser": "chrome",
+          "expires_at_ms": 1790000058000,
+          "frame_url": "https://bank.example/login",
+          "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000029",
+          "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+          "label": "Work",
+          "needs_proof": true,
+          "reasons": [
+            "protected",
+            "cross_origin"
+          ],
+          "title": "Bank",
+          "top_url": "https://portal.example/",
+          "username": "me"
+        }
+      ],
+      "enabled": true,
+      "paired": [
+        {
+          "browser": "chrome",
+          "connected": true,
+          "extension": "abcdefghijklmnopabcdefghijklmnop",
+          "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000002a",
+          "label": "Work",
+          "last_seen_ms": 1789999940000,
+          "page_access": true,
+          "paired_at_ms": 1789913600000,
+          "paused": false
+        },
+        {
+          "browser": "firefox",
+          "connected": false,
+          "extension": "lockra@firlab.app",
+          "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000002b",
+          "label": "",
+          "last_seen_ms": null,
+          "page_access": null,
+          "paired_at_ms": 1789996400000,
+          "paused": true
+        }
+      ],
+      "pairing": [
+        {
+          "browser": "edge",
+          "code": "123456",
+          "expires_at_ms": 1790000112000,
+          "extension": "ponmlkjihgfedcbaponmlkjihgfedcba",
+          "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000028",
+          "label": ""
+        }
+      ],
+      "policy": {
+        "auto_submit": false,
+        "confirm_fill": true,
+        "copy_otp": true,
+        "cross_origin_frames": "ask",
+        "fill_otp": true,
+        "on_page_load": false
+      }
     },
     "collapsed_groups": [
       "",
@@ -592,6 +730,7 @@
       "auto_lock_minutes": 10,
       "auto_update": true,
       "biometric_offer": false,
+      "browser_integration": true,
       "clipboard_clear_seconds": 20,
       "codes_view": "grid",
       "default_unlock": "password",

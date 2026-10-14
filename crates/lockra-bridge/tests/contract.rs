@@ -20,9 +20,10 @@ use lockra_core::ui::{
     SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use lockra_core::{
-    AccountColor, AutofillChoice, ConflictView, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, FieldView, GeneratedPastView, GeneratedView,
-    GeneratorOptions, ItemRevealed, ItemView, KdfCost, Matching, Outcome, PassphraseOptions, PastView, PinnedGroup, Ports, Protection, Purpose, RevealedField,
-    ScoreView, SiteRuleView, Tri, UrlView,
+    AccountColor, ActivityEvent, ActivityView, AutofillChoice, BrowserPolicy, BrowserView, ConfirmAction, ConfirmReason, ConfirmView, ConflictView, Core,
+    CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, FieldView, FrameRule, GeneratedPastView, GeneratedView, GeneratorOptions, ItemRevealed,
+    ItemView, KdfCost, Lenient, Matching, Outcome, PairRequestView, PairedView, PassphraseOptions, PastView, PinnedGroup, Ports, Protection, Purpose, Refusal,
+    RevealedField, ScoreView, SiteRuleView, Tri, UrlView,
 };
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
 use lockra_transfer::{Incompatible, Origin, RejectReason};
@@ -132,6 +133,7 @@ fn settings() -> Settings {
         auto_update: true,
         default_unlock: DefaultUnlock::Password,
         biometric_offer: false,
+        browser_integration: true,
         generator: GeneratorOptions::Passphrase(PassphraseOptions { words: 5, separator: " ".into(), capitalize: true, number: true }),
     }
 }
@@ -276,6 +278,7 @@ fn state(phase: Phase) -> UiState {
             Vec::new()
         },
         generator: GeneratorStatus { history_count: if unlocked { 3 } else { 0 } },
+        browser: if unlocked { browser() } else { BrowserView { available: true, enabled: true, ..BrowserView::default() } },
         collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
         entry_order: if unlocked { vec![id(2), id(1)] } else { Vec::new() },
         group_order: if unlocked { vec!["Work".into(), String::new()] } else { Vec::new() },
@@ -308,6 +311,11 @@ fn notices() -> Vec<Notice> {
         Notice::Copied { entry_id: id(1), clear_after_s: None },
         Notice::ItemCopied { item_id: Some(id(20)), part: CopiedPart::Password, clear_after_s: Some(30) },
         Notice::ItemCopied { item_id: None, part: CopiedPart::Generated, clear_after_s: None },
+        Notice::ItemSaved { item_id: id(20), title: "GitHub".into(), updated: true },
+        Notice::BrowserPairRequested { id: id(40), browser: "chrome".into(), code: "123456".into() },
+        Notice::BrowserConfirmRequested { id: id(41), browser: "firefox".into(), title: "Bank".into() },
+        Notice::BrowserPaused { pairing: id(42), browser: "edge".into(), label: "Work".into() },
+        Notice::BrowserUnlockRequested { browser: "chrome".into() },
         Notice::ClipboardCleared,
         Notice::Imported { added: 3, replaced: 1, skipped: 2 },
         Notice::FileUnrecognized { name: "notes.bin".into() },
@@ -411,7 +419,95 @@ fn commands() -> Vec<Value> {
         json!({"command": "password_score", "password": "correct horse battery staple"}),
         json!({"command": "site_rule_add", "kind": "equivalent", "domains": ["example.com", "example.co.uk"]}),
         json!({"command": "site_rule_remove", "id": id(30).to_string()}),
+        json!({"command": "browser_pair_approve", "id": id(40).to_string(), "password": "a new password"}),
+        json!({"command": "browser_pair_deny", "id": id(40).to_string()}),
+        json!({"command": "browser_fill_confirm", "id": id(41).to_string(), "reason": "fill Bank in Firefox"}),
+        json!({"command": "browser_fill_deny", "id": id(41).to_string()}),
+        json!({"command": "browser_unpair", "id": id(42).to_string()}),
+        json!({"command": "browser_resume"}),
+        json!({"command": "browser_activity_clear"}),
+        json!({"command": "browser_set_policy", "policy": {
+            "fill_otp": true, "copy_otp": false, "auto_submit": false, "confirm_fill": true, "cross_origin_frames": "ask", "on_page_load": false
+        }, "password": "a new password"}),
     ]
+}
+
+/// Settings › Browser with one of everything: two pairings (one paused), a pairing request, a fill
+/// waiting for proof, and activity.
+fn browser() -> BrowserView {
+    BrowserView {
+        available: true,
+        enabled: true,
+        paired: vec![
+            PairedView {
+                id: id(42),
+                browser: "chrome".into(),
+                label: "Work".into(),
+                extension: "abcdefghijklmnopabcdefghijklmnop".into(),
+                paired_at_ms: T0 - 86_400_000,
+                last_seen_ms: Some(T0 - 60_000),
+                connected: true,
+                page_access: Some(true),
+                paused: false,
+            },
+            PairedView {
+                id: id(43),
+                browser: "firefox".into(),
+                label: String::new(),
+                extension: "lockra@firlab.app".into(),
+                paired_at_ms: T0 - 3_600_000,
+                last_seen_ms: None,
+                connected: false,
+                page_access: None,
+                paused: true,
+            },
+        ],
+        pairing: vec![PairRequestView {
+            id: id(40),
+            code: "123456".into(),
+            browser: "edge".into(),
+            label: String::new(),
+            extension: "ponmlkjihgfedcbaponmlkjihgfedcba".into(),
+            expires_at_ms: T0 + 112_000,
+        }],
+        confirms: vec![ConfirmView {
+            id: id(41),
+            item_id: id(20),
+            title: "Bank".into(),
+            username: "me".into(),
+            frame_url: "https://bank.example/login".into(),
+            top_url: Some("https://portal.example/".into()),
+            browser: "chrome".into(),
+            label: "Work".into(),
+            reasons: vec![ConfirmReason::Protected, ConfirmReason::CrossOrigin],
+            action: ConfirmAction::Fill,
+            needs_proof: true,
+            expires_at_ms: T0 + 58_000,
+        }],
+        policy: BrowserPolicy { confirm_fill: true, cross_origin_frames: Lenient::Known(FrameRule::Ask), ..BrowserPolicy::default() },
+        activity: vec![
+            ActivityView {
+                at_ms: T0 - 1_000,
+                browser: "chrome".into(),
+                label: "Work".into(),
+                site: "github.com".into(),
+                event: ActivityEvent::Filled,
+                refusal: None,
+                item_id: Some(id(20)),
+                title: Some("GitHub".into()),
+            },
+            ActivityView {
+                at_ms: T0 - 2_000,
+                browser: "chrome".into(),
+                label: "Work".into(),
+                site: "evil.example".into(),
+                event: ActivityEvent::Refused,
+                refusal: Some(Refusal::CrossOrigin),
+                item_id: None,
+                title: None,
+            },
+        ],
+    }
 }
 
 /// Logins as `items_list` shows them: one with every part, one with none but its name, one a
@@ -578,6 +674,9 @@ fn response_fixtures() {
         ErrorCode::ItemInvalid.into(),
         ErrorCode::ItemReadOnly.into(),
         ErrorCode::GeneratorRulesUnsatisfiable.into(),
+        ErrorCode::BrowserUnavailable.into(),
+        ErrorCode::BrowserNotPaired.into(),
+        ErrorCode::BrowserPairExpired.into(),
         ErrorCode::Internal.into(),
     ];
     check(
@@ -787,6 +886,18 @@ async fn dispatch_answers_and_leaks_nothing() {
     ok(run(json!({"command": "generator_history_clear"})).await, &mut answers);
     let rule = run(json!({"command": "app_state"})).await.unwrap()["site_rules"][0]["id"].clone();
     ok(run(json!({"command": "site_rule_remove", "id": rule})).await, &mut answers);
+    // The browser extension's commands, without an extension: what can run does, the rest says why.
+    for command in [
+        json!({"command": "browser_resume"}),
+        json!({"command": "browser_activity_clear"}),
+        json!({"command": "browser_set_policy", "policy": {"fill_otp": false, "copy_otp": true, "auto_submit": false, "confirm_fill": true, "cross_origin_frames": "never", "on_page_load": false}}),
+    ] {
+        ok(run(command).await, &mut answers);
+    }
+    assert_eq!(run(json!({"command": "browser_pair_deny", "id": id(40)})).await.unwrap_err().code, ErrorCode::BrowserPairExpired);
+    assert_eq!(run(json!({"command": "browser_unpair", "id": id(42)})).await.unwrap_err().code, ErrorCode::BrowserNotPaired);
+    let riskier = json!({"command": "browser_set_policy", "policy": {"fill_otp": true, "copy_otp": true, "auto_submit": true, "confirm_fill": false, "cross_origin_frames": "ask", "on_page_load": true}, "password": "correct horse battery"});
+    ok(run(riskier).await, &mut answers);
     // The clipboard holds a code again, for the check below.
     ok(run(json!({"command": "entry_copy", "id": entry_id})).await, &mut answers);
     let error = run(json!({"command": "vault_unlock", "password": "x"})).await;
