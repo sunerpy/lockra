@@ -69,6 +69,12 @@
         "no-await-in-loop": "off",
         "unicorn/consistent-function-scoping": "off"
       }
+    },
+    {
+      "files": ["apps/extension/src/**"],
+      "rules": {
+        "no-console": "error"
+      }
     }
   ]
 }

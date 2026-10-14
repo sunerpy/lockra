@@ -18,6 +18,12 @@ How to work in this repository, for coding agents and people alike.
 - `apps/mobile` — the Android app (released from 0.7.0): the React phone app (`src/`) and its Tauri 2
   shell (`src-tauri/`, crate `lockra-mobile`; `gen/android` is the Gradle project with the Kotlin
   plugins, generated once and then kept).
+- `apps/extension` — the browser extension (Chrome, Edge, Firefox; MV3), a thin client of the
+  running app over native messaging: the background (`src/background`, the connection's state
+  machine, the frame facts, the shortcut), Noise and the protocol (`src/noise`, `src/protocol`,
+  checked against `crates/lockra-browser/tests/vectors/`), the content script (`src/content`), the
+  inline frame (`src/inline`), the popup and the options page (React + `@lockra/ui`); manifests per
+  browser in `manifest/`.
 - `packages/shared` (zod contract, backends, i18n, labels), `packages/ui` (design system).
 - `docs/` — `architecture.md` first, then `formats.md`, `security.md`, `release.md`; `DESIGN.md` at
   the root is the design system's reading guide; `docs/acceptance/` holds the visual QA and its
@@ -41,6 +47,7 @@ make pre-ci                      # the real app under Xvfb, the deb, the cross-b
 make smoke-desktop               # the real app alone: flows and screenshots
 make showcase                    # the component showcase in the four themes
 make android-apk                 # the phone app's debug APK (JDK 21, Android SDK 36, NDK)
+make extension                   # the browser extension's Chrome, Edge and Firefox zips (CONTRIBUTING.md)
 make site-screens                # the documentation site's screenshots (docs/site/README.md)
 scripts/update-vendored-data.sh  # lockra-autofill's bundled data, from the pins in its data/SOURCES
 UPDATE_BROWSER_FIXTURES=1 cargo test -p lockra-browser --test protocol  # the extension's contract vectors
@@ -66,7 +73,10 @@ make help                        # everything else
 - **The browser extension** reports facts (the frame's and the tab's addresses, from the browser,
   never from the page); every decision on what it gets is the core's (`session/browser.rs`). The
   vectors in `crates/lockra-browser/tests/vectors/` are compared byte for byte, like the IPC
-  fixtures.
+  fixtures. It listens to no `window` message (`scripts/check-no-window-message.sh`, for the whole
+  repository), runs nothing in a page's main world and loads no remote code; its content script
+  stays under 30 KB gzip and its popup under 150 KB (`scripts/check-extension-bundle.sh`). Its
+  ids are defined once, in `crates/lockra-browser/src/ids.rs`.
 - **Commands are `async`** in the shell; Argon2 and file I/O go through `spawn_blocking` in the core.
 - **Copy** lives in `packages/shared/src/i18n/zh-CN.ts` (the keys) and `en.ts` (same shape, tested).
   No colour literals in components (`scripts/check-no-literal-colors.sh`); use the tokens.

@@ -3,8 +3,9 @@
 # oxfmt over TS, JSON, YAML, TOML and Markdown), clippy, the Rust tests (the IPC contract fixtures
 # are compared byte for byte there), the crates' line coverage floor, the web packages' lint,
 # types and tests with their own coverage floors, the release configuration, no colour literal in
-# a component, a release bundle free of development code, cargo-deny, actionlint, shellcheck and
-# the one-line installers (offline).
+# a component, no window message listener, a release bundle free of development code, the browser
+# extension's sizes and contents, cargo-deny, actionlint, shellcheck and the one-line installers
+# (offline).
 # The desktop smoke test and the packages are separate (make pre-ci): they need a display server
 # stack and the cross toolchain. Usage: scripts/verify-all.sh   (make check)
 set -euo pipefail
@@ -35,7 +36,9 @@ step "web lint + types"; pnpm -r run lint
 step "web tests";        pnpm -r run test:coverage
 step "release config";   python3 .github/scripts/tauri-release.py check-config --project apps/desktop/src-tauri --targets-file .github/release-targets.json >/dev/null && python3 .github/scripts/tauri-release.py matrix --file .github/release-targets.json >/dev/null && python3 .github/scripts/test-tauri-release.py && .github/scripts/android-signing.sh >/dev/null
 step "colour literals";  scripts/check-no-literal-colors.sh
+step "window messages";  scripts/check-no-window-message.sh
 step "release bundle";   scripts/check-web-bundle.sh
+step "extension bundle"; scripts/check-extension-bundle.sh
 step "cargo-deny";       cargo deny check licenses bans sources
 step "actionlint";       actionlint
 step "shellcheck";       shellcheck scripts/*.sh .github/scripts/*.sh

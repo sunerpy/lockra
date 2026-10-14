@@ -1,5 +1,6 @@
 // English. Same nested shape as zh-CN (`Messages`); a missing or extra key is a type error, and
 // `every locale dictionary has the same key set` compares the leaf paths at runtime.
+import { extensionEn } from "./extension.en";
 import type { Messages } from "./zh-CN";
 
 export const en: Messages = {
@@ -1455,4 +1456,5 @@ export const en: Messages = {
   showcase: {
     title: "Component showcase (development only)",
   },
+  extension: extensionEn,
 };

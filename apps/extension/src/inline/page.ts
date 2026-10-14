@@ -1,0 +1,521 @@
+// The inline frame's page (inline.html): the menu under a field and the save or update prompt, drawn
+// in plain DOM with the tokens (DESIGN.md; boards 33, 34). It shows nothing until the background
+// accepts the token from its URL's fragment (the content script put it there) and sends the view;
+// every click goes back with where it landed and whether the user made it, and counts only once
+// the content script's checks pass. Its own IntersectionObserver v2 (Chromium) reports whether the
+// frame is really visible.
+import type { ExtensionKey, ExtensionT, Params } from "@lockra/shared/i18n/extension";
+import type {
+  BackgroundToInline,
+  InlineAction,
+  InlineToBackground,
+  InlineView,
+  MenuItem,
+} from "../shared/messages";
+import { AVATAR_RADIUS, AVATAR_TEXT, autoColor, initial } from "../shared/avatar";
+import { type IconName, icon, logo } from "../shared/icons";
+import { refusalText } from "../shared/refusal";
+
+export interface InlinePort {
+  post(message: InlineToBackground): void;
+  onMessage(listener: (message: BackgroundToInline) => void): void;
+  onDisconnect(listener: () => void): void;
+}
+
+export interface InlineOptions {
+  doc: Document;
+  token: string;
+  connect(): InlinePort;
+  t: ExtensionT;
+  /** The browser's observers (the tests give theirs; jsdom has none). */
+  IntersectionObserver?: typeof IntersectionObserver | undefined;
+  ResizeObserver?: typeof ResizeObserver | undefined;
+}
+
+type Child = Node | string | null | undefined | false;
+
+/** IntersectionObserver v2's options (Chromium): the frame's visibility, occlusion included. */
+const VISIBILITY: IntersectionObserverInit & { trackVisibility: boolean; delay: number } = {
+  threshold: 1,
+  trackVisibility: true,
+  delay: 100,
+};
+
+export class InlinePage {
+  private port: InlinePort | null = null;
+  private readonly root: HTMLElement;
+  private view: InlineView | null = null;
+  private revealed = false;
+  private lastHeight = -1;
+
+  constructor(private readonly options: InlineOptions) {
+    this.root = options.doc.getElementById("root") ?? options.doc.body;
+  }
+
+  start(): void {
+    // No token, nothing to ask for: an empty frame.
+    if (!/^[0-9a-f]{32}$/.test(this.options.token)) return;
+    const port = this.options.connect();
+    this.port = port;
+    port.onMessage((message) => {
+      if (message.kind === "view") this.render(message.view);
+      else this.clear();
+    });
+    port.onDisconnect(() => {
+      this.port = null;
+      this.clear();
+    });
+    port.post({ kind: "hello", token: this.options.token });
+    this.watchVisibility();
+    this.watchSize();
+  }
+
+  private send(message: InlineToBackground): void {
+    try {
+      this.port?.post(message);
+    } catch {
+      this.port = null;
+    }
+  }
+
+  private t(key: ExtensionKey, params?: Params): string {
+    return this.options.t(key, params);
+  }
+
+  // ---- what the frame tells -------------------------------------------------------------------
+
+  private watchVisibility(): void {
+    const Observer = this.options.IntersectionObserver;
+    if (typeof Observer !== "function") return;
+    try {
+      const observer = new Observer((entries) => {
+        const entry = entries.at(-1);
+        // Firefox has no v2: it says nothing, which the checks read as unknown.
+        if (entry && "isVisible" in entry && typeof entry.isVisible === "boolean")
+          this.send({ kind: "visible", visible: entry.isVisible });
+      }, VISIBILITY);
+      observer.observe(this.root);
+    } catch {
+      // No v2 options here.
+    }
+  }
+
+  private watchSize(): void {
+    const Observer = this.options.ResizeObserver;
+    const report = () => {
+      const height = Math.ceil(this.root.getBoundingClientRect().height);
+      if (height === this.lastHeight) return;
+      this.lastHeight = height;
+      this.send({ kind: "size", height });
+    };
+    if (typeof Observer === "function") new Observer(report).observe(this.root);
+    this.afterRender = report;
+  }
+
+  private afterRender: () => void = () => undefined;
+
+  private act(action: InlineAction, event?: MouseEvent): void {
+    this.send({
+      kind: "action",
+      action,
+      point: event ? { x: event.clientX, y: event.clientY } : null,
+      trusted: event?.isTrusted ?? false,
+    });
+  }
+
+  // ---- drawing ----------------------------------------------------------------------------------
+
+  private el<K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    className: string,
+    ...children: Child[]
+  ): HTMLElementTagNameMap[K] {
+    const node = this.options.doc.createElement(tag);
+    if (className) node.className = className;
+    for (const child of children) {
+      if (child === null || child === undefined || child === false) continue;
+      node.append(child);
+    }
+    return node;
+  }
+
+  private button(
+    label: string,
+    variant: "primary" | "ghost" | "outline" | "text-muted",
+    onClick: (event: MouseEvent) => void,
+    iconName?: IconName,
+  ): HTMLButtonElement {
+    const styles = {
+      primary: "bg-primary text-primary-fg shadow-primary hover:opacity-90",
+      ghost: "bg-transparent text-fg hover:bg-inset",
+      outline: "bg-surface-solid text-fg hairline hover:bg-inset",
+      "text-muted": "bg-transparent px-0 text-fg-muted hover:text-fg",
+    };
+    const node = this.el(
+      "button",
+      `inline-flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-6 px-2.5 text-[12px] font-medium whitespace-nowrap transition-colors ${styles[variant]}`,
+      iconName ? icon(this.options.doc, iconName, 13) : null,
+      label,
+    );
+    node.type = "button";
+    node.addEventListener("click", onClick);
+    return node;
+  }
+
+  private iconButton(
+    name: IconName,
+    label: string,
+    onClick: (event: MouseEvent) => void,
+  ): HTMLButtonElement {
+    const node = this.el(
+      "button",
+      "inline-flex size-6 shrink-0 items-center justify-center rounded-6 text-fg-muted transition-colors hover:bg-inset hover:text-fg",
+      icon(this.options.doc, name, 14),
+    );
+    node.type = "button";
+    node.setAttribute("aria-label", label);
+    node.title = label;
+    node.addEventListener("click", onClick);
+    return node;
+  }
+
+  private avatar(item: MenuItem): HTMLSpanElement {
+    const node = this.el(
+      "span",
+      `inline-flex size-8 shrink-0 items-center justify-center bg-tag-bg font-semibold text-tag-fg select-none ${AVATAR_TEXT[32]}`,
+      initial(item.title, item.username),
+    );
+    node.dataset.tag = autoColor(item.title, item.username);
+    node.style.borderRadius = `${AVATAR_RADIUS[32]}px`;
+    node.setAttribute("aria-hidden", "true");
+    return node;
+  }
+
+  private keycap(text: string): HTMLElement {
+    return this.el(
+      "kbd",
+      "mono inline-flex h-5 min-w-5 items-center justify-center rounded-6 border border-keycap-border bg-keycap-bg px-1.5 text-[11px] leading-none text-fg-muted",
+      text,
+    );
+  }
+
+  private clear(): void {
+    this.view = null;
+    this.root.replaceChildren();
+  }
+
+  private render(view: InlineView): void {
+    if (this.view?.view !== view.view) this.revealed = false;
+    this.view = view;
+    const body =
+      view.view === "save" || view.view === "update" ? this.prompt(view) : this.menu(view);
+    this.root.replaceChildren(body);
+    this.afterRender();
+  }
+
+  /** The menu's frame: a header, the content, a footer of keys. */
+  private menu(view: Exclude<InlineView, { view: "save" } | { view: "update" }>): HTMLElement {
+    const t = (key: ExtensionKey, params?: Params) => this.t(key, params);
+    const site = "site" in view ? view.site : "";
+    const hint =
+      view.view === "list"
+        ? t("inline.matches", { site, n: view.items.length })
+        : view.view === "signup"
+          ? t("inline.signupHint")
+          : site;
+    const header = this.el(
+      "div",
+      "flex h-[34px] items-center gap-2 px-3",
+      logo(this.options.doc, 18),
+      this.el("span", "text-[12px] font-semibold text-fg", "Lockra"),
+      this.el("span", "min-w-0 flex-1 truncate text-[11px] text-fg-subtle", hint),
+      this.iconButton("x", t("inline.close"), () => this.act({ type: "close" })),
+    );
+    let content: HTMLElement;
+    let footer: string;
+    switch (view.view) {
+      case "list":
+        content = this.list(view.items, view.active);
+        footer = t("inline.listFooter");
+        break;
+      case "signup":
+        content = this.signup(view);
+        footer = t("inline.signupFooter");
+        break;
+      case "confirm":
+        content = this.confirm(view.item);
+        footer = t("inline.confirmFooter");
+        break;
+      case "http":
+        content = this.http();
+        footer = t("inline.escFooter");
+        break;
+      case "waiting":
+        content = this.message("lock", t("inline.waitingTitle"), t("inline.waitingBody"));
+        footer = t("inline.escFooter");
+        break;
+      case "notice":
+        content = this.message(
+          "info",
+          t("inline.noticeTitle"),
+          refusalText(this.options.t, view.refusal),
+        );
+        footer = t("inline.escFooter");
+        break;
+    }
+    return this.el(
+      "div",
+      "overflow-hidden rounded-10 border border-border bg-surface-solid shadow-pop",
+      header,
+      this.el("div", "h-px bg-border"),
+      this.el("div", "p-1", content),
+      this.el("div", "h-px bg-border"),
+      this.el("div", "mono flex h-[30px] items-center px-3 text-[10px] text-fg-subtle", footer),
+    );
+  }
+
+  private list(items: MenuItem[], active: number): HTMLElement {
+    const rows = items.map((item, index) => {
+      const row = this.el(
+        "button",
+        `flex h-[52px] w-full items-center gap-3 rounded-6 px-2 text-left transition-colors ${index === active ? "bg-inset" : "hover:bg-inset"}`,
+        this.avatar(item),
+        this.el(
+          "span",
+          "min-w-0 flex-1",
+          this.el("span", "block truncate text-[13px] font-semibold text-fg", item.title),
+          this.el("span", "block truncate text-[12px] text-fg-muted", item.username),
+        ),
+        index === active ? this.keycap("↵") : null,
+      );
+      row.type = "button";
+      row.title = `${item.title} · ${item.username}`;
+      row.addEventListener("click", (event) => this.act({ type: "choose", index }, event));
+      return row;
+    });
+    return this.el("div", "flex flex-col", ...rows);
+  }
+
+  private signup(view: Extract<InlineView, { view: "signup" }>): HTMLElement {
+    const t = (key: ExtensionKey, params?: Params) => this.t(key, params);
+    const use = this.el(
+      "button",
+      "flex w-full items-start gap-2.5 rounded-6 bg-inset px-3 py-2 text-left",
+      this.el("span", "mt-0.5 text-accent-text", icon(this.options.doc, "dice", 16)),
+      this.el(
+        "span",
+        "min-w-0 flex-1",
+        this.el("span", "block text-[13px] font-semibold text-fg", t("inline.signupTitle")),
+        this.el("span", "mono block truncate text-[13px] font-medium text-fg", view.password),
+        this.el(
+          "span",
+          "block text-[11px] text-fg-subtle",
+          t(view.rules ? "inline.signupRules" : "inline.signupRandom", {
+            n: Array.from(view.password).length,
+          }),
+        ),
+      ),
+    );
+    use.type = "button";
+    use.addEventListener("click", (event) => this.act({ type: "use" }, event));
+    const refresh = this.iconButton("refresh", t("inline.regenerate"), (event) =>
+      this.act({ type: "regenerate" }, event),
+    );
+    const note = view.username
+      ? t("inline.signupNote", { site: view.site, username: view.username })
+      : t("inline.signupNoteNoUser", { site: view.site });
+    return this.el(
+      "div",
+      "flex flex-col gap-1",
+      this.el("div", "flex items-center gap-1", use, refresh),
+      this.el(
+        "p",
+        "flex items-start gap-2 px-3 py-1.5 text-[11.5px] leading-snug text-fg-muted",
+        this.el("span", "mt-0.5 text-fg-subtle", icon(this.options.doc, "info", 14)),
+        note,
+      ),
+    );
+  }
+
+  private confirm(item: MenuItem): HTMLElement {
+    const t = (key: ExtensionKey, params?: Params) => this.t(key, params);
+    return this.el(
+      "div",
+      "flex gap-3 rounded-6 bg-inset p-2.5",
+      this.avatar(item),
+      this.el(
+        "div",
+        "min-w-0 flex-1",
+        this.el(
+          "p",
+          "truncate text-[13px] font-semibold text-fg",
+          t("inline.confirmTitle", { title: item.title, username: item.username }),
+        ),
+        this.el("p", "text-[11.5px] text-fg-subtle", t("inline.confirmNote")),
+        this.el(
+          "div",
+          "mt-2 flex gap-2",
+          this.button(t("inline.fill"), "primary", (event) => this.act({ type: "fill" }, event)),
+          this.button(t("inline.cancel"), "ghost", () => this.act({ type: "close" })),
+        ),
+      ),
+    );
+  }
+
+  private http(): HTMLElement {
+    const t = (key: ExtensionKey) => this.t(key);
+    return this.el(
+      "div",
+      "flex gap-2.5 p-2.5",
+      this.el("span", "mt-0.5 text-warning", icon(this.options.doc, "alert", 16)),
+      this.el(
+        "div",
+        "min-w-0 flex-1",
+        this.el("p", "text-[13px] font-semibold text-fg", t("http.title")),
+        this.el("p", "text-[12px] leading-snug text-fg-muted", t("http.body")),
+        this.el(
+          "div",
+          "mt-2 flex gap-2",
+          this.button(t("http.fill"), "outline", (event) =>
+            this.act({ type: "allow_http" }, event),
+          ),
+          this.button(t("http.cancel"), "ghost", () => this.act({ type: "close" })),
+        ),
+      ),
+    );
+  }
+
+  private message(name: IconName, title: string, body: string): HTMLElement {
+    return this.el(
+      "div",
+      "flex gap-2.5 p-2.5",
+      this.el("span", "mt-0.5 text-fg-muted", icon(this.options.doc, name, 16)),
+      this.el(
+        "div",
+        "min-w-0 flex-1",
+        this.el("p", "text-[13px] font-semibold text-fg", title),
+        this.el("p", "text-[12px] leading-snug text-fg-muted", body),
+      ),
+    );
+  }
+
+  private field(label: string, input: HTMLInputElement, ...after: Child[]): HTMLElement {
+    const id = `f-${label.length}-${Math.random().toString(36).slice(2, 8)}`;
+    input.id = id;
+    input.className = `min-w-0 flex-1 bg-transparent outline-none placeholder:text-fg-subtle ${input.className}`;
+    const caption = this.el("label", "text-[12px] text-fg-muted", label);
+    caption.htmlFor = id;
+    return this.el(
+      "div",
+      "flex flex-col gap-1",
+      caption,
+      this.el(
+        "div",
+        "flex h-8 items-center gap-2 rounded-6 bg-surface-solid px-2.5 text-[13px] hairline focus-within:border-fg",
+        input,
+        ...after,
+      ),
+    );
+  }
+
+  private input(value: string, placeholder = ""): HTMLInputElement {
+    const input = this.options.doc.createElement("input");
+    input.value = value;
+    input.placeholder = placeholder;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    return input;
+  }
+
+  /** The save or update prompt at the top right. */
+  private prompt(view: Extract<InlineView, { view: "save" } | { view: "update" }>): HTMLElement {
+    const t = (key: ExtensionKey) => this.t(key);
+    const title = this.el(
+      "div",
+      "flex items-center gap-2.5",
+      logo(this.options.doc, 20),
+      this.el(
+        "span",
+        "min-w-0 flex-1 truncate text-[14px] font-semibold text-fg",
+        t(view.view === "save" ? "save.title" : "update.title"),
+      ),
+      this.iconButton("x", t("inline.close"), () => this.act({ type: "close" })),
+    );
+    let body: HTMLElement;
+    let primary: HTMLButtonElement;
+    let dismiss: string;
+    if (view.view === "save") {
+      const titleInput = this.input(view.title);
+      const usernameInput = this.input(view.username);
+      const passwordInput = this.input(view.password);
+      passwordInput.type = this.revealed ? "text" : "password";
+      passwordInput.readOnly = true;
+      passwordInput.className = "mono";
+      const groupInput = this.input("", t("save.groupPlaceholder"));
+      const reveal = this.iconButton(
+        this.revealed ? "eyeOff" : "eye",
+        t(this.revealed ? "save.hide" : "save.show"),
+        () => {
+          this.revealed = !this.revealed;
+          this.render(view);
+        },
+      );
+      body = this.el(
+        "div",
+        "flex flex-col gap-2.5",
+        this.field(t("save.fieldTitle"), titleInput),
+        this.field(t("save.username"), usernameInput),
+        this.field(t("save.password"), passwordInput, reveal),
+        this.field(t("save.group"), groupInput),
+      );
+      primary = this.button(t("save.save"), "primary", (event) =>
+        this.act(
+          {
+            type: "save",
+            title: titleInput.value,
+            username: usernameInput.value,
+            group: groupInput.value,
+          },
+          event,
+        ),
+      );
+      dismiss = t("save.dismiss");
+    } else {
+      body = this.el(
+        "div",
+        "flex flex-col gap-2.5",
+        this.el(
+          "div",
+          "flex h-[52px] items-center gap-3 rounded-6 bg-inset px-3 hairline",
+          this.avatar(view.item),
+          this.el(
+            "span",
+            "min-w-0 flex-1",
+            this.el("span", "block truncate text-[13px] font-semibold text-fg", view.item.title),
+            this.el("span", "block truncate text-[12px] text-fg-muted", view.item.username),
+          ),
+        ),
+        this.el("p", "text-[12.5px] leading-normal text-fg-muted", t("update.body")),
+      );
+      primary = this.button(t("update.update"), "primary", (event) =>
+        this.act({ type: "update" }, event),
+      );
+      dismiss = t("update.dismiss");
+    }
+    const actions = this.el(
+      "div",
+      "flex items-center gap-2",
+      this.button(t("save.never"), "text-muted", (event) => this.act({ type: "never" }, event)),
+      this.el("span", "flex-1"),
+      this.button(dismiss, "ghost", (event) => this.act({ type: "dismiss" }, event)),
+      primary,
+    );
+    return this.el(
+      "div",
+      "flex flex-col gap-3.5 overflow-hidden rounded-14 border border-border bg-surface-solid p-4 shadow-pop",
+      title,
+      body,
+      actions,
+    );
+  }
+}

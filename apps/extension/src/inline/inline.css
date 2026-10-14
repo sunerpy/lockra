@@ -1,0 +1,11 @@
+/* The inline frame: the tokens without the app's components, on a transparent page (the menu draws
+ * its own opaque surface; a frame of another color scheme than its page would get an opaque one). */
+@import "tailwindcss";
+@import "../../../../packages/ui/src/tokens.css";
+
+html,
+body {
+  margin: 0;
+  overflow: hidden;
+  background: transparent !important;
+}

@@ -213,6 +213,16 @@ client: it keeps no vault and caches no secret, and every decision is the core's
 - **The policy** is in the vault, so editing `settings.json` cannot turn a risky option on; any
   change that lets the extensions do more asks for the proof. `browser_integration` in
   `settings.json` only says whether Lockra listens.
+- **The extension's side** (`apps/extension`). Its static key is a WebCrypto X25519 key made with
+  a private half that cannot be exported, kept in IndexedDB; the pairing (its id and the app's public
+  key) is all `storage.local` holds besides; session keys live in the background's memory only, and
+  the popup's last list of the site's logins (no secret) in `storage.session`, emptied as Lockra
+  locks. The content script runs in its isolated world, listens to no `window` message and reports
+  no address; the menu and the save prompt are extension frames in a closed shadow root in the top
+  layer, shown nothing without the token the background handed out, and a click in them counts only
+  when the frame has shown unmoved for 300 ms, is on top at the click, has no see-through, filtered,
+  clipped or blended ancestor, was not touched by the page, and (Chromium) its IntersectionObserver
+  v2 saw it visible.
 
 ## Updates
 

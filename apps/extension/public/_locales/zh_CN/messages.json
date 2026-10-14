@@ -1,0 +1,14 @@
+{
+  "name": {
+    "message": "Lockra",
+    "description": "The extension's name in the browser and the stores."
+  },
+  "description": {
+    "message": "用电脑上的 Lockra 填充密码和验证码。扩展本身不保存登录项。",
+    "description": "The extension's one-line description."
+  },
+  "commandFill": {
+    "message": "填充当前网站的登录项",
+    "description": "The fill shortcut's name on the browser's shortcuts page."
+  }
+}
