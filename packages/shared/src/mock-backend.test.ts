@@ -10,6 +10,7 @@ import {
   mockEntry,
   mockItemView,
   mockSyncSpace,
+  sampleBrowser,
   sampleEntries,
 } from "./mock-backend";
 import type { CodesFrame, JoinSource, Notice, StorageConfig, UiEvent } from "./schema";
@@ -1351,5 +1352,29 @@ describe("MockBackend", () => {
     expect(fakeCode("A", 1, 6)).toBe(fakeCode("A", 1, 6));
     expect(fakeCode("A", 1, 8)).toMatch(/^\d{8}$/);
     expect(fakeCode("A", 1, 6)).not.toBe(fakeCode("A", 2, 6));
+  });
+});
+
+describe("the browser preview's sample", () => {
+  it("is paired with Chrome and Edge, with some activity, once unlocked", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      passwords: true,
+      browser: sampleBrowser(0),
+    });
+    const { browser } = await backend.getState();
+    expect(browser.paired.map((p) => [p.browser, p.connected])).toEqual([
+      ["chrome", true],
+      ["edge", false],
+    ]);
+    expect(browser.activity.map((a) => a.event)).toEqual([
+      "filled",
+      "otp_filled",
+      "refused",
+      "saved",
+      "paused",
+    ]);
+    expect(browser.activity[2]?.refusal).toBe("never_fill");
+    await backend.dispatch({ command: "browser_activity_clear" });
   });
 });

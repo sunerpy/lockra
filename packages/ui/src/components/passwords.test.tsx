@@ -24,6 +24,32 @@ function login(fields: Partial<ItemView> = {}): ItemView {
 }
 
 describe("PasswordRow", () => {
+  it("regression: the app's shortcuts get through its buttons, the list's keys do not", async () => {
+    // The smoke test, 2026-10-15: with the copy button focused, Ctrl+, opened no settings.
+    const user = userEvent.setup();
+    const heard: string[] = [];
+    const onKey = (event: KeyboardEvent) =>
+      heard.push(`${event.ctrlKey ? "Ctrl+" : ""}${event.key}`);
+    window.addEventListener("keydown", onKey);
+    try {
+      render(
+        <PasswordRow
+          item={login()}
+          onSelect={vi.fn()}
+          onCopyPassword={vi.fn()}
+          onCopyUsername={vi.fn()}
+        />,
+      );
+      screen.getByTestId("row-copy-password").focus();
+      await user.keyboard("{Control>},{/Control}");
+      await user.keyboard("{ArrowDown}");
+    } finally {
+      window.removeEventListener("keydown", onKey);
+    }
+    expect(heard).toContain("Ctrl+,");
+    expect(heard).not.toContain("ArrowDown");
+  });
+
   it("shows the login, its marks and its site; a click selects, Enter copies the password", async () => {
     const user = userEvent.setup();
     const onSelect = vi.fn();

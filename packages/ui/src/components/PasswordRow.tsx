@@ -28,6 +28,12 @@ export interface PasswordRowProps {
 
 const stop = (event: SyntheticEvent) => event.stopPropagation();
 
+/** A key pressed on the row's buttons stays with them (the list's arrows do not move the row),
+ *  except the app's shortcuts (Ctrl or ⌘ with a key), which the window hears. */
+const keepKey = (event: KeyboardEvent) => {
+  if (!event.ctrlKey && !event.metaKey) event.stopPropagation();
+};
+
 /** One login of the password list (board 01): avatar, title with its star, protection mark and
  *  badges, the user name, the site on the right, and three buttons (copy the user name, copy the
  *  password, the menu) shown with a mouse only while the row is hovered, focused or selected. A
@@ -157,7 +163,7 @@ export function PasswordRow({
             "transition-opacity pointer-fine:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100",
         )}
         onClick={stop}
-        onKeyDown={stop}>
+        onKeyDown={keepKey}>
         {!card && account !== "" && (
           <IconButton
             icon="user"

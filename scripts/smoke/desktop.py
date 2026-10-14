@@ -14,7 +14,7 @@ accounts reordered by a handle; the newer themes (澄空, 墨白 and their night
 card and a row just copied, and Settings › 外观's grid of eight themes; the passwords page (a debug
 build offers password management) with logins whose password, copied from the list by Rust, is on
 the X clipboard; the browser integration turned on, the real binary in host mode reaching the
-running app through its socket, and turned off.
+running app through its socket, Settings › 浏览器, and turned off.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -304,6 +304,17 @@ class Smoke:
         if host.returncode != 0 or plain.get("op") != "hello" or plain.get("state") != "unlocked" or plain.get("proto") != 1:
             sys.exit(f"smoke: the host's answer: {plain} (status {host.returncode})")
         print("smoke: Chrome's manifest points here, and the host reached the running app through its socket")
+        # Settings › 浏览器 with the integration on: Chrome's row as the shell reports it.
+        web = self.web
+        self.resize(1280, 800)
+        self.focus()
+        self.x("key", "ctrl+comma")
+        web.wait('[data-testid="settings-content"]')
+        web.click(web.wait(xpath="//button[@role='tab'][normalize-space()='浏览器']"))
+        web.wait('[data-testid="browser-row-chrome"]')
+        self.shot("settings-browser-1280-light")
+        self.x("key", "Escape")
+        web.gone('[data-testid="settings-content"]')
         statuses = self.web.invoke_shell("browser_disable", {})
         if any(s["manifest"] for s in statuses) or os.path.exists(manifest_path):
             sys.exit(f"smoke: the manifests stayed: {statuses}")

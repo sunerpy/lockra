@@ -5,6 +5,7 @@
 
 use lockra_core::Core;
 use lockra_core::settings::LocaleSetting;
+use lockra_core::ui::Notice;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager as _, Runtime};
@@ -35,6 +36,13 @@ pub fn tray_words(locale: LocaleSetting, system: Option<&str>) -> TrayWords {
     } else {
         TrayWords { open: "Open Lockra", lock: "Lock", quit: "Quit Lockra" }
     }
+}
+
+/// Whether `notice` waits for the user in the window: a pairing to approve, a fill to confirm, an
+/// unlock the extension asked for (boards 17–19). Lockra may be hidden in the tray or behind the
+/// browser, so the window comes up with it.
+pub fn brings_window_up(notice: &Notice) -> bool {
+    matches!(notice, Notice::BrowserPairRequested { .. } | Notice::BrowserConfirmRequested { .. } | Notice::BrowserUnlockRequested { .. })
 }
 
 /// Bring the window up: shown, not minimized, focused.
@@ -97,5 +105,17 @@ mod tests {
         assert_eq!(tray_words(LocaleSetting::System, Some("zh-Hans-CN")).quit, "退出 Lockra");
         assert_eq!(tray_words(LocaleSetting::System, Some("de-DE")).open, "Open Lockra");
         assert_eq!(tray_words(LocaleSetting::System, None).open, "Open Lockra");
+    }
+
+    #[test]
+    fn an_extension_waiting_for_the_user_brings_the_window_up() {
+        let id = uuid::Uuid::nil();
+        let browser = "chrome".to_owned();
+        assert!(brings_window_up(&Notice::BrowserPairRequested { id, browser: browser.clone(), code: "123456".to_owned() }));
+        assert!(brings_window_up(&Notice::BrowserConfirmRequested { id, browser: browser.clone(), title: "GitHub".to_owned() }));
+        assert!(brings_window_up(&Notice::BrowserUnlockRequested { browser: browser.clone() }));
+        // What only tells the user something stays a toast.
+        assert!(!brings_window_up(&Notice::BrowserPaused { pairing: id, browser, label: String::new() }));
+        assert!(!brings_window_up(&Notice::ItemSaved { item_id: id, title: "GitHub".to_owned(), updated: false }));
     }
 }
