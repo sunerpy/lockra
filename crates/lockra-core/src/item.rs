@@ -517,7 +517,6 @@ impl VaultItem {
     }
 
     /// The metadata changed at `now_ms`: the register takes `stamp`, written by the fresh `mwid`.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the login commands write the metadata"))]
     pub(crate) fn meta_written(&mut self, stamp: Hlc, mwid: u64, now_ms: u64) {
         self.stamp = stamp;
         self.mwid = mwid;
@@ -546,7 +545,6 @@ impl VaultItem {
     /// Settle field `id`'s conflict at `now_ms` with `value` (the one kept, or the one taken from
     /// the history): a new write that has seen every value the history holds for the field, so
     /// the conflict is gone on every replica once it syncs.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the login commands settle conflicts"))]
     pub(crate) fn settle_field(&mut self, id: Uuid, value: Zeroizing<String>, stamp: Hlc, wid: u64, now_ms: u64) -> bool {
         let Some(mut field) = self.field(id).cloned() else { return false };
         let seen: Vec<u64> = self.history.iter().filter(|p| p.field == id).map(|p| p.wid).collect();

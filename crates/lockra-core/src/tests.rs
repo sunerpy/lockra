@@ -28,6 +28,7 @@ const MASTER: &str = "correct horse battery";
 const SECRET: &str = "JBSWY3DPEHPK3PXP";
 
 mod items;
+mod logins;
 mod sync;
 mod update;
 
@@ -89,15 +90,41 @@ fn start(
     sync: Arc<dyn SyncTransport>,
     biometrics: Arc<FakeBiometrics>,
 ) -> Core {
+    start_with(root, Features { passwords: true }, keychain, clipboard, updater, sync, biometrics)
+}
+
+fn start_with(
+    root: &Path,
+    features: Features,
+    keychain: Arc<FakeKeychain>,
+    clipboard: Arc<FakeClipboard>,
+    updater: Arc<FakeUpdater>,
+    sync: Arc<dyn SyncTransport>,
+    biometrics: Arc<FakeBiometrics>,
+) -> Core {
     let config = CoreConfig {
         data_dir: root.join("data"),
         config_dir: root.join("config"),
         app_version: "0.1.0-test".into(),
         kdf: KdfCost::FAST_INSECURE,
         platform: Platform::Linux,
-        features: Features { passwords: true },
+        features,
     };
     Core::start(config, Ports { secrets: keychain, clipboard, clock: Arc::new(FakeClock::new(T0)), updater, sync, biometrics })
+}
+
+/// A core of a build that offers `features`.
+fn harness_with_features(features: Features) -> Harness {
+    let dir = tempfile::tempdir().unwrap();
+    let keychain = Arc::new(FakeKeychain::default());
+    let clipboard = Arc::new(FakeClipboard::default());
+    let updater = Arc::new(FakeUpdater::default());
+    let biometrics = Arc::new(FakeBiometrics::default());
+    let sync: Arc<dyn SyncTransport> = Arc::new(FakeTransport::default());
+    let core =
+        start_with(dir.path(), features, Arc::clone(&keychain), Arc::clone(&clipboard), Arc::clone(&updater), Arc::clone(&sync), Arc::clone(&biometrics));
+    let events = core.subscribe();
+    Harness { core, keychain, biometrics, clipboard, updater, sync, events, dir }
 }
 
 fn harness() -> Harness {

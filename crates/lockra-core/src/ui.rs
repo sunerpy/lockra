@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use crate::entry::{EntryView, PinnedGroup};
 use crate::error::ErrorCode;
+use crate::logins::SiteRuleView;
 use crate::settings::Settings;
 
 /// The Tauri event that carries [`UiEvent`]s.
@@ -90,6 +91,15 @@ pub struct UiState {
     pub lock: LockView,
     /// The entries, without secrets; empty unless unlocked.
     pub entries: Vec<EntryView>,
+    /// Goes up whenever the logins or the site rules change, and as the vault opens and locks:
+    /// the logins themselves come from `items_list`, asked for again when it moves.
+    pub items_rev: u64,
+    /// How many logins the vault holds; 0 unless unlocked.
+    pub items_count: u32,
+    /// The site rules (never save, never fill, equivalent domains); empty unless unlocked.
+    pub site_rules: Vec<SiteRuleView>,
+    /// The password generator.
+    pub generator: GeneratorStatus,
     /// The groups folded in the code list ("" for the accounts in no group); this device's, kept in
     /// the vault, so empty unless unlocked.
     pub collapsed_groups: Vec<String>,
@@ -116,6 +126,31 @@ pub struct UiState {
     pub update: UpdateView,
     /// Multi-device sync.
     pub sync: SyncView,
+}
+
+/// The password generator, as the interface shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct GeneratorStatus {
+    /// Passwords in its history (shown only on `generator_history_reveal`); 0 unless unlocked.
+    pub history_count: u32,
+}
+
+/// What `item_copy` or `generator_copy` put on the clipboard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CopiedPart {
+    /// A login's user name.
+    Username,
+    /// A login's email address.
+    Email,
+    /// A login's password.
+    Password,
+    /// The current code of the account linked to a login.
+    Totp,
+    /// A custom field's value.
+    Field,
+    /// The password the generator made.
+    Generated,
 }
 
 /// Multi-device sync, as Settings › Sync shows it.
@@ -661,6 +696,15 @@ pub enum Notice {
     Copied {
         /// Which entry.
         entry_id: Uuid,
+        /// Seconds until it is cleared; absent when it stays.
+        clear_after_s: Option<u32>,
+    },
+    /// A part of a login, or a generated password, is on the clipboard.
+    ItemCopied {
+        /// Which login; none for a generated password.
+        item_id: Option<Uuid>,
+        /// What.
+        part: CopiedPart,
         /// Seconds until it is cleared; absent when it stays.
         clear_after_s: Option<u32>,
     },
