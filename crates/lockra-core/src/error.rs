@@ -145,6 +145,13 @@ pub enum ErrorCode {
     ItemReadOnly,
     /// No password meets the site's rules with these generator options.
     GeneratorRulesUnsatisfiable,
+    /// This build or platform offers no browser extension (the phone).
+    BrowserUnavailable,
+    /// No paired extension with that id.
+    BrowserNotPaired,
+    /// The extension's request (pairing, fill or copy) is no longer waiting: it lapsed, or the
+    /// extension went away.
+    BrowserPairExpired,
     /// This build does not offer it yet: password management before it ships, or a backup with
     /// logins merged before the preview can show them (a restore that replaces still takes them).
     FeatureUnavailable,

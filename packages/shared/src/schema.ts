@@ -135,6 +135,9 @@ export const settingsSchema = z.object({
   biometric_offer: z.boolean(),
   /** What the password generator makes unless told otherwise: the last options chosen. */
   generator: generatorOptionsSchema,
+  /** The browser extension's integration is on. Only the shell changes it (after writing the
+   *  browsers' manifests); `settings_set` leaves it as it is. */
+  browser_integration: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -159,6 +162,7 @@ export function defaultSettings(): Settings {
     default_unlock: "biometric",
     biometric_offer: true,
     generator: defaultGeneratorOptions(),
+    browser_integration: false,
   };
 }
 
@@ -378,6 +382,9 @@ export const ERROR_CODES = [
   "item_invalid",
   "item_read_only",
   "generator_rules_unsatisfiable",
+  "browser_unavailable",
+  "browser_not_paired",
+  "browser_pair_expired",
   "feature_unavailable",
   "internal",
 ] as const;
@@ -695,6 +702,135 @@ export const COPIED_PARTS = [
 export const copiedPartSchema = z.enum(COPIED_PARTS);
 export type CopiedPart = z.infer<typeof copiedPartSchema>;
 
+// ---- the browser extension ----------------------------------------------------------------------
+
+/** A sign-in form in a frame of another site: never fill it, or ask in Lockra. */
+export const FRAME_RULES = ["never", "ask"] as const;
+export const frameRuleSchema = z.enum(FRAME_RULES);
+export type FrameRule = z.infer<typeof frameRuleSchema>;
+
+/** What the paired extensions may do (lockra-core `BrowserPolicy`), kept in the vault. */
+export const browserPolicySchema = z.object({
+  fill_otp: z.boolean(),
+  copy_otp: z.boolean(),
+  auto_submit: z.boolean(),
+  confirm_fill: z.boolean(),
+  cross_origin_frames: frameRuleSchema,
+  on_page_load: z.boolean(),
+});
+export type BrowserPolicy = z.infer<typeof browserPolicySchema>;
+
+/** Why an extension's request gets nothing (lockra-core `Refusal`). */
+export const REFUSALS = [
+  "unavailable",
+  "locked",
+  "not_paired",
+  "paused",
+  "busy",
+  "invalid",
+  "never_fill",
+  "never_save",
+  "no_match",
+  "cross_origin",
+  "http_downgrade",
+  "protected",
+  "denied",
+  "expired",
+  "rate_limited",
+  "not_found",
+] as const;
+export const refusalSchema = z.enum(REFUSALS);
+export type Refusal = z.infer<typeof refusalSchema>;
+
+export const pairedViewSchema = z.object({
+  id: idSchema,
+  browser: z.string(),
+  label: z.string(),
+  extension: z.string(),
+  paired_at_ms: msSchema,
+  last_seen_ms: msSchema.nullable(),
+  /** A session is open now. */
+  connected: z.boolean(),
+  /** It may run in pages, as it said when it connected last; null until it has. */
+  page_access: z.boolean().nullable(),
+  /** It asked too often and gets nothing until resumed. */
+  paused: z.boolean(),
+});
+export type PairedView = z.infer<typeof pairedViewSchema>;
+
+/** A pairing request: the user compares the code with the extension's and approves. */
+export const pairRequestViewSchema = z.object({
+  id: idSchema,
+  code: z.string(),
+  browser: z.string(),
+  label: z.string(),
+  extension: z.string(),
+  expires_at_ms: msSchema,
+});
+export type PairRequestView = z.infer<typeof pairRequestViewSchema>;
+
+export const CONFIRM_REASONS = ["protected", "cross_origin"] as const;
+export const CONFIRM_ACTIONS = ["fill", "copy"] as const;
+
+/** A fill (or a copy from the popup) waiting for the user. */
+export const confirmViewSchema = z.object({
+  id: idSchema,
+  item_id: idSchema,
+  title: z.string(),
+  username: z.string(),
+  frame_url: z.string(),
+  /** The page, when the form is in a frame of another site. */
+  top_url: z.string().nullable(),
+  browser: z.string(),
+  label: z.string(),
+  reasons: z.array(z.enum(CONFIRM_REASONS)),
+  action: z.enum(CONFIRM_ACTIONS),
+  /** It needs the master password or the biometric check, not a click. */
+  needs_proof: z.boolean(),
+  expires_at_ms: msSchema,
+});
+export type ConfirmView = z.infer<typeof confirmViewSchema>;
+
+export const ACTIVITY_EVENTS = [
+  "paired",
+  "unpaired",
+  "filled",
+  "otp_filled",
+  "copied",
+  "saved",
+  "updated",
+  "generated",
+  "refused",
+  "paused",
+] as const;
+
+export const activityViewSchema = z.object({
+  at_ms: msSchema,
+  browser: z.string(),
+  label: z.string(),
+  site: z.string(),
+  event: z.enum(ACTIVITY_EVENTS),
+  refusal: refusalSchema.nullable(),
+  item_id: idSchema.nullable(),
+  title: z.string().nullable(),
+});
+export type ActivityView = z.infer<typeof activityViewSchema>;
+
+/** Settings › Browser and the requests waiting for the user (lockra-core `BrowserView`). */
+export const browserViewSchema = z.object({
+  /** This build offers the extension here (the desktop, password management on). */
+  available: z.boolean(),
+  /** The integration is on (readable while locked). */
+  enabled: z.boolean(),
+  paired: z.array(pairedViewSchema),
+  pairing: z.array(pairRequestViewSchema),
+  confirms: z.array(confirmViewSchema),
+  policy: browserPolicySchema,
+  /** Newest first; in memory only, emptied as the vault locks. */
+  activity: z.array(activityViewSchema),
+});
+export type BrowserView = z.infer<typeof browserViewSchema>;
+
 /** What this build offers of what is still being finished (lockra-core `Features`): a release
  *  build turns password management on once it ships; the interface hides what is off. */
 export const featuresSchema = z.object({
@@ -719,6 +855,8 @@ export const uiStateSchema = z.object({
   site_rules: z.array(siteRuleViewSchema),
   /** The password generator: how many passwords its history holds (0 unless unlocked). */
   generator: z.object({ history_count: z.number().int().nonnegative() }),
+  /** The browser extension. */
+  browser: browserViewSchema,
   /** The groups folded in the code list ("" for the accounts in no group); empty unless unlocked. */
   collapsed_groups: z.array(z.string()),
   /** The accounts in the order they were dragged into (`manual` order); this device's. */
@@ -752,6 +890,36 @@ export const noticeSchema = z.discriminatedUnion("type", [
     clear_after_s: z.number().int().nullable(),
   }),
   z.object({ type: z.literal("clipboard_cleared") }),
+  /** A login saved, or its password changed, from the browser extension. */
+  z.object({
+    type: z.literal("item_saved"),
+    item_id: idSchema,
+    title: z.string(),
+    updated: z.boolean(),
+  }),
+  /** An extension asks to pair: bring the window up with the request. */
+  z.object({
+    type: z.literal("browser_pair_requested"),
+    id: idSchema,
+    browser: z.string(),
+    code: z.string(),
+  }),
+  /** An extension asks to fill or copy a login that waits for the user. */
+  z.object({
+    type: z.literal("browser_confirm_requested"),
+    id: idSchema,
+    browser: z.string(),
+    title: z.string(),
+  }),
+  /** An extension asked too often and is paused. */
+  z.object({
+    type: z.literal("browser_paused"),
+    pairing: idSchema,
+    browser: z.string(),
+    label: z.string(),
+  }),
+  /** An extension asks Lockra to unlock. */
+  z.object({ type: z.literal("browser_unlock_requested"), browser: z.string() }),
   z.object({
     type: z.literal("imported"),
     added: z.number().int(),
@@ -1186,6 +1354,32 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
     domains: z.array(z.string()),
   }),
   z.object({ command: z.literal("site_rule_remove"), id: idSchema }),
+  /** The user compared the codes: approve with the master password or the biometric check. */
+  z.object({
+    command: z.literal("browser_pair_approve"),
+    id: idSchema,
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
+  z.object({ command: z.literal("browser_pair_deny"), id: idSchema }),
+  /** A waiting fill or copy goes ahead; proof where the login asks for it. */
+  z.object({
+    command: z.literal("browser_fill_confirm"),
+    id: idSchema,
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
+  z.object({ command: z.literal("browser_fill_deny"), id: idSchema }),
+  z.object({ command: z.literal("browser_unpair"), id: idSchema }),
+  z.object({ command: z.literal("browser_resume") }),
+  z.object({ command: z.literal("browser_activity_clear") }),
+  /** Letting the extensions do more asks for proof. */
+  z.object({
+    command: z.literal("browser_set_policy"),
+    policy: browserPolicySchema,
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
 ]);
 export type UiCommand = z.infer<typeof uiCommandSchema>;
 export type CommandName = UiCommand["command"];

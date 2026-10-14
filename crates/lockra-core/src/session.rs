@@ -26,6 +26,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::backup::{auto_file_name, pre_restore_file_name, prune};
+use crate::browser::BrowserRuntime;
 use crate::entry::{Entry, EntryDraft, EntryPatch, PinnedGroup, VAULT_DATA_FORMAT, VaultData, clean_mark, clean_name, random_device};
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
@@ -155,6 +156,8 @@ struct State {
     /// Goes up whenever the logins or the site rules change (an edit, a sync, a restore) and as
     /// the vault opens and locks: the webview asks for `items_list` again when it moves.
     items_rev: u64,
+    /// The browser extensions' sessions and the requests waiting for the user (in memory).
+    browser: BrowserRuntime,
 }
 
 /// A watch on a space's storage, for that space and storage.
@@ -265,6 +268,7 @@ impl Core {
             chosen_folder: None,
             storage_watch: None,
             items_rev: 0,
+            browser: BrowserRuntime::default(),
         };
         let (events, _) = broadcast::channel(64);
         let shared =
@@ -533,6 +537,7 @@ impl Core {
             }
             if was_unlocked {
                 st.phase = PhaseState::Locked;
+                st.browser.locked();
                 touch_items(&mut st);
                 st.auto_backup_at = None;
                 // A run in progress finds the vault locked and keeps nothing.
@@ -1430,7 +1435,8 @@ impl Core {
 
     /// Save new settings.
     pub fn set_settings(&self, settings: Settings) -> CoreResult<()> {
-        let settings = settings.normalized();
+        // The browser integration is the shell's to turn on or off (`browser_set_enabled`).
+        let settings = Settings { browser_integration: self.lock().settings.browser_integration, ..settings.normalized() };
         if settings.auto_backup.enabled && settings.auto_backup.dir.is_none() {
             return Err(ErrorCode::BackupDirMissing.into());
         }
@@ -2613,6 +2619,7 @@ impl Core {
                 _ => Vec::new(),
             },
             generator: GeneratorStatus { history_count: items::generator_history_count(st) },
+            browser: self.browser_view(st),
             collapsed_groups,
             entry_order,
             group_order,
@@ -2984,6 +2991,7 @@ fn unlocked(st: &State) -> CoreResult<&Session> {
     }
 }
 
+mod browser;
 mod items;
 
 pub use items::{GENERATOR_HISTORY_DAYS, GENERATOR_HISTORY_MAX};

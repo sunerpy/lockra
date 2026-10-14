@@ -12,8 +12,8 @@
 use lockra_core::settings::Settings;
 use lockra_core::ui::{ExportTarget, JoinSource};
 use lockra_core::{
-    Choice, CopyPart, Core, CoreError, EntryDraft, EntryPatch, GeneratorOptions, ItemDraft, ItemPatch, PinnedGroup, RestoreMode, RevealParts, SiteRuleKind,
-    StorageConfig,
+    BrowserPolicy, Choice, CopyPart, Core, CoreError, EntryDraft, EntryPatch, GeneratorOptions, ItemDraft, ItemPatch, PinnedGroup, RestoreMode, RevealParts,
+    SiteRuleKind, StorageConfig,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -383,11 +383,66 @@ pub enum UiCommand {
         /// Which.
         id: Uuid,
     },
+    /// Approve a browser extension's pairing (the user compared the codes), with the master
+    /// password or the biometric check.
+    BrowserPairApprove {
+        /// The request.
+        id: Uuid,
+        /// The master password.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
+    },
+    /// Refuse a pairing.
+    BrowserPairDeny {
+        /// The request.
+        id: Uuid,
+    },
+    /// Let a waiting fill (or a copy from the popup) go ahead: with the master password or the
+    /// biometric check where the login asks for it.
+    BrowserFillConfirm {
+        /// The request.
+        id: Uuid,
+        /// The master password.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
+    },
+    /// Refuse a waiting fill or copy.
+    BrowserFillDeny {
+        /// The request.
+        id: Uuid,
+    },
+    /// Remove a pairing: its sessions end, the extension has to pair again.
+    BrowserUnpair {
+        /// The pairing.
+        id: Uuid,
+    },
+    /// The paused extensions get answers again.
+    BrowserResume,
+    /// Empty the activity list.
+    BrowserActivityClear,
+    /// Change what the extensions may do; letting them do more asks for the master password or
+    /// the biometric check.
+    BrowserSetPolicy {
+        /// The new policy.
+        policy: BrowserPolicy,
+        /// The master password.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
+    },
 }
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 63] = [
+pub const COMMANDS: [&str; 71] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -451,6 +506,14 @@ pub const COMMANDS: [&str; 63] = [
     "password_score",
     "site_rule_add",
     "site_rule_remove",
+    "browser_pair_approve",
+    "browser_pair_deny",
+    "browser_fill_confirm",
+    "browser_fill_deny",
+    "browser_unpair",
+    "browser_resume",
+    "browser_activity_clear",
+    "browser_set_policy",
 ];
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
@@ -589,6 +652,14 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::PasswordScore { password } => json!(core.password_score(&password)?),
         UiCommand::SiteRuleAdd { kind, domains } => unit(core.site_rule_add(kind, &domains))?,
         UiCommand::SiteRuleRemove { id } => unit(core.site_rule_remove(id))?,
+        UiCommand::BrowserPairApprove { id, password, reason } => unit(core.browser_pair_approve(id, password, reason).await)?,
+        UiCommand::BrowserPairDeny { id } => unit(core.browser_pair_deny(id))?,
+        UiCommand::BrowserFillConfirm { id, password, reason } => unit(core.browser_confirm(id, password, reason).await)?,
+        UiCommand::BrowserFillDeny { id } => unit(core.browser_confirm_deny(id))?,
+        UiCommand::BrowserUnpair { id } => unit(core.browser_unpair(id))?,
+        UiCommand::BrowserResume => unit(core.browser_resume())?,
+        UiCommand::BrowserActivityClear => unit(core.browser_activity_clear())?,
+        UiCommand::BrowserSetPolicy { policy, password, reason } => unit(core.browser_set_policy(policy, password, reason).await)?,
     })
 }
 

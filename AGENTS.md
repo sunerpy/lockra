@@ -10,7 +10,9 @@ How to work in this repository, for coding agents and people alike.
   everything native), `lockra-bridge` (the IPC contract), `lockra-sync` (the end-to-end encrypted
   sync: keyring, device snapshots, merge; no I/O), `lockra-remote` (its S3 and WebDAV storage) and
   `lockra-autofill` (URL matching, password rules, the password generator and strength; no I/O; the
-  third-party data it compiles in sits in its `data/`).
+  third-party data it compiles in sits in its `data/`) and `lockra-browser` (the browser extension's
+  channel: framing, Noise pairing and sessions, the service loop over a local socket; the decisions
+  are the core's).
 - `apps/desktop` — the React app (`src/`) and the Tauri 2 shell (`src-tauri/`, crate
   `lockra-desktop`).
 - `apps/mobile` — the Android app (released from 0.7.0): the React phone app (`src/`) and its Tauri 2
@@ -41,6 +43,7 @@ make showcase                    # the component showcase in the four themes
 make android-apk                 # the phone app's debug APK (JDK 21, Android SDK 36, NDK)
 make site-screens                # the documentation site's screenshots (docs/site/README.md)
 scripts/update-vendored-data.sh  # lockra-autofill's bundled data, from the pins in its data/SOURCES
+UPDATE_BROWSER_FIXTURES=1 cargo test -p lockra-browser --test protocol  # the extension's contract vectors
 make help                        # everything else
 ```
 
@@ -60,6 +63,10 @@ make help                        # everything else
   contract test's leak check and `UiCommand::shows_secret` list the same). `item_reveal` asks for
   proof only for a login of the `confirm` level, the user's choice per login. A new command needs
   its zod schema, its fixture and its i18n strings.
+- **The browser extension** reports facts (the frame's and the tab's addresses, from the browser,
+  never from the page); every decision on what it gets is the core's (`session/browser.rs`). The
+  vectors in `crates/lockra-browser/tests/vectors/` are compared byte for byte, like the IPC
+  fixtures.
 - **Commands are `async`** in the shell; Argon2 and file I/O go through `spawn_blocking` in the core.
 - **Copy** lives in `packages/shared/src/i18n/zh-CN.ts` (the keys) and `en.ts` (same shape, tested).
   No colour literals in components (`scripts/check-no-literal-colors.sh`); use the tokens.

@@ -102,6 +102,27 @@ export function noticeText(t: TFunction, notice: Notice, name?: string): string 
     }
     case "clipboard_cleared":
       return t("notice.clipboardCleared");
+    case "item_saved":
+      return t(notice.updated ? "notice.itemUpdated" : "notice.itemSaved", { title: notice.title });
+    case "browser_pair_requested":
+      return t("notice.browserPairRequested", {
+        browser: browserName(notice.browser),
+        code: pairingCode(notice.code),
+      });
+    case "browser_confirm_requested":
+      return t("notice.browserConfirmRequested", {
+        browser: browserName(notice.browser),
+        title: notice.title,
+      });
+    case "browser_paused":
+      return t("notice.browserPaused", {
+        name:
+          notice.label === ""
+            ? browserName(notice.browser)
+            : `${browserName(notice.browser)} · ${notice.label}`,
+      });
+    case "browser_unlock_requested":
+      return t("notice.browserUnlockRequested", { browser: browserName(notice.browser) });
     case "imported":
       return t("notice.imported", {
         added: notice.added,
@@ -303,4 +324,21 @@ export function groupCode(code: string): string {
   if (code.length === 8) return `${code.slice(0, 4)} ${code.slice(4)}`;
   if (code.length === 7) return `${code.slice(0, 3)} ${code.slice(3)}`;
   return code;
+}
+
+/** A browser's name as an extension gave it (`chrome`, `edge`…), as people write it. */
+export function browserName(browser: string): string {
+  const known: Record<string, string> = {
+    chrome: "Chrome",
+    chromium: "Chromium",
+    edge: "Edge",
+    firefox: "Firefox",
+    brave: "Brave",
+  };
+  return known[browser] ?? (browser === "" ? "?" : browser);
+}
+
+/** A pairing code in two groups of three digits, as both sides show it. */
+export function pairingCode(code: string): string {
+  return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
 }

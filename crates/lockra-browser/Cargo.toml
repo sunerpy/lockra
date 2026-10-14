@@ -1,0 +1,33 @@
+[package]
+name = "lockra-browser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The browser extension's channel: framing, Noise pairing and sessions, and the app's service loop over a local socket."
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+data-encoding.workspace = true
+hkdf.workspace = true
+lockra-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+snow.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-util"] }
+tracing.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+lockra-core = { workspace = true, features = ["fakes"] }
+lockra-otp.workspace = true
+lockra-vault = { workspace = true, features = ["test-kdf"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["test-util"] }

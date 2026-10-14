@@ -49,6 +49,11 @@ impl Core {
     /// Add a login; its id. The secrets come from the webview (or, for the password, from the
     /// generator's last one) and never go back but through `item_reveal`.
     pub fn item_add(&self, draft: ItemDraft) -> CoreResult<Uuid> {
+        self.add_item(draft, false)
+    }
+
+    /// [`Self::item_add`]; `quiet`: the browser extension's, which does not restart the idle timer.
+    pub(super) fn add_item(&self, draft: ItemDraft, quiet: bool) -> CoreResult<Uuid> {
         self.passwords_on()?;
         let now = self.now_ms();
         let id = {
@@ -91,7 +96,11 @@ impl Core {
             }
             check_field_count(&item)?;
             session.data.items.push(item);
+            let idle = st.last_activity;
             self.save(&mut st, true, move |s| s.data.items.retain(|i| i.id != id))?;
+            if quiet {
+                st.last_activity = idle;
+            }
             touch_items(&mut st);
             id
         };
@@ -102,6 +111,12 @@ impl Core {
     /// Change a login. Every part the patch names takes a write of its own: the metadata one, each
     /// field one, so that a change made at the same time elsewhere to another part stays.
     pub fn item_update(&self, id: Uuid, patch: ItemPatch) -> CoreResult<()> {
+        self.update_item(id, patch, false)
+    }
+
+    /// [`Self::item_update`]; `quiet`: the browser extension's, which does not restart the idle
+    /// timer.
+    pub(super) fn update_item(&self, id: Uuid, patch: ItemPatch, quiet: bool) -> CoreResult<()> {
         self.passwords_on()?;
         let now = self.now_ms();
         {
@@ -201,11 +216,15 @@ impl Core {
             }
             check_field_count(&item)?;
             session.data.items[index] = item;
+            let idle = st.last_activity;
             self.save(&mut st, true, move |s| {
                 if let Some(slot) = s.data.items.iter_mut().find(|i| i.id == id) {
                     *slot = before;
                 }
             })?;
+            if quiet {
+                st.last_activity = idle;
+            }
             touch_items(&mut st);
         }
         self.changed();
@@ -294,19 +313,7 @@ impl Core {
             let mut st = self.lock();
             let clear_seconds = st.settings.clipboard_clear_seconds;
             let session = unlocked_mut(&mut st)?;
-            let item = session.data.items.iter().find(|i| i.id == id).ok_or(ErrorCode::ItemNotFound)?;
-            let text: Zeroizing<String> = match part {
-                CopyPart::Username => field_value(item, Purpose::Username)?,
-                CopyPart::Email => field_value(item, Purpose::Email)?,
-                CopyPart::Password => field_value(item, Purpose::Password)?,
-                CopyPart::Field { id: field } => {
-                    item.field(field).filter(|f| !f.removed && !f.value.is_empty()).map(|f| f.value.clone()).ok_or(ErrorCode::ItemNotFound)?
-                }
-                CopyPart::Totp => {
-                    let entry = item.totp_entry.and_then(|entry| session.data.get(entry)).ok_or(ErrorCode::EntryNotFound)?;
-                    Zeroizing::new(current_code(entry, now))
-                }
-            };
+            let text = copy_part_text(session, id, part, now)?;
             self.shared.ports.clipboard.set_secret_text(&text).map_err(|_| ErrorCode::ClipboardFailed)?;
             if let Some(item) = session.data.items.iter_mut().find(|i| i.id == id) {
                 item.last_used_at_ms = Some(now);
@@ -401,6 +408,12 @@ impl Core {
 
     /// Add a site rule (or widen the one about the same single domain).
     pub fn site_rule_add(&self, kind: SiteRuleKind, domains: &[String]) -> CoreResult<()> {
+        self.add_site_rule(kind, domains, false)
+    }
+
+    /// [`Self::site_rule_add`]; `quiet`: the browser extension's, which does not restart the idle
+    /// timer.
+    pub(super) fn add_site_rule(&self, kind: SiteRuleKind, domains: &[String], quiet: bool) -> CoreResult<()> {
         self.passwords_on()?;
         let domains = clean_domains(domains)?;
         if kind == SiteRuleKind::Equivalent && domains.len() < 2 {
@@ -418,7 +431,11 @@ impl Core {
                 Some(own) => *own = rule,
                 None => session.data.site_rules.push(rule),
             }
+            let idle = st.last_activity;
             self.save(&mut st, true, move |s| s.data.site_rules = before)?;
+            if quiet {
+                st.last_activity = idle;
+            }
             touch_items(&mut st);
         }
         self.changed();
@@ -526,6 +543,24 @@ fn same_content(a: &Field, b: &Field) -> bool {
     (a.label.as_str(), a.value.as_str(), a.hidden, &a.page_field, a.removed) == (b.label.as_str(), b.value.as_str(), b.hidden, &b.page_field, b.removed)
 }
 
+/// What copying `part` of login `id` puts on the clipboard at `now`: the part's value, or the
+/// linked account's current code.
+pub(super) fn copy_part_text(session: &Session, id: Uuid, part: CopyPart, now: u64) -> CoreResult<Zeroizing<String>> {
+    let item = session.data.items.iter().find(|i| i.id == id).ok_or(ErrorCode::ItemNotFound)?;
+    Ok(match part {
+        CopyPart::Username => field_value(item, Purpose::Username)?,
+        CopyPart::Email => field_value(item, Purpose::Email)?,
+        CopyPart::Password => field_value(item, Purpose::Password)?,
+        CopyPart::Field { id: field } => {
+            item.field(field).filter(|f| !f.removed && !f.value.is_empty()).map(|f| f.value.clone()).ok_or(ErrorCode::ItemNotFound)?
+        }
+        CopyPart::Totp => {
+            let entry = item.totp_entry.and_then(|entry| session.data.get(entry)).ok_or(ErrorCode::EntryNotFound)?;
+            Zeroizing::new(current_code(entry, now))
+        }
+    })
+}
+
 /// The value of `item`'s field of `purpose`, when it holds one.
 fn field_value(item: &VaultItem, purpose: Purpose) -> CoreResult<Zeroizing<String>> {
     item.field_of(purpose).filter(|f| !f.value.is_empty()).map(|f| f.value.clone()).ok_or_else(|| ErrorCode::ItemNotFound.into())
@@ -537,7 +572,7 @@ fn needs_presence(item: &VaultItem) -> bool {
 }
 
 /// Keep `password` in the generator's history as copied or used at `now`.
-fn remember_generated(session: &mut Session, password: Zeroizing<String>, site: Option<String>, now: u64) {
+pub(super) fn remember_generated(session: &mut Session, password: Zeroizing<String>, site: Option<String>, now: u64) {
     let local = session.data.local_mut();
     let mut history = std::mem::take(&mut local.generator_history);
     history.retain(|g| g.password != password);

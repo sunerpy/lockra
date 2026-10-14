@@ -1,0 +1,398 @@
+{
+  "app_plain": {
+    "error": {
+      "error": "not_paired",
+      "op": "error"
+    },
+    "hello": {
+      "app_version": "0.10.0",
+      "op": "hello",
+      "proto": 1,
+      "proto_max": 1,
+      "proto_min": 1,
+      "state": "unlocked"
+    },
+    "hello_incompatible": {
+      "app_version": "0.10.0",
+      "op": "hello",
+      "proto": null,
+      "proto_max": 1,
+      "proto_min": 1,
+      "state": "locked"
+    },
+    "state": {
+      "op": "state",
+      "state": "locked"
+    },
+    "state_no_vault": {
+      "op": "state",
+      "state": "no_vault"
+    },
+    "unlock": {
+      "accepted": true,
+      "op": "unlock"
+    }
+  },
+  "client_plain": {
+    "hello": {
+      "browser": "chrome",
+      "extension": "abcdefghijklmnopabcdefghijklmnop",
+      "label": "Work",
+      "op": "hello",
+      "page_access": true,
+      "proto_max": 1,
+      "proto_min": 1,
+      "version": "0.10.0"
+    },
+    "unlock_request": {
+      "op": "unlock_request"
+    }
+  },
+  "envelopes": {
+    "handshake": {
+      "d": "aGFuZHNoYWtl",
+      "t": "hs",
+      "v": 1
+    },
+    "hello": {
+      "d": "eyJvcCI6InVubG9ja19yZXF1ZXN0In0=",
+      "t": "hello",
+      "v": 1
+    },
+    "message": {
+      "d": "c2VhbGVk",
+      "t": "msg",
+      "v": 1
+    },
+    "session_handshake": {
+      "d": "aGFuZHNoYWtl",
+      "p": "5c0fe1a2-0b3c-4d5e-8f60-000000000009",
+      "t": "hs",
+      "v": 1
+    }
+  },
+  "policy_default": {
+    "auto_submit": false,
+    "confirm_fill": false,
+    "copy_otp": true,
+    "cross_origin_frames": "never",
+    "fill_otp": true,
+    "on_page_load": false
+  },
+  "pushes": {
+    "pair_failed": {
+      "push": "pair_failed",
+      "reason": "expired"
+    },
+    "pair_pending": {
+      "expires_in_ms": 120000,
+      "push": "pair_pending"
+    },
+    "paired": {
+      "pairing": "5c0fe1a2-0b3c-4d5e-8f60-000000000009",
+      "push": "paired"
+    },
+    "ready": {
+      "pairing": "5c0fe1a2-0b3c-4d5e-8f60-000000000009",
+      "push": "ready"
+    },
+    "revoked": {
+      "push": "revoked"
+    }
+  },
+  "refusals": [
+    "unavailable",
+    "locked",
+    "not_paired",
+    "paused",
+    "busy",
+    "invalid",
+    "never_fill",
+    "never_save",
+    "no_match",
+    "cross_origin",
+    "http_downgrade",
+    "protected",
+    "denied",
+    "expired",
+    "rate_limited",
+    "not_found"
+  ],
+  "requests": {
+    "copy": {
+      "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+      "op": "copy",
+      "part": {
+        "type": "password"
+      },
+      "req": 7
+    },
+    "fill": {
+      "allow_http": false,
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+      "op": "fill",
+      "req": 4,
+      "top_url": "https://www.example.com/",
+      "trigger": "inline_menu"
+    },
+    "fill_likeliest": {
+      "allow_http": true,
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "item_id": null,
+      "op": "fill",
+      "req": 5,
+      "top_url": "https://www.example.com/",
+      "trigger": "shortcut"
+    },
+    "generate": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "maxlength": 64,
+      "minlength": 12,
+      "op": "generate",
+      "req": 10,
+      "rules": "minlength: 20; required: lower; required: digit;",
+      "save": {
+        "title": "Example",
+        "username": null
+      },
+      "top_url": "https://www.example.com/"
+    },
+    "otp": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+      "op": "otp",
+      "req": 6,
+      "top_url": "https://www.example.com/"
+    },
+    "query": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "op": "query",
+      "password": "",
+      "purpose": "fill",
+      "req": 2,
+      "top_url": "https://www.example.com/",
+      "username": ""
+    },
+    "query_save": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "op": "query",
+      "password": "s3cret",
+      "purpose": "save",
+      "req": 3,
+      "top_url": "https://www.example.com/",
+      "username": "alice"
+    },
+    "save": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "group": "Work",
+      "op": "save",
+      "password": "s3cret",
+      "req": 8,
+      "title": "",
+      "top_url": "https://www.example.com/",
+      "username": "alice"
+    },
+    "search": {
+      "op": "search",
+      "req": 12,
+      "text": "exam",
+      "top_url": "https://www.example.com/"
+    },
+    "site_rule": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "kind": "never_save",
+      "op": "site_rule",
+      "req": 11,
+      "top_url": "https://www.example.com/"
+    },
+    "status": {
+      "op": "status",
+      "req": 1
+    },
+    "update": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+      "op": "update",
+      "password": "n3w",
+      "req": 9,
+      "top_url": "https://www.example.com/"
+    }
+  },
+  "responses": {
+    "done": {
+      "ok": true,
+      "req": 9,
+      "result": {}
+    },
+    "fill": {
+      "ok": true,
+      "req": 4,
+      "result": {
+        "fields": [
+          {
+            "page_field": "pin",
+            "value": "4242"
+          }
+        ],
+        "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+        "otp": "123456",
+        "password": "s3cret",
+        "submit": false,
+        "username": "alice"
+      }
+    },
+    "found": {
+      "ok": true,
+      "req": 12,
+      "result": {
+        "items": [
+          {
+            "downgrade": false,
+            "email": "alice@example.com",
+            "favorite": false,
+            "has_password": true,
+            "has_totp": true,
+            "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+            "matches": true,
+            "protection": "fill",
+            "title": "Example",
+            "username": "alice"
+          }
+        ]
+      }
+    },
+    "generated": {
+      "ok": true,
+      "req": 10,
+      "result": {
+        "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000003",
+        "password": "q7vx2mz9kd4w8p1r6t3y",
+        "username": "alice"
+      }
+    },
+    "otp": {
+      "ok": true,
+      "req": 6,
+      "result": {
+        "code": "654321",
+        "copied": true
+      }
+    },
+    "query": {
+      "ok": true,
+      "req": 2,
+      "result": {
+        "cross_origin": false,
+        "items": [
+          {
+            "downgrade": false,
+            "email": "alice@example.com",
+            "favorite": false,
+            "has_password": true,
+            "has_totp": true,
+            "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+            "matches": true,
+            "protection": "fill",
+            "title": "Example",
+            "username": "alice"
+          }
+        ],
+        "level": "host",
+        "never_fill": false,
+        "never_save": false,
+        "policy": {
+          "auto_submit": false,
+          "confirm_fill": false,
+          "copy_otp": true,
+          "cross_origin_frames": "never",
+          "fill_otp": true,
+          "on_page_load": false
+        },
+        "save": null,
+        "site": "example.com"
+      }
+    },
+    "query_save": {
+      "ok": true,
+      "req": 3,
+      "result": {
+        "cross_origin": true,
+        "items": [],
+        "level": null,
+        "never_fill": false,
+        "never_save": false,
+        "policy": {
+          "auto_submit": false,
+          "confirm_fill": false,
+          "copy_otp": true,
+          "cross_origin_frames": "never",
+          "fill_otp": true,
+          "on_page_load": false
+        },
+        "save": {
+          "action": "update",
+          "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001"
+        },
+        "site": "example.com"
+      }
+    },
+    "refused": {
+      "error": "http_downgrade",
+      "ok": false,
+      "req": 5
+    },
+    "saved": {
+      "ok": true,
+      "req": 8,
+      "result": {
+        "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000002"
+      }
+    },
+    "status": {
+      "ok": true,
+      "req": 1,
+      "result": {
+        "app_version": "0.10.0",
+        "items": 12,
+        "pairing": "5c0fe1a2-0b3c-4d5e-8f60-000000000009",
+        "paused": false,
+        "policy": {
+          "auto_submit": false,
+          "confirm_fill": false,
+          "copy_otp": true,
+          "cross_origin_frames": "never",
+          "fill_otp": true,
+          "on_page_load": false
+        }
+      }
+    }
+  }
+}

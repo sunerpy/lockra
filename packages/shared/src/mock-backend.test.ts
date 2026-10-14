@@ -1066,6 +1066,184 @@ describe("MockBackend", () => {
     );
   });
 
+  it("pairs browser extensions behind proof and keeps what they may do", async () => {
+    let now = 1_790_000_000_000;
+    const backend = new MockBackend({ phase: "unlocked", passwords: true, now: () => now });
+    const { notices } = recorder(backend);
+    expect((await backend.getState()).browser).toMatchObject({
+      available: true,
+      enabled: false,
+      paired: [],
+    });
+    const request = backend.simulatePairRequest({
+      code: "123456",
+      browser: "chrome",
+      label: "Work",
+      extension: "abc",
+    });
+    expect(notices()).toContainEqual({
+      type: "browser_pair_requested",
+      id: request,
+      browser: "chrome",
+      code: "123456",
+    });
+    expect((await backend.getState()).browser.pairing.map((p) => p.code)).toEqual(["123456"]);
+    expect(
+      await errorCode(backend.dispatch({ command: "browser_pair_approve", id: request })),
+    ).toBe("biometric_unavailable");
+    await backend.dispatch({
+      command: "browser_pair_approve",
+      id: request,
+      password: "correct horse battery",
+    });
+    let browser = (await backend.getState()).browser;
+    expect(browser.pairing).toEqual([]);
+    expect(browser.paired.map((p) => [p.browser, p.label, p.connected])).toEqual([
+      ["chrome", "Work", false],
+    ]);
+    expect(browser.activity[0]?.event).toBe("paired");
+    // Denied, lapsed, removed.
+    const denied = backend.simulatePairRequest({
+      code: "654321",
+      browser: "edge",
+      label: "",
+      extension: "def",
+    });
+    await backend.dispatch({ command: "browser_pair_deny", id: denied });
+    expect(await errorCode(backend.dispatch({ command: "browser_pair_deny", id: denied }))).toBe(
+      "browser_pair_expired",
+    );
+    const lapsed = backend.simulatePairRequest({
+      code: "111111",
+      browser: "edge",
+      label: "",
+      extension: "def",
+    });
+    now += 121_000;
+    expect(
+      await errorCode(
+        backend.dispatch({
+          command: "browser_pair_approve",
+          id: lapsed,
+          password: "correct horse battery",
+        }),
+      ),
+    ).toBe("browser_pair_expired");
+    const id = browser.paired[0]?.id ?? "";
+    await backend.dispatch({ command: "browser_unpair", id });
+    expect(await errorCode(backend.dispatch({ command: "browser_unpair", id }))).toBe(
+      "browser_not_paired",
+    );
+    expect((await backend.getState()).browser.activity[0]?.event).toBe("unpaired");
+    // The policy: less needs nothing, more needs proof.
+    const policy = (await backend.getState()).browser.policy;
+    await backend.dispatch({
+      command: "browser_set_policy",
+      policy: { ...policy, copy_otp: false },
+    });
+    expect(
+      await errorCode(
+        backend.dispatch({
+          command: "browser_set_policy",
+          policy: { ...policy, on_page_load: true },
+        }),
+      ),
+    ).toBe("biometric_unavailable");
+    await backend.dispatch({
+      command: "browser_set_policy",
+      policy: { ...policy, on_page_load: true },
+      password: "correct horse battery",
+    });
+    expect((await backend.getState()).browser.policy.on_page_load).toBe(true);
+    await backend.dispatch({ command: "browser_activity_clear" });
+    expect((await backend.getState()).browser.activity).toEqual([]);
+    browser = (await backend.getState()).browser;
+    expect(browser.enabled).toBe(false);
+  });
+
+  it("lets a waiting fill go ahead, with proof where the login asks for it", async () => {
+    const backend = new MockBackend({
+      phase: "unlocked",
+      passwords: true,
+      browser: {
+        paired: [
+          {
+            id: "p1",
+            browser: "firefox",
+            label: "",
+            extension: "lockra@firlab.app",
+            paired_at_ms: 1,
+            last_seen_ms: null,
+            connected: true,
+            page_access: true,
+            paused: true,
+          },
+        ],
+      },
+    });
+    const view = {
+      item_id: "i1",
+      title: "Bank",
+      username: "me",
+      frame_url: "https://bank.example/",
+      top_url: null,
+      browser: "firefox",
+      label: "",
+      reasons: ["protected" as const],
+      action: "fill" as const,
+    };
+    const proof = backend.simulateConfirm({ ...view, needs_proof: true });
+    expect(await errorCode(backend.dispatch({ command: "browser_fill_confirm", id: proof }))).toBe(
+      "biometric_unavailable",
+    );
+    await backend.dispatch({
+      command: "browser_fill_confirm",
+      id: proof,
+      password: "correct horse battery",
+    });
+    const click = backend.simulateConfirm({
+      ...view,
+      reasons: ["cross_origin"],
+      needs_proof: false,
+    });
+    await backend.dispatch({ command: "browser_fill_confirm", id: click });
+    const no = backend.simulateConfirm({ ...view, needs_proof: false });
+    await backend.dispatch({ command: "browser_fill_deny", id: no });
+    expect(await errorCode(backend.dispatch({ command: "browser_fill_deny", id: no }))).toBe(
+      "browser_pair_expired",
+    );
+    expect(await errorCode(backend.dispatch({ command: "browser_fill_confirm", id: no }))).toBe(
+      "browser_pair_expired",
+    );
+    expect((await backend.getState()).browser.confirms).toEqual([]);
+    expect((await backend.getState()).browser.paired[0]?.paused).toBe(true);
+    await backend.dispatch({ command: "browser_resume" });
+    expect((await backend.getState()).browser.paired[0]?.paused).toBe(false);
+    // Locking empties what waits and ends the sessions.
+    backend.simulatePairRequest({ code: "123456", browser: "chrome", label: "", extension: "x" });
+    await backend.dispatch({ command: "vault_lock" });
+    expect((await backend.getState()).browser).toMatchObject({
+      paired: [],
+      pairing: [],
+      available: true,
+    });
+    await backend.dispatch({ command: "vault_unlock", password: "correct horse battery" });
+    const state = (await backend.getState()).browser;
+    expect([state.pairing, state.paired.map((p) => p.connected)]).toEqual([[], [false]]);
+  });
+
+  it("offers no browser extension on the phone or without password management", async () => {
+    const phone = new MockBackend({ phase: "unlocked", passwords: true, platform: "android" });
+    expect((await phone.getState()).browser.available).toBe(false);
+    expect(await errorCode(phone.dispatch({ command: "browser_resume" }))).toBe(
+      "browser_unavailable",
+    );
+    const off = new MockBackend({ phase: "unlocked" });
+    expect(await errorCode(off.dispatch({ command: "browser_activity_clear" }))).toBe(
+      "feature_unavailable",
+    );
+  });
+
   it("stand-in codes are stable and padded", () => {
     expect(fakeCode("A", 1, 6)).toBe(fakeCode("A", 1, 6));
     expect(fakeCode("A", 1, 8)).toMatch(/^\d{8}$/);

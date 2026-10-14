@@ -9,6 +9,7 @@ use lockra_vault::FileKind;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::browser::BrowserView;
 use crate::entry::{EntryView, PinnedGroup};
 use crate::error::ErrorCode;
 use crate::logins::SiteRuleView;
@@ -100,6 +101,8 @@ pub struct UiState {
     pub site_rules: Vec<SiteRuleView>,
     /// The password generator.
     pub generator: GeneratorStatus,
+    /// The browser extension: the integration, the pairings, the requests waiting for the user.
+    pub browser: BrowserView,
     /// The groups folded in the code list ("" for the accounts in no group); this device's, kept in
     /// the vault, so empty unless unlocked.
     pub collapsed_groups: Vec<String>,
@@ -710,6 +713,47 @@ pub enum Notice {
     },
     /// The copied code was removed from the clipboard.
     ClipboardCleared,
+    /// A login was saved, or its password changed, from the browser extension.
+    ItemSaved {
+        /// Which.
+        item_id: Uuid,
+        /// Its title.
+        title: String,
+        /// Its password was changed rather than a new login saved.
+        updated: bool,
+    },
+    /// An extension asks to pair: the window comes to the front with the request.
+    BrowserPairRequested {
+        /// The request (`browser_pair_approve`).
+        id: Uuid,
+        /// The browser.
+        browser: String,
+        /// The code the extension shows.
+        code: String,
+    },
+    /// An extension asks to fill or copy a login that waits for the user.
+    BrowserConfirmRequested {
+        /// The request (`browser_confirm`).
+        id: Uuid,
+        /// The browser.
+        browser: String,
+        /// The login's title.
+        title: String,
+    },
+    /// An extension asked too often and gets nothing until the user resumes it.
+    BrowserPaused {
+        /// The pairing.
+        pairing: Uuid,
+        /// The browser.
+        browser: String,
+        /// What the extension calls itself.
+        label: String,
+    },
+    /// An extension asks Lockra to unlock: the window comes up with the unlock screen.
+    BrowserUnlockRequested {
+        /// The browser.
+        browser: String,
+    },
     /// An import was committed.
     Imported {
         /// New entries.
