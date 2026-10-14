@@ -31,7 +31,9 @@ pub enum System {
 /// The Unix socket's path on `system`.
 pub fn unix_socket_path(system: System, runtime_dir: Option<&Path>, data_dir: &Path, temp_dir: &Path) -> PathBuf {
     match system {
-        System::Linux => match runtime_dir.filter(|d| d.is_absolute()) {
+        // A relative runtime folder is none (the XDG spec asks for an absolute path). `has_root`
+        // is `is_absolute` on Unix, and lets the tests check Linux's path on Windows too.
+        System::Linux => match runtime_dir.filter(|d| d.has_root()) {
             Some(runtime) => runtime.join("lockra").join(SOCKET_FILE),
             None => data_dir.join("browser").join(SOCKET_FILE),
         },
