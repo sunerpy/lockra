@@ -1413,7 +1413,7 @@ dependencies = [
  "rustc_version",
  "toml 1.1.6+spec-1.1.0",
  "vswhom",
- "winreg",
+ "winreg 0.55.0",
 ]
 
 [[package]]
@@ -3083,19 +3083,24 @@ name = "lockra-desktop"
 version = "0.0.0"
 dependencies = [
  "arboard",
+ "data-encoding",
+ "dirs",
  "flate2",
  "keyring",
  "lockra-bridge",
+ "lockra-browser",
  "lockra-core",
  "lockra-remote",
  "lockra-sync",
  "lockra-vault",
  "parking_lot",
  "robius-authentication",
+ "rustix",
  "security-framework",
  "serde",
  "serde_json",
  "sha2 0.11.0",
+ "sys-locale",
  "tao",
  "tar",
  "tauri",
@@ -3114,6 +3119,7 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "windows 0.61.3",
+ "winreg 0.56.0",
  "wry",
  "zeroize",
 ]
@@ -5635,6 +5641,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "sys-locale"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eab9a99a024a169fe8a903cf9d4a3b3601109bcc13bd9e3c6fff259138626c4"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "system-configuration"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7559,6 +7574,16 @@ checksum = "cb5a765337c50e9ec252c2069be9bf91c7df47afb103b642ba3a53bf8101be97"
 dependencies = [
  "cfg-if",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "winreg"
+version = "0.56.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d6f32a0ff4a9f6f01231eb2059cc85479330739333e0e58cadf03b6af2cca10"
+dependencies = [
+ "cfg-if",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
