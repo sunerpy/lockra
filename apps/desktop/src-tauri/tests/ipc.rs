@@ -49,6 +49,9 @@ fn shell_on(updater: Option<Arc<dyn Updater>>, sync: Option<Arc<dyn SyncTranspor
         updater,
         plugin_updates: false,
         sync,
+        // A socket of the test's own (never the user's running Lockra's), and no tray.
+        browser_socket: Some(dir.path().join("run").join("browser.sock")),
+        tray: false,
     };
     let mut app = build_app(mock_builder(), options).build(mock_context(noop_assets())).unwrap();
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();

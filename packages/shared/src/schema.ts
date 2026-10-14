@@ -145,6 +145,7 @@ export const settingsSchema = z.object({
   /** The browser extension's integration is on. Only the shell changes it (after writing the
    *  browsers' manifests); `settings_set` leaves it as it is. */
   browser_integration: z.boolean(),
+  run_in_background: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -171,6 +172,7 @@ export function defaultSettings(): Settings {
     generator: defaultGeneratorOptions(),
     item_sort: "name",
     browser_integration: false,
+    run_in_background: false,
   };
 }
 
@@ -433,6 +435,7 @@ export const ERROR_CODES = [
   "browser_unavailable",
   "browser_not_paired",
   "browser_pair_expired",
+  "browser_manifest_failed",
   "feature_unavailable",
   "internal",
 ] as const;
@@ -1467,6 +1470,9 @@ export const SHELL_COMMAND_NAMES = [
   "export_otpauth_file",
   "sync_key_save",
   "sync_pick_folder",
+  "browser_enable",
+  "browser_disable",
+  "browser_status",
 ] as const;
 
 /** The phone shell's own Tauri commands (lockra-bridge `PHONE_COMMANDS`). */

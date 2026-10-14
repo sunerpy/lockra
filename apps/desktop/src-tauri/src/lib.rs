@@ -8,7 +8,9 @@
 //! drives the real command layer on `tauri::test::MockRuntime` without a window.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod background;
 pub mod biometrics;
+pub mod browser;
 pub mod clipboard;
 pub mod code_identity;
 #[cfg(unix)]
@@ -53,7 +55,7 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 11] = [
+pub const COMMANDS: [&str; 14] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -65,6 +67,9 @@ pub const COMMANDS: [&str; 11] = [
     "export_otpauth_file",
     "sync_key_save",
     "sync_pick_folder",
+    "browser_enable",
+    "browser_disable",
+    "browser_status",
 ];
 
 /// `true` only when a debug build was explicitly asked for the in-memory keychain.
@@ -103,6 +108,10 @@ pub struct ShellOptions {
     pub plugin_updates: bool,
     /// The sync storage (default: lockra-remote over HTTPS).
     pub sync: Option<Arc<dyn SyncTransport>>,
+    /// Where the browser channel listens (default: `browser::socket::place` of the app's folders).
+    pub browser_socket: Option<PathBuf>,
+    /// Show the tray while Lockra runs in the background (off in the mock-runtime tests).
+    pub tray: bool,
 }
 
 impl Default for ShellOptions {
@@ -117,6 +126,8 @@ impl Default for ShellOptions {
             updater: None,
             plugin_updates: false,
             sync: None,
+            browser_socket: None,
+            tray: true,
         }
     }
 }
@@ -315,15 +326,19 @@ async fn export_otpauth_file<R: Runtime>(
 
 /// Forward every core event to the webview; a vault that is no longer unlocked lifts the
 /// screen-capture protection (auto-lock locks with a secret view open).
-async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core) {
+async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core, tray: bool) {
     let mut events = core.subscribe();
     loop {
         match events.recv().await {
             Ok(event) => {
-                if let UiEvent::State { state } = &event
-                    && state.phase != Phase::Unlocked
-                {
-                    protect(&app, false);
+                if let UiEvent::State { state } = &event {
+                    if state.phase != Phase::Unlocked {
+                        protect(&app, false);
+                    }
+                    // The tray follows the setting, from Settings or another window's change.
+                    if tray {
+                        background::sync_tray(&app, state.settings.run_in_background, state.settings.locale);
+                    }
                 }
                 if let Err(error) = app.emit(UI_EVENT_NAME, &event) {
                     tracing::warn!(%error, "event not delivered");
@@ -376,14 +391,28 @@ fn watch_focus<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
     });
 }
 
+/// While Lockra runs in the background, closing the window hides it (the tray brings it back);
+/// otherwise the window closes and Lockra quits, as it always has.
+fn watch_close<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
+    let hidden = window.clone();
+    window.on_window_event(move |event| {
+        if let WindowEvent::CloseRequested { api, .. } = event
+            && core.state().settings.run_in_background
+        {
+            api.prevent_close();
+            let _ = hidden.hide();
+        }
+    });
+}
+
 /// The app with every command, the core and its wiring; `run` adds the real context.
 pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) -> tauri::Builder<R> {
     let builder = if options.single_instance {
-        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
-                let _ = window.unminimize();
-                let _ = window.show();
-                let _ = window.set_focus();
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Started again for the browser (the host's `start_app`): Lockra runs already, and
+            // the window stays as it is; any other start brings it up.
+            if !args.iter().any(|a| a == browser::FROM_BROWSER) {
+                background::show_main(app);
             }
         }))
     } else {
@@ -403,7 +432,10 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             restore_pick,
             export_otpauth_file,
             sync_key_save,
-            sync_pick_folder
+            sync_pick_folder,
+            browser::service::browser_enable,
+            browser::service::browser_disable,
+            browser::service::browser_status
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {
@@ -414,6 +446,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 Some(dir) => dir,
                 None => app.path().app_config_dir()?,
             };
+            let socket = options.browser_socket.clone().unwrap_or_else(|| browser::socket::place(&data_dir, &config_dir));
             let secrets = options.secrets.clone().unwrap_or_else(secret_store);
             let clipboard = options.clipboard.clone().unwrap_or_else(|| Arc::new(clipboard::ArboardClipboard::spawn()));
             let config = CoreConfig {
@@ -434,13 +467,25 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());
-            tauri::async_runtime::spawn(forward_events(app.handle().clone(), core.clone()));
+            let service = browser::service::BrowserService::new(socket);
+            app.manage(service.clone());
+            tauri::async_runtime::spawn(browser::service::resume(core.clone(), service));
+            let settings = core.state().settings;
+            if options.tray {
+                background::sync_tray(app.handle(), settings.run_in_background, settings.locale);
+            }
+            tauri::async_runtime::spawn(forward_events(app.handle().clone(), core.clone(), options.tray));
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 watch_focus(&window, core.clone());
+                watch_close(&window, core.clone());
                 watch_drops(&window, core);
-                // Declared invisible so it never flashes white before the theme is applied.
-                let _ = window.show();
-                let _ = window.set_focus();
+                // Declared invisible so it never flashes white before the theme is applied. Started
+                // for the browser while Lockra runs in the background, it stays in the tray.
+                let from_browser = std::env::args().any(|a| a == browser::FROM_BROWSER);
+                if !(from_browser && settings.run_in_background) {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
             }
             Ok(())
         })
@@ -448,7 +493,15 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
 
 /// The desktop entry point.
 pub fn run() {
-    logging::init();
+    // The browser started this binary as its native-messaging host: it relays, and nothing of the
+    // app starts (stdout is the protocol's; the log goes to stderr alone).
+    let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    let host = browser::host::is_host_mode(&args);
+    if host {
+        logging::init_stderr();
+    } else {
+        logging::init();
+    }
     // A staged update started by the running build to take its keychain entries: that, and nothing
     // else, before any window or the single-instance check.
     #[cfg(target_os = "macos")]
@@ -459,6 +512,9 @@ pub fn run() {
     if let Some(entry) = keychain_handoff::asked_for_probe() {
         std::process::exit(keychain_handoff::probe(&entry));
     }
+    if host {
+        std::process::exit(browser::host::run_host());
+    }
     let options = ShellOptions { plugin_updates: true, ..ShellOptions::default() };
     #[cfg_attr(not(windows), allow(unused_mut, reason = "only Windows adjusts the context"))]
     let mut context = tauri::generate_context!();
@@ -466,9 +522,19 @@ pub fn run() {
     // passively when it came from the MSI (updater::windows_install_mode).
     #[cfg(windows)]
     updater::set_windows_install_mode(&mut context.config_mut().plugins, updater::windows_install_mode(tauri::utils::platform::bundle_type()));
-    let app = build_app(tauri::Builder::default(), options).run(context);
-    if let Err(error) = app {
-        tracing::error!(%error, "Lockra could not start");
-        std::process::exit(1);
-    }
+    let app = match build_app(tauri::Builder::default(), options).build(context) {
+        Ok(app) => app,
+        Err(error) => {
+            tracing::error!(%error, "Lockra could not start");
+            std::process::exit(1);
+        }
+    };
+    app.run(|app, event| {
+        // macOS: the Dock's icon brings back a window hidden in the background.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = event {
+            background::show_main(app);
+        }
+        let _ = (app, event);
+    });
 }

@@ -48,6 +48,13 @@ pub fn open_log(dir: &Path) -> io::Result<File> {
     options.open(path)
 }
 
+/// Log to stderr alone: host mode, a process per connection of the browser's, keeps out of the
+/// app's log file.
+pub fn init_stderr() {
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| "lockra=info".into());
+    let _ = tracing_subscriber::registry().with(filter).with(fmt::layer().with_writer(io::stderr)).try_init();
+}
+
 /// Log to stderr and, where there is one, the log file (`RUST_LOG`, default `lockra=info`).
 pub fn init() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| "lockra=info".into());

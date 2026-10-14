@@ -138,6 +138,7 @@ fn settings() -> Settings {
         default_unlock: DefaultUnlock::Password,
         biometric_offer: false,
         browser_integration: true,
+        run_in_background: true,
         item_sort: lockra_core::settings::ItemSort::Recent,
         generator: GeneratorOptions::Passphrase(PassphraseOptions { words: 5, separator: " ".into(), capitalize: true, number: true }),
     }
