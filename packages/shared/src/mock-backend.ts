@@ -20,7 +20,6 @@ import {
   BROWSER_IDS,
   type BiometricKind,
   type BrowserId,
-  type BrowserPolicy,
   type BrowserStatus,
   type BrowserView,
   type ConfirmView,
@@ -75,6 +74,7 @@ import {
   type UiCommand,
   type UiState,
 } from "./schema";
+import { CONFIRM_TTL_MS, PAIR_TTL_MS, defaultBrowserPolicy, riskierPolicy } from "./browser";
 import { MIN_PASSWORD } from "./password";
 import { isSealedInvite } from "./storage-form";
 
@@ -129,29 +129,6 @@ export interface MockOptions {
   /** The browser extension's pairings, waiting requests, policy and activity (shown once
    *  unlocked). */
   browser?: Partial<Pick<BrowserView, "paired" | "pairing" | "confirms" | "policy" | "activity">>;
-}
-
-/** The browser extension's defaults (lockra-core `BrowserPolicy::default()`). */
-export function defaultBrowserPolicy(): BrowserPolicy {
-  return {
-    fill_otp: true,
-    copy_otp: true,
-    auto_submit: false,
-    confirm_fill: false,
-    cross_origin_frames: "never",
-    on_page_load: false,
-  };
-}
-
-/** Whether `next` lets the extensions do more than `policy` (that asks for proof). */
-export function riskierPolicy(policy: BrowserPolicy, next: BrowserPolicy): boolean {
-  return (
-    (next.on_page_load && !policy.on_page_load) ||
-    (next.auto_submit && !policy.auto_submit) ||
-    (next.fill_otp && !policy.fill_otp) ||
-    (policy.confirm_fill && !next.confirm_fill) ||
-    (next.cross_origin_frames === "ask" && policy.cross_origin_frames === "never")
-  );
 }
 
 /** A login of the mock: its view and its secrets. */
@@ -395,6 +372,62 @@ const sampleLogin = (
   }),
   ...secrets,
 });
+
+/** The browser extension as boards 13–16 show it: Chrome connected, Edge paired before, recent
+ *  activity with a refusal and a pause (for the browser preview's `?browser`). */
+export function sampleBrowser(now: number = Date.now()): NonNullable<MockOptions["browser"]> {
+  const minute = 60_000;
+  const activity = (
+    ago: number,
+    browser: string,
+    site: string,
+    event: ActivityView["event"],
+    title: string | null,
+    refusal: ActivityView["refusal"] = null,
+  ): ActivityView => ({
+    at_ms: now - ago * minute,
+    browser,
+    label: "",
+    site,
+    event,
+    refusal,
+    item_id: null,
+    title,
+  });
+  return {
+    paired: [
+      {
+        id: nextId(),
+        browser: "chrome",
+        label: "",
+        extension: "egbpficliljjnpkjbigonldakfllebco",
+        paired_at_ms: now - 3 * 24 * 60 * minute,
+        last_seen_ms: now,
+        connected: true,
+        page_access: true,
+        paused: false,
+      },
+      {
+        id: nextId(),
+        browser: "edge",
+        label: "",
+        extension: "egbpficliljjnpkjbigonldakfllebco",
+        paired_at_ms: now - 10 * 24 * 60 * minute,
+        last_seen_ms: now - 2 * 24 * 60 * minute,
+        connected: false,
+        page_access: false,
+        paused: false,
+      },
+    ],
+    activity: [
+      activity(1, "chrome", "github.com", "filled", "GitHub"),
+      activity(1, "chrome", "github.com", "otp_filled", "GitHub"),
+      activity(6, "chrome", "bank.example.cn", "refused", null, "never_fill"),
+      activity(12, "edge", "figma.com", "saved", "Figma"),
+      activity(40, "edge", "", "paused", null),
+    ],
+  };
+}
 
 /** The sample logins (board 01 of Penpot 「Lockra 密码管理」): twelve, in 工作, 个人 and none, three
  *  favourites; GitHub, AWS, Cloudflare and Google go with the accounts of `entries` of their name,
@@ -2451,7 +2484,7 @@ export class MockBackend implements Backend {
     this.browser.pairing.push({
       ...request,
       id,
-      expires_at_ms: request.expires_at_ms ?? this.now() + 120_000,
+      expires_at_ms: request.expires_at_ms ?? this.now() + PAIR_TTL_MS,
     });
     this.changed();
     this.notice({
@@ -2471,7 +2504,7 @@ export class MockBackend implements Backend {
     this.browser.confirms.push({
       ...view,
       id,
-      expires_at_ms: view.expires_at_ms ?? this.now() + 60_000,
+      expires_at_ms: view.expires_at_ms ?? this.now() + CONFIRM_TTL_MS,
     });
     this.changed();
     this.notice({

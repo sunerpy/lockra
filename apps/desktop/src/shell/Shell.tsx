@@ -27,6 +27,7 @@ import { useDispatch } from "../app/dispatch";
 import { useFileDrag } from "../app/drag";
 import { type PageId, ShellStateProvider, isPageId, useShell } from "../app/shell-state";
 import { useShortcuts } from "../app/shortcuts";
+import { BrowserRequests } from "../features/browser/BrowserRequests";
 import { EntryDialogs } from "../features/entries/EntryDialogs";
 import { ExportViewer } from "../features/export/ExportViewer";
 import { ItemDialogs } from "../features/items/ItemDialogs";
@@ -252,6 +253,8 @@ function ShellLayout() {
       {shell.overlay?.type === "export" && <ExportViewer started={shell.overlay.started} />}
       {shell.overlay?.type === "settings" && <SettingsDialog section={shell.overlay.section} />}
       <UpdateDialog open={shell.updateOpen} onClose={() => shell.setUpdateOpen(false)} />
+      {/* Last: an extension's request comes up over anything open. */}
+      {state.browser.available && <BrowserRequests />}
     </div>
   );
 }

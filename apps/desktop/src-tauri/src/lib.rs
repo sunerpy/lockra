@@ -369,6 +369,11 @@ async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core, tray: bool) {
                         background::sync_tray(&app, state.settings.run_in_background, state.settings.locale);
                     }
                 }
+                if let UiEvent::Notice { notice } = &event
+                    && background::brings_window_up(notice)
+                {
+                    background::show_main(&app);
+                }
                 if let Err(error) = app.emit(UI_EVENT_NAME, &event) {
                     tracing::warn!(%error, "event not delivered");
                 }

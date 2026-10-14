@@ -38,6 +38,7 @@ export * from "./components/Keycap";
 export * from "./components/Banner";
 export * from "./components/SyncKeyReminder";
 export * from "./components/StatusRow";
+export * from "./components/TileRow";
 export * from "./components/SettingsLayout";
 export * from "./components/EmptyState";
 export * from "./components/Progress";

@@ -20,8 +20,9 @@ export interface Proof {
   reason?: string;
 }
 
-/** What the user is about to do, as the verification says it. */
-export type VerifyAction = "copy" | "show" | "view";
+/** What the user is about to do, as the verification says it: a secret copied, shown or looked
+ *  at, or a setting that lets the browser extension do more turned on or changed. */
+export type VerifyAction = "copy" | "show" | "view" | "open" | "change";
 
 /** Ask the user to prove it is them, then run `run` with the proof: its answer, or `undefined`
  *  when the user cancelled. */

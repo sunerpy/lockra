@@ -5,17 +5,17 @@ import { useEffect } from "react";
 import { type SettingsSection, useShell } from "../../app/shell-state";
 import { About } from "./About";
 import { Appearance } from "./Appearance";
+import { Browser } from "./Browser";
 import { General } from "./General";
 import { Security } from "./Security";
 import { Sync } from "./Sync";
 
-export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
-  "general",
-  "appearance",
-  "security",
-  "sync",
-  "about",
-];
+/** The groups, in order; 浏览器 only where this build offers the browser extension. */
+export function settingsSections(browser: boolean): readonly SettingsSection[] {
+  return browser
+    ? ["general", "appearance", "security", "sync", "browser", "about"]
+    : ["general", "appearance", "security", "sync", "about"];
+}
 
 const TITLE_ID = "lk-settings-title";
 
@@ -25,9 +25,10 @@ function tabId(section: SettingsSection): string {
 
 export function SettingsDialog({ section }: { section: SettingsSection }) {
   const t = useT();
-  const { app_version: version } = useUiState();
+  const { app_version: version, browser } = useUiState();
   const { open, close } = useShell();
   const show = (next: SettingsSection) => open({ type: "settings", section: next });
+  const sections = settingsSections(browser.available);
 
   // Opening the dialog, and moving between groups, puts the focus on the group's tab.
   useEffect(() => {
@@ -46,9 +47,8 @@ export function SettingsDialog({ section }: { section: SettingsSection }) {
   }, [close]);
 
   const move = (delta: number) => {
-    const at = SETTINGS_SECTIONS.indexOf(section);
-    const next =
-      SETTINGS_SECTIONS[(at + delta + SETTINGS_SECTIONS.length) % SETTINGS_SECTIONS.length];
+    const at = sections.indexOf(section);
+    const next = sections[(at + delta + sections.length) % sections.length];
     if (next !== undefined) show(next);
   };
 
@@ -79,7 +79,7 @@ export function SettingsDialog({ section }: { section: SettingsSection }) {
               e.preventDefault();
               move(e.key === "ArrowDown" ? 1 : -1);
             }}>
-            {SETTINGS_SECTIONS.map((id) => {
+            {sections.map((id) => {
               const active = id === section;
               return (
                 <li key={id}>
@@ -129,6 +129,7 @@ export function SettingsDialog({ section }: { section: SettingsSection }) {
             {section === "appearance" && <Appearance />}
             {section === "security" && <Security />}
             {section === "sync" && <Sync />}
+            {section === "browser" && browser.available && <Browser />}
             {section === "about" && <About />}
           </div>
         </div>

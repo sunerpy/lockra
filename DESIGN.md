@@ -204,6 +204,9 @@ New for Lockra:
 | `QrView`        | white plate (the QR's own quiet zone) inside a dialog, page `n / N`, prev/next                                      |
 | `StepList`      | numbered steps (mono numerals in `inset` circles) for the import sources                                            |
 | `useClock`      | a shared, second-aligned clock in ms for countdowns (`useNow`, also ms, ticks every 30 s for relative times)        |
+| `TileRow`       | a settings list row with a 32 px icon tile (`inset`), the name (14 / 500) and a status line (a 6 px lamp and 12 px  |
+|                 | `fg-muted` words), the actions on the right and an optional note under it; Settings › 浏览器's browsers and paired  |
+|                 | extensions                                                                                                          |
 
 Every interactive primitive has `default hover focus-visible active disabled` states, plus
 `loading` (buttons: spinner, label kept) and `error` (inputs: `danger` border and message below).
@@ -224,6 +227,34 @@ tooltip.
   glass) with a 1 px border and `shadow-pop`: the menu 340 px wide (at least the field's), 6 px under
   the field, `rounded-10`, rows of 52 px; the save and update prompts 360 px at the page's top
   right, `rounded-14`.
+
+### Settings › 浏览器 and the requests that wait for the user
+
+Boards 13–19 of Penpot 「Lockra 密码管理」; the group sits between 同步 and 关于 where the build
+offers the browser extension.
+
+- **The pane**: the two switches (浏览器集成, 关闭窗口后继续运行) in `StatusRow`s. Off, a line says
+  what turning it on brings and nothing else shows. On: 浏览器 (a `TileRow` per browser used here:
+  已连接 `ok`, 清单已写入 `idle`, 未安装扩展 `off`, and 还没有写入连接文件 `warn` with 写入), 已配对的扩展
+  (`TileRow`s with `puzzle`, the date paired and last used, 取消配对 in `text-danger`; a missing
+  site access adds an `alert` line in `warning-text`), 自动填充 (six `StatusRow`s, the frames rule a
+  small `Segmented`), 网站名单 (two cards side by side, `minmax(0, 1fr)` each, 36 px rows) and 最近活动
+  (a dense `Table`: time in mono, browser, site in `fg-muted`, the event; a refusal in `danger` with
+  `ban`, a pause with `pause` in `warning-text`; 「只保存在内存里，锁定时清空」 and 清空 beside the
+  heading). A paused extension puts a `Banner warn bar` with 恢复 at the top of the pane.
+- **Dialogs of the pane**: turning the integration on while Lockra does not run in the background
+  asks once (440 px: 暂不, 开启后台运行). Filling as pages load first shows its risks (480 px: a
+  warning banner, the six conditions, 「从不填验证码、从不自动提交」, 继续…; no checkbox, the owner's
+  answer of 2026-10-14), then the proof dialog; so does any change that lets the extensions do more.
+  Adding a site (420 px) and unpairing (420 px, a `danger` button) are their own small dialogs.
+- **The requests** (460 px, over anything open, the window brought up by the shell): a pairing
+  shows the code in mono 40 / 600 on `inset`, a 14 px ring and the seconds left, then the browser
+  and the extension's id, 「还有 N 个配对请求在排队」 while others wait; expired, the code turns to
+  dashes and only 关闭 is left. A fill or a copy to confirm shows the site, the login and the browser
+  on `inset` (the frame's site and the page's for a frame of another site) and the seconds before it
+  is denied. Where the core asks for proof the buttons are 拒绝 · 改用主密码 · 使用 Touch ID / Windows
+  Hello …, and the master password after the system check fails or was not chosen; a frame of
+  another site needs only 仍然填充. Esc denies.
 
 ## 4. Content states
 
