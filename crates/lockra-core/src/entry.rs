@@ -8,6 +8,8 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::error::{CoreResult, ErrorCode};
+use crate::item::{GeneratedPassword, Identity, ItemListView, SiteRule, VaultItem};
+use crate::lenient::{self, Lenient};
 use crate::sync::SyncLocal;
 
 /// The longest issuer, account or group name kept (characters).
@@ -41,8 +43,9 @@ pub struct Entry {
     /// What its avatar shows instead of the name's initial ([`clean_mark`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mark: Option<String>,
-    /// Where it came from.
-    pub origin: Origin,
+    /// Where it came from; one a later Lockra added is kept as written (devices of 0.9 cannot read
+    /// one: none is added while they are supported, AGENTS.md).
+    pub origin: Lenient<Origin>,
     /// Unix milliseconds.
     pub created_at_ms: u64,
     /// Unix milliseconds.
@@ -96,7 +99,7 @@ impl Entry {
             favorite: false,
             color: AccountColor::Auto,
             mark: None,
-            origin,
+            origin: Lenient::Known(origin),
             created_at_ms: now_ms,
             updated_at_ms: now_ms,
             last_used_at_ms: None,
@@ -145,7 +148,7 @@ impl Entry {
             favorite: self.favorite,
             color: self.color,
             mark: self.mark.clone(),
-            origin: self.origin,
+            origin: self.origin.or(Origin::Uri),
             created_at_ms: self.created_at_ms,
             updated_at_ms: self.updated_at_ms,
             last_used_at_ms: self.last_used_at_ms,
@@ -293,13 +296,19 @@ pub(crate) fn clean_mark(mark: &str) -> Option<String> {
     Some(kept.trim().to_owned()).filter(|m| !m.is_empty())
 }
 
-/// The payload format this Lockra writes: 2 added the stamps, the tombstones and the local part.
-pub const VAULT_DATA_FORMAT: u32 = 2;
+/// The newest payload format this Lockra reads and writes: 2 added the stamps, the tombstones and
+/// the local part; 3 the logins, the site rules and the generator's history. A payload is written
+/// as 3 only when it holds any of those ([`VaultData::written_format`]), so that a vault that never
+/// held a login still opens in a version before them.
+pub const VAULT_DATA_FORMAT: u32 = 3;
+/// The format of a payload without logins, site rules or generated passwords.
+const FORMAT_WITHOUT_LOGINS: u32 = 2;
 
 /// The decrypted payload of the vault.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct VaultData {
-    /// Payload format ([`VAULT_DATA_FORMAT`]; 1 before sync).
+    /// Payload format as read ([`VAULT_DATA_FORMAT`] once opened; 1 before sync). A payload is
+    /// written in the format its content needs, whatever this says.
     #[serde(default = "format_one")]
     pub format: u32,
     /// The accounts, in insertion order.
@@ -308,13 +317,26 @@ pub struct VaultData {
     /// The accounts deleted, so that a deletion on one device removes the account on the others.
     #[serde(default)]
     pub tombstones: Vec<Tombstone>,
+    /// The logins.
+    #[serde(default)]
+    pub items: Vec<VaultItem>,
+    /// The logins deleted.
+    #[serde(default)]
+    pub item_tombstones: Vec<Tombstone>,
+    /// The site rules (never save, never fill, equivalent domains).
+    #[serde(default)]
+    pub site_rules: Vec<SiteRule>,
+    /// The site rules removed.
+    #[serde(default)]
+    pub site_rule_tombstones: Vec<Tombstone>,
     /// This device's own part: its clock and its sync space. In the vault file only: never in a
     /// backup, never synced.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub local: Option<Local>,
 }
 
-/// What only this device keeps.
+/// What only this device keeps. Every part but the clock and the sync space reads leniently: one
+/// that does not read (a later version's shape) is reset alone, and the vault opens (R16).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Local {
     /// Stamps this device's changes; its device number names this device in its sync space too.
@@ -323,14 +345,30 @@ pub struct Local {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) sync: Option<SyncLocal>,
     /// How this device shows the code list.
-    #[serde(default, skip_serializing_if = "View::is_empty")]
+    #[serde(default, skip_serializing_if = "View::is_empty", deserialize_with = "lenient::or_default")]
     pub(crate) view: View,
+    /// The passwords the generator made here: secrets, kept only in the vault file.
+    #[serde(default, skip_serializing_if = "Vec::is_empty", deserialize_with = "lenient::or_default")]
+    pub(crate) generator_history: Vec<GeneratedPassword>,
+    /// How this device shows the password list.
+    #[serde(default, skip_serializing_if = "ItemListView::is_empty", deserialize_with = "lenient::or_default")]
+    pub(crate) item_view: ItemListView,
+    /// The user name and email a sign-up form gets.
+    #[serde(default, skip_serializing_if = "Identity::is_empty", deserialize_with = "lenient::or_default")]
+    pub(crate) identity: Identity,
 }
 
 impl Local {
     /// A new device: a random number, nothing stamped yet, no sync.
     pub(crate) fn new() -> Self {
-        Self { clock: Clock::new(random_device()), sync: None, view: View::default() }
+        Self {
+            clock: Clock::new(random_device()),
+            sync: None,
+            view: View::default(),
+            generator_history: Vec::new(),
+            item_view: ItemListView::default(),
+            identity: Identity::default(),
+        }
     }
 }
 
@@ -396,15 +434,43 @@ fn format_one() -> u32 {
     1
 }
 
+/// The vault file's payload as written: [`VaultData`] with the format its content needs.
+#[derive(Serialize)]
+struct Written<'a> {
+    format: u32,
+    entries: &'a [Entry],
+    tombstones: &'a [Tombstone],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    items: &'a [VaultItem],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    item_tombstones: &'a [Tombstone],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    site_rules: &'a [SiteRule],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    site_rule_tombstones: &'a [Tombstone],
+    #[serde(skip_serializing_if = "Option::is_none")]
+    local: &'a Option<Local>,
+}
+
+/// A backup's payload: the accounts, the logins, the site rules and their deletions, without this
+/// device's part.
 #[derive(Serialize)]
 struct BackupPayload<'a> {
     format: u32,
     entries: &'a [Entry],
     tombstones: &'a [Tombstone],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    items: &'a [VaultItem],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    item_tombstones: &'a [Tombstone],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    site_rules: &'a [SiteRule],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    site_rule_tombstones: &'a [Tombstone],
 }
 
-/// A payload read without its sync space: [`VaultData`] field for field, the local part's clock
-/// alone (serde skips the rest unread).
+/// A payload read without its sync space: [`VaultData`] field for field, the local part without
+/// `sync` (serde skips it unread), its other parts read leniently.
 #[derive(Deserialize)]
 struct WithoutSync {
     #[serde(default = "format_one")]
@@ -414,31 +480,78 @@ struct WithoutSync {
     #[serde(default)]
     tombstones: Vec<Tombstone>,
     #[serde(default)]
-    local: Option<ClockOnly>,
+    items: Vec<VaultItem>,
+    #[serde(default)]
+    item_tombstones: Vec<Tombstone>,
+    #[serde(default)]
+    site_rules: Vec<SiteRule>,
+    #[serde(default)]
+    site_rule_tombstones: Vec<Tombstone>,
+    #[serde(default)]
+    local: Option<LocalWithoutSync>,
 }
 
 #[derive(Deserialize)]
-struct ClockOnly {
+struct LocalWithoutSync {
     clock: Clock,
+    #[serde(default, deserialize_with = "lenient::or_default")]
+    view: View,
+    #[serde(default, deserialize_with = "lenient::or_default")]
+    generator_history: Vec<GeneratedPassword>,
+    #[serde(default, deserialize_with = "lenient::or_default")]
+    item_view: ItemListView,
+    #[serde(default, deserialize_with = "lenient::or_default")]
+    identity: Identity,
 }
 
 impl VaultData {
     /// A new vault's payload.
     pub fn new() -> Self {
-        Self { format: VAULT_DATA_FORMAT, entries: Vec::new(), tombstones: Vec::new(), local: Some(Local::new()) }
+        Self { format: FORMAT_WITHOUT_LOGINS, local: Some(Local::new()), ..Self::default() }
+    }
+
+    /// The format this payload is written in: 3 once it holds a login, a site rule, one of their
+    /// deletions or a generated password, 2 otherwise.
+    pub fn written_format(&self) -> u32 {
+        let generated = self.local.as_ref().is_some_and(|l| !l.generator_history.is_empty());
+        if self.holds_logins() || generated { VAULT_DATA_FORMAT } else { FORMAT_WITHOUT_LOGINS }
+    }
+
+    /// It holds logins, site rules or their deletions: what a backup of format 3 carries.
+    pub(crate) fn holds_logins(&self) -> bool {
+        !(self.items.is_empty() && self.item_tombstones.is_empty() && self.site_rules.is_empty() && self.site_rule_tombstones.is_empty())
     }
 
     /// The vault file's payload bytes for `lockra-vault`: everything, the local part included.
     pub fn to_bytes(&self) -> Zeroizing<Vec<u8>> {
+        let written = Written {
+            format: self.written_format(),
+            entries: &self.entries,
+            tombstones: &self.tombstones,
+            items: &self.items,
+            item_tombstones: &self.item_tombstones,
+            site_rules: &self.site_rules,
+            site_rule_tombstones: &self.site_rule_tombstones,
+            local: &self.local,
+        };
         // Serializing plain data structures to JSON cannot fail.
         #[allow(clippy::expect_used)]
-        Zeroizing::new(serde_json::to_vec(self).expect("vault data serializes"))
+        Zeroizing::new(serde_json::to_vec(&written).expect("vault data serializes"))
     }
 
-    /// A backup's payload bytes: the accounts and the deletions, without this device's part (its
-    /// sync space and the storage's credentials stay in the vault file).
+    /// A backup's payload bytes: the accounts, the logins, the site rules and the deletions,
+    /// without this device's part (its sync space, the storage's credentials and the generated
+    /// passwords stay in the vault file).
     pub fn backup_bytes(&self) -> Zeroizing<Vec<u8>> {
-        let backup = BackupPayload { format: VAULT_DATA_FORMAT, entries: &self.entries, tombstones: &self.tombstones };
+        let backup = BackupPayload {
+            format: if self.holds_logins() { VAULT_DATA_FORMAT } else { FORMAT_WITHOUT_LOGINS },
+            entries: &self.entries,
+            tombstones: &self.tombstones,
+            items: &self.items,
+            item_tombstones: &self.item_tombstones,
+            site_rules: &self.site_rules,
+            site_rule_tombstones: &self.site_rule_tombstones,
+        };
         // Serializing plain data structures to JSON cannot fail.
         #[allow(clippy::expect_used)]
         Zeroizing::new(serde_json::to_vec(&backup).expect("vault data serializes"))
@@ -446,12 +559,28 @@ impl VaultData {
 
     /// Parse a payload; `None` when it is not a Lockra payload. A sync space this version cannot
     /// read (kept by an earlier build) is left out, not the vault: sync is off on this device until
-    /// it is set up again.
+    /// it is set up again. The logins, the site rules and the rest of the local part stay.
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         serde_json::from_slice(bytes).ok().or_else(|| {
             let data: WithoutSync = serde_json::from_slice(bytes).ok()?;
-            let local = data.local.map(|local| Local { clock: local.clock, sync: None, view: View::default() });
-            Some(Self { format: data.format, entries: data.entries, tombstones: data.tombstones, local })
+            let local = data.local.map(|local| Local {
+                clock: local.clock,
+                sync: None,
+                view: local.view,
+                generator_history: local.generator_history,
+                item_view: local.item_view,
+                identity: local.identity,
+            });
+            Some(Self {
+                format: data.format,
+                entries: data.entries,
+                tombstones: data.tombstones,
+                items: data.items,
+                item_tombstones: data.item_tombstones,
+                site_rules: data.site_rules,
+                site_rule_tombstones: data.site_rule_tombstones,
+                local,
+            })
         })
     }
 
@@ -459,10 +588,17 @@ impl VaultData {
     /// before stamps get one (their last change, from this device), and a payload without a local
     /// part (a backup, an older vault) gets a new one.
     pub(crate) fn open(bytes: &[u8]) -> CoreResult<Self> {
+        Self::open_versioned(bytes).map(|(data, _)| data)
+    }
+
+    /// [`Self::open`], with the format the payload was written in (a restore tells a backup of
+    /// format 2, which holds no logins, from one of format 3, which does).
+    pub(crate) fn open_versioned(bytes: &[u8]) -> CoreResult<(Self, u32)> {
         let mut data = Self::from_bytes(bytes).ok_or(ErrorCode::VaultCorrupted)?;
         if data.format > VAULT_DATA_FORMAT {
             return Err(ErrorCode::VaultUnsupported.into());
         }
+        let source_format = data.format;
         data.format = VAULT_DATA_FORMAT;
         let device = data.local_mut().clock.device();
         for entry in &mut data.entries {
@@ -473,7 +609,7 @@ impl VaultData {
         // A clock behind the payload's stamps (a new local part, another device's backup) would
         // stamp the next change before the version it replaces.
         data.observe_stamps();
-        Ok(data)
+        Ok((data, source_format))
     }
 
     pub(crate) fn local_mut(&mut self) -> &mut Local {
@@ -519,10 +655,19 @@ impl VaultData {
         self.local_mut().clock.tick(now_ms)
     }
 
+    /// The latest stamp the payload holds: the accounts', the logins' (each of their parts), the
+    /// site rules' and every deletion's.
+    fn latest_stamp(&self) -> Option<Hlc> {
+        let entries = self.entries.iter().map(|e| e.stamp);
+        let items = self.items.iter().map(VaultItem::latest_stamp);
+        let rules = self.site_rules.iter().map(|r| r.stamp);
+        let deletions = [&self.tombstones, &self.item_tombstones, &self.site_rule_tombstones].into_iter().flatten().map(|t| t.stamp);
+        entries.chain(items).chain(rules).chain(deletions).max()
+    }
+
     /// Note the latest stamp of what a sync brought in: changes made here later come after it.
     pub(crate) fn observe_stamps(&mut self) {
-        let latest = self.entries.iter().map(|e| e.stamp).chain(self.tombstones.iter().map(|t| t.stamp)).max();
-        if let Some(latest) = latest {
+        if let Some(latest) = self.latest_stamp() {
             self.local_mut().clock.observe(latest);
         }
     }
@@ -538,18 +683,12 @@ impl VaultData {
 
     /// Keep `tombstone`: the later deletion and the higher counter of the two.
     fn bury(&mut self, tombstone: Tombstone) {
-        match self.tombstones.iter_mut().find(|t| t.id == tombstone.id) {
-            Some(own) => {
-                own.stamp = own.stamp.max(tombstone.stamp);
-                own.counter = own.counter.max(tombstone.counter);
-            }
-            None => self.tombstones.push(tombstone),
-        }
+        bury(&mut self.tombstones, tombstone);
     }
 
     /// Replace the accounts by a backup's `entries` as one change made at `now_ms` (a restore
     /// that replaces): every account gets a new stamp, the ones that go get tombstones, and the
-    /// backup's own deletions are kept, so the other devices of a sync space end up with the
+    /// backup's own deletions are kept, so that the other devices of a sync space end up with the
     /// backup's accounts. An HOTP counter does not go back below what this vault had.
     pub(crate) fn replace_entries(&mut self, entries: Vec<Entry>, tombstones: &[Tombstone], now_ms: u64) {
         // The new stamps come after everything the backup holds, its deletions included (a backup
@@ -578,6 +717,58 @@ impl VaultData {
         }
     }
 
+    /// Replace the logins by a backup's `items` as one change made at `now_ms`, as
+    /// [`Self::replace_entries`] does the accounts: the backup's deletions are kept, the logins
+    /// that go get tombstones, and each restored login takes its backup version back with new
+    /// stamps (its write ids kept), later than anything the space holds, so that no other device's
+    /// older snapshot changes it back and none raises a conflict over it.
+    pub(crate) fn replace_items(&mut self, items: &[VaultItem], tombstones: &[Tombstone], now_ms: u64) {
+        let backup_latest = items.iter().map(VaultItem::latest_stamp).chain(tombstones.iter().map(|t| t.stamp)).max();
+        if let Some(latest) = backup_latest {
+            self.local_mut().clock.observe(latest);
+        }
+        for tombstone in tombstones {
+            bury(&mut self.item_tombstones, *tombstone);
+        }
+        let mut clock = self.local_mut().clock;
+        let gone: Vec<Uuid> = self.items.iter().map(|i| i.id).filter(|id| !items.iter().any(|r| r.id == *id)).collect();
+        for id in gone {
+            bury(&mut self.item_tombstones, Tombstone { id, stamp: clock.tick(now_ms), counter: None });
+        }
+        let previous = std::mem::take(&mut self.items);
+        self.items = items
+            .iter()
+            .map(|restored| {
+                let mut item = previous.iter().find(|p| p.id == restored.id).cloned().unwrap_or_else(|| restored.clone());
+                item.take_back(restored, now_ms, || clock.tick(now_ms));
+                item.last_used_at_ms = previous.iter().find(|p| p.id == restored.id).and_then(|p| p.last_used_at_ms);
+                item
+            })
+            .collect();
+        self.local_mut().clock = clock;
+    }
+
+    /// Replace the site rules by a backup's, as one change made at `now_ms`: the backup's deletions
+    /// are kept, the rules that go get tombstones, and every restored rule a new stamp.
+    pub(crate) fn replace_site_rules(&mut self, rules: &[SiteRule], tombstones: &[Tombstone], now_ms: u64) {
+        if let Some(latest) = rules.iter().map(|r| r.stamp).chain(tombstones.iter().map(|t| t.stamp)).max() {
+            self.local_mut().clock.observe(latest);
+        }
+        for tombstone in tombstones {
+            bury(&mut self.site_rule_tombstones, *tombstone);
+        }
+        let gone: Vec<Uuid> = self.site_rules.iter().map(|r| r.id).filter(|id| !rules.iter().any(|r| r.id == *id)).collect();
+        for id in gone {
+            let stamp = self.tick(now_ms);
+            bury(&mut self.site_rule_tombstones, Tombstone { id, stamp, counter: None });
+        }
+        self.site_rules = rules.to_vec();
+        for index in 0..self.site_rules.len() {
+            let stamp = self.tick(now_ms);
+            self.site_rules[index].stamp = stamp;
+        }
+    }
+
     /// The entry with `id`.
     pub fn get(&self, id: Uuid) -> Option<&Entry> {
         self.entries.iter().find(|e| e.id == id)
@@ -586,6 +777,17 @@ impl VaultData {
     /// The entry with `id`, mutably.
     pub fn get_mut(&mut self, id: Uuid) -> Option<&mut Entry> {
         self.entries.iter_mut().find(|e| e.id == id)
+    }
+}
+
+/// Keep `tombstone` among `tombstones`: the later deletion and the higher counter of the two.
+fn bury(tombstones: &mut Vec<Tombstone>, tombstone: Tombstone) {
+    match tombstones.iter_mut().find(|t| t.id == tombstone.id) {
+        Some(own) => {
+            own.stamp = own.stamp.max(tombstone.stamp);
+            own.counter = own.counter.max(tombstone.counter);
+        }
+        None => tombstones.push(tombstone),
     }
 }
 
@@ -634,7 +836,8 @@ mod tests {
         assert_ne!(device, 0);
         assert_eq!(data.entries[0].stamp, Hlc { wall_ms: 7, counter: 0, device }, "the last change, from this device");
         assert!(data.tombstones.is_empty() && data.sync().is_none());
-        assert_eq!(VaultData::open(br#"{"format":3}"#).unwrap_err().code, ErrorCode::VaultUnsupported);
+        let newer = format!(r#"{{"format":{}}}"#, VAULT_DATA_FORMAT + 1);
+        assert_eq!(VaultData::open(newer.as_bytes()).unwrap_err().code, ErrorCode::VaultUnsupported);
         assert_eq!(VaultData::open(b"not json").unwrap_err().code, ErrorCode::VaultCorrupted);
         // Opening again keeps the device and the stamps.
         let again = VaultData::open(&data.to_bytes()).unwrap();
@@ -808,6 +1011,288 @@ mod tests {
         // A backup: no local part, so a new clock that has seen nothing.
         let mut restored = VaultData::open(&ahead.backup_bytes()).unwrap();
         assert!(restored.tick(1_000) > entry.stamp, "a change made now comes after what the backup holds");
+    }
+
+    use crate::item::{Field, Purpose, SiteRuleKind};
+
+    /// A login with a user name and a hidden password, stamped by `data`'s clock at `now_ms`.
+    fn login(data: &mut VaultData, title: &str, password: &str, now_ms: u64) -> VaultItem {
+        let (stamp, mwid) = (data.tick(now_ms), crate::item::random_write_id());
+        let mut item = VaultItem::login(Uuid::new_v4(), now_ms, stamp, mwid);
+        item.title = title.into();
+        let (stamp, wid) = (data.tick(now_ms), crate::item::random_write_id());
+        item.write_field(Uuid::from_u128(1), Purpose::Username, stamp, wid, now_ms, |f| f.value = Zeroizing::new("octocat".into()));
+        let (stamp, wid) = (data.tick(now_ms), crate::item::random_write_id());
+        item.write_field(Uuid::from_u128(2), Purpose::Password, stamp, wid, now_ms, |f| {
+            f.value = Zeroizing::new(password.into());
+            f.hidden = true;
+        });
+        item
+    }
+
+    fn site_rule(data: &mut VaultData, kind: SiteRuleKind, domain: &str, now_ms: u64) -> SiteRule {
+        SiteRule {
+            id: SiteRule::single_id(kind, domain),
+            kind: kind.into(),
+            domains: vec![domain.into()],
+            stamp: data.tick(now_ms),
+            extra: serde_json::Map::new(),
+        }
+    }
+
+    fn format_of(bytes: &[u8]) -> u64 {
+        serde_json::from_slice::<serde_json::Value>(bytes).unwrap()["format"].as_u64().unwrap()
+    }
+
+    fn password(item: &VaultItem) -> &str {
+        item.field_of(Purpose::Password).map_or("", |f| f.value.as_str())
+    }
+
+    #[test]
+    fn a_vault_is_written_as_format_3_only_once_it_holds_logins() {
+        let mut data = VaultData::new();
+        data.entries.push(Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1));
+        let bytes = data.to_bytes();
+        assert_eq!(format_of(&bytes), 2, "no logins: an earlier version still opens it");
+        let text = std::str::from_utf8(&bytes).unwrap();
+        for absent in ["items", "item_tombstones", "site_rules", "site_rule_tombstones", "generator_history"] {
+            assert!(!text.contains(absent), "{absent} in {text}");
+        }
+        // Opened, it says 3 (what this version reads), and still writes 2.
+        let opened = VaultData::open(&bytes).unwrap();
+        assert_eq!((opened.format, format_of(&opened.to_bytes())), (VAULT_DATA_FORMAT, 2));
+        // Each of the new parts alone makes it 3.
+        let mut with_item = opened.clone();
+        let item = login(&mut with_item, "GitHub", "hunter2", 10);
+        with_item.items.push(item);
+        assert_eq!(format_of(&with_item.to_bytes()), 3);
+        let mut with_deletion = opened.clone();
+        with_deletion.item_tombstones.push(Tombstone { id: Uuid::new_v4(), stamp: Hlc::at(1), counter: None });
+        assert_eq!(format_of(&with_deletion.to_bytes()), 3);
+        let mut with_rule = opened.clone();
+        let rule = site_rule(&mut with_rule, SiteRuleKind::NeverSave, "example.com", 10);
+        with_rule.site_rules.push(rule);
+        assert_eq!(format_of(&with_rule.to_bytes()), 3);
+        let mut with_rule_deletion = opened.clone();
+        with_rule_deletion.site_rule_tombstones.push(Tombstone { id: Uuid::new_v4(), stamp: Hlc::at(1), counter: None });
+        assert_eq!(format_of(&with_rule_deletion.to_bytes()), 3);
+        let mut with_generated = opened.clone();
+        with_generated.local_mut().generator_history.push(GeneratedPassword { password: Zeroizing::new("x".into()), at_ms: 1, site: None });
+        assert_eq!(format_of(&with_generated.to_bytes()), 3);
+        // A round trip keeps everything.
+        let again = VaultData::open(&with_item.to_bytes()).unwrap();
+        assert_eq!((again.items.clone(), again.device()), (with_item.items.clone(), with_item.device()));
+    }
+
+    #[test]
+    fn a_vault_of_0_9_opens_and_is_written_back_as_it_was() {
+        // As 0.9.1 writes a vault with a sync space and a view: format 2, no new part.
+        let mut data = VaultData::new();
+        let mut entry = Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Google, 1);
+        entry.stamp = data.tick(1);
+        data.entries.push(entry);
+        data.local_mut().view.collapsed_groups = vec!["Work".into()];
+        let storage = lockra_sync::StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() };
+        let sync_key = lockra_sync::SyncKey::generate().unwrap();
+        let keys = lockra_sync::SpaceKeys::generate(sync_key.space_id()).unwrap();
+        data.local_mut().sync = Some(SyncLocal::new(storage, &keys, &sync_key, "Laptop".into(), b"keyring"));
+        let written_by_0_9 = data.to_bytes();
+        let value: serde_json::Value = serde_json::from_slice(&written_by_0_9).unwrap();
+        let keys_0_9: Vec<&str> = value.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys_0_9, ["entries", "format", "local", "tombstones"], "what 0.9 writes, nothing more");
+        let local_keys: Vec<&str> = value["local"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(local_keys, ["clock", "sync", "view"]);
+        let opened = VaultData::open(&written_by_0_9).unwrap();
+        assert!(opened.sync().is_some() && opened.items.is_empty());
+        assert_eq!(opened.collapsed_groups(), ["Work"]);
+        assert_eq!(*opened.to_bytes(), *written_by_0_9, "written back byte for byte");
+    }
+
+    #[test]
+    fn logins_rules_and_generated_passwords_survive_a_sync_space_this_version_cannot_read() {
+        let mut data = VaultData::new();
+        let item = login(&mut data, "GitHub", "hunter2", 10);
+        data.items.push(item);
+        let rule = site_rule(&mut data, SiteRuleKind::NeverFill, "bank.example", 11);
+        data.site_rules.push(rule);
+        data.item_tombstones.push(Tombstone { id: Uuid::new_v4(), stamp: Hlc::at(5), counter: None });
+        data.local_mut().generator_history.push(GeneratedPassword {
+            password: Zeroizing::new("generated".into()),
+            at_ms: 12,
+            site: Some("example.com".into()),
+        });
+        data.local_mut().identity = Identity { username: "me".into(), email: "me@example.com".into() };
+        data.local_mut().view.group_order = vec!["Work".into()];
+        let storage = lockra_sync::StorageConfig::Folder { path: std::env::temp_dir().join("Drive") };
+        let sync_key = lockra_sync::SyncKey::generate().unwrap();
+        let keys = lockra_sync::SpaceKeys::generate(sync_key.space_id()).unwrap();
+        data.local_mut().sync = Some(SyncLocal::new(storage, &keys, &sync_key, "Laptop".into(), b"keyring"));
+        let mut broken: serde_json::Value = serde_json::from_slice(&data.to_bytes()).unwrap();
+        assert_eq!(broken["format"], 3);
+        broken["local"]["sync"]["keyring"] = serde_json::json!("");
+        let opened = VaultData::open(&serde_json::to_vec(&broken).unwrap()).unwrap();
+        assert!(opened.sync().is_none(), "the sync space goes");
+        assert_eq!(opened.items, data.items, "the logins stay");
+        assert_eq!((opened.site_rules.clone(), opened.item_tombstones.clone()), (data.site_rules.clone(), data.item_tombstones.clone()));
+        let local = opened.local.as_ref().unwrap();
+        assert_eq!(local.generator_history, data.local.as_ref().unwrap().generator_history, "and the generated passwords");
+        assert_eq!((local.identity.username.as_str(), local.view.group_order.clone()), ("me", vec!["Work".to_owned()]), "and every part that reads");
+        assert_eq!(opened.device(), data.device());
+    }
+
+    #[test]
+    fn a_local_part_of_a_later_shape_is_reset_alone() {
+        let mut data = VaultData::new();
+        data.local_mut().generator_history.push(GeneratedPassword { password: Zeroizing::new("generated".into()), at_ms: 12, site: None });
+        data.local_mut().identity = Identity { username: "me".into(), email: String::new() };
+        data.local_mut().item_view.collapsed_groups = vec!["Bank".into()];
+        let mut later: serde_json::Value = serde_json::from_slice(&data.to_bytes()).unwrap();
+        later["local"]["generator_history"] = serde_json::json!({"a later": "shape"});
+        later["local"]["identity"] = serde_json::json!(7);
+        later["local"]["view"] = serde_json::json!("not a view");
+        let opened = VaultData::open(&serde_json::to_vec(&later).unwrap()).unwrap();
+        let local = opened.local.as_ref().unwrap();
+        assert!(local.generator_history.is_empty() && local.identity.is_empty() && local.view.is_empty(), "each reset alone");
+        assert_eq!(local.item_view.collapsed_groups, ["Bank"], "the rest kept");
+        assert_eq!(opened.device(), data.device());
+    }
+
+    #[test]
+    fn an_origin_a_later_lockra_added_is_kept_and_shown_as_a_link() {
+        let mut entry = Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1);
+        entry.origin = Lenient::Unknown("kdbx".into());
+        let text = serde_json::to_string(&entry).unwrap();
+        assert!(text.contains(r#""origin":"kdbx""#), "{text}");
+        let read: Entry = serde_json::from_str(&text).unwrap();
+        assert_eq!(read.origin, Lenient::Unknown("kdbx".into()));
+        assert_eq!(read.view().origin, Origin::Uri, "the interface knows the five it always knew");
+    }
+
+    #[test]
+    fn a_backup_carries_the_logins_and_rules_and_says_so_in_its_format() {
+        let mut data = VaultData::new();
+        data.entries.push(Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1));
+        assert_eq!(format_of(&data.backup_bytes()), 2);
+        let item = login(&mut data, "GitHub", "hunter2", 10);
+        data.items.push(item);
+        let rule = site_rule(&mut data, SiteRuleKind::NeverSave, "example.com", 11);
+        data.site_rules.push(rule);
+        data.local_mut().generator_history.push(GeneratedPassword { password: Zeroizing::new("generated".into()), at_ms: 12, site: None });
+        let backup = data.backup_bytes();
+        assert_eq!(format_of(&backup), 3);
+        let text = std::str::from_utf8(&backup).unwrap();
+        assert!(!text.contains("generated") && !text.contains("\"local\""), "the generated passwords stay on this device: {text}");
+        let (mut restored, source_format) = VaultData::open_versioned(&backup).unwrap();
+        assert_eq!(source_format, 3);
+        assert_eq!((restored.items.clone(), restored.site_rules.clone()), (data.items.clone(), data.site_rules.clone()));
+        assert!(restored.tick(1) > data.items[0].latest_stamp(), "a change made now comes after what the backup holds");
+        // Only generated passwords: nothing a backup carries, so a backup of format 2.
+        let mut only_generated = VaultData::new();
+        only_generated.local_mut().generator_history.push(GeneratedPassword { password: Zeroizing::new("g".into()), at_ms: 1, site: None });
+        assert_eq!((format_of(&only_generated.to_bytes()), format_of(&only_generated.backup_bytes())), (3, 2));
+    }
+
+    /// What 0.9.1 reads of a vault or a backup, frozen: it refuses any format above 2.
+    fn open_as_0_9(bytes: &[u8]) -> Result<usize, &'static str> {
+        #[derive(Deserialize)]
+        struct Frozen {
+            #[serde(default = "format_one")]
+            format: u32,
+            #[serde(default)]
+            entries: Vec<serde_json::Value>,
+        }
+        let data: Frozen = serde_json::from_slice(bytes).map_err(|_| "vault_corrupted")?;
+        if data.format > 2 {
+            return Err("vault_unsupported");
+        }
+        Ok(data.entries.len())
+    }
+
+    #[test]
+    fn lockra_0_9_refuses_a_payload_with_logins_instead_of_dropping_them() {
+        let mut data = VaultData::new();
+        data.entries.push(Entry::from_auth(auth("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP"), Origin::Uri, 1));
+        assert_eq!(open_as_0_9(&data.to_bytes()), Ok(1));
+        assert_eq!(open_as_0_9(&data.backup_bytes()), Ok(1));
+        let item = login(&mut data, "GitHub", "hunter2", 10);
+        data.items.push(item);
+        assert_eq!(open_as_0_9(&data.to_bytes()), Err("vault_unsupported"));
+        assert_eq!(open_as_0_9(&data.backup_bytes()), Err("vault_unsupported"));
+    }
+
+    #[test]
+    fn a_restore_that_replaces_takes_the_backups_logins_back_after_everything() {
+        // The backup: two logins and a rule; then this vault changes the first login's password,
+        // adds a third login and a field, deletes the second login, and adds a rule.
+        let mut data = VaultData::new();
+        let mut kept = login(&mut data, "GitHub", "in the backup", 10);
+        let deleted_since = login(&mut data, "Mail", "mail password", 11);
+        data.items = vec![kept.clone(), deleted_since.clone()];
+        let backup_rule = site_rule(&mut data, SiteRuleKind::NeverSave, "example.com", 12);
+        data.site_rules.push(backup_rule.clone());
+        let backup = VaultData::open(&data.backup_bytes()).unwrap();
+        let backup_password = kept.field(Uuid::from_u128(2)).unwrap().clone();
+        let (stamp, wid) = (data.tick(20), crate::item::random_write_id());
+        kept.write_field(Uuid::from_u128(2), Purpose::Password, stamp, wid, 20, |f| f.value = Zeroizing::new("changed since".into()));
+        let (stamp, wid) = (data.tick(21), crate::item::random_write_id());
+        kept.write_field(Uuid::from_u128(9), Purpose::Custom, stamp, wid, 21, |f| f.label = "PIN".into());
+        let new_since = login(&mut data, "Bank", "bank password", 22);
+        data.items = vec![kept.clone(), new_since.clone()];
+        let deleted_at = data.tick(23);
+        data.item_tombstones.push(Tombstone { id: deleted_since.id, stamp: deleted_at, counter: None });
+        let local_rule = site_rule(&mut data, SiteRuleKind::NeverFill, "bank.example", 24);
+        data.site_rules.push(local_rule.clone());
+        let before = data.clone();
+
+        data.replace_items(&backup.items, &backup.item_tombstones, 100);
+        data.replace_site_rules(&backup.site_rules, &backup.site_rule_tombstones, 100);
+        let latest_before = before.latest_stamp().unwrap();
+        // The backup's logins, and only them.
+        let ids: Vec<Uuid> = data.items.iter().map(|i| i.id).collect();
+        assert_eq!(ids, [kept.id, deleted_since.id]);
+        let restored = &data.items[0];
+        assert_eq!(password(restored), "in the backup");
+        assert!(restored.field(Uuid::from_u128(9)).unwrap().removed, "the field added since is removed by a write of its own");
+        assert!(data.items.iter().all(|i| i.stamp > latest_before && i.fields.iter().all(|f| f.stamp > latest_before)), "stamped after everything");
+        assert_eq!(restored.field(Uuid::from_u128(2)).unwrap().wid, backup_password.wid, "the backup's write, taken back");
+        assert!(!restored.conflict());
+        // The login new since is deleted, the one deleted since is back.
+        let tombstone = data.item_tombstones.iter().find(|t| t.id == new_since.id).unwrap();
+        assert!(tombstone.stamp > latest_before);
+        assert!(data.items.iter().all(|i| Record::stamp(i) > data.item_tombstones.iter().find(|t| t.id == i.id).map_or(Hlc::default(), |t| t.stamp)));
+        // The rules: the backup's, stamped anew; the local one deleted.
+        assert_eq!(data.site_rules.iter().map(|r| r.id).collect::<Vec<_>>(), [backup_rule.id]);
+        assert!(data.site_rules[0].stamp > latest_before);
+        assert!(data.site_rule_tombstones.iter().any(|t| t.id == local_rule.id && t.stamp > latest_before));
+
+        // Another device's snapshots from before the restore change nothing back and raise no
+        // conflict: one holding the backup's own values, one holding this vault's old ones.
+        for older in [backup.clone(), before.clone()] {
+            let mut merged = data.clone();
+            crate::sync::merge_items(&mut merged.items, &mut merged.item_tombstones, &older.items, &older.item_tombstones);
+            lockra_sync::merge(&mut merged.site_rules, &mut merged.site_rule_tombstones, &older.site_rules, &older.site_rule_tombstones);
+            assert_eq!(merged.items.iter().map(|i| i.id).collect::<Vec<_>>(), [kept.id, deleted_since.id]);
+            assert_eq!(password(&merged.items[0]), "in the backup");
+            assert!(merged.items.iter().all(|i| !i.conflict()), "{:?}", merged.items[0]);
+            assert_eq!(merged.site_rules.len(), 1);
+        }
+    }
+
+    #[test]
+    fn a_restored_field_has_seen_the_value_it_replaced() {
+        let mut data = VaultData::new();
+        let original = login(&mut data, "GitHub", "old", 10);
+        let in_backup: Field = original.field(Uuid::from_u128(2)).unwrap().clone();
+        let mut changed = original.clone();
+        let (stamp, wid) = (data.tick(20), crate::item::random_write_id());
+        changed.write_field(Uuid::from_u128(2), Purpose::Password, stamp, wid, 20, |f| f.value = Zeroizing::new("new".into()));
+        let replaced_wid = changed.field(Uuid::from_u128(2)).unwrap().wid;
+        data.items = vec![changed];
+        data.replace_items(std::slice::from_ref(&original), &[], 30);
+        let field = data.items[0].field(Uuid::from_u128(2)).unwrap();
+        assert_eq!((field.wid, field.value.as_str()), (in_backup.wid, "old"));
+        assert!(field.seen.contains(&replaced_wid), "{:?}", field.seen);
+        assert!(data.items[0].history.iter().any(|p| p.wid == replaced_wid));
     }
 
     #[test]

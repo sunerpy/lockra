@@ -15,6 +15,7 @@ use zeroize::Zeroizing;
 
 use crate::entry::{Entry, clean_name};
 use crate::error::{CoreError, ErrorCode};
+use crate::item::{SiteRule, VaultItem};
 use crate::ui::{Notice, Platform, StorageView, SyncDeviceView};
 
 /// Delay between the last change and the sync run it causes.
@@ -34,8 +35,14 @@ pub const SYNC_INTERVAL_FOLDER: Duration = Duration::from_secs(60);
 pub const SYNC_FOLDER_SETTLE: Duration = Duration::from_secs(1);
 /// The longest device name kept (characters), as a snapshot carries it.
 pub const MAX_DEVICE_NAME_CHARS: usize = 64;
-/// The format of the payload inside a snapshot: the accounts and the deletions.
+/// The format of the payload inside a snapshot: the accounts and the deletions, and since the
+/// logins arrived, the logins, the site rules and their deletions beside them. Still 1: a device
+/// of 0.9 reads a snapshot of another format as unreadable, while it ignores what it does not know
+/// in one of its own.
 const PAYLOAD_FORMAT: u32 = 1;
+/// What this version reads of a payload ([`Replica::reader`]): 0.9 read the accounts (1), this one
+/// the logins and the site rules as well (2).
+const PAYLOAD_READER: u32 = 2;
 
 /// This device's sync space, in the vault's local part.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,11 +200,16 @@ pub(crate) fn device_name(name: &str, platform: Platform) -> String {
     .to_owned()
 }
 
-/// The replica a run works on: a copy of the vault's accounts and deletions taken when the run
-/// started.
+/// The replica a run works on: a copy of the vault's accounts, logins, site rules and deletions
+/// taken when the run started.
+#[derive(Default)]
 pub(crate) struct Working {
     pub entries: Vec<Entry>,
     pub tombstones: Vec<Tombstone>,
+    pub items: Vec<VaultItem>,
+    pub item_tombstones: Vec<Tombstone>,
+    pub site_rules: Vec<SiteRule>,
+    pub site_rule_tombstones: Vec<Tombstone>,
 }
 
 #[derive(Serialize)]
@@ -205,6 +217,16 @@ struct PayloadOut<'a> {
     format: u32,
     entries: Vec<Entry>,
     tombstones: &'a [Tombstone],
+    // Left out when empty: a payload without logins is byte for byte what 0.9 writes, so that an
+    // update alone writes no snapshot again.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    items: Vec<VaultItem>,
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    item_tombstones: &'a [Tombstone],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    site_rules: &'a [SiteRule],
+    #[serde(skip_serializing_if = "<[_]>::is_empty")]
+    site_rule_tombstones: &'a [Tombstone],
 }
 
 #[derive(Deserialize)]
@@ -214,13 +236,30 @@ struct PayloadIn {
     entries: Vec<Entry>,
     #[serde(default)]
     tombstones: Vec<Tombstone>,
+    #[serde(default)]
+    items: Vec<VaultItem>,
+    #[serde(default)]
+    item_tombstones: Vec<Tombstone>,
+    #[serde(default)]
+    site_rules: Vec<SiteRule>,
+    #[serde(default)]
+    site_rule_tombstones: Vec<Tombstone>,
 }
 
 impl Replica for Working {
     fn payload(&self) -> Zeroizing<Vec<u8>> {
         // The copy times stay on this device.
         let entries = self.entries.iter().map(|e| Entry { last_used_at_ms: None, ..e.clone() }).collect();
-        let payload = PayloadOut { format: PAYLOAD_FORMAT, entries, tombstones: &self.tombstones };
+        let items = self.items.iter().map(|i| VaultItem { last_used_at_ms: None, ..i.clone() }).collect();
+        let payload = PayloadOut {
+            format: PAYLOAD_FORMAT,
+            entries,
+            tombstones: &self.tombstones,
+            items,
+            item_tombstones: &self.item_tombstones,
+            site_rules: &self.site_rules,
+            site_rule_tombstones: &self.site_rule_tombstones,
+        };
         // Serializing plain data structures to JSON cannot fail.
         #[allow(clippy::expect_used)]
         Zeroizing::new(serde_json::to_vec(&payload).expect("a sync payload serializes"))
@@ -231,7 +270,37 @@ impl Replica for Working {
         if theirs.format != PAYLOAD_FORMAT {
             return Err(SyncError::Unsupported(theirs.format));
         }
-        Ok(merge_entries(&mut self.entries, &mut self.tombstones, &theirs.entries, &theirs.tombstones))
+        let mut changed = merge_entries(&mut self.entries, &mut self.tombstones, &theirs.entries, &theirs.tombstones);
+        changed |= merge_items(&mut self.items, &mut self.item_tombstones, &theirs.items, &theirs.item_tombstones);
+        changed |= merge(&mut self.site_rules, &mut self.site_rule_tombstones, &theirs.site_rules, &theirs.site_rule_tombstones);
+        Ok(changed)
+    }
+
+    fn reader(&self) -> u32 {
+        PAYLOAD_READER
+    }
+}
+
+impl Working {
+    /// Fold the run's replica into `data`, merging rather than replacing (a change made while the
+    /// run was out stays); `true` when it changed.
+    pub(crate) fn fold_into(&self, data: &mut crate::entry::VaultData) -> bool {
+        let mut changed = merge_entries(&mut data.entries, &mut data.tombstones, &self.entries, &self.tombstones);
+        changed |= merge_items(&mut data.items, &mut data.item_tombstones, &self.items, &self.item_tombstones);
+        changed |= merge(&mut data.site_rules, &mut data.site_rule_tombstones, &self.site_rules, &self.site_rule_tombstones);
+        changed
+    }
+
+    /// A copy of what `data` syncs.
+    pub(crate) fn of(data: &crate::entry::VaultData) -> Self {
+        Self {
+            entries: data.entries.clone(),
+            tombstones: data.tombstones.clone(),
+            items: data.items.clone(),
+            item_tombstones: data.item_tombstones.clone(),
+            site_rules: data.site_rules.clone(),
+            site_rule_tombstones: data.site_rule_tombstones.clone(),
+        }
     }
 }
 
@@ -248,12 +317,32 @@ pub(crate) fn merge_entries(entries: &mut Vec<Entry>, tombstones: &mut Vec<Tombs
     changed
 }
 
-/// What a run took into this device's accounts.
+/// Fold another replica's logins and their deletions in, part by part, keeping this device's copy
+/// times; `true` when something changed.
+pub(crate) fn merge_items(items: &mut Vec<VaultItem>, tombstones: &mut Vec<Tombstone>, their_items: &[VaultItem], their_tombstones: &[Tombstone]) -> bool {
+    let used: HashMap<Uuid, u64> = items.iter().filter_map(|i| i.last_used_at_ms.map(|at| (i.id, at))).collect();
+    let mut changed = merge(items, tombstones, their_items, their_tombstones);
+    for item in items.iter_mut() {
+        if let Some(&at) = used.get(&item.id) {
+            item.last_used_at_ms = Some(item.last_used_at_ms.map_or(at, |theirs| theirs.max(at)));
+        }
+        // An item taken in whole keeps the one order every replica holds it in.
+        if !item.is_tidy() {
+            item.normalize();
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// What a run took into this device's accounts and logins.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Brought {
     pub added: u32,
     pub updated: u32,
     pub removed: u32,
+    /// Logins new, changed or deleted here.
+    pub logins: u32,
 }
 
 impl Brought {
@@ -265,17 +354,26 @@ impl Brought {
             added: count(after.iter().filter(|e| !previous.contains_key(&e.id))),
             updated: count(after.iter().filter(|e| previous.get(&e.id).is_some_and(|p| *p != *e))),
             removed: count(before.iter().filter(|e| !kept.contains(&e.id))),
+            logins: 0,
         }
     }
 
-    /// Whether the run changed any account here.
+    /// The logins new, changed or gone after a merge against the ones before it.
+    pub(crate) fn logins_between(before: &[VaultItem], after: &[VaultItem]) -> u32 {
+        let previous: HashMap<Uuid, &VaultItem> = before.iter().map(|i| (i.id, i)).collect();
+        let kept: HashSet<Uuid> = after.iter().map(|i| i.id).collect();
+        let changed = count(after.iter().filter(|i| previous.get(&i.id).is_none_or(|p| *p != *i)));
+        changed.saturating_add(count(before.iter().filter(|i| !kept.contains(&i.id))))
+    }
+
+    /// Whether the run changed any account or login here.
     pub(crate) fn any(self) -> bool {
         self != Self::default()
     }
 
     /// The notice for it, naming the devices it came from.
     pub(crate) fn notice(self, devices: Vec<String>) -> Notice {
-        Notice::SyncBrought { added: self.added, updated: self.updated, removed: self.removed, devices }
+        Notice::SyncBrought { added: self.added, updated: self.updated, removed: self.removed, logins: self.logins, devices }
     }
 }
 
@@ -284,6 +382,7 @@ impl AddAssign for Brought {
         self.added = self.added.saturating_add(other.added);
         self.updated = self.updated.saturating_add(other.updated);
         self.removed = self.removed.saturating_add(other.removed);
+        self.logins = self.logins.saturating_add(other.logins);
     }
 }
 
@@ -321,7 +420,7 @@ pub(crate) fn config_error(error: ConfigError) -> CoreError {
 #[cfg(test)]
 mod tests {
     use lockra_otp::uri;
-    use lockra_sync::Hlc;
+    use lockra_sync::{Hlc, RemoteStore};
     use lockra_transfer::Origin;
 
     use super::*;
@@ -336,7 +435,7 @@ mod tests {
     fn the_payload_leaves_the_copy_times_here_and_a_merge_keeps_them() {
         let mut mine = entry("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP", 10, 1);
         mine.last_used_at_ms = Some(500);
-        let working = Working { entries: vec![mine.clone()], tombstones: Vec::new() };
+        let working = Working { entries: vec![mine.clone()], ..Working::default() };
         let payload: serde_json::Value = serde_json::from_slice(&working.payload()).unwrap();
         assert_eq!(payload["format"], 1);
         assert_eq!(payload["entries"][0]["last_used_at_ms"], serde_json::Value::Null);
@@ -347,7 +446,7 @@ mod tests {
         renamed.stamp = Hlc { wall_ms: 20, counter: 0, device: 2 };
         renamed.last_used_at_ms = None;
         let mut working = working;
-        let theirs = Working { entries: vec![renamed], tombstones: Vec::new() };
+        let theirs = Working { entries: vec![renamed], ..Working::default() };
         assert!(working.absorb(&theirs.payload()).unwrap());
         assert_eq!((working.entries[0].issuer.as_str(), working.entries[0].last_used_at_ms), ("Renamed", Some(500)));
         // Nothing newer: nothing changes.
@@ -364,23 +463,136 @@ mod tests {
         renamed.issuer = "B2".into();
         let before = [a.clone(), b, c];
         let brought = Brought::between(&before, &[a.clone(), renamed, d]);
-        assert_eq!(brought, Brought { added: 1, updated: 1, removed: 1 });
+        assert_eq!(brought, Brought { added: 1, updated: 1, removed: 1, logins: 0 });
         assert!(brought.any());
         assert!(!Brought::between(&before, &before).any());
 
         let mut total = Brought::default();
         total += brought;
-        total += Brought { added: 2, updated: 0, removed: u32::MAX };
-        assert_eq!(total, Brought { added: 3, updated: 1, removed: u32::MAX });
-        assert_eq!(total.notice(vec!["Phone".into()]), Notice::SyncBrought { added: 3, updated: 1, removed: u32::MAX, devices: vec!["Phone".into()] });
+        total += Brought { added: 2, updated: 0, removed: u32::MAX, logins: 4 };
+        assert_eq!(total, Brought { added: 3, updated: 1, removed: u32::MAX, logins: 4 });
+        assert_eq!(
+            total.notice(vec!["Phone".into()]),
+            Notice::SyncBrought { added: 3, updated: 1, removed: u32::MAX, logins: 4, devices: vec!["Phone".into()] }
+        );
     }
 
     #[test]
     fn a_payload_of_another_format_or_none_at_all_is_refused() {
-        let mut working = Working { entries: Vec::new(), tombstones: Vec::new() };
+        let mut working = Working::default();
         assert_eq!(working.absorb(br#"{"format":2,"entries":[]}"#), Err(SyncError::Unsupported(2)));
         assert_eq!(working.absorb(b"[]"), Err(SyncError::Corrupted));
         assert_eq!(working.absorb(br#"{"entries":[]}"#), Err(SyncError::Corrupted), "the format is required");
+    }
+
+    /// A login with a user name, an email, a password, two sites, notes and tags, as people keep
+    /// them, and three earlier passwords.
+    fn typical_login(n: usize, clock: &mut lockra_sync::Clock) -> VaultItem {
+        use crate::item::{Purpose, UrlRule, random_write_id};
+        let now = 1_790_000_000_000 + n as u64;
+        let mut item = VaultItem::login(Uuid::new_v4(), now, clock.tick(now), random_write_id());
+        item.title = format!("Service number {n}");
+        item.urls = vec![
+            UrlRule { url: format!("https://login.service{n}.example.com/"), matching: Default::default(), extra: Default::default() },
+            UrlRule { url: format!("https://app.service{n}.example.com/account"), matching: Default::default(), extra: Default::default() },
+        ];
+        item.notes = Zeroizing::new(format!("Recovery codes are in the safe; support PIN {n:06}. ").repeat(2));
+        item.tags = vec!["work".into(), "shared".into()];
+        item.group = Some("Work".into());
+        for (id, purpose, value) in [(1, Purpose::Username, format!("user{n}")), (2, Purpose::Email, format!("user{n}@example.com"))] {
+            item.write_field(Uuid::from_u128(id), purpose, clock.tick(now), random_write_id(), now, |f| f.value = Zeroizing::new(value));
+        }
+        for round in 0..4 {
+            item.write_field(Uuid::from_u128(3), Purpose::Password, clock.tick(now), random_write_id(), now, |f| {
+                f.value = Zeroizing::new(format!("Kx9!vQ2#mZ7@pL4&{n}-{round}"));
+                f.hidden = true;
+            });
+        }
+        item
+    }
+
+    #[test]
+    fn two_thousand_logins_fit_a_relays_snapshot() {
+        let mut clock = lockra_sync::Clock::new(7);
+        let items: Vec<VaultItem> = (0..2000).map(|n| typical_login(n, &mut clock)).collect();
+        assert_eq!(items[0].history.len(), 3);
+        let working = Working { items, ..Working::default() };
+        let size = working.payload().len();
+        // A relay keeps snapshots of at most 4 MiB (docs/relay.md), header and padding included.
+        // These logins are on the heavy side (notes, two sites and three earlier passwords each):
+        // 3.5 MiB measured on 2026-10-14, past the 75 % at which Settings › Sync is to warn.
+        assert!(size < 4 * 1024 * 1024 - 64 * 1024, "2000 logins take {size} bytes");
+    }
+
+    /// What 0.9.1 reads of a snapshot's payload, frozen: the accounts and their deletions.
+    #[derive(Deserialize)]
+    struct PayloadIn09 {
+        format: u32,
+        #[serde(default)]
+        entries: Vec<Entry>,
+        #[serde(default)]
+        tombstones: Vec<Tombstone>,
+    }
+
+    #[test]
+    fn lockra_0_9_reads_the_accounts_of_a_snapshot_with_logins_and_leaves_the_logins() {
+        let mut clock = lockra_sync::Clock::new(7);
+        let working = Working {
+            entries: vec![entry("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP", 10, 1)],
+            items: vec![typical_login(1, &mut clock)],
+            ..Working::default()
+        };
+        let read: PayloadIn09 = serde_json::from_slice(&working.payload()).unwrap();
+        assert_eq!((read.format, read.entries.len(), read.tombstones.len()), (1, 1, 0), "the format it knows, its accounts");
+        // A snapshot without logins is what 0.9 writes, byte for byte.
+        let codes_only = Working { entries: working.entries.clone(), ..Working::default() };
+        let text = String::from_utf8(codes_only.payload().to_vec()).unwrap();
+        assert!(!text.contains("items") && !text.contains("site_rules"), "{text}");
+        assert_eq!(working.reader(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_state_of_0_9_reads_once_more_what_it_had_taken_in() {
+        use lockra_sync::{MemoryRemote, Space, SpaceKeys, step};
+        let remote = MemoryRemote::new(false);
+        let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+        let mut clock = lockra_sync::Clock::new(1);
+        // A newer device writes a login beside its account.
+        let mut desktop = Working {
+            entries: vec![entry("otpauth://totp/A:b?secret=JBSWY3DPEHPK3PXP", 10, 1)],
+            items: vec![typical_login(1, &mut clock)],
+            ..Working::default()
+        };
+        let desktop_space = Space { prefix: "", keys: &keys, device: 1, device_name: "Desktop", keyring: b"keyring" };
+        let mut desktop_state = lockra_sync::SyncState::default();
+        step(&remote, &desktop_space, &mut desktop_state, &mut desktop, 100).await.unwrap();
+        // The phone on 0.9 takes it in: its accounts only, its state as 0.9 saves it.
+        struct Phone09(Vec<Entry>, Vec<Tombstone>);
+        impl Replica for Phone09 {
+            fn payload(&self) -> Zeroizing<Vec<u8>> {
+                Zeroizing::new(serde_json::to_vec(&serde_json::json!({ "format": 1, "entries": self.0, "tombstones": self.1 })).unwrap())
+            }
+            fn absorb(&mut self, payload: &[u8]) -> Result<bool, SyncError> {
+                let theirs: PayloadIn09 = serde_json::from_slice(payload).map_err(|_| SyncError::Corrupted)?;
+                Ok(merge(&mut self.0, &mut self.1, &theirs.entries, &theirs.tombstones))
+            }
+        }
+        let phone_space = Space { prefix: "", keys: &keys, device: 2, device_name: "Phone", keyring: b"keyring" };
+        let mut old = Phone09(Vec::new(), Vec::new());
+        let mut state = lockra_sync::SyncState::default();
+        step(&remote, &phone_space, &mut state, &mut old, 200).await.unwrap();
+        let mut saved: serde_json::Value = serde_json::to_value(&state).unwrap();
+        saved.as_object_mut().unwrap().remove("reader");
+        let mut state: lockra_sync::SyncState = serde_json::from_value(saved).unwrap();
+        // Updated in place; the desktop writes nothing new, its snapshot keeps its etag.
+        let etag = remote.list(&lockra_sync::devices_dir("", keys.space_id())).await.unwrap().into_iter().map(|m| m.etag).collect::<Vec<_>>();
+        let mut phone = Working { entries: old.0, tombstones: old.1, ..Working::default() };
+        let outcome = step(&remote, &phone_space, &mut state, &mut phone, 300).await.unwrap();
+        assert!(outcome.changed);
+        assert_eq!(phone.items.len(), 1, "the logins arrive");
+        assert_eq!(state.reader, 2);
+        let after = remote.list(&lockra_sync::devices_dir("", keys.space_id())).await.unwrap();
+        assert!(after.iter().any(|m| etag.contains(&m.etag)), "the desktop's snapshot is the one it was");
     }
 
     #[test]

@@ -293,7 +293,7 @@ mod tests {
         let replaced = &data.entries[0];
         assert_eq!(replaced.secret.as_slice(), b"foobar");
         assert!(replaced.favorite, "a replace keeps the pin");
-        assert_eq!((replaced.origin, replaced.updated_at_ms), (Origin::Google, 99));
+        assert_eq!((replaced.origin.clone(), replaced.updated_at_ms), (Origin::Google.into(), 99));
         assert_ne!(replaced.id, original_id);
         assert!(data.get(original_id).is_none());
         assert!(data.tombstones.iter().any(|t| t.id == original_id));
@@ -338,7 +338,7 @@ mod tests {
         session.add_backup(&ImportSource::File { name: "x.lockrabackup".into() }, vec![backup]);
         let mut data = VaultData::default();
         assert_eq!(session.commit(&mut data, &[], 5).added, 1);
-        assert_eq!((data.entries[0].group.as_deref(), data.entries[0].favorite, data.entries[0].origin), (Some("Work"), true, Origin::Backup));
+        assert_eq!((data.entries[0].group.as_deref(), data.entries[0].favorite, data.entries[0].origin.clone()), (Some("Work"), true, Origin::Backup.into()));
     }
 
     #[test]

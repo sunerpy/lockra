@@ -30,7 +30,7 @@ use lockra_bridge::{UiCommand, dispatch};
 use lockra_core::ports::{
     Biometrics, Clipboard, CodeSink, MemorySecretStore, NoSecretStore, NoUpdater, PortError, SecretStore, SyncTransport, SystemClock, Updater,
 };
-use lockra_core::ui::{BiometricKind, CodesFrame, Phase, Platform, UI_EVENT_NAME, UiEvent};
+use lockra_core::ui::{BiometricKind, CodesFrame, Features, Phase, Platform, UI_EVENT_NAME, UiEvent};
 use lockra_core::{Core, CoreConfig, CoreError, ErrorCode, KdfCost, Ports};
 use serde_json::Value;
 use tauri::ipc::Channel;
@@ -400,8 +400,14 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             };
             let secrets = options.secrets.clone().unwrap_or_else(secret_store);
             let clipboard = options.clipboard.clone().unwrap_or_else(|| Arc::new(clipboard::ArboardClipboard::spawn()));
-            let config =
-                CoreConfig { data_dir, config_dir, app_version: app.package_info().version.to_string(), kdf: options.kdf, platform: Platform::current() };
+            let config = CoreConfig {
+                data_dir,
+                config_dir,
+                app_version: app.package_info().version.to_string(),
+                kdf: options.kdf,
+                platform: Platform::current(),
+                features: Features::default(),
+            };
             let updater: Arc<dyn Updater> = match options.updater.clone() {
                 Some(updater) => updater,
                 None if options.plugin_updates => Arc::new(updater::PluginUpdater::new(app.handle().clone(), updater::install_method())),

@@ -958,6 +958,7 @@ export const zhCN = {
     sync_folder_missing: "找不到同步文件夹：网盘客户端可能没有运行，或者文件夹已被移动或删除",
     sync_data_corrupted: "存储里的同步数据已损坏或被改动",
     sync_unsupported: "同步数据来自更新版本的 Lockra，请先升级",
+    feature_unavailable: "当前版本还不支持这项操作：含有密码的备份请用「替换」恢复",
     internal: "出现内部错误",
   },
   reject: {
@@ -1009,6 +1010,7 @@ export const zhCN = {
     syncAdded: "新增 {n} 个",
     syncUpdated: "修改 {n} 个",
     syncRemoved: "删除 {n} 个",
+    syncLogins: "{n} 个登录项有变化",
     syncChangesSeparator: "，",
     syncDevicesSeparator: "、",
   },

@@ -1016,6 +1016,8 @@ export const en: Messages = {
       "The sync folder is missing: the cloud drive's app may not be running, or the folder was moved or deleted",
     sync_data_corrupted: "The sync data on the storage is damaged or was altered",
     sync_unsupported: "The sync data comes from a newer Lockra; update Lockra first",
+    feature_unavailable:
+      "This version cannot do that yet; restore a backup that holds passwords with Replace",
     internal: "An internal error occurred",
   },
   reject: {
@@ -1068,6 +1070,7 @@ export const en: Messages = {
     syncAdded: "{n} added",
     syncUpdated: "{n} changed",
     syncRemoved: "{n} removed",
+    syncLogins: "{n} logins changed",
     syncChangesSeparator: ", ",
     syncDevicesSeparator: ", ",
   },

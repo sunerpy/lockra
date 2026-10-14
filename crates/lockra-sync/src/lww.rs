@@ -24,6 +24,26 @@ pub trait Record: Clone + PartialEq {
     }
     /// Raise the counter to `floor` (a record with a counter, whose counter is below it).
     fn raise_counter(&mut self, _floor: u64) {}
+    /// Fold another replica's version of this record in; `true` when this one changed. The
+    /// default is the whole record, last writer wins: the later version replaces this one. A
+    /// record whose parts change apart (a login's fields) merges them one by one instead, and
+    /// must stay commutative, associative and idempotent, as [`merge`] is.
+    fn fold(&mut self, theirs: &Self) -> bool {
+        if theirs.stamp() > self.stamp() {
+            *self = theirs.clone();
+            true
+        } else {
+            false
+        }
+    }
+    /// Drop the parts a deletion at `deleted` covers, those stamped at or before it; `true` when
+    /// something went. A record that folds part by part must: a version brought back by a change
+    /// after the deletion then keeps only what was written after it, on every replica alike,
+    /// whichever arrived first, the deletion or an older version folded in elsewhere. The default
+    /// has one part, the whole record, which the deletion check covers already.
+    fn forget(&mut self, _deleted: Hlc) -> bool {
+        false
+    }
 }
 
 /// A deleted record: its id, when it was deleted, and the highest counter its versions reached.
@@ -85,11 +105,18 @@ pub fn merge<R: Record>(records: &mut Vec<R>, tombstones: &mut Vec<Tombstone>, t
     }
     for theirs in their_records {
         match records.iter_mut().find(|own| own.id() == theirs.id()) {
+            // Both hold it: the record folds the other version in (by default the later one wins
+            // whole), then its counter rises to the higher of the two.
             Some(own) => {
                 let floor = higher(own.counter(), theirs.counter());
-                if theirs.stamp() > own.stamp() {
-                    *own = theirs.clone();
-                    changed = true;
+                match tombstones.iter().find(|t| t.id == theirs.id()) {
+                    // Brought back after a deletion here: only what came after it folds in.
+                    Some(tombstone) => {
+                        let mut later = theirs.clone();
+                        later.forget(tombstone.stamp);
+                        changed |= own.fold(&later);
+                    }
+                    None => changed |= own.fold(theirs),
                 }
                 changed |= raise(own, floor);
             }
@@ -123,6 +150,8 @@ pub fn merge<R: Record>(records: &mut Vec<R>, tombstones: &mut Vec<Tombstone>, t
                     changed = true;
                 }
                 if tombstone.stamp < record.stamp() {
+                    // Brought back: what the deletion covers stays deleted.
+                    changed |= record.forget(tombstone.stamp);
                     changed |= raise(&mut record, counter);
                     kept.push(record);
                 }
@@ -373,6 +402,292 @@ mod tests {
                     prop_assert!(item.counter.unwrap_or(0) >= highest, "{item:?} went back below {highest}");
                 }
             }
+        }
+
+        /// The default fold is the merge as it was before records could fold: the same records,
+        /// in the same order, the same tombstones and the same answer, whatever the replicas hold.
+        #[test]
+        fn the_default_fold_merges_as_before(
+            ops in proptest::collection::vec((0u64..3, op()), 0..40),
+            pairs in proptest::collection::vec((0usize..3, 0usize..3), 1..12),
+        ) {
+            let mut replicas = vec![Replica::default(), Replica::default(), Replica::default()];
+            for (step, (device, op)) in ops.iter().enumerate() {
+                let stamp = Hlc { wall_ms: step as u64, counter: 0, device: *device };
+                apply(&mut replicas[usize::try_from(*device).unwrap()], op, stamp);
+            }
+            let mut before = replicas.clone();
+            for &(from, to) in &pairs {
+                let other = replicas[from].clone();
+                let changed = replicas[to].absorb(&other);
+                let theirs = before[from].clone();
+                let target = &mut before[to];
+                let expected = merge_before_fold(&mut target.items, &mut target.tombstones, &theirs.items, &theirs.tombstones);
+                prop_assert_eq!(changed, expected);
+                prop_assert_eq!(&replicas[to], &before[to]);
+            }
+        }
+    }
+
+    /// [`merge`] as it was before [`Record::fold`]: a later version replaced the whole record.
+    fn merge_before_fold<R: Record>(records: &mut Vec<R>, tombstones: &mut Vec<Tombstone>, their_records: &[R], their_tombstones: &[Tombstone]) -> bool {
+        let mut changed = false;
+        for theirs in their_tombstones {
+            match tombstones.iter_mut().find(|own| own.id == theirs.id) {
+                Some(own) => {
+                    if theirs.stamp > own.stamp {
+                        own.stamp = theirs.stamp;
+                        changed = true;
+                    }
+                    let counter = higher(own.counter, theirs.counter);
+                    if counter != own.counter {
+                        own.counter = counter;
+                        changed = true;
+                    }
+                }
+                None => {
+                    tombstones.push(*theirs);
+                    changed = true;
+                }
+            }
+        }
+        for theirs in their_records {
+            match records.iter_mut().find(|own| own.id() == theirs.id()) {
+                Some(own) => {
+                    let floor = higher(own.counter(), theirs.counter());
+                    if theirs.stamp() > own.stamp() {
+                        *own = theirs.clone();
+                        changed = true;
+                    }
+                    changed |= raise(own, floor);
+                }
+                None => match tombstones.iter_mut().find(|t| t.id == theirs.id() && t.stamp >= theirs.stamp()) {
+                    Some(tombstone) => {
+                        let counter = higher(tombstone.counter, theirs.counter());
+                        if counter != tombstone.counter {
+                            tombstone.counter = counter;
+                            changed = true;
+                        }
+                    }
+                    None => {
+                        records.push(theirs.clone());
+                        changed = true;
+                    }
+                },
+            }
+        }
+        let before = records.len();
+        let mut kept = Vec::with_capacity(records.len());
+        for mut record in records.drain(..) {
+            match tombstones.iter_mut().find(|t| t.id == record.id()) {
+                Some(tombstone) => {
+                    let counter = higher(tombstone.counter, record.counter());
+                    if counter != tombstone.counter {
+                        tombstone.counter = counter;
+                        changed = true;
+                    }
+                    if tombstone.stamp < record.stamp() {
+                        changed |= raise(&mut record, counter);
+                        kept.push(record);
+                    }
+                }
+                None => kept.push(record),
+            }
+        }
+        *records = kept;
+        changed | (records.len() != before)
+    }
+
+    /// A record whose parts change apart: registers by key, each with its own stamp, the later
+    /// one of each kept; ties go to the larger value. Its registers stay sorted by key, so two
+    /// replicas that hold the same registers hold the same array.
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+    struct Card {
+        id: Uuid,
+        registers: Vec<Register>,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+    struct Register {
+        key: u8,
+        value: u8,
+        stamp: Hlc,
+    }
+
+    impl Record for Card {
+        fn id(&self) -> Uuid {
+            self.id
+        }
+
+        fn stamp(&self) -> Hlc {
+            self.registers.iter().map(|r| r.stamp).max().unwrap_or_default()
+        }
+
+        fn fold(&mut self, theirs: &Self) -> bool {
+            let mut changed = false;
+            for register in &theirs.registers {
+                match self.registers.iter_mut().find(|own| own.key == register.key) {
+                    Some(own) => {
+                        if (register.stamp, register.value) > (own.stamp, own.value) {
+                            *own = *register;
+                            changed = true;
+                        }
+                    }
+                    None => {
+                        self.registers.push(*register);
+                        changed = true;
+                    }
+                }
+            }
+            self.registers.sort_by_key(|r| r.key);
+            changed
+        }
+
+        fn forget(&mut self, deleted: Hlc) -> bool {
+            let before = self.registers.len();
+            self.registers.retain(|r| r.stamp > deleted);
+            self.registers.len() != before
+        }
+    }
+
+    #[derive(Debug, Clone, Default, PartialEq)]
+    struct Cards {
+        cards: Vec<Card>,
+        tombstones: Vec<Tombstone>,
+    }
+
+    impl Cards {
+        fn absorb(&mut self, other: &Self) -> bool {
+            merge(&mut self.cards, &mut self.tombstones, &other.cards, &other.tombstones)
+        }
+
+        /// The records in id order (they arrive in any order), each exactly as held: its
+        /// registers are not sorted here, they must already be in their one order.
+        fn normal(&self) -> (Vec<u8>, Vec<Tombstone>) {
+            let mut cards = self.cards.clone();
+            cards.sort_by_key(|c| c.id);
+            let mut tombstones = self.tombstones.clone();
+            tombstones.sort_by_key(|t| t.id);
+            (serde_json::to_vec(&cards).unwrap(), tombstones)
+        }
+
+        /// Set register `key` of card `n` at `stamp`: the card's other registers stay as they are.
+        fn set(&mut self, n: u8, key: u8, value: u8, stamp: Hlc) {
+            let register = Register { key, value, stamp };
+            match self.cards.iter_mut().find(|c| c.id == id(n)) {
+                Some(card) => match card.registers.iter_mut().find(|r| r.key == key) {
+                    Some(own) => *own = register,
+                    None => {
+                        card.registers.push(register);
+                        card.registers.sort_by_key(|r| r.key);
+                    }
+                },
+                None => self.cards.push(Card { id: id(n), registers: vec![register] }),
+            }
+        }
+
+        fn delete(&mut self, n: u8, stamp: Hlc) {
+            if self.cards.iter().any(|c| c.id == id(n)) {
+                self.cards.retain(|c| c.id != id(n));
+                match self.tombstones.iter_mut().find(|t| t.id == id(n)) {
+                    Some(t) => t.stamp = t.stamp.max(stamp),
+                    None => self.tombstones.push(Tombstone { id: id(n), stamp, counter: None }),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn records_that_fold_keep_the_later_part_of_each_side() {
+        let mut ours = Cards::default();
+        ours.set(1, 0, 1, at(10, 1));
+        ours.set(1, 1, 1, at(10, 1));
+        let mut theirs = ours.clone();
+        // Their change to the first part, ours to the second one, later.
+        theirs.set(1, 0, 2, at(20, 2));
+        ours.set(1, 1, 3, at(30, 1));
+        assert!(ours.absorb(&theirs));
+        assert_eq!(ours.cards[0].registers, [Register { key: 0, value: 2, stamp: at(20, 2) }, Register { key: 1, value: 3, stamp: at(30, 1) }]);
+        assert!(theirs.absorb(&ours));
+        assert_eq!(theirs.normal(), ours.normal());
+        assert!(!ours.absorb(&theirs), "the same state again changes nothing");
+        // A deletion after every part removes the record; one between the parts does not.
+        let mut deleted = ours.clone();
+        deleted.absorb(&Cards { cards: vec![], tombstones: vec![tombstone(1, at(25, 3))] });
+        // The second part came after the deletion and brings the record back, alone: the first
+        // part is one the deletion covers.
+        assert_eq!(deleted.cards[0].registers, [Register { key: 1, value: 3, stamp: at(30, 1) }]);
+        // A version from before the deletion, folded in afterwards, brings nothing back either,
+        // and says so.
+        assert!(!deleted.absorb(&theirs), "{deleted:?}");
+        assert_eq!(deleted.cards[0].registers, [Register { key: 1, value: 3, stamp: at(30, 1) }]);
+        assert!(deleted.absorb(&Cards { cards: vec![], tombstones: vec![tombstone(1, at(40, 3))] }));
+        assert!(deleted.cards.is_empty());
+    }
+
+    /// One device's edit of a card: set one of its parts, or delete it.
+    #[derive(Debug, Clone)]
+    enum CardOp {
+        Set { n: u8, key: u8, value: u8 },
+        Delete { n: u8 },
+    }
+
+    fn card_op() -> impl Strategy<Value = CardOp> {
+        prop_oneof![
+            4 => (0u8..4, 0u8..4, any::<u8>()).prop_map(|(n, key, value)| CardOp::Set { n, key, value }),
+            1 => (0u8..4).prop_map(|n| CardOp::Delete { n }),
+        ]
+    }
+
+    proptest! {
+        /// Records that fold part by part converge as whole records do: whatever the order, with
+        /// snapshots taken in more than once, three replicas end with the same records, their
+        /// parts in the same array byte for byte.
+        #[test]
+        fn records_that_fold_converge_whatever_the_order(
+            ops in proptest::collection::vec((0u64..3, card_op()), 0..48),
+            order in Just(vec![0usize, 1, 2]).prop_shuffle(),
+            first in 0usize..3,
+        ) {
+            let mut replicas = vec![Cards::default(), Cards::default(), Cards::default()];
+            for (step, (device, op)) in ops.iter().enumerate() {
+                let stamp = Hlc { wall_ms: step as u64 / 2, counter: 0, device: *device };
+                let replica = &mut replicas[usize::try_from(*device).unwrap()];
+                match *op {
+                    CardOp::Set { n, key, value } => replica.set(n, key, value, stamp),
+                    CardOp::Delete { n } => replica.delete(n, stamp),
+                }
+                // Now and then a device takes in another's snapshot as it is at that moment.
+                if step % 5 == 4 {
+                    let from = (usize::try_from(*device).unwrap() + first) % 3;
+                    let other = replicas[from].clone();
+                    replicas[usize::try_from(*device).unwrap()].absorb(&other);
+                }
+            }
+            let mut forward = replicas.clone();
+            for _ in 0..2 {
+                for &from in &order {
+                    for to in 0..3 {
+                        let other = forward[from].clone();
+                        forward[to].absorb(&other);
+                    }
+                }
+            }
+            let mut backward = replicas.clone();
+            for _ in 0..2 {
+                for &from in order.iter().rev() {
+                    for to in (0..3).rev() {
+                        let other = backward[from].clone();
+                        backward[to].absorb(&other);
+                    }
+                }
+            }
+            let expected = forward[0].normal();
+            for replica in forward.iter().chain(backward.iter()) {
+                prop_assert_eq!(replica.normal(), expected.clone());
+            }
+            let mut again = forward[0].clone();
+            prop_assert!(!again.absorb(&forward[1]), "idempotent");
         }
     }
 }

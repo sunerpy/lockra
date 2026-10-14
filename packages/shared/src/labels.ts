@@ -121,12 +121,14 @@ export function noticeText(t: TFunction, notice: Notice, name?: string): string 
   }
 }
 
-/** `已从 Pixel 8 同步：新增 2 个，修改 1 个`: what a sync run brought, the counts that are not zero. */
+/** `已从 Pixel 8 同步：新增 2 个，修改 1 个`: what a sync run brought, the counts that are not zero
+ *  (the accounts', then the logins'). */
 function syncBroughtText(t: TFunction, notice: Extract<Notice, { type: "sync_brought" }>): string {
   const counts = [
     ["notice.syncAdded", notice.added],
     ["notice.syncUpdated", notice.updated],
     ["notice.syncRemoved", notice.removed],
+    ["notice.syncLogins", notice.logins],
   ] as const;
   const changes = counts
     .filter(([, n]) => n > 0)

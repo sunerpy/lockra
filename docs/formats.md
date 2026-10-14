@@ -62,9 +62,14 @@ are created `0600` on Unix.
 
 `vault.lockra` in the app data directory (`~/.local/share/dev.lockra.desktop`,
 `%APPDATA%\dev.lockra.desktop`, `~/Library/Application Support/dev.lockra.desktop`). Its payload
-(JSON) is `{format: 2, entries, tombstones, local}`; format 1 (before 0.4.0) had the entries
-only, and reads as format 2 with every entry stamped at its `updated_at_ms`; a larger format is
-refused (`VaultUnsupported`). The entries:
+(JSON) is `{format, entries, tombstones, items, item_tombstones, site_rules, site_rule_tombstones,
+local}`. The format is worked out from the content when the file is written: **3** once it holds a
+login, a site rule, a deletion of either, or a generated password, **2** otherwise, each of the
+four new arrays left out while empty. A vault that never held a login is therefore written as
+before and still opens in Lockra 0.9, which refuses format 3 (`VaultUnsupported`) and leaves the
+file as it is, rather than dropping what it cannot read. Format 1 (before 0.4.0) had the entries
+only, and reads with every entry stamped at its `updated_at_ms`; a format above 3 is refused. The
+entries:
 
 | Field                                               |                                                                          |
 | --------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -74,7 +79,7 @@ refused (`VaultUnsupported`). The entries:
 | `digits`                                            | 6–8                                                                      |
 | `secret`                                            | bytes (never sent to the webview except by an explicit reveal or export) |
 | `issuer`, `account`, `group`, `favorite`            |                                                                          |
-| `origin`                                            | `manual`, `uri`, `google`, `microsoft`, `backup`                         |
+| `origin`                                            | `manual`, `uri`, `google`, `microsoft`, `backup` (see below)             |
 | `created_at_ms`, `updated_at_ms`, `last_used_at_ms` | `last_used_at_ms` stays on this device: it does not sync                 |
 | `stamp`                                             | `{wall_ms, counter, device}`: when it last changed (§9)                  |
 | `color`, `mark`                                     | the avatar's colour and up to two characters; absent: from the name      |
@@ -82,10 +87,14 @@ refused (`VaultUnsupported`). The entries:
 `color` is one of `red orange amber green teal blue indigo purple pink gray`; absent (`auto`), the
 avatar takes a colour from a hash of the name, the same on every device. A colour this version does
 not know reads as `auto`, so neither the vault nor another device's snapshot fails over one. `mark`
-holds at most two characters as people count them (an emoji with its joiners is one).
+holds at most two characters as people count them (an emoji with its joiners is one). An `origin`
+this version does not know is kept as written and shown as `uri`; none is added while devices of
+0.9, which fail on one, are supported (an account an import of logins makes is `uri`, the login
+names its source).
 
 `tombstones` lists deleted accounts as `{id, stamp, counter?}` (an HOTP account's counter at its
-deletion), so that a deletion reaches the other devices of a sync space. Replacing an account's
+deletion), so that a deletion reaches the other devices of a sync space; `item_tombstones` and
+`site_rule_tombstones` do the same for logins and site rules (`{id, stamp}`). Replacing an account's
 secret through an import gives it a new id (the old id is tombstoned), so its HOTP counter starts
 again with the new secret. `local` is this device's own part and never leaves the vault file (no
 backup, no sync): `clock` (its device number and the latest stamp), `view` (the groups folded in
@@ -94,13 +103,78 @@ and the groups were dragged into on this device, `{entry_order}` (ids) and `{gro
 (names, "" for the accounts in no group, which move like a group since 0.8.9), and the group
 pinned at the top, `{pinned_group}`: `{"type": "favorites"}`, `{"type": "group", "name"}` or
 `{"type": "ungrouped"}`, a kind this version cannot read being no pin; each is left out while
-empty: group names stay inside the encrypted file, never in `settings.json`) and, with sync on, `sync` (the storage settings and credentials, the space id, its
+empty: group names stay inside the encrypted file, never in `settings.json`), `generator_history`
+(the passwords the generator made here, `{password, at_ms, site?}`: secrets, in the vault file
+only), `item_view` (the groups folded in the password list, `{collapsed_groups}`) and `identity`
+(the user name and email a sign-up form gets, `{username, email}`). Every part but `clock` and
+`sync` reads leniently: one that does not read (a later version's shape) is reset alone and the
+vault opens. With sync on, `local` also holds `sync` (the storage settings and credentials, the space id, its
 data key, the sync key, this device's name, its keyring and what the runs remember, among it
 `keyring_unsealed`: the keyring was sealed under random bytes by a join with the biometric check,
 and waits for the next unlock with the master password). A `sync` this version cannot read (one kept by an earlier build, or by a later
 Lockra: to 0.7.3, a space in a cloud drive's folder, `{kind: "folder", path}`; to 0.8.0, a space on
 a relay, `{kind: "relay", url}`) is left out and the vault opens without it: sync is off on that
-device until it is set up again.
+device until it is set up again. Everything else stays: the accounts, the logins, the site rules
+and every other part of `local` that reads.
+
+### Logins
+
+`items` holds the logins. Each merges part by part (§9): its **metadata** is one register, each
+**field** another, and every register is ordered by `(stamp, write id, content)`, so that two
+replicas pick the same version whatever they saw first.
+
+| Field                                        |                                                                                                                    |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `id`                                         | UUID                                                                                                               |
+| `kind`                                       | `login`; a kind of a later Lockra is kept as written and the item is read-only                                     |
+| `title`, `notes`                             | `notes` is treated as a secret (only shown on request), at most 64 KiB                                             |
+| `fields`                                     | user name, email, password, custom fields: at most 64, below                                                       |
+| `urls`                                       | `{url, matching}`, at most 32; `matching` is `domain` (absent), `host`, `starts_with`, `regex`, `exact` or `never` |
+| `tags`, `group`, `favorite`, `color`, `mark` | as an account's                                                                                                    |
+| `protection`                                 | `fill` (absent), `confirm` (ask before showing, copying, filling), `no_extension`                                  |
+| `autofill`                                   | `{on_page_load, auto_submit, fill_otp}`, each `default` (absent), `on` or `off`                                    |
+| `totp_entry`                                 | the id of the account whose codes go with it                                                                       |
+| `history`                                    | hidden values its fields held before, `{field, value, set_at, wid}`, newest first, at most 20                      |
+| `source`                                     | where an imported login came from (`bitwarden`, `kdbx`, …)                                                         |
+| `created_at_ms`, `updated_at_ms`             | `updated_at_ms` is the last change of any part (merged by its maximum)                                             |
+| `last_used_at_ms`                            | stays on this device: it does not sync                                                                             |
+| `stamp`, `mwid`                              | the metadata register: when it was written and by which write (a random 64-bit number)                             |
+
+A field is `{id, purpose, label?, value, hidden?, page_field?, removed?, created, stamp, wid,
+seen?}`: `purpose` is `username`, `email`, `password` or `custom`; `page_field` is the page's field
+a custom field fills; a removed field keeps its register (`removed: true`, empty value) so that the
+removal syncs; `created` never changes and, with the purpose and the id, orders the fields (user
+name, email, password, then custom fields as added, on every replica alike). `wid` names the write
+that put the content there: a write of new content (an edit, an update from the browser, a
+replacing import, settling a conflict) takes a fresh random one, a value taken back (a restore)
+keeps its own. `seen` (sorted) lists the writes of that field the author of the content had seen:
+the value it replaced, and what that one had seen, trimmed when written to the writes still in the
+history.
+
+- **The history.** A write of a hidden field puts the value it replaces into the history, unless
+  it is the same write taken back; so does a merge with the version that loses. The history keeps
+  one entry per `(field, wid)`, the latest `set_at`; none for a value a field holds now; the 20
+  newest by `(set_at, wid)`. Every step gives the same result on every replica.
+- **Conflicts** are derived, not stored: a field is in conflict when its history holds a value
+  whose write is neither the current one nor in its `seen`, and which differs from the current
+  value: two changes made without seeing each other, whatever the clocks or the device numbers
+  said. Settling it (keeping the current value or taking the other) is a new write that has seen
+  every write the history holds, and clears it on every replica once it syncs. A conflicting value
+  pushed out of the 20 takes the conflict with it.
+- **The same write on both sides** (two copies of a vault taking the same value back at the same
+  moment) differs at most in `seen`: a merge takes the union and trims nothing, so `seen` can hold
+  more than 20 writes for a while; the next write of that field on this device trims it.
+- **Read leniently.** A `kind`, `purpose`, `matching`, `protection` or `autofill` value of a later
+  Lockra is kept as written and written back unchanged: an unknown `matching` matches nothing and
+  an unknown `protection` gives the browser extension nothing (rather not fill than fill where the
+  user did not mean). Keys a later Lockra adds to a login, a field, a URL or `autofill` are kept as
+  well.
+
+`site_rules` holds `{id, kind, domains, stamp}`: `kind` is `never_save`, `never_fill` or
+`equivalent` (domains that share their sign-ins); one of a later kind says nothing. A rule merges
+whole, the later version winning. A rule about one domain has the id made from SHA-256 of the kind,
+a zero byte and the domain in lower case (its first 16 bytes as a version 8 UUID), so that two
+devices adding the same rule end up with one.
 
 Duplicates: the same secret and parameters is **the same account** (an import skips it); the same
 issuer and account with a different secret is a **conflict** (both are kept by default, or the
@@ -136,20 +210,32 @@ A `*.lockrabackup` file is the container with magic `LKRABAK1` and one password 
   After a password change the DEK rotates, so earlier backups keep opening with the old password.
 - **Under a separate backup password** (manual backup, by choice): a new DEK and salt.
 
-A backup's payload is `{format: 2, entries, tombstones}`: the vault's `local` part (the sync space
-and its credentials) is left out, so a restored backup is a new device that joins its space again.
+A backup's payload is `{format, entries, tombstones, items, item_tombstones, site_rules,
+site_rule_tombstones}`, of format 3 when it holds a login, a site rule or a deletion of either, 2
+otherwise: the vault's `local` part (the sync space and its credentials, the generated passwords)
+is left out, so a restored backup is a new device that joins its space again. Lockra 0.9 refuses a
+backup of format 3; one it made holds no logins.
 
 Automatic backups go to the chosen folder 3 seconds after the last change, named
 `lockra-auto-YYYYMMDD-HHMMSS.lockrabackup` (UTC; `-2`, `-3`, … on a clash). Beyond `keep`, the
 oldest files **of that pattern** are deleted; nothing else in the folder is touched. A folder that
 cannot be written is reported in the app and tried again at the next change.
 
-Restoring into a vault: _merge_ puts the backup's accounts into the import preview; _replace_
-first writes the current vault as `pre-restore-YYYYMMDD-HHMMSS.lockrabackup` in the data
-directory. Restoring on the welcome screen makes the backup the vault and its password the master
-password. A vault file (`.lockra`) can be restored the same way. With sync on, _replace_ is a
-change made at that moment: the backup's accounts are stamped anew and the accounts that go are
-tombstoned, so the other devices end up with the backup's accounts too.
+Restoring into a vault: _merge_ puts the backup's accounts into the import preview and adds its
+site rules quietly (the later version of each winning, the backup's deletions left out); a backup
+with logins or deletions of logins is refused (`feature_unavailable`) until the preview shows
+logins, rather than restoring its codes alone, and stays open for a _replace_. _Replace_ first
+writes the current vault as `pre-restore-YYYYMMDD-HHMMSS.lockrabackup` in the data directory.
+Restoring on the welcome screen makes the backup the vault and its password the master password. A
+vault file (`.lockra`) can be restored the same way. With sync on, _replace_ is a change made at
+that moment: the backup's accounts are stamped anew and the accounts that go are tombstoned, so the
+other devices end up with the backup's accounts too. A backup of format 3 replaces the logins and
+the site rules the same way: the backup's deletions are kept, the logins and rules that go are
+tombstoned, and each restored login takes its backup version back, metadata and every field
+stamped anew after everything the space holds, their write ids kept; the values they replace go
+into the history and count as seen, and a field the backup does not have is removed by a write of
+its own. An older snapshot of another device then changes nothing back and raises no conflict. A
+backup of format 2 leaves the logins and the site rules as they are.
 
 ## 5. otpauth URIs
 
@@ -270,8 +356,15 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
 - **Names.** The space id is derived from the sync key (HKDF, info `lockra-sync v1 space id`, as a
   version-4 UUID). A device tag is the first 16 bytes, in hex, of HMAC-SHA256 under
   HKDF(data key, info `lockra-sync v1 device tag`) of the device's random 64-bit number.
-- **Payload.** `{format: 1, entries, tombstones}` as in the vault (§2), without
-  `last_used_at_ms`. A device writes its snapshot when its device name, keyring or payload
+- **Payload.** `{format: 1, entries, tombstones, items, item_tombstones, site_rules,
+site_rule_tombstones}` as in the vault (§2), without `last_used_at_ms`, each of the last four
+  left out while empty. The format stays 1: Lockra 0.9 reads a snapshot of another format as
+  unreadable, but ignores what it does not know in one of its own, so it takes the accounts of a
+  snapshot with logins and leaves the logins. What a version reads of a payload is a number of its
+  own (`reader` in the state the vault keeps: 1 for 0.9, 2 since logins), and a run whose state
+  says less reads every snapshot once more, whatever its etag, keeping the sequence numbers seen
+  for rollbacks: a device of 0.9 that took a snapshot in and then updated gets its logins even if
+  the device that wrote it never writes again. A device writes its snapshot when its device name, keyring or payload
   changed, under a sequence number no write of it had before: one higher than the last written or
   attempted. S3 and relay writes carry `If-None-Match: *` or `If-Match: <etag>`, which catch a
   copied vault writing under the same name sooner. A snapshot under a new etag is read and merged even at a
@@ -283,8 +376,13 @@ Every object is framed like the container: `magic (8) | header length (u32 LE) |
   every stamp the device has seen. A tombstone at or after an account's stamp removes it; a change
   after the deletion brings it back. An HOTP counter is the exception to "the whole later version
   wins": an account and its tombstone carry the highest counter any of their versions reached, so
-  a code once shown never comes back on any device. Merging is commutative, associative and
-  idempotent.
+  a code once shown never comes back on any device. A login merges part by part (§2, "Logins"):
+  the later metadata register, the later version of each field (the loser's hidden value into the
+  history), the histories joined. A tombstone removes a login whose every part is stamped at or
+  before it; a part written after the deletion brings the login back with what came after it
+  only, the parts the deletion covers (metadata, fields, history entries) being dropped on every
+  replica, whichever arrived first, the deletion or an older version merged elsewhere. Site rules
+  merge whole, as accounts do. Merging is commutative, associative and idempotent.
 - **The sync key** is `LKS1-` and 14 groups of four Base32 characters: the 32-byte key and three
   bytes of its SHA-256, so a mistyped character is caught. Case, spaces and dashes do not matter.
   The interface calls it the recovery key: it is shown only on `sync_key_reveal`, after the

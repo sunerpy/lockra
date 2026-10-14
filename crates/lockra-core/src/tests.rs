@@ -16,7 +16,7 @@ use zeroize::Zeroizing;
 use crate::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
 use crate::ports::{BiometricError, ClipboardImage, SecretStore, SyncTransport};
 use crate::settings::{AutoBackup, Settings, SortOrder, ThemeId};
-use crate::ui::{BiometricKind, BiometricView, CandidateAction, CandidateStatus, ExportTarget, ImportSource, Notice, Phase, Platform, UiEvent};
+use crate::ui::{BiometricKind, BiometricView, CandidateAction, CandidateStatus, ExportTarget, Features, ImportSource, Notice, Phase, Platform, UiEvent};
 use crate::{
     AccountColor, Choice, Core, CoreConfig, EntryDraft, EntryPatch, ErrorCode, MAX_IMPORT_BYTES, Outcome, PickedFile, PinnedGroup, Ports, RestoreMode,
     VAULT_FILE,
@@ -27,6 +27,7 @@ const T0: u64 = 1_790_000_000_000;
 const MASTER: &str = "correct horse battery";
 const SECRET: &str = "JBSWY3DPEHPK3PXP";
 
+mod items;
 mod sync;
 mod update;
 
@@ -94,6 +95,7 @@ fn start(
         app_version: "0.1.0-test".into(),
         kdf: KdfCost::FAST_INSECURE,
         platform: Platform::Linux,
+        features: Features { passwords: true },
     };
     Core::start(config, Ports { secrets: keychain, clipboard, clock: Arc::new(FakeClock::new(T0)), updater, sync, biometrics })
 }

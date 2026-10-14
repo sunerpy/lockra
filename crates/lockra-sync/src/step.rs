@@ -63,6 +63,15 @@ pub struct SyncState {
     pub pending: Option<PendingWrite>,
     /// The other devices, by tag.
     pub seen: BTreeMap<String, Seen>,
+    /// What of a payload the replica read when it last ran to the end ([`Replica::reader`]); 0
+    /// before versions said (and when a version that does not know it saved the state), and not
+    /// written then, so that such a state is written back as it was.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub reader: u32,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 /// A write of this device's snapshot, named before it goes out.
@@ -94,6 +103,13 @@ pub trait Replica {
     /// Fold another device's payload in; `true` when the replica changed. A payload that does not
     /// parse is an error, and that device's snapshot counts as unreadable.
     fn absorb(&mut self, payload: &[u8]) -> Result<bool, SyncError>;
+    /// What this version reads of a payload, a number that goes up with the version that starts
+    /// reading parts of it earlier ones ignored: 1 for a replica that does not say. Above the
+    /// number a state was saved with, the next run reads every snapshot again, at whatever etag:
+    /// an earlier version took them in and left those parts out.
+    fn reader(&self) -> u32 {
+        1
+    }
 }
 
 /// The space and this device in it.
@@ -178,6 +194,14 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
     let dir = devices_dir(space.prefix, keys.space_id());
     let own_path = format!("{dir}{own_tag}{EXTENSION}");
     let listing = remote.list(&dir).await?;
+    // A version that reads more of a payload than the one that took these snapshots in: every
+    // snapshot is read again, whatever its etag (the sequence numbers stay, for rollbacks), once.
+    let reader = replica.reader();
+    if state.reader < reader {
+        for seen in state.seen.values_mut() {
+            seen.etag = None;
+        }
+    }
     let mut outcome = Outcome::default();
     let mut own_meta: Option<ObjectMeta> = None;
     let mut others: Vec<String> = Vec::new();
@@ -310,6 +334,7 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
         outcome.wrote = true;
     }
 
+    state.reader = reader;
     outcome.devices.push(DeviceView { tag: own_tag, name, written_at_ms: state.own_written_at_ms, this_device: true });
     for tag in others {
         if let Some(seen) = state.seen.get(&tag) {
@@ -377,6 +402,12 @@ mod tests {
     struct Doc {
         items: Vec<Item>,
         tombstones: Vec<Tombstone>,
+        /// Items this version keeps apart; a version that does not read them leaves them out.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        notes: Vec<Item>,
+        /// This version reads `notes` (2) or not (1, as before notes existed).
+        #[serde(skip)]
+        reads_notes: bool,
     }
 
     impl Replica for Doc {
@@ -386,7 +417,15 @@ mod tests {
 
         fn absorb(&mut self, payload: &[u8]) -> Result<bool, SyncError> {
             let theirs: Doc = serde_json::from_slice(payload).map_err(|_| SyncError::Corrupted)?;
-            Ok(merge(&mut self.items, &mut self.tombstones, &theirs.items, &theirs.tombstones))
+            let mut changed = merge(&mut self.items, &mut self.tombstones, &theirs.items, &theirs.tombstones);
+            if self.reads_notes {
+                changed |= merge(&mut self.notes, &mut Vec::new(), &theirs.notes, &[]);
+            }
+            Ok(changed)
+        }
+
+        fn reader(&self) -> u32 {
+            if self.reads_notes { 2 } else { 1 }
         }
     }
 
@@ -640,6 +679,73 @@ mod tests {
         let outcome = laptop.sync(&remote, &keys, 100).await.unwrap();
         assert_eq!(outcome.unreadable, [tag]);
         assert!(outcome.wrote);
+    }
+
+    #[tokio::test]
+    async fn a_version_that_reads_more_takes_in_every_snapshot_once_more() {
+        for conditional in [true, false] {
+            let remote = MemoryRemote::new(conditional);
+            let keys = keys();
+            // The laptop, a newer version, writes notes that the phone's version does not read.
+            let mut laptop = Device::new(1, "Laptop");
+            laptop.doc.reads_notes = true;
+            laptop.doc.put(1, "GitHub", 10, 1);
+            laptop.doc.notes.push(Item { id: Uuid::from_bytes([9; 16]), stamp: Hlc { wall_ms: 10, counter: 0, device: 1 }, value: "note".into() });
+            laptop.sync(&remote, &keys, 100).await.unwrap();
+            let old = remote.object(&laptop.path(&keys)).unwrap();
+            laptop.doc.put(2, "Mail", 20, 1);
+            laptop.sync(&remote, &keys, 150).await.unwrap();
+            let mut phone = Device::new(2, "Phone");
+            phone.sync(&remote, &keys, 200).await.unwrap();
+            assert_eq!(phone.doc.values(), ["GitHub", "Mail"]);
+            assert!(phone.doc.notes.is_empty(), "this version leaves them out");
+            assert_eq!(phone.state.reader, 1);
+
+            // Updated in place: the laptop's snapshot is the one already seen, at the same etag,
+            // and the laptop writes nothing new. The first run takes it in again, notes and all.
+            phone.doc.reads_notes = true;
+            let calls = remote.calls().len();
+            let upgraded = phone.sync(&remote, &keys, 300).await.unwrap();
+            assert!(upgraded.changed, "{upgraded:?}");
+            assert_eq!(phone.doc.notes.len(), 1, "conditional={conditional}");
+            assert_eq!(phone.state.reader, 2);
+            assert!(remote.calls()[calls..].iter().any(|c| c.starts_with("get ")), "{:?}", &remote.calls()[calls..]);
+            // Once: the next run reads nothing again.
+            let calls = remote.calls().len();
+            assert!(!phone.sync(&remote, &keys, 400).await.unwrap().changed);
+            assert!(remote.calls()[calls..].iter().all(|c| !c.starts_with("get ")), "{:?}", &remote.calls()[calls..]);
+
+            // Reading again still refuses a rollback: the sequence numbers seen stay.
+            let mut older = Device::new(3, "Tablet");
+            older.sync(&remote, &keys, 500).await.unwrap();
+            older.state.reader = 0;
+            older.doc.reads_notes = true;
+            remote.set_object(&laptop.path(&keys), old.clone());
+            let outcome = older.sync(&remote, &keys, 600).await.unwrap();
+            assert_eq!(outcome.rolled_back, [keys.device_tag(1)], "conditional={conditional}");
+            assert_eq!(older.state.reader, 2);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_run_that_fails_reads_everything_again_next_time() {
+        let remote = MemoryRemote::new(true);
+        let keys = keys();
+        let mut laptop = Device::new(1, "Laptop");
+        laptop.doc.put(1, "GitHub", 10, 1);
+        laptop.sync(&remote, &keys, 100).await.unwrap();
+        let mut phone = Device::new(2, "Phone");
+        phone.sync(&remote, &keys, 200).await.unwrap();
+        phone.doc.reads_notes = true;
+        // The write at the end of the upgraded run fails: the next run still reads again.
+        phone.doc.put(3, "Bank", 30, 2);
+        remote.fail_next_put(SyncError::Network("cut".into()), false);
+        assert!(phone.sync(&remote, &keys, 300).await.is_err());
+        assert_eq!(phone.state.reader, 1, "only a run that ends well moves it");
+        let calls = remote.calls().len();
+        phone.sync(&remote, &keys, 400).await.unwrap();
+        assert!(remote.calls()[calls..].iter().any(|c| c.starts_with("get ")), "{:?}", &remote.calls()[calls..]);
+        assert_eq!(phone.state.reader, 2);
     }
 
     #[tokio::test]

@@ -14,7 +14,7 @@ use std::time::Duration;
 use data_encoding::BASE64;
 use lockra_otp::{OtpKind, base32, hotp, totp_window, uri};
 use lockra_sync::{
-    Invite, Outcome as SyncOutcome, RemoteStore, Space, SpaceAccess, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, devices_dir, find_space,
+    Invite, Outcome as SyncOutcome, RemoteStore, Space, SpaceAccess, SpaceKeys, StorageConfig, SyncError, SyncKey, SyncState, devices_dir, find_space, merge,
     open_keyring, open_space, remove_device, seal_keyring, step, step_with,
 };
 use lockra_transfer::{Item, Origin, detect, microsoft, qr, text};
@@ -26,7 +26,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::backup::{auto_file_name, pre_restore_file_name, prune};
-use crate::entry::{Entry, EntryDraft, EntryPatch, PinnedGroup, VaultData, clean_mark, clean_name, random_device};
+use crate::entry::{Entry, EntryDraft, EntryPatch, PinnedGroup, VAULT_DATA_FORMAT, VaultData, clean_mark, clean_name, random_device};
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
@@ -34,12 +34,12 @@ use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, Keych
 use crate::settings::{Settings, SettingsStore, SortOrder};
 use crate::sync::{
     Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_FOLDER_SETTLE, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND,
-    SyncLocal, Working, config_error, device_name, merge_entries, storage_view, sync_error,
+    SyncLocal, Working, config_error, device_name, storage_view, sync_error,
 };
 use crate::ui::{
-    BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, ImportSource,
-    InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus,
-    SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, Features,
+    ImportSource, InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, SyncInvite, SyncKeyView, SyncSpaceView,
+    SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
 
@@ -68,6 +68,9 @@ pub struct CoreConfig {
     pub kdf: KdfCost,
     /// The host.
     pub platform: Platform,
+    /// What this build offers of what is still being finished ([`Features::default`] for a
+    /// shell: everything in a debug build, only what shipped in a release build).
+    pub features: Features,
 }
 
 /// The platform services.
@@ -1320,10 +1323,16 @@ impl Core {
     pub async fn restore_commit(&self, password: Zeroizing<String>, mode: RestoreMode) -> CoreResult<()> {
         let bytes = self.lock().restore.as_ref().map(|r| r.bytes.clone()).ok_or(ErrorCode::NoRestore)?;
         let opened = blocking(move || Ok(Sealed::open_with_password(&bytes, password.as_bytes())?)).await?;
-        let data = VaultData::open(&opened.payload)?;
+        let (data, source_format) = VaultData::open_versioned(&opened.payload)?;
         let now = self.now_ms();
         let notice = {
             let mut st = self.lock();
+            // A merge goes through the import preview, which does not show logins yet: a backup
+            // with logins is refused rather than half restored, and stays open for a restore that
+            // replaces.
+            if mode == RestoreMode::Merge && matches!(st.phase, PhaseState::Unlocked(_)) && !(data.items.is_empty() && data.item_tombstones.is_empty()) {
+                return Err(ErrorCode::FeatureUnavailable.into());
+            }
             let restore = st.restore.take().ok_or(ErrorCode::NoRestore)?;
             match &mut st.phase {
                 PhaseState::NoVault => {
@@ -1351,6 +1360,14 @@ impl Core {
                 }
                 PhaseState::Unlocked(session) => match mode {
                     RestoreMode::Merge => {
+                        // The site rules join quietly, the later version of each winning; the
+                        // backup's deletions are left out, as its accounts' are.
+                        let before = session.data.site_rules.clone();
+                        if merge(&mut session.data.site_rules, &mut session.data.site_rule_tombstones, &data.site_rules, &[]) {
+                            session.data.observe_stamps();
+                            self.save(&mut st, true, move |s| s.data.site_rules = before)?;
+                        }
+                        let session = unlocked_mut(&mut st)?;
                         session.import.get_or_insert_with(ImportSession::default).add_backup(&ImportSource::File { name: restore.name }, data.entries);
                         None
                     }
@@ -1361,6 +1378,13 @@ impl Core {
                         // A change made now: this device's part stays, and a sync space ends up
                         // with the backup's accounts.
                         session.data.replace_entries(data.entries, &data.tombstones, now);
+                        // A backup of format 3 holds the logins and the site rules too; one of
+                        // format 2 (from before them, or from a vault without them) leaves this
+                        // vault's alone.
+                        if source_format >= VAULT_DATA_FORMAT {
+                            session.data.replace_items(&data.items, &data.item_tombstones, now);
+                            session.data.replace_site_rules(&data.site_rules, &data.site_rule_tombstones, now);
+                        }
                         let entries = u32::try_from(session.data.entries.len()).unwrap_or(u32::MAX);
                         self.save(&mut st, true, move |s| s.data = before)?;
                         Some(Notice::Restored { entries })
@@ -1572,7 +1596,7 @@ impl Core {
             if session.data.sync().is_some() {
                 return Err(ErrorCode::SyncAlreadyOn.into());
             }
-            let working = Working { entries: session.data.entries.clone(), tombstones: session.data.tombstones.clone() };
+            let working = Working::of(&session.data);
             (session.sealed.clone(), working, session.data.device())
         };
         let vault_id = sealed.vault_id();
@@ -2312,7 +2336,7 @@ impl Core {
                 device_name: sync.device_name.clone(),
                 keyring: sync.keyring()?,
                 state: sync.state.clone(),
-                working: Working { entries: session.data.entries.clone(), tombstones: session.data.tombstones.clone() },
+                working: Working::of(&session.data),
             };
             (job, sync.storage.clone())
         };
@@ -2356,8 +2380,12 @@ impl Core {
                 return Err(SyncError::Interrupted);
             }
             let before = session.data.clone();
-            let changed = merge_entries(&mut session.data.entries, &mut session.data.tombstones, &working.entries, &working.tombstones);
-            let brought = if changed { Brought::between(&before.entries, &session.data.entries) } else { Brought::default() };
+            let changed = working.fold_into(&mut session.data);
+            let mut brought = if changed { Brought::between(&before.entries, &session.data.entries) } else { Brought::default() };
+            // Logins are told of only where the interface shows them.
+            if changed && self.shared.config.features.passwords {
+                brought.logins = Brought::logins_between(&before.items, &session.data.items);
+            }
             if changed {
                 session.data.observe_stamps();
             }
@@ -2530,6 +2558,7 @@ impl Core {
         UiState {
             app_version: self.shared.config.app_version.clone(),
             platform: self.shared.config.platform,
+            features: self.shared.config.features,
             phase,
             data_dir: self.shared.config.data_dir.display().to_string(),
             lock: LockView {
@@ -2692,6 +2721,29 @@ impl Core {
             let _ = self.start_update(UpdateRun::Auto { install_version });
         }
         self.push_codes();
+    }
+}
+
+/// Reaching into the unlocked vault's payload, for the tests of what syncs, restores and opens
+/// before the commands that change logins exist.
+#[cfg(test)]
+impl Core {
+    /// Change the unlocked vault's payload and write it, as a command does.
+    pub(crate) fn edit_data(&self, change: impl FnOnce(&mut VaultData)) {
+        {
+            let mut st = self.lock();
+            let PhaseState::Unlocked(session) = &mut st.phase else { panic!("the vault is locked") };
+            change(&mut session.data);
+            self.save(&mut st, true, |_| {}).expect("the vault is written");
+        }
+        self.changed();
+    }
+
+    /// A copy of the unlocked vault's payload.
+    pub(crate) fn data(&self) -> VaultData {
+        let st = self.lock();
+        let PhaseState::Unlocked(session) = &st.phase else { panic!("the vault is locked") };
+        session.data.clone()
     }
 }
 
