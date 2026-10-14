@@ -46,6 +46,18 @@
       "code": "feature_unavailable"
     },
     {
+      "code": "item_not_found"
+    },
+    {
+      "code": "item_invalid"
+    },
+    {
+      "code": "item_read_only"
+    },
+    {
+      "code": "generator_rules_unsatisfiable"
+    },
+    {
       "code": "internal"
     }
   ],
@@ -70,10 +82,149 @@
     "session": "0f3f1a1e-8d4b-4c8e-9f7a-000000000064",
     "target": "google"
   },
+  "generated": {
+    "bits": 128,
+    "password": "q7#Lm2vX9!pRt4zW8@kD",
+    "rules_met": true
+  },
+  "generator_history": [
+    {
+      "at_ms": 1789999940000,
+      "password": "q7#Lm2vX9!pRt4zW8@kD",
+      "site": "apple.com"
+    },
+    {
+      "at_ms": 1789996400000,
+      "password": "plaza-ribbon-onward-lucky-cosmic-fable",
+      "site": null
+    }
+  ],
   "import_outcome": {
     "added": 3,
     "replaced": 1,
     "skipped": 2
+  },
+  "item_added": {
+    "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014"
+  },
+  "item_revealed": {
+    "fields": [
+      {
+        "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000015",
+        "value": "4242"
+      }
+    ],
+    "history": [
+      {
+        "conflict": true,
+        "field": "0f3f1a1e-8d4b-4c8e-9f7a-000000000016",
+        "id": "1234567890",
+        "set_at_ms": 1789992800000,
+        "value": "from the phone"
+      },
+      {
+        "conflict": false,
+        "field": "0f3f1a1e-8d4b-4c8e-9f7a-000000000016",
+        "id": "987654321",
+        "set_at_ms": 1789913600000,
+        "value": "the first one"
+      }
+    ],
+    "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+    "notes": "recovery codes in the safe",
+    "password": "correct horse battery staple"
+  },
+  "item_revealed_part": {
+    "fields": [],
+    "history": null,
+    "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+    "notes": null,
+    "password": "correct horse battery staple"
+  },
+  "items": [
+    {
+      "autofill": {
+        "auto_submit": "on",
+        "fill_otp": "default",
+        "on_page_load": "off"
+      },
+      "color": "purple",
+      "conflicts": [
+        {
+          "field": "0f3f1a1e-8d4b-4c8e-9f7a-000000000016",
+          "label": "",
+          "purpose": "password"
+        }
+      ],
+      "created_at_ms": 1789913600000,
+      "email": "octocat@example.com",
+      "favorite": true,
+      "fields": [
+        {
+          "has_value": true,
+          "hidden": true,
+          "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000015",
+          "label": "PIN",
+          "page_field": "pin",
+          "value": null
+        },
+        {
+          "has_value": true,
+          "hidden": false,
+          "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000017",
+          "label": "Customer no.",
+          "page_field": null,
+          "value": "C-77"
+        }
+      ],
+      "group": "Dev",
+      "has_notes": true,
+      "has_password": true,
+      "history_count": 2,
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+      "last_used_at_ms": 1789999940000,
+      "mark": "GH",
+      "protection": "confirm",
+      "source": "bitwarden",
+      "tags": [
+        "work"
+      ],
+      "title": "GitHub",
+      "totp_entry": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "updated_at_ms": 1789996400000,
+      "urls": [
+        {
+          "url": "https://github.com/login"
+        },
+        {
+          "matching": "host",
+          "url": "https://gist.github.com/"
+        }
+      ],
+      "username": "octocat"
+    },
+    {
+      "created_at_ms": 1790000000000,
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000018",
+      "title": "Router",
+      "updated_at_ms": 1790000000000
+    },
+    {
+      "created_at_ms": 1790000000000,
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000019",
+      "kind": "bank_card",
+      "read_only": true,
+      "title": "Card",
+      "updated_at_ms": 1790000000000
+    }
+  ],
+  "password_score": {
+    "score": 1,
+    "warning": "common"
+  },
+  "password_score_strong": {
+    "score": 4,
+    "warning": null
   },
   "revealed": {
     "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",

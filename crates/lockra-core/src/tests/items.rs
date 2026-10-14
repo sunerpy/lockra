@@ -49,7 +49,7 @@ fn passwords(h: &Harness) -> Vec<String> {
 }
 
 /// A desktop that set up a space on a relay and a phone that joined it, both synced once.
-async fn two_devices() -> (Harness, Harness) {
+pub(super) async fn two_devices() -> (Harness, Harness) {
     let transport = Arc::new(FakeTransport::default());
     let storage = StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() };
     let desktop = harness_on(FakeUpdater::default(), Arc::clone(&transport) as Arc<dyn SyncTransport>);

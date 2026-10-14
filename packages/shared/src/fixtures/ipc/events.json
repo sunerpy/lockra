@@ -22,6 +22,12 @@
         "retry_at_ms": 1790000002000
       },
       "entries": [],
+      "items_rev": 8,
+      "items_count": 0,
+      "site_rules": [],
+      "generator": {
+        "history_count": 0
+      },
       "collapsed_groups": [],
       "entry_order": [],
       "group_order": [],
@@ -47,7 +53,17 @@
         },
         "auto_update": false,
         "default_unlock": "biometric",
-        "biometric_offer": true
+        "biometric_offer": true,
+        "generator": {
+          "kind": "password",
+          "length": 20,
+          "lower": true,
+          "upper": true,
+          "digits": true,
+          "symbols": true,
+          "avoid_ambiguous": false,
+          "exclude": ""
+        }
       },
       "import": null,
       "backup": {
@@ -84,6 +100,24 @@
     "notice": {
       "type": "copied",
       "entry_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+      "clear_after_s": null
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "item_copied",
+      "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+      "part": "password",
+      "clear_after_s": 30
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "item_copied",
+      "item_id": null,
+      "part": "generated",
       "clear_after_s": null
     }
   },

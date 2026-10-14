@@ -14,8 +14,13 @@
     "features": {
       "passwords": false
     },
+    "generator": {
+      "history_count": 0
+    },
     "group_order": [],
     "import": null,
+    "items_count": 0,
+    "items_rev": 8,
     "lock": {
       "device_unlock": {
         "available": true,
@@ -48,6 +53,16 @@
       "density": "default",
       "follow_system_theme": true,
       "font_size_px": 14,
+      "generator": {
+        "avoid_ambiguous": false,
+        "digits": true,
+        "exclude": "",
+        "kind": "password",
+        "length": 20,
+        "lower": true,
+        "symbols": true,
+        "upper": true
+      },
       "group_codes": true,
       "hide_codes": false,
       "locale": "system",
@@ -55,6 +70,7 @@
       "sort": "name",
       "theme": "glass"
     },
+    "site_rules": [],
     "sync": {
       "space": null
     },
@@ -83,8 +99,13 @@
     "features": {
       "passwords": true
     },
+    "generator": {
+      "history_count": 0
+    },
     "group_order": [],
     "import": null,
+    "items_count": 0,
+    "items_rev": 8,
     "lock": {
       "device_unlock": {
         "available": true,
@@ -121,6 +142,16 @@
       "density": "default",
       "follow_system_theme": true,
       "font_size_px": 14,
+      "generator": {
+        "avoid_ambiguous": false,
+        "digits": true,
+        "exclude": "",
+        "kind": "password",
+        "length": 20,
+        "lower": true,
+        "symbols": true,
+        "upper": true
+      },
       "group_codes": true,
       "hide_codes": false,
       "locale": "system",
@@ -128,6 +159,7 @@
       "sort": "name",
       "theme": "glass"
     },
+    "site_rules": [],
     "sync": {
       "space": null
     },
@@ -153,8 +185,13 @@
     "features": {
       "passwords": false
     },
+    "generator": {
+      "history_count": 0
+    },
     "group_order": [],
     "import": null,
+    "items_count": 0,
+    "items_rev": 8,
     "lock": {
       "device_unlock": {
         "available": true,
@@ -187,6 +224,16 @@
       "density": "default",
       "follow_system_theme": true,
       "font_size_px": 14,
+      "generator": {
+        "avoid_ambiguous": false,
+        "digits": true,
+        "exclude": "",
+        "kind": "password",
+        "length": 20,
+        "lower": true,
+        "symbols": true,
+        "upper": true
+      },
       "group_codes": true,
       "hide_codes": false,
       "locale": "system",
@@ -194,6 +241,7 @@
       "sort": "name",
       "theme": "glass"
     },
+    "site_rules": [],
     "sync": {
       "space": null
     },
@@ -323,6 +371,9 @@
     ],
     "features": {
       "passwords": true
+    },
+    "generator": {
+      "history_count": 3
     },
     "group_order": [
       "Work",
@@ -511,6 +562,8 @@
         }
       ]
     },
+    "items_count": 2,
+    "items_rev": 7,
     "lock": {
       "device_unlock": {
         "available": true,
@@ -545,6 +598,13 @@
       "density": "compact",
       "follow_system_theme": false,
       "font_size_px": 13,
+      "generator": {
+        "capitalize": true,
+        "kind": "passphrase",
+        "number": true,
+        "separator": " ",
+        "words": 5
+      },
       "group_codes": false,
       "hide_codes": true,
       "locale": "zh-cn",
@@ -552,6 +612,23 @@
       "sort": "recent",
       "theme": "glass_night"
     },
+    "site_rules": [
+      {
+        "domains": [
+          "bank.example"
+        ],
+        "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000001e",
+        "kind": "never_save"
+      },
+      {
+        "domains": [
+          "example.com",
+          "example.co.uk"
+        ],
+        "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000001f",
+        "kind": "equivalent"
+      }
+    ],
     "sync": {
       "space": {
         "device_name": "Desktop",

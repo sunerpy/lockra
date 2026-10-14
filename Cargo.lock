@@ -2835,6 +2835,7 @@ version = "0.0.0"
 dependencies = [
  "data-encoding",
  "image",
+ "lockra-autofill",
  "lockra-otp",
  "lockra-sync",
  "lockra-transfer",

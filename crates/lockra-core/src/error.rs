@@ -136,6 +136,15 @@ pub enum ErrorCode {
     SyncDataCorrupted,
     /// The space was written by a newer Lockra.
     SyncUnsupported,
+    /// No login with that id (or no field, or no earlier value, with that id in it).
+    ItemNotFound,
+    /// A login, a field, a URL or a site rule that is not one: too long, too many, empty where
+    /// something is needed.
+    ItemInvalid,
+    /// The login holds what a later Lockra wrote; this version shows it and does not change it.
+    ItemReadOnly,
+    /// No password meets the site's rules with these generator options.
+    GeneratorRulesUnsatisfiable,
     /// This build does not offer it yet: password management before it ships, or a backup with
     /// logins merged before the preview can show them (a restore that replaces still takes them).
     FeatureUnavailable,

@@ -18,6 +18,7 @@ fakes = []
 
 [dependencies]
 data-encoding.workspace = true
+lockra-autofill.workspace = true
 lockra-otp.workspace = true
 lockra-sync.workspace = true
 lockra-transfer.workspace = true

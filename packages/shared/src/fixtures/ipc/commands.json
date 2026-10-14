@@ -198,6 +198,13 @@
         "density": "compact",
         "follow_system_theme": false,
         "font_size_px": 13,
+        "generator": {
+          "capitalize": true,
+          "kind": "passphrase",
+          "number": true,
+          "separator": " ",
+          "words": 5
+        },
         "group_codes": false,
         "hide_codes": true,
         "locale": "zh-cn",
@@ -277,6 +284,151 @@
     },
     {
       "command": "sync_disable"
+    },
+    {
+      "command": "items_list"
+    },
+    {
+      "command": "item_add",
+      "draft": {
+        "autofill": {
+          "auto_submit": "on",
+          "fill_otp": "default",
+          "on_page_load": "off"
+        },
+        "color": "purple",
+        "email": "octocat@example.com",
+        "favorite": true,
+        "fields": [
+          {
+            "hidden": true,
+            "label": "PIN",
+            "page_field": "pin",
+            "value": {
+              "type": "set",
+              "value": "4242"
+            }
+          }
+        ],
+        "group": "Dev",
+        "mark": "GH",
+        "notes": "recovery codes in the safe",
+        "password": {
+          "type": "generated"
+        },
+        "protection": "confirm",
+        "tags": [
+          "work"
+        ],
+        "title": "GitHub",
+        "totp_entry": "0f3f1a1e-8d4b-4c8e-9f7a-000000000001",
+        "urls": [
+          {
+            "matching": "domain",
+            "url": "https://github.com/login"
+          },
+          {
+            "matching": "regex",
+            "url": "^https://github\\.com/session"
+          }
+        ],
+        "username": "octocat"
+      }
+    },
+    {
+      "command": "item_update",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+      "patch": {
+        "fields": [
+          {
+            "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000015",
+            "remove": true
+          }
+        ],
+        "notes": {
+          "type": "clear"
+        },
+        "password": {
+          "type": "set",
+          "value": "new password"
+        },
+        "settle": [
+          {
+            "field": "0f3f1a1e-8d4b-4c8e-9f7a-000000000016",
+            "take": "1234567890"
+          }
+        ],
+        "title": "GitHub (work)",
+        "totp_entry": null
+      }
+    },
+    {
+      "command": "item_delete",
+      "ids": [
+        "0f3f1a1e-8d4b-4c8e-9f7a-000000000014"
+      ]
+    },
+    {
+      "command": "item_reveal",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+      "parts": {
+        "fields": [
+          "0f3f1a1e-8d4b-4c8e-9f7a-000000000015"
+        ],
+        "history": true,
+        "notes": true,
+        "password": true
+      },
+      "password": "a new password"
+    },
+    {
+      "command": "item_copy",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+      "part": {
+        "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000015",
+        "type": "field"
+      },
+      "reason": "copy the PIN"
+    },
+    {
+      "command": "generator_generate",
+      "domain": "apple.com",
+      "options": {
+        "avoid_ambiguous": true,
+        "digits": true,
+        "exclude": "0O",
+        "kind": "password",
+        "length": 24,
+        "lower": true,
+        "symbols": false,
+        "upper": true
+      }
+    },
+    {
+      "command": "generator_copy"
+    },
+    {
+      "command": "generator_history_reveal",
+      "reason": "show generated passwords"
+    },
+    {
+      "command": "generator_history_clear"
+    },
+    {
+      "command": "password_score",
+      "password": "correct horse battery staple"
+    },
+    {
+      "command": "site_rule_add",
+      "domains": [
+        "example.com",
+        "example.co.uk"
+      ],
+      "kind": "equivalent"
+    },
+    {
+      "command": "site_rule_remove",
+      "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000001e"
     }
   ],
   "phone_commands": [

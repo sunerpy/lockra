@@ -30,6 +30,7 @@ use crate::entry::{Entry, EntryDraft, EntryPatch, PinnedGroup, VAULT_DATA_FORMAT
 use crate::error::{CoreError, CoreResult, ErrorCode};
 use crate::export::{self, EXPORT_IDLE, ExportSession};
 use crate::import::{AwaitingBackup, Choice, ImportSession, Outcome};
+use crate::logins::SiteRuleView;
 use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, KeychainStatus, SecretStore, StorageWatch, SyncTransport, Updater};
 use crate::settings::{Settings, SettingsStore, SortOrder};
 use crate::sync::{
@@ -38,8 +39,8 @@ use crate::sync::{
 };
 use crate::ui::{
     BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget, Features,
-    ImportSource, InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, SyncInvite, SyncKeyView, SyncSpaceView,
-    SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    GeneratorStatus, ImportSource, InstallMethod, JoinSource, LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, SyncInvite, SyncKeyView,
+    SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use crate::update::{Pending, ProgressGate, UpdateRun, UpdateState, clear_marker, failure_code, read_marker, write_marker};
 
@@ -151,6 +152,9 @@ struct State {
     /// The watch on the storage the unlocked space is kept in, where the storage can tell (a
     /// folder of this computer, a relay).
     storage_watch: Option<SpaceWatch>,
+    /// Goes up whenever the logins or the site rules change (an edit, a sync, a restore) and as
+    /// the vault opens and locks: the webview asks for `items_list` again when it moves.
+    items_rev: u64,
 }
 
 /// A watch on a space's storage, for that space and storage.
@@ -205,6 +209,15 @@ struct Session {
     data: VaultData,
     import: Option<ImportSession>,
     exports: Vec<ExportSession>,
+    /// The password the generator made last, and the site it was made for: what a login saved
+    /// with the generated password takes, so the webview need not send it back.
+    generated: Option<(Zeroizing<String>, Option<String>)>,
+}
+
+impl Session {
+    fn new(sealed: Sealed, data: VaultData) -> Self {
+        Self { sealed, data, import: None, exports: Vec::new(), generated: None }
+    }
 }
 
 struct Restore {
@@ -251,6 +264,7 @@ impl Core {
             foreground: true,
             chosen_folder: None,
             storage_watch: None,
+            items_rev: 0,
         };
         let (events, _) = broadcast::channel(64);
         let shared =
@@ -310,12 +324,13 @@ impl Core {
             if !matches!(st.phase, PhaseState::NoVault) {
                 return Err(ErrorCode::VaultExists.into());
             }
-            let session = Session { sealed, data: VaultData::new(), import: None, exports: Vec::new() };
+            let session = Session::new(sealed, VaultData::new());
             self.write_vault(&session)?;
             st.vault_id = Some(session.sealed.vault_id());
             st.device_slot = false;
             st.phase = PhaseState::Unlocked(Box::new(session));
             st.last_activity = Instant::now();
+            touch_items(&mut st);
         }
         self.changed();
         Ok(())
@@ -497,7 +512,8 @@ impl Core {
             if data.sync().is_some() {
                 st.sync.at = Some(Instant::now());
             }
-            st.phase = PhaseState::Unlocked(Box::new(Session { sealed: opened.sealed, data, import: None, exports: Vec::new() }));
+            st.phase = PhaseState::Unlocked(Box::new(Session::new(opened.sealed, data)));
+            touch_items(&mut st);
         }
         self.changed();
         Ok(())
@@ -517,6 +533,7 @@ impl Core {
             }
             if was_unlocked {
                 st.phase = PhaseState::Locked;
+                touch_items(&mut st);
                 st.auto_backup_at = None;
                 // A run in progress finds the vault locked and keeps nothing.
                 st.sync = SyncRuntime { busy: st.sync.busy, ..SyncRuntime::default() };
@@ -1338,7 +1355,7 @@ impl Core {
                 PhaseState::NoVault => {
                     fs::create_dir_all(&self.shared.config.data_dir)?;
                     restrict_dir(&self.shared.config.data_dir);
-                    let session = Session { sealed: opened.sealed, data, import: None, exports: Vec::new() };
+                    let session = Session::new(opened.sealed, data);
                     if let Err(error) = self.write_vault(&session) {
                         st.restore = Some(restore);
                         return Err(error);
@@ -1352,6 +1369,7 @@ impl Core {
                     }
                     st.phase = PhaseState::Unlocked(Box::new(session));
                     st.last_activity = Instant::now();
+                    touch_items(&mut st);
                     Some(Notice::Restored { entries })
                 }
                 PhaseState::Locked => {
@@ -1366,6 +1384,7 @@ impl Core {
                         if merge(&mut session.data.site_rules, &mut session.data.site_rule_tombstones, &data.site_rules, &[]) {
                             session.data.observe_stamps();
                             self.save(&mut st, true, move |s| s.data.site_rules = before)?;
+                            touch_items(&mut st);
                         }
                         let session = unlocked_mut(&mut st)?;
                         session.import.get_or_insert_with(ImportSession::default).add_backup(&ImportSource::File { name: restore.name }, data.entries);
@@ -1387,6 +1406,7 @@ impl Core {
                         }
                         let entries = u32::try_from(session.data.entries.len()).unwrap_or(u32::MAX);
                         self.save(&mut st, true, move |s| s.data = before)?;
+                        touch_items(&mut st);
                         Some(Notice::Restored { entries })
                     }
                 },
@@ -1771,12 +1791,13 @@ impl Core {
             let cache = (space.space_id, space.storage.clone(), remote);
             let mut data = VaultData::new();
             data.local_mut().sync = Some(space);
-            let session = Session { sealed, data, import: None, exports: Vec::new() };
+            let session = Session::new(sealed, data);
             self.write_vault(&session)?;
             st.vault_id = Some(session.sealed.vault_id());
             st.device_slot = false;
             st.phase = PhaseState::Unlocked(Box::new(session));
             st.last_activity = Instant::now();
+            touch_items(&mut st);
             st.sync.remote = Some(cache);
             st.sync.at = Some(Instant::now());
         }
@@ -2407,6 +2428,10 @@ impl Core {
             }
             if changed {
                 self.schedule_auto_backup(&mut st);
+                let PhaseState::Unlocked(session) = &st.phase else { return Err(SyncError::Interrupted) };
+                if session.data.items != before.items || session.data.site_rules != before.site_rules {
+                    touch_items(&mut st);
+                }
             }
             (changed, brought)
         };
@@ -2578,6 +2603,16 @@ impl Core {
                 retry_at_ms: st.retry_at_ms.filter(|at| *at > now),
             },
             entries,
+            items_rev: st.items_rev,
+            items_count: match &st.phase {
+                PhaseState::Unlocked(session) => u32::try_from(session.data.items.len()).unwrap_or(u32::MAX),
+                _ => 0,
+            },
+            site_rules: match &st.phase {
+                PhaseState::Unlocked(session) => session.data.site_rules.iter().map(SiteRuleView::of).collect(),
+                _ => Vec::new(),
+            },
+            generator: GeneratorStatus { history_count: items::generator_history_count(st) },
             collapsed_groups,
             entry_order,
             group_order,
@@ -2947,6 +2982,15 @@ fn unlocked(st: &State) -> CoreResult<&Session> {
         PhaseState::Locked => Err(ErrorCode::Locked.into()),
         PhaseState::NoVault => Err(ErrorCode::NoVault.into()),
     }
+}
+
+mod items;
+
+pub use items::{GENERATOR_HISTORY_DAYS, GENERATOR_HISTORY_MAX};
+
+/// The logins or the site rules changed, or the vault opened or locked.
+fn touch_items(st: &mut State) {
+    st.items_rev = st.items_rev.wrapping_add(1);
 }
 
 fn unlocked_mut(st: &mut State) -> CoreResult<&mut Session> {

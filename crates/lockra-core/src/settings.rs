@@ -5,6 +5,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use lockra_autofill::GeneratorOptions;
 use serde::{Deserialize, Serialize};
 
 /// The palettes of the design system (DESIGN.md). Following the system's scheme switches within a
@@ -183,6 +184,8 @@ pub struct Settings {
     /// off on this device (the phone's fingerprint). 「暂不」, or the switch turned off when the
     /// vault was made, turns the offer off; the check stays in Settings › Security.
     pub biometric_offer: bool,
+    /// What the password generator makes unless told otherwise: the last options chosen.
+    pub generator: GeneratorOptions,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -216,6 +219,7 @@ impl Default for Settings {
             auto_update: false,
             default_unlock: DefaultUnlock::default(),
             biometric_offer: true,
+            generator: GeneratorOptions::default(),
         }
     }
 }

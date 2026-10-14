@@ -11,7 +11,10 @@
 
 use lockra_core::settings::Settings;
 use lockra_core::ui::{ExportTarget, JoinSource};
-use lockra_core::{Choice, Core, CoreError, EntryDraft, EntryPatch, PinnedGroup, RestoreMode, StorageConfig};
+use lockra_core::{
+    Choice, CopyPart, Core, CoreError, EntryDraft, EntryPatch, GeneratorOptions, ItemDraft, ItemPatch, PinnedGroup, RestoreMode, RevealParts, SiteRuleKind,
+    StorageConfig,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -294,11 +297,97 @@ pub enum UiCommand {
     SyncNow,
     /// Turn sync off on this device.
     SyncDisable,
+    /// Every login, without its secrets.
+    ItemsList,
+    /// Add a login; answers with its id.
+    ItemAdd {
+        /// The login.
+        draft: ItemDraft,
+    },
+    /// Change a login.
+    ItemUpdate {
+        /// Which.
+        id: Uuid,
+        /// What changes.
+        patch: ItemPatch,
+    },
+    /// Delete logins.
+    ItemDelete {
+        /// Which.
+        ids: Vec<Uuid>,
+    },
+    /// Show a login's secrets (a secret answer). A login of the `confirm` level needs the master
+    /// password, or without it the biometric check that unlocks this vault.
+    ItemReveal {
+        /// Which.
+        id: Uuid,
+        /// What to show.
+        parts: RevealParts,
+        /// The master password.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
+    },
+    /// Put a part of a login on the clipboard (Rust writes it, and clears it).
+    ItemCopy {
+        /// Which.
+        id: Uuid,
+        /// What.
+        part: CopyPart,
+        /// The master password, for a secret of a `confirm` login.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
+    },
+    /// Make a password (a secret answer); the core keeps it for `generator_copy` and a login saved
+    /// with it.
+    GeneratorGenerate {
+        /// What to make.
+        options: GeneratorOptions,
+        /// The site it is for, whose rules it keeps to when Lockra knows them.
+        #[serde(default)]
+        domain: Option<String>,
+    },
+    /// Put the generator's last password on the clipboard, and into its history.
+    GeneratorCopy,
+    /// The generator's history (a secret answer), after the master password or the biometric
+    /// check.
+    GeneratorHistoryReveal {
+        /// The master password.
+        #[serde(default)]
+        password: Option<Zeroizing<String>>,
+        /// The biometric prompt's words, without a password.
+        #[serde(default)]
+        reason: Option<String>,
+    },
+    /// Forget the generator's history.
+    GeneratorHistoryClear,
+    /// How strong a password is.
+    PasswordScore {
+        /// The password.
+        password: Zeroizing<String>,
+    },
+    /// Add a site rule.
+    SiteRuleAdd {
+        /// Never save, never fill, or equivalent domains.
+        kind: SiteRuleKind,
+        /// The domains.
+        domains: Vec<String>,
+    },
+    /// Remove a site rule.
+    SiteRuleRemove {
+        /// Which.
+        id: Uuid,
+    },
 }
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 50] = [
+pub const COMMANDS: [&str; 63] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -349,6 +438,19 @@ pub const COMMANDS: [&str; 50] = [
     "sync_remove_device",
     "sync_now",
     "sync_disable",
+    "items_list",
+    "item_add",
+    "item_update",
+    "item_delete",
+    "item_reveal",
+    "item_copy",
+    "generator_generate",
+    "generator_copy",
+    "generator_history_reveal",
+    "generator_history_clear",
+    "password_score",
+    "site_rule_add",
+    "site_rule_remove",
 ];
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
@@ -385,7 +487,16 @@ pub const PHONE_COMMANDS: [&str; 11] = [
 impl UiCommand {
     /// Whether the answer carries a secret (the shell turns screen-capture protection on).
     pub fn shows_secret(&self) -> bool {
-        matches!(self, Self::EntryReveal { .. } | Self::ExportStart { .. } | Self::SyncInvite { .. } | Self::SyncKeyReveal { .. })
+        matches!(
+            self,
+            Self::EntryReveal { .. }
+                | Self::ExportStart { .. }
+                | Self::SyncInvite { .. }
+                | Self::SyncKeyReveal { .. }
+                | Self::ItemReveal { .. }
+                | Self::GeneratorGenerate { .. }
+                | Self::GeneratorHistoryReveal { .. }
+        )
     }
 
     /// Whether the command ends every secret view (the shell turns the protection off).
@@ -465,6 +576,19 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::SyncRemoveDevice { tag } => unit(core.sync_remove_device(&tag).await)?,
         UiCommand::SyncNow => unit(core.sync_now())?,
         UiCommand::SyncDisable => unit(core.sync_disable())?,
+        UiCommand::ItemsList => json!(core.items_list()?),
+        UiCommand::ItemAdd { draft } => json!({ "id": core.item_add(draft)? }),
+        UiCommand::ItemUpdate { id, patch } => unit(core.item_update(id, patch))?,
+        UiCommand::ItemDelete { ids } => unit(core.item_delete(&ids))?,
+        UiCommand::ItemReveal { id, parts, password, reason } => json!(core.item_reveal(id, parts, password, reason).await?),
+        UiCommand::ItemCopy { id, part, password, reason } => unit(core.item_copy(id, part, password, reason).await)?,
+        UiCommand::GeneratorGenerate { options, domain } => json!(core.generator_generate(&options, domain)?),
+        UiCommand::GeneratorCopy => unit(core.generator_copy())?,
+        UiCommand::GeneratorHistoryReveal { password, reason } => json!(core.generator_history_reveal(password, reason).await?),
+        UiCommand::GeneratorHistoryClear => unit(core.generator_history_clear())?,
+        UiCommand::PasswordScore { password } => json!(core.password_score(&password)?),
+        UiCommand::SiteRuleAdd { kind, domains } => unit(core.site_rule_add(kind, &domains))?,
+        UiCommand::SiteRuleRemove { id } => unit(core.site_rule_remove(id))?,
     })
 }
 

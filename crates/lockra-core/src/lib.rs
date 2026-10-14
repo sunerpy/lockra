@@ -14,6 +14,7 @@ mod export;
 mod import;
 mod item;
 mod lenient;
+mod logins;
 pub mod ports;
 mod session;
 pub mod settings;
@@ -37,9 +38,15 @@ pub use item::{
     UrlRule, VaultItem,
 };
 pub use lenient::Lenient;
+pub use lockra_autofill::{GeneratorOptions, PassphraseOptions, PasswordOptions};
 pub use lockra_sync::StorageConfig;
 pub use lockra_vault::KdfCost;
+pub use logins::{
+    AutofillChoice, ConflictView, CopyPart, FieldChange, FieldView, GeneratedPastView, GeneratedView, ItemDraft, ItemPatch, ItemRevealed, ItemView,
+    MAX_RULE_DOMAINS, MAX_TAGS, MAX_VALUE_BYTES, PastView, RevealParts, RevealedField, ScoreView, SecretChange, Settle, SiteRuleView, UrlDraft, UrlView,
+};
 pub use session::{AUTO_BACKUP_DEBOUNCE, Core, CoreConfig, FREE_ATTEMPTS, MAX_IMPORT_BYTES, MIN_PASSWORD_CHARS, PickedFile, Ports, RestoreMode, VAULT_FILE};
+pub use session::{GENERATOR_HISTORY_DAYS, GENERATOR_HISTORY_MAX};
 pub use sync::{
     MAX_DEVICE_NAME_CHARS, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_FOLDER_SETTLE, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND,
     SYNC_INTERVAL_FOREGROUND,

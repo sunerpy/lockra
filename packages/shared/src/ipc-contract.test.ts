@@ -12,7 +12,12 @@ import {
   entryAddedSchema,
   exportPageSchema,
   exportStartedSchema,
+  generatedPastViewSchema,
+  generatedViewSchema,
   importOutcomeSchema,
+  itemRevealedSchema,
+  itemViewSchema,
+  scoreViewSchema,
   revealedSchema,
   syncKeyViewSchema,
   syncInviteSchema,
@@ -59,7 +64,7 @@ describe("IPC fixtures", () => {
       const parsed = uiEventSchema.parse(event);
       if (parsed.type === "notice") kinds.add(parsed.notice.type);
     }
-    expect(kinds.size).toBe(12);
+    expect(kinds.size).toBe(13);
   });
 
   it("every update view parses, each state and each install method once at least", () => {
@@ -118,6 +123,32 @@ describe("IPC fixtures", () => {
     expect(sealed.shared).toEqual({ text: "lockra-invite:2:TEtTSU5WVDI", code: "7K2QM-XW4FD" });
     // A space on a relay: nothing sealed, the invitation is the pairing link.
     expect(syncInviteSchema.parse(r.sync_invite_relay).shared).toBeNull();
+    const items = r.items.map((item) => itemViewSchema.parse(item));
+    expect(items[0]?.fields[0]).toMatchObject({ label: "PIN", hidden: true, value: null });
+    expect(items[0]?.conflicts[0]?.purpose).toBe("password");
+    // A part at its default is left out by the core and filled in here.
+    expect(r.items[1]).not.toHaveProperty("username");
+    expect(items[1]).toMatchObject({
+      kind: "login",
+      username: "",
+      urls: [],
+      protection: "fill",
+      read_only: false,
+      totp_entry: null,
+    });
+    expect(items[1]?.urls).toEqual([]);
+    expect(items[0]?.urls[0]?.matching).toBe("domain");
+    expect(items[2]).toMatchObject({ kind: "bank_card", read_only: true });
+    const revealed = itemRevealedSchema.parse(r.item_revealed);
+    expect(revealed.history?.[0]?.conflict).toBe(true);
+    expect(itemRevealedSchema.parse(r.item_revealed_part).history).toBeNull();
+    expect(generatedViewSchema.parse(r.generated).rules_met).toBe(true);
+    expect(r.generator_history.map((g) => generatedPastViewSchema.parse(g).site)).toEqual([
+      "apple.com",
+      null,
+    ]);
+    expect(scoreViewSchema.parse(r.password_score)).toEqual({ score: 1, warning: "common" });
+    expect(scoreViewSchema.parse(r.password_score_strong).warning).toBeNull();
     const errors = r.errors.map((e) => coreErrorSchema.parse(e));
     expect(errors[1]).toEqual({ code: "rate_limited", retry_at_ms: 1_790_000_004_000 });
   });
@@ -146,6 +177,12 @@ describe("IPC fixtures", () => {
         export_page: ipcFixtures.responses.export_page,
         sync_key_reveal: ipcFixtures.responses.sync_key_reveal,
         sync_invite: ipcFixtures.responses.sync_invite,
+        items_list: ipcFixtures.responses.items,
+        item_add: ipcFixtures.responses.item_added,
+        item_reveal: ipcFixtures.responses.item_revealed,
+        generator_generate: ipcFixtures.responses.generated,
+        generator_history_reveal: ipcFixtures.responses.generator_history,
+        password_score: ipcFixtures.responses.password_score,
       };
       const { transport, calls } = recordingTransport(answers[command.command] ?? null);
       const answer = await new TauriBackend(transport).dispatch(command);

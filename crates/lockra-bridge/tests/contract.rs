@@ -14,12 +14,16 @@ use lockra_bridge::{COMMANDS, PHONE_COMMANDS, SHELL_COMMANDS, UiCommand, dispatc
 use lockra_core::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater, RecordingSink};
 use lockra_core::settings::{AccentId, AutoBackup, CodesView, DefaultUnlock, Density, LocaleSetting, Settings, SortOrder, ThemeId};
 use lockra_core::ui::{
-    BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, DeviceUnlockView, Excluded,
-    ExportPage, ExportStarted, ExportTarget, Features, GoogleBatchView, ImportSource, ImportView, InstallMethod, LockView, Notice, Phase, Platform,
-    RestoreView, Revealed, SharedInvite, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState,
-    UpdateStatus, UpdateView,
+    BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame, CopiedPart,
+    DeviceUnlockView, Excluded, ExportPage, ExportStarted, ExportTarget, Features, GeneratorStatus, GoogleBatchView, ImportSource, ImportView, InstallMethod,
+    LockView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus,
+    SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
-use lockra_core::{AccountColor, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, KdfCost, Outcome, PinnedGroup, Ports};
+use lockra_core::{
+    AccountColor, AutofillChoice, ConflictView, Core, CoreConfig, CoreError, EntryView, ErrorCode, ExportCompat, FieldView, GeneratedPastView, GeneratedView,
+    GeneratorOptions, ItemRevealed, ItemView, KdfCost, Matching, Outcome, PassphraseOptions, PastView, PinnedGroup, Ports, Protection, Purpose, RevealedField,
+    ScoreView, SiteRuleView, Tri, UrlView,
+};
 use lockra_otp::{Algorithm, Digits, OtpKind, Period};
 use lockra_transfer::{Incompatible, Origin, RejectReason};
 use lockra_vault::FileKind;
@@ -30,6 +34,9 @@ use uuid::Uuid;
 const UPDATE_ENV: &str = "UPDATE_IPC_FIXTURES";
 const T0: u64 = 1_790_000_000_000;
 const SECRET: &str = "JBSWY3DPEHPK3PXP";
+const LOGIN_PASSWORD: &str = "hunter2-correct-horse";
+const LOGIN_NOTES: &str = "the recovery codes are 4815162342";
+const LOGIN_FIELD: &str = "pin-90210";
 
 fn id(n: u128) -> Uuid {
     Uuid::from_u128(0x0f3f_1a1e_8d4b_4c8e_9f7a_0000_0000_0000 + n)
@@ -125,6 +132,7 @@ fn settings() -> Settings {
         auto_update: true,
         default_unlock: DefaultUnlock::Password,
         biometric_offer: false,
+        generator: GeneratorOptions::Passphrase(PassphraseOptions { words: 5, separator: " ".into(), capitalize: true, number: true }),
     }
 }
 
@@ -257,6 +265,17 @@ fn state(phase: Phase) -> UiState {
             retry_at_ms: (phase == Phase::Locked).then_some(T0 + 2000),
         },
         entries: if unlocked { entries() } else { Vec::new() },
+        items_rev: if unlocked { 7 } else { 8 },
+        items_count: if unlocked { 2 } else { 0 },
+        site_rules: if unlocked {
+            vec![
+                SiteRuleView { id: id(30), kind: "never_save".into(), domains: vec!["bank.example".into()] },
+                SiteRuleView { id: id(31), kind: "equivalent".into(), domains: vec!["example.com".into(), "example.co.uk".into()] },
+            ]
+        } else {
+            Vec::new()
+        },
+        generator: GeneratorStatus { history_count: if unlocked { 3 } else { 0 } },
         collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
         entry_order: if unlocked { vec![id(2), id(1)] } else { Vec::new() },
         group_order: if unlocked { vec!["Work".into(), String::new()] } else { Vec::new() },
@@ -287,6 +306,8 @@ fn notices() -> Vec<Notice> {
     vec![
         Notice::Copied { entry_id: id(1), clear_after_s: Some(30) },
         Notice::Copied { entry_id: id(1), clear_after_s: None },
+        Notice::ItemCopied { item_id: Some(id(20)), part: CopiedPart::Password, clear_after_s: Some(30) },
+        Notice::ItemCopied { item_id: None, part: CopiedPart::Generated, clear_after_s: None },
         Notice::ClipboardCleared,
         Notice::Imported { added: 3, replaced: 1, skipped: 2 },
         Notice::FileUnrecognized { name: "notes.bin".into() },
@@ -367,7 +388,95 @@ fn commands() -> Vec<Value> {
         json!({"command": "sync_remove_device", "tag": PHONE_TAG}),
         json!({"command": "sync_now"}),
         json!({"command": "sync_disable"}),
+        json!({"command": "items_list"}),
+        // The password from the generator: the webview does not send it back.
+        json!({"command": "item_add", "draft": {
+            "title": "GitHub", "username": "octocat", "email": "octocat@example.com", "password": {"type": "generated"},
+            "urls": [{"url": "https://github.com/login", "matching": "domain"}, {"url": "^https://github\\.com/session", "matching": "regex"}],
+            "notes": "recovery codes in the safe", "tags": ["work"], "group": "Dev", "favorite": true, "color": "purple", "mark": "GH",
+            "protection": "confirm", "autofill": {"on_page_load": "off", "auto_submit": "on", "fill_otp": "default"}, "totp_entry": entry_id,
+            "fields": [{"label": "PIN", "value": {"type": "set", "value": "4242"}, "hidden": true, "page_field": "pin"}]
+        }}),
+        json!({"command": "item_update", "id": id(20).to_string(), "patch": {
+            "title": "GitHub (work)", "password": {"type": "set", "value": "new password"}, "notes": {"type": "clear"}, "totp_entry": null,
+            "fields": [{"id": id(21).to_string(), "remove": true}], "settle": [{"field": id(22).to_string(), "take": "1234567890"}]
+        }}),
+        json!({"command": "item_delete", "ids": [id(20).to_string()]}),
+        json!({"command": "item_reveal", "id": id(20).to_string(), "parts": {"password": true, "notes": true, "history": true, "fields": [id(21).to_string()]}, "password": "a new password"}),
+        json!({"command": "item_copy", "id": id(20).to_string(), "part": {"type": "field", "id": id(21).to_string()}, "reason": "copy the PIN"}),
+        json!({"command": "generator_generate", "options": {"kind": "password", "length": 24, "lower": true, "upper": true, "digits": true, "symbols": false, "avoid_ambiguous": true, "exclude": "0O"}, "domain": "apple.com"}),
+        json!({"command": "generator_copy"}),
+        json!({"command": "generator_history_reveal", "reason": "show generated passwords"}),
+        json!({"command": "generator_history_clear"}),
+        json!({"command": "password_score", "password": "correct horse battery staple"}),
+        json!({"command": "site_rule_add", "kind": "equivalent", "domains": ["example.com", "example.co.uk"]}),
+        json!({"command": "site_rule_remove", "id": id(30).to_string()}),
     ]
+}
+
+/// Logins as `items_list` shows them: one with every part, one with none but its name, one a
+/// later Lockra wrote.
+fn items() -> Vec<ItemView> {
+    let full = ItemView {
+        id: id(20),
+        kind: "login".into(),
+        title: "GitHub".into(),
+        username: "octocat".into(),
+        email: "octocat@example.com".into(),
+        has_password: true,
+        urls: vec![
+            UrlView { url: "https://github.com/login".into(), matching: Matching::Domain },
+            UrlView { url: "https://gist.github.com/".into(), matching: Matching::Host },
+        ],
+        has_notes: true,
+        tags: vec!["work".into()],
+        group: Some("Dev".into()),
+        favorite: true,
+        color: AccountColor::Purple,
+        mark: Some("GH".into()),
+        protection: Protection::Confirm,
+        autofill: AutofillChoice { on_page_load: Tri::Off, auto_submit: Tri::On, fill_otp: Tri::Default },
+        totp_entry: Some(id(1)),
+        fields: vec![
+            FieldView { id: id(21), label: "PIN".into(), hidden: true, value: None, has_value: true, page_field: Some("pin".into()) },
+            FieldView { id: id(23), label: "Customer no.".into(), hidden: false, value: Some("C-77".into()), has_value: true, page_field: None },
+        ],
+        history_count: 2,
+        conflicts: vec![ConflictView { field: id(22), purpose: Purpose::Password, label: String::new() }],
+        source: Some("bitwarden".into()),
+        created_at_ms: T0 - 86_400_000,
+        updated_at_ms: T0 - 3_600_000,
+        last_used_at_ms: Some(T0 - 60_000),
+        read_only: false,
+    };
+    let bare = ItemView {
+        id: id(24),
+        kind: "login".into(),
+        title: "Router".into(),
+        username: String::new(),
+        email: String::new(),
+        has_password: false,
+        urls: Vec::new(),
+        has_notes: false,
+        tags: Vec::new(),
+        group: None,
+        favorite: false,
+        color: AccountColor::Auto,
+        mark: None,
+        protection: Protection::Fill,
+        autofill: AutofillChoice::default(),
+        totp_entry: None,
+        fields: Vec::new(),
+        history_count: 0,
+        conflicts: Vec::new(),
+        source: None,
+        created_at_ms: T0,
+        updated_at_ms: T0,
+        last_used_at_ms: None,
+        read_only: false,
+    };
+    let later = ItemView { id: id(25), kind: "bank_card".into(), title: "Card".into(), read_only: true, ..bare.clone() };
+    vec![full, bare, later]
 }
 
 /// A storage as the webview sends it, credentials included.
@@ -465,6 +574,10 @@ fn response_fixtures() {
         ErrorCode::SyncWrongCredentials.into(),
         ErrorCode::SyncInviteNeedsStorage.into(),
         ErrorCode::FeatureUnavailable.into(),
+        ErrorCode::ItemNotFound.into(),
+        ErrorCode::ItemInvalid.into(),
+        ErrorCode::ItemReadOnly.into(),
+        ErrorCode::GeneratorRulesUnsatisfiable.into(),
         ErrorCode::Internal.into(),
     ];
     check(
@@ -499,6 +612,26 @@ fn response_fixtures() {
                 shared: None,
                 includes_storage: true,
             },
+            "items": items(),
+            "item_added": { "id": id(20) },
+            "item_revealed": ItemRevealed {
+                item_id: id(20),
+                password: Some("correct horse battery staple".into()),
+                notes: Some("recovery codes in the safe".into()),
+                fields: vec![RevealedField { id: id(21), value: "4242".into() }],
+                history: Some(vec![
+                    PastView { id: "1234567890".into(), field: id(22), value: "from the phone".into(), set_at_ms: T0 - 7_200_000, conflict: true },
+                    PastView { id: "987654321".into(), field: id(22), value: "the first one".into(), set_at_ms: T0 - 86_400_000, conflict: false },
+                ]),
+            },
+            "item_revealed_part": ItemRevealed { item_id: id(20), password: Some("correct horse battery staple".into()), notes: None, fields: Vec::new(), history: None },
+            "generated": GeneratedView { password: "q7#Lm2vX9!pRt4zW8@kD".into(), bits: 128, rules_met: true },
+            "generator_history": vec![
+                GeneratedPastView { password: "q7#Lm2vX9!pRt4zW8@kD".into(), at_ms: T0 - 60_000, site: Some("apple.com".into()) },
+                GeneratedPastView { password: "plaza-ribbon-onward-lucky-cosmic-fable".into(), at_ms: T0 - 3_600_000, site: None },
+            ],
+            "password_score": ScoreView { score: 1, warning: Some("common".into()) },
+            "password_score_strong": ScoreView { score: 4, warning: None },
             "codes_frame": codes,
             "codes_frame_locked": CodesFrame { at_ms: T0, codes: Vec::new() },
             "errors": errors,
@@ -539,6 +672,12 @@ fn secret_views_are_flagged_for_the_shell() {
     // Without a password the biometric check proves presence; the answer is the same secret.
     assert!(parse(json!({"command": "sync_invite", "reason": "show the invitation"})).shows_secret());
     assert!(parse(json!({"command": "sync_key_reveal", "reason": "show the recovery key"})).shows_secret());
+    // The logins' secrets and the generator's passwords.
+    assert!(parse(json!({"command": "item_reveal", "id": id(20), "parts": {"password": true}})).shows_secret());
+    assert!(parse(json!({"command": "generator_generate", "options": {"kind": "passphrase"}})).shows_secret());
+    assert!(parse(json!({"command": "generator_history_reveal", "reason": "x"})).shows_secret());
+    assert!(!parse(json!({"command": "items_list"})).shows_secret());
+    assert!(!parse(json!({"command": "item_copy", "id": id(20), "part": {"type": "password"}})).shows_secret(), "the clipboard, not the webview");
     assert!(!parse(json!({"command": "sync_now"})).shows_secret());
     assert!(!parse(json!({"command": "app_state"})).shows_secret());
     for command in [json!({"command": "secret_view_closed"}), json!({"command": "export_close", "session": id(1)}), json!({"command": "vault_lock"})] {
@@ -553,8 +692,8 @@ fn ok(value: Result<Value, CoreError>, answers: &mut Vec<String>) -> Value {
     value
 }
 
-/// Every command dispatched on a real core: answers and events carry no secret, except the two
-/// answers whose purpose is to show one.
+/// Every command dispatched on a real core: answers and events carry no secret, except the
+/// answers whose purpose is to show one (the seven `shows_secret` names, docs/security.md).
 #[tokio::test(start_paused = true)]
 async fn dispatch_answers_and_leaks_nothing() {
     let dir = tempfile::tempdir().unwrap();
@@ -616,6 +755,40 @@ async fn dispatch_answers_and_leaks_nothing() {
     ] {
         ok(run(command).await, &mut answers);
     }
+    // Logins: their password, notes and hidden field go in, and come back only when revealed.
+    let draft = json!({
+        "title": "GitHub", "username": "octocat", "password": {"type": "set", "value": LOGIN_PASSWORD}, "notes": LOGIN_NOTES,
+        "fields": [{"label": "PIN", "value": {"type": "set", "value": LOGIN_FIELD}, "hidden": true}]
+    });
+    let added = ok(run(json!({"command": "item_add", "draft": draft})).await, &mut answers);
+    let item_id = added["id"].as_str().unwrap().to_owned();
+    let listed = ok(run(json!({"command": "items_list"})).await, &mut answers);
+    let pin = listed[0]["fields"][0]["id"].clone();
+    for command in [
+        json!({"command": "item_update", "id": item_id, "patch": {"favorite": true, "urls": [{"url": "https://github.com/", "matching": "host"}]}}),
+        json!({"command": "item_copy", "id": item_id, "part": {"type": "username"}}),
+        json!({"command": "site_rule_add", "kind": "never_save", "domains": ["bank.example"]}),
+        json!({"command": "password_score", "password": LOGIN_PASSWORD}),
+    ] {
+        ok(run(command).await, &mut answers);
+    }
+    let revealed =
+        run(json!({"command": "item_reveal", "id": item_id, "parts": {"password": true, "notes": true, "history": true, "fields": [pin]}})).await.unwrap();
+    assert_eq!(
+        (revealed["password"].as_str(), revealed["notes"].as_str(), revealed["fields"][0]["value"].as_str()),
+        (Some(LOGIN_PASSWORD), Some(LOGIN_NOTES), Some(LOGIN_FIELD))
+    );
+    let generated = run(json!({"command": "generator_generate", "options": {"kind": "password", "length": 32}})).await.unwrap();
+    let generated_password = generated["password"].as_str().unwrap().to_owned();
+    ok(run(json!({"command": "generator_copy"})).await, &mut answers);
+    let history = run(json!({"command": "generator_history_reveal", "password": "correct horse battery"})).await.unwrap();
+    assert_eq!(history[0]["password"].as_str(), Some(generated_password.as_str()));
+    ok(run(json!({"command": "item_add", "draft": {"title": "Generated", "password": {"type": "generated"}}})).await, &mut answers);
+    ok(run(json!({"command": "generator_history_clear"})).await, &mut answers);
+    let rule = run(json!({"command": "app_state"})).await.unwrap()["site_rules"][0]["id"].clone();
+    ok(run(json!({"command": "site_rule_remove", "id": rule})).await, &mut answers);
+    // The clipboard holds a code again, for the check below.
+    ok(run(json!({"command": "entry_copy", "id": entry_id})).await, &mut answers);
     let error = run(json!({"command": "vault_unlock", "password": "x"})).await;
     assert!(error.is_ok(), "unlock while unlocked is a no-op");
     let wrong = run(json!({"command": "entry_reveal", "id": entry_id, "password": "wrong password"})).await.unwrap_err();
@@ -683,7 +856,19 @@ async fn dispatch_answers_and_leaks_nothing() {
     }
     texts.extend(sink.frames().iter().map(|f| serde_json::to_string(f).unwrap()));
     for text in &texts {
-        for secret in [SECRET, "GEZDGNBVGY3TQOJQ", "MZXW6YTBOI", "secret=", FakeTransport::SECRET, &sync_key[5..19], "lockra-invite"] {
+        for secret in [
+            SECRET,
+            "GEZDGNBVGY3TQOJQ",
+            "MZXW6YTBOI",
+            "secret=",
+            FakeTransport::SECRET,
+            &sync_key[5..19],
+            "lockra-invite",
+            LOGIN_PASSWORD,
+            LOGIN_NOTES,
+            LOGIN_FIELD,
+            &generated_password,
+        ] {
             assert!(!text.contains(secret), "{secret} leaked: {text}");
         }
     }
@@ -699,6 +884,7 @@ async fn dispatch_answers_and_leaks_nothing() {
     ok(run(json!({"command": "entry_delete", "id": bank})).await, &mut Vec::new());
     assert_eq!(run(json!({"command": "import_clipboard"})).await.unwrap_err().code, ErrorCode::ClipboardEmpty);
     assert_eq!(run(json!({"command": "import_backup_password", "password": "x"})).await.unwrap_err().code, ErrorCode::NoImport);
+    ok(run(json!({"command": "item_delete", "ids": [item_id]})).await, &mut Vec::new());
     ok(run(json!({"command": "vault_change_password", "current": "correct horse battery", "new": "a new password"})).await, &mut Vec::new());
     ok(run(json!({"command": "device_unlock_disable", "password": "a new password"})).await, &mut Vec::new());
     ok(run(json!({"command": "vault_lock"})).await, &mut Vec::new());

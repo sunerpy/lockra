@@ -69,6 +69,51 @@ export const DEFAULT_UNLOCKS = ["biometric", "password"] as const;
 export const defaultUnlockSchema = z.enum(DEFAULT_UNLOCKS);
 export type DefaultUnlock = z.infer<typeof defaultUnlockSchema>;
 
+// ---- the password generator (lockra-autofill) ---------------------------------------------------
+
+/** A random password's options (lockra-autofill `PasswordOptions`). */
+export const passwordOptionsSchema = z.object({
+  kind: z.literal("password"),
+  /** 4 to 128; a site's rules may lengthen or shorten it. */
+  length: z.number().int(),
+  lower: z.boolean(),
+  upper: z.boolean(),
+  digits: z.boolean(),
+  symbols: z.boolean(),
+  /** Leave out `I l 1 | O 0`. */
+  avoid_ambiguous: z.boolean(),
+  /** Characters never to use. */
+  exclude: z.string(),
+});
+/** A passphrase's options (lockra-autofill `PassphraseOptions`), words from the EFF's list. */
+export const passphraseOptionsSchema = z.object({
+  kind: z.literal("passphrase"),
+  /** 3 to 20. */
+  words: z.number().int(),
+  separator: z.string(),
+  capitalize: z.boolean(),
+  number: z.boolean(),
+});
+export const generatorOptionsSchema = z.discriminatedUnion("kind", [
+  passwordOptionsSchema,
+  passphraseOptionsSchema,
+]);
+export type GeneratorOptions = z.infer<typeof generatorOptionsSchema>;
+
+/** The generator's defaults (lockra-autofill `GeneratorOptions::default()`). */
+export function defaultGeneratorOptions(): GeneratorOptions {
+  return {
+    kind: "password",
+    length: 20,
+    lower: true,
+    upper: true,
+    digits: true,
+    symbols: true,
+    avoid_ambiguous: false,
+    exclude: "",
+  };
+}
+
 export const settingsSchema = z.object({
   theme: themeIdSchema,
   follow_system_theme: z.boolean(),
@@ -88,6 +133,8 @@ export const settingsSchema = z.object({
   default_unlock: defaultUnlockSchema,
   /** Offer the phone's fingerprint once after a master-password unlock, until declined. */
   biometric_offer: z.boolean(),
+  /** What the password generator makes unless told otherwise: the last options chosen. */
+  generator: generatorOptionsSchema,
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -111,6 +158,7 @@ export function defaultSettings(): Settings {
     auto_update: false,
     default_unlock: "biometric",
     biometric_offer: true,
+    generator: defaultGeneratorOptions(),
   };
 }
 
@@ -326,6 +374,10 @@ export const ERROR_CODES = [
   "sync_folder_missing",
   "sync_data_corrupted",
   "sync_unsupported",
+  "item_not_found",
+  "item_invalid",
+  "item_read_only",
+  "generator_rules_unsatisfiable",
   "feature_unavailable",
   "internal",
 ] as const;
@@ -531,6 +583,118 @@ export const pinnedGroupSchema = z.discriminatedUnion("type", [
 ]);
 export type PinnedGroup = z.infer<typeof pinnedGroupSchema>;
 
+// ---- logins ----------------------------------------------------------------------------------
+
+/** How a saved URL is compared with the page. */
+export const MATCHINGS = ["domain", "host", "starts_with", "regex", "exact", "never"] as const;
+export const matchingSchema = z.enum(MATCHINGS);
+export type Matching = z.infer<typeof matchingSchema>;
+
+/** What the browser extension may do with a login. */
+export const PROTECTIONS = ["fill", "confirm", "no_extension"] as const;
+export const protectionSchema = z.enum(PROTECTIONS);
+export type Protection = z.infer<typeof protectionSchema>;
+
+/** A login's own choice for an autofill preference. */
+export const TRIS = ["default", "on", "off"] as const;
+export const triSchema = z.enum(TRIS);
+export type Tri = z.infer<typeof triSchema>;
+
+/** What a field of a login holds. */
+export const PURPOSES = ["username", "email", "password", "custom"] as const;
+export const purposeSchema = z.enum(PURPOSES);
+export type Purpose = z.infer<typeof purposeSchema>;
+
+export const SITE_RULE_KINDS = ["never_save", "never_fill", "equivalent"] as const;
+export const siteRuleKindSchema = z.enum(SITE_RULE_KINDS);
+export type SiteRuleKind = z.infer<typeof siteRuleKindSchema>;
+
+export const autofillChoiceSchema = z.object({
+  on_page_load: triSchema.default("default"),
+  auto_submit: triSchema.default("default"),
+  fill_otp: triSchema.default("default"),
+});
+export type AutofillChoice = z.infer<typeof autofillChoiceSchema>;
+
+export const urlViewSchema = z.object({
+  url: z.string(),
+  matching: matchingSchema.default("domain"),
+});
+export type UrlView = z.infer<typeof urlViewSchema>;
+
+/** A custom field: a hidden one shows its name only. */
+export const fieldViewSchema = z.object({
+  id: idSchema,
+  label: z.string(),
+  hidden: z.boolean(),
+  value: z.string().nullable(),
+  has_value: z.boolean(),
+  page_field: z.string().nullable(),
+});
+export type FieldView = z.infer<typeof fieldViewSchema>;
+
+export const conflictViewSchema = z.object({
+  field: idSchema,
+  purpose: purposeSchema,
+  label: z.string(),
+});
+export type ConflictView = z.infer<typeof conflictViewSchema>;
+
+/** A login as `items_list` shows it (lockra-core `ItemView`): no secret. The core leaves out what
+ *  is at its default; the defaults here fill it in. */
+export const itemViewSchema = z.object({
+  id: idSchema,
+  /** `login`, or the name a later Lockra gave its kind (then `read_only`). */
+  kind: z.string().default("login"),
+  title: z.string(),
+  username: z.string().default(""),
+  email: z.string().default(""),
+  has_password: z.boolean().default(false),
+  urls: z.array(urlViewSchema).default([]),
+  has_notes: z.boolean().default(false),
+  tags: z.array(z.string()).default([]),
+  group: z.string().nullable().default(null),
+  favorite: z.boolean().default(false),
+  color: accountColorSchema.default("auto"),
+  mark: z.string().nullable().default(null),
+  protection: protectionSchema.default("fill"),
+  autofill: autofillChoiceSchema.default({
+    on_page_load: "default",
+    auto_submit: "default",
+    fill_otp: "default",
+  }),
+  totp_entry: idSchema.nullable().default(null),
+  fields: z.array(fieldViewSchema).default([]),
+  history_count: z.number().int().nonnegative().default(0),
+  conflicts: z.array(conflictViewSchema).default([]),
+  source: z.string().nullable().default(null),
+  created_at_ms: msSchema,
+  updated_at_ms: msSchema,
+  last_used_at_ms: msSchema.nullable().default(null),
+  /** Holds what a later Lockra wrote: shown, not edited. */
+  read_only: z.boolean().default(false),
+});
+export type ItemView = z.infer<typeof itemViewSchema>;
+
+export const siteRuleViewSchema = z.object({
+  id: idSchema,
+  kind: z.string(),
+  domains: z.array(z.string()),
+});
+export type SiteRuleView = z.infer<typeof siteRuleViewSchema>;
+
+/** What `item_copy` or `generator_copy` put on the clipboard. */
+export const COPIED_PARTS = [
+  "username",
+  "email",
+  "password",
+  "totp",
+  "field",
+  "generated",
+] as const;
+export const copiedPartSchema = z.enum(COPIED_PARTS);
+export type CopiedPart = z.infer<typeof copiedPartSchema>;
+
 /** What this build offers of what is still being finished (lockra-core `Features`): a release
  *  build turns password management on once it ships; the interface hides what is off. */
 export const featuresSchema = z.object({
@@ -546,6 +710,15 @@ export const uiStateSchema = z.object({
   data_dir: z.string(),
   lock: lockViewSchema,
   entries: z.array(entryViewSchema),
+  /** Goes up whenever the logins or the site rules change and as the vault opens and locks: ask
+   *  for `items_list` again (`useItems`). */
+  items_rev: z.number().int().nonnegative(),
+  /** How many logins the vault holds; 0 unless unlocked. */
+  items_count: z.number().int().nonnegative(),
+  /** The site rules; empty unless unlocked. */
+  site_rules: z.array(siteRuleViewSchema),
+  /** The password generator: how many passwords its history holds (0 unless unlocked). */
+  generator: z.object({ history_count: z.number().int().nonnegative() }),
   /** The groups folded in the code list ("" for the accounts in no group); empty unless unlocked. */
   collapsed_groups: z.array(z.string()),
   /** The accounts in the order they were dragged into (`manual` order); this device's. */
@@ -569,6 +742,13 @@ export const noticeSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("copied"),
     entry_id: idSchema,
+    clear_after_s: z.number().int().nullable(),
+  }),
+  /** A part of a login, or a generated password (`item_id` null), is on the clipboard. */
+  z.object({
+    type: z.literal("item_copied"),
+    item_id: idSchema.nullable(),
+    part: copiedPartSchema,
     clear_after_s: z.number().int().nullable(),
   }),
   z.object({ type: z.literal("clipboard_cleared") }),
@@ -681,6 +861,52 @@ export const syncInviteSchema = z.object({
 });
 export type SyncInvite = z.infer<typeof syncInviteSchema>;
 
+/** A hidden value a login's field held before (`item_reveal`'s history). */
+export const pastViewSchema = z.object({
+  /** What `item_update`'s `settle` names it by. */
+  id: z.string(),
+  field: idSchema,
+  value: z.string(),
+  set_at_ms: msSchema,
+  /** Written apart from the field's current value: one side of a conflict. */
+  conflict: z.boolean(),
+});
+export type PastView = z.infer<typeof pastViewSchema>;
+
+/** The answer to `item_reveal`: the parts asked for (a secret answer). */
+export const itemRevealedSchema = z.object({
+  item_id: idSchema,
+  password: z.string().nullable(),
+  notes: z.string().nullable(),
+  fields: z.array(z.object({ id: idSchema, value: z.string() })),
+  history: z.array(pastViewSchema).nullable(),
+});
+export type ItemRevealed = z.infer<typeof itemRevealedSchema>;
+
+/** The answer to `generator_generate` (a secret answer). */
+export const generatedViewSchema = z.object({
+  password: z.string(),
+  bits: z.number().int().nonnegative(),
+  /** Made to a site's rules, and meets them. */
+  rules_met: z.boolean(),
+});
+export type GeneratedView = z.infer<typeof generatedViewSchema>;
+
+/** A password of the generator's history (`generator_history_reveal`, a secret answer). */
+export const generatedPastViewSchema = z.object({
+  password: z.string(),
+  at_ms: msSchema,
+  site: z.string().nullable(),
+});
+export type GeneratedPastView = z.infer<typeof generatedPastViewSchema>;
+
+/** The answer to `password_score`: zxcvbn's score and a warning code. */
+export const scoreViewSchema = z.object({
+  score: z.number().int().min(0).max(4),
+  warning: z.string().nullable(),
+});
+export type ScoreView = z.infer<typeof scoreViewSchema>;
+
 export const coreErrorSchema = z.object({
   code: errorCodeSchema,
   retry_at_ms: msSchema.optional(),
@@ -716,6 +942,99 @@ export const choiceSchema = z.object({
   action: candidateActionSchema,
 });
 export type Choice = z.infer<typeof choiceSchema>;
+
+/** What becomes of a secret in an edit: kept, set, emptied, or the generator's last password
+ *  (which the webview need not send back). */
+export const secretChangeSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("keep") }),
+  z.object({ type: z.literal("set"), value: z.string() }),
+  z.object({ type: z.literal("clear") }),
+  z.object({ type: z.literal("generated") }),
+]);
+export type SecretChange = z.infer<typeof secretChangeSchema>;
+
+export const urlDraftSchema = z.object({ url: z.string(), matching: matchingSchema.optional() });
+export type UrlDraft = z.infer<typeof urlDraftSchema>;
+
+export const autofillDraftSchema = z.object({
+  on_page_load: triSchema.optional(),
+  auto_submit: triSchema.optional(),
+  fill_otp: triSchema.optional(),
+});
+
+/** A custom field added (no `id`), changed or removed. */
+export const fieldChangeSchema = z.object({
+  id: idSchema.optional(),
+  label: z.string().optional(),
+  value: secretChangeSchema.optional(),
+  hidden: z.boolean().optional(),
+  /** The page's field it fills; `""` fills none. */
+  page_field: z.string().optional(),
+  remove: z.boolean().optional(),
+});
+export type FieldChange = z.infer<typeof fieldChangeSchema>;
+
+export const itemDraftSchema = z.object({
+  title: z.string().optional(),
+  username: z.string().optional(),
+  email: z.string().optional(),
+  password: secretChangeSchema.optional(),
+  urls: z.array(urlDraftSchema).optional(),
+  notes: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  group: z.string().nullable().optional(),
+  favorite: z.boolean().optional(),
+  color: accountColorSchema.optional(),
+  mark: z.string().nullable().optional(),
+  protection: protectionSchema.optional(),
+  autofill: autofillDraftSchema.optional(),
+  totp_entry: idSchema.nullable().optional(),
+  fields: z.array(fieldChangeSchema).optional(),
+});
+export type ItemDraft = z.infer<typeof itemDraftSchema>;
+
+/** What an edit changes; what it leaves out stays. */
+export const itemPatchSchema = z.object({
+  title: z.string().optional(),
+  /** `""` clears it. */
+  username: z.string().optional(),
+  email: z.string().optional(),
+  password: secretChangeSchema.optional(),
+  urls: z.array(urlDraftSchema).optional(),
+  notes: secretChangeSchema.optional(),
+  tags: z.array(z.string()).optional(),
+  /** `""` takes it out of its group. */
+  group: z.string().optional(),
+  favorite: z.boolean().optional(),
+  color: accountColorSchema.optional(),
+  /** `""` goes back to the title's initial. */
+  mark: z.string().optional(),
+  protection: protectionSchema.optional(),
+  autofill: autofillDraftSchema.optional(),
+  /** `null` unlinks the account. */
+  totp_entry: idSchema.nullable().optional(),
+  fields: z.array(fieldChangeSchema).optional(),
+  /** Conflicts settled: take a value of the history (`PastView.id`), or keep the current one. */
+  settle: z.array(z.object({ field: idSchema, take: z.string().optional() })).optional(),
+});
+export type ItemPatch = z.infer<typeof itemPatchSchema>;
+
+export const revealPartsSchema = z.object({
+  password: z.boolean().optional(),
+  notes: z.boolean().optional(),
+  history: z.boolean().optional(),
+  fields: z.array(idSchema).optional(),
+});
+export type RevealParts = z.infer<typeof revealPartsSchema>;
+
+export const copyPartSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("username") }),
+  z.object({ type: z.literal("email") }),
+  z.object({ type: z.literal("password") }),
+  z.object({ type: z.literal("totp") }),
+  z.object({ type: z.literal("field"), id: idSchema }),
+]);
+export type CopyPart = z.infer<typeof copyPartSchema>;
 
 export const RESTORE_MODES = ["merge", "replace"] as const;
 export const restoreModeSchema = z.enum(RESTORE_MODES);
@@ -828,6 +1147,45 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("sync_remove_device"), tag: z.string() }),
   z.object({ command: z.literal("sync_now") }),
   z.object({ command: z.literal("sync_disable") }),
+  z.object({ command: z.literal("items_list") }),
+  z.object({ command: z.literal("item_add"), draft: itemDraftSchema }),
+  z.object({ command: z.literal("item_update"), id: idSchema, patch: itemPatchSchema }),
+  z.object({ command: z.literal("item_delete"), ids: z.array(idSchema) }),
+  /** A `confirm` login needs the master password, or without it the biometric check. */
+  z.object({
+    command: z.literal("item_reveal"),
+    id: idSchema,
+    parts: revealPartsSchema,
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
+  z.object({
+    command: z.literal("item_copy"),
+    id: idSchema,
+    part: copyPartSchema,
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
+  z.object({
+    command: z.literal("generator_generate"),
+    options: generatorOptionsSchema,
+    /** The site it is for: its rules are kept to when Lockra knows them. */
+    domain: z.string().optional(),
+  }),
+  z.object({ command: z.literal("generator_copy") }),
+  z.object({
+    command: z.literal("generator_history_reveal"),
+    password: password.optional(),
+    reason: z.string().optional(),
+  }),
+  z.object({ command: z.literal("generator_history_clear") }),
+  z.object({ command: z.literal("password_score"), password }),
+  z.object({
+    command: z.literal("site_rule_add"),
+    kind: siteRuleKindSchema,
+    domains: z.array(z.string()),
+  }),
+  z.object({ command: z.literal("site_rule_remove"), id: idSchema }),
 ]);
 export type UiCommand = z.infer<typeof uiCommandSchema>;
 export type CommandName = UiCommand["command"];
@@ -876,6 +1234,12 @@ export interface CommandResults {
   export_page: ExportPage;
   sync_key_reveal: SyncKeyView;
   sync_invite: SyncInvite;
+  items_list: ItemView[];
+  item_add: EntryAdded;
+  item_reveal: ItemRevealed;
+  generator_generate: GeneratedView;
+  generator_history_reveal: GeneratedPastView[];
+  password_score: ScoreView;
 }
 export type ResultOf<C extends CommandName> = C extends keyof CommandResults
   ? CommandResults[C]
@@ -891,6 +1255,12 @@ export const RESULT_SCHEMAS: { [C in keyof CommandResults]: z.ZodType<CommandRes
   export_page: exportPageSchema,
   sync_key_reveal: syncKeyViewSchema,
   sync_invite: syncInviteSchema,
+  items_list: z.array(itemViewSchema),
+  item_add: entryAddedSchema,
+  item_reveal: itemRevealedSchema,
+  generator_generate: generatedViewSchema,
+  generator_history_reveal: z.array(generatedPastViewSchema),
+  password_score: scoreViewSchema,
 };
 
 export function hasResult(name: CommandName): name is keyof CommandResults {

@@ -8,6 +8,7 @@ import {
   MockBackend,
   fakeCode,
   mockEntry,
+  mockItemView,
   mockSyncSpace,
   sampleEntries,
 } from "./mock-backend";
@@ -785,6 +786,284 @@ describe("MockBackend", () => {
     await locked.dispatch({ command: "vault_lock" });
     await locked.dispatch({ command: "vault_unlock", password: MOCK_PASSWORD });
     expect((await locked.getState()).sync.space?.device_name).toBe("Desktop");
+  });
+
+  it("keeps logins without their secrets, and shows and copies them as the core does", async () => {
+    const backend = new MockBackend({ passwords: true, entries: [mockEntry("GitHub", "octocat")] });
+    const { notices } = recorder(backend);
+    const entry = (await backend.getState()).entries[0]?.id ?? "";
+    const before = (await backend.getState()).items_rev;
+    const { id } = await backend.dispatch({
+      command: "item_add",
+      draft: {
+        title: " GitHub ",
+        username: "octocat",
+        password: { type: "set", value: "hunter2" },
+        notes: "recovery codes",
+        urls: [{ url: "https://github.com/" }, { url: " " }],
+        tags: ["work", "work"],
+        totp_entry: entry,
+        fields: [
+          { label: "PIN", value: { type: "set", value: "4242" }, hidden: true },
+          { label: "No.", value: { type: "set", value: "7" } },
+        ],
+      },
+    });
+    const state = await backend.getState();
+    expect(state.items_count).toBe(1);
+    expect(state.items_rev).toBeGreaterThan(before);
+    const [view] = await backend.dispatch({ command: "items_list" });
+    expect(view).toMatchObject({
+      title: "GitHub",
+      username: "octocat",
+      has_password: true,
+      has_notes: true,
+      tags: ["work"],
+    });
+    expect(view?.urls).toEqual([{ url: "https://github.com/", matching: "domain" }]);
+    expect(JSON.stringify(view)).not.toMatch(/hunter2|recovery|4242/);
+    const pin = view?.fields.find((f) => f.label === "PIN")?.id ?? "";
+    expect(view?.fields.find((f) => f.label === "No.")?.value).toBe("7");
+    const revealed = await backend.dispatch({
+      command: "item_reveal",
+      id,
+      parts: { password: true, notes: true, fields: [pin], history: true },
+    });
+    expect(revealed).toMatchObject({
+      password: "hunter2",
+      notes: "recovery codes",
+      fields: [{ id: pin, value: "4242" }],
+      history: [],
+    });
+    await backend.dispatch({ command: "item_copy", id, part: { type: "password" } });
+    expect(backend.clipboardText).toBe("hunter2");
+    expect(notices().at(-1)).toEqual({
+      type: "item_copied",
+      item_id: id,
+      part: "password",
+      clear_after_s: 30,
+    });
+    await backend.dispatch({ command: "item_copy", id, part: { type: "field", id: pin } });
+    expect(backend.clipboardText).toBe("4242");
+    await backend.dispatch({ command: "item_copy", id, part: { type: "totp" } });
+    expect(backend.clipboardText).toMatch(/^\d{6}$/);
+    await backend.dispatch({ command: "item_copy", id, part: { type: "username" } });
+    expect(
+      await errorCode(backend.dispatch({ command: "item_copy", id, part: { type: "email" } })),
+    ).toBe("item_not_found");
+    // An edit: a new password keeps the old one in the history; fields change and go.
+    await backend.dispatch({
+      command: "item_update",
+      id,
+      patch: {
+        title: "GitHub (work)",
+        email: "me@example.com",
+        password: { type: "set", value: "second" },
+        notes: { type: "clear" },
+        urls: [{ url: "https://gist.github.com/", matching: "host" }],
+        tags: [],
+        group: "Dev",
+        favorite: true,
+        color: "teal",
+        mark: "GH",
+        protection: "confirm",
+        autofill: { auto_submit: "on" },
+        totp_entry: null,
+        fields: [
+          { id: pin, value: { type: "set", value: "9999" } },
+          { id: view?.fields[1]?.id ?? "", remove: true },
+        ],
+      },
+    });
+    const [edited] = await backend.dispatch({ command: "items_list" });
+    expect(edited).toMatchObject({
+      title: "GitHub (work)",
+      email: "me@example.com",
+      has_notes: false,
+      group: "Dev",
+      favorite: true,
+      history_count: 1,
+      protection: "confirm",
+    });
+    expect(edited?.fields.map((f) => f.label)).toEqual(["PIN"]);
+    // Now of the confirm level: a secret needs proof.
+    expect(
+      await errorCode(backend.dispatch({ command: "item_reveal", id, parts: { password: true } })),
+    ).toBe("biometric_unavailable");
+    const history = await backend.dispatch({
+      command: "item_reveal",
+      id,
+      parts: { history: true },
+      password: MOCK_PASSWORD,
+    });
+    expect(history.history?.map((p) => p.value)).toEqual(["hunter2"]);
+    await backend.dispatch({
+      command: "item_update",
+      id,
+      patch: { settle: [{ field: "password", take: history.history?.[0]?.id ?? "" }] },
+    });
+    expect(
+      (
+        await backend.dispatch({
+          command: "item_reveal",
+          id,
+          parts: { password: true },
+          password: MOCK_PASSWORD,
+        })
+      ).password,
+    ).toBe("hunter2");
+    expect(
+      await errorCode(
+        backend.dispatch({
+          command: "item_update",
+          id,
+          patch: { settle: [{ field: "password", take: "nope" }] },
+        }),
+      ),
+    ).toBe("item_not_found");
+    expect(
+      await errorCode(
+        backend.dispatch({ command: "item_update", id, patch: { title: "x".repeat(201) } }),
+      ),
+    ).toBe("item_invalid");
+    expect(
+      await errorCode(
+        backend.dispatch({
+          command: "item_update",
+          id,
+          patch: { totp_entry: "00000000-0000-4000-8000-ffffffffffff" },
+        }),
+      ),
+    ).toBe("entry_not_found");
+    expect(
+      await errorCode(
+        backend.dispatch({
+          command: "item_update",
+          id,
+          patch: { fields: [{ id: "00000000-0000-4000-8000-fffffffffffe" }] },
+        }),
+      ),
+    ).toBe("item_not_found");
+    await backend.dispatch({ command: "item_delete", ids: [id] });
+    expect(await backend.dispatch({ command: "items_list" })).toEqual([]);
+    expect(await errorCode(backend.dispatch({ command: "item_delete", ids: [id] }))).toBe(
+      "item_not_found",
+    );
+    expect(await errorCode(backend.dispatch({ command: "item_reveal", id, parts: {} }))).toBe(
+      "item_not_found",
+    );
+  });
+
+  it("makes passwords, saves one without sending it back, and keeps its history behind proof", async () => {
+    const backend = new MockBackend({
+      passwords: true,
+      phase: "unlocked",
+      items: [{ view: mockItemView("Old", { read_only: true, kind: "bank_card" }) }],
+    });
+    const options = {
+      kind: "password",
+      length: 24,
+      lower: true,
+      upper: true,
+      digits: true,
+      symbols: false,
+      avoid_ambiguous: false,
+      exclude: "",
+    } as const;
+    expect(await errorCode(backend.dispatch({ command: "generator_copy" }))).toBe("item_invalid");
+    const made = await backend.dispatch({
+      command: "generator_generate",
+      options,
+      domain: "example.com",
+    });
+    expect(made.password).toHaveLength(24);
+    expect(made.rules_met).toBe(true);
+    await backend.dispatch({ command: "generator_copy" });
+    expect(backend.clipboardText).toBe(made.password);
+    expect((await backend.getState()).generator.history_count).toBe(1);
+    const { id } = await backend.dispatch({
+      command: "item_add",
+      draft: { title: "New", password: { type: "generated" } },
+    });
+    expect(
+      (await backend.dispatch({ command: "item_reveal", id, parts: { password: true } })).password,
+    ).toBe(made.password);
+    const words = await backend.dispatch({
+      command: "generator_generate",
+      options: { kind: "passphrase", words: 4, separator: " ", capitalize: true, number: true },
+    });
+    expect(words.password.split(" ")).toHaveLength(4);
+    expect(await errorCode(backend.dispatch({ command: "generator_history_reveal" }))).toBe(
+      "biometric_unavailable",
+    );
+    const history = await backend.dispatch({
+      command: "generator_history_reveal",
+      password: MOCK_PASSWORD,
+    });
+    expect(history.map((g) => g.site)).toEqual(["example.com"]);
+    await backend.dispatch({ command: "generator_history_clear" });
+    expect((await backend.getState()).generator.history_count).toBe(0);
+    expect(
+      await errorCode(
+        backend.dispatch({
+          command: "generator_generate",
+          options: { ...options, lower: false, upper: false, digits: false },
+        }),
+      ),
+    ).toBe("item_invalid");
+    expect(await backend.dispatch({ command: "password_score", password: "password" })).toEqual({
+      score: 0,
+      warning: "top_ten",
+    });
+    expect(
+      (await backend.dispatch({ command: "password_score", password: "Kx9!vQ2#mZ7@pL4&" })).score,
+    ).toBe(4);
+    // A login a later Lockra wrote is shown and not changed.
+    const [later] = await backend.dispatch({ command: "items_list" });
+    expect(
+      await errorCode(
+        backend.dispatch({ command: "item_update", id: later?.id ?? "", patch: { title: "x" } }),
+      ),
+    ).toBe("item_read_only");
+    // Site rules.
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "never_save",
+      domains: [" Example.com "],
+    });
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "never_save",
+      domains: ["example.com"],
+    });
+    expect(
+      await errorCode(
+        backend.dispatch({ command: "site_rule_add", kind: "equivalent", domains: ["a.example"] }),
+      ),
+    ).toBe("item_invalid");
+    const rules = (await backend.getState()).site_rules;
+    expect(rules).toEqual([{ id: rules[0]?.id, kind: "never_save", domains: ["example.com"] }]);
+    await backend.dispatch({ command: "site_rule_remove", id: rules[0]?.id ?? "" });
+    expect((await backend.getState()).site_rules).toEqual([]);
+    expect(
+      await errorCode(backend.dispatch({ command: "site_rule_remove", id: rules[0]?.id ?? "" })),
+    ).toBe("item_not_found");
+    // Locking forgets what was made, and the list moves.
+    const rev = (await backend.getState()).items_rev;
+    await backend.dispatch({ command: "vault_lock" });
+    expect((await backend.getState()).items_rev).toBeGreaterThan(rev);
+    expect(await errorCode(backend.dispatch({ command: "items_list" }))).toBe("locked");
+  });
+
+  it("answers nothing of password management while the build does not offer it", async () => {
+    const backend = new MockBackend({ phase: "unlocked" });
+    expect((await backend.getState()).features.passwords).toBe(false);
+    expect(await errorCode(backend.dispatch({ command: "items_list" }))).toBe(
+      "feature_unavailable",
+    );
+    expect(await errorCode(backend.dispatch({ command: "password_score", password: "x" }))).toBe(
+      "feature_unavailable",
+    );
   });
 
   it("stand-in codes are stable and padded", () => {
