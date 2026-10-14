@@ -42,3 +42,7 @@ apps/desktop/src-tauri/gen/
 # Written by the Rust contract test in serde_json's own layout and compared byte
 # for byte (crates/lockra-bridge/tests/contract.rs): never reformat.
 **/fixtures/ipc/
+
+# Third-party data, byte for byte as published and pinned by SHA-256
+# (crates/lockra-autofill/data/SOURCES, scripts/update-vendored-data.sh).
+crates/lockra-autofill/data/

@@ -24,6 +24,8 @@ crates/
                    keeps in sync (FolderStore, watched by FolderWatch).
   lockra-relay     The relay server, a binary of its own (docs/relay.md): keeps the snapshots of
                    spaces whose devices have no storage, opening none; never linked into the apps.
+  lockra-autofill  Autofill's pure logic: URL matching (Public Suffix List, equivalent domains),
+                   password rules, the generator, strength (zxcvbn); bundled data under data/.
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
                    screen-capture protection, single instance).

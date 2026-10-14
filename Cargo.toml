@@ -10,6 +10,7 @@ members = [
   "crates/lockra-sync",
   "crates/lockra-remote",
   "crates/lockra-relay",
+  "crates/lockra-autofill",
   "apps/desktop/src-tauri",
   "apps/mobile/src-tauri",
 ]
@@ -78,6 +79,9 @@ opendal-http-transport-reqwest = { version = "=0.59.3", default-features = false
 parking_lot = "=0.12.5"
 percent-encoding = "=2.3.2"
 proptest = "=1.11.0"
+# The Public Suffix List compiled to code (crates/lockra-autofill: registrable domains, URL matching).
+# A new version comes out whenever the list changes; take the latest before each release.
+psl = "=2.1.241"
 # The sync storage's HTTP client, the versions tauri-plugin-updater already brings: rustls on ring.
 reqwest = { version = "=0.13.5", default-features = false, features = [
   "rustls-no-provider",
@@ -87,6 +91,8 @@ reqwest = { version = "=0.13.5", default-features = false, features = [
 # `#[derive(prost::Message)]`, so there is no protoc and no build script.
 prost = { version = "=0.14.4", default-features = false, features = ["derive", "std"] }
 qrcode = { version = "=0.14.1", default-features = false, features = ["svg"] }
+# Saved URLs with the regular-expression rule (crates/lockra-autofill), compiled with a size limit.
+regex = "=1.13.1"
 rxing = { version = "=0.9.3", default-features = false, features = [
   "decoders",
   "qrcode",
@@ -112,6 +118,8 @@ url = "=2.5.8"
 unicode-segmentation = "=1.13.3"
 uuid = { version = "=1.26.1", features = ["v4", "serde"] }
 zeroize = { version = "=1.9.0", features = ["derive", "serde"] }
+# Password strength (crates/lockra-autofill); without `builder`, which only adds derive_builder.
+zxcvbn = { version = "=3.1.1", default-features = false }
 
 lockra-otp = { path = "crates/lockra-otp" }
 lockra-vault = { path = "crates/lockra-vault" }
@@ -121,6 +129,7 @@ lockra-bridge = { path = "crates/lockra-bridge" }
 lockra-sync = { path = "crates/lockra-sync" }
 lockra-remote = { path = "crates/lockra-remote" }
 lockra-relay = { path = "crates/lockra-relay" }
+lockra-autofill = { path = "crates/lockra-autofill" }
 
 [profile.release]
 lto = "thin"
