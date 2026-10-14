@@ -76,8 +76,7 @@ pub struct Manifest {
 /// The manifest for `browser`, pointing at `program`: the Chromium ones allow the stores' ids
 /// (and, in a debug build, the development one), Firefox's the add-on's id.
 pub fn manifest(browser: Browser, program: &Path, debug: bool) -> Manifest {
-    let (allowed_origins, allowed_extensions) =
-        if browser.firefox() { (None, Some(vec![ids::FIREFOX])) } else { (Some(ids::chromium_origins(debug)), None) };
+    let (allowed_origins, allowed_extensions) = if browser.firefox() { (None, Some(vec![ids::FIREFOX])) } else { (Some(ids::chromium_origins(debug)), None) };
     Manifest { name: HOST_NAME, description: "Lockra", path: program.to_string_lossy().into_owned(), kind: "stdio", allowed_origins, allowed_extensions }
 }
 

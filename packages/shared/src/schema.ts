@@ -867,6 +867,21 @@ export const activityViewSchema = z.object({
 });
 export type ActivityView = z.infer<typeof activityViewSchema>;
 
+/** The browsers Lockra writes a native-messaging manifest for (the shell's `Browser`), in the
+ *  order Settings › Browser lists them. */
+export const BROWSER_IDS = ["chrome", "edge", "firefox", "chromium", "brave"] as const;
+export const browserIdSchema = z.enum(BROWSER_IDS);
+export type BrowserId = z.infer<typeof browserIdSchema>;
+
+/** A browser as the desktop shell sees it (`browser_status`): its profiles on this account, and
+ *  Lockra's manifest in place for it. */
+export const browserStatusSchema = z.object({
+  browser: browserIdSchema,
+  installed: z.boolean(),
+  manifest: z.boolean(),
+});
+export type BrowserStatus = z.infer<typeof browserStatusSchema>;
+
 /** Settings › Browser and the requests waiting for the user (lockra-core `BrowserView`). */
 export const browserViewSchema = z.object({
   /** This build offers the extension here (the desktop, password management on). */

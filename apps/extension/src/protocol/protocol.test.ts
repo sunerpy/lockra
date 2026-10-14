@@ -95,10 +95,10 @@ describe("plain messages", () => {
     expect(unlockRequest()).toEqual(f.client_plain.unlock_request);
     for (const raw of Object.values(f.client_plain))
       expect(clientPlainSchema.parse(raw)).toEqual(raw);
-    // Host-only, never forwarded to the app (PR 9's host): starting Lockra, and bringing it up.
-    expect(startApp()).toEqual({ op: "start_app" });
-    expect(startApp(true)).toEqual({ op: "start_app", show: true });
-    expect(clientPlainSchema.parse(startApp(true))).toEqual({ op: "start_app", show: true });
+    // Host-only, never forwarded to the app: starting Lockra, and bringing it up.
+    expect(startApp()).toEqual(f.client_plain.start_app);
+    expect(startApp(true)).toEqual(f.client_plain.start_app_show);
+    expect(f.client_plain.start_app_show).toEqual({ op: "start_app", show: true });
   });
 
   it("the app's read, the host's `not_running` too", () => {
@@ -116,7 +116,7 @@ describe("plain messages", () => {
     });
     const none = appPlainSchema.parse(f.app_plain.hello_incompatible);
     expect(none.op === "hello" && none.proto).toBeNull();
-    expect(appPlainSchema.parse({ op: "state", state: "not_running" })).toEqual({
+    expect(appPlainSchema.parse(f.app_plain.state_not_running)).toEqual({
       op: "state",
       state: "not_running",
     });

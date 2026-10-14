@@ -192,6 +192,18 @@ client: it keeps no vault and caches no secret, and every decision is the core's
   between the paired keys with fresh ephemeral keys. At most three pairing requests wait, for two
   minutes each. The app's static key is in the vault's local part (never synced, never in a
   backup) and stays in the app's memory, never in the webview.
+- **The host and the socket.** The native-messaging manifests are written only for the browsers
+  the user picks and removed when the integration is turned off; they allow Lockra's extensions
+  alone: the stores' ids and Firefox's add-on id, and only in a debug build the development id
+  (anyone can load an unpacked extension under it). The host reads nothing it passes on: it says
+  by itself only that Lockra is not running, and starts Lockra when the extension asks (started
+  for the browser, a Lockra running in the background stays in the tray). On Linux and macOS the
+  socket's folder is the user's alone (theirs, not a link, 0700): the app makes it so before it
+  listens and takes a connection only from a process of the same user (`peer_cred`), and the host
+  connects only into such a folder. On Windows the named pipe is created as its first instance, so
+  a process holding the name first makes Lockra not listen rather than share the pipe, and it
+  refuses remote clients; its default access lets other users of the machine open it, which
+  gets them no further than a Noise handshake they cannot complete.
 - **Locked means nothing.** While locked the app answers only `hello` and the request to unlock
   (at most every ten seconds); locking ends every session, refuses every waiting request and
   empties the activity list. A browser's requests never restart the idle timer.
@@ -448,6 +460,15 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   levels; a script on a site a login matches (by its registrable domain, unless the user chose a
   closer rule) can read what is filled there, and with filling as pages load it needs no click; the
   extension's strings cannot be wiped from memory.
+- Running in the background (off unless the user turns it on) keeps Lockra running after its
+  window closes: the vault stays unlocked until it locks by itself or from the tray. Some Linux
+  desktops show no tray icon (GNOME without an AppIndicator extension), and there nothing shows
+  that Lockra still runs; starting it again brings its window back.
+- On Windows, a Lockra the host starts inherits the host's handles to the browser's pipes (Rust
+  starts a process with every inheritable handle, and the workspace forbids the unsafe call that
+  would narrow them). It never reads or writes them, and they close as it quits; until then the
+  browser may not notice that host ending. Chrome starts its hosts outside a job object that would end
+  them with it, so the started Lockra outlives the browser, as it should.
 - A forgotten master password cannot be recovered; _reset_ keeps the old file but cannot open it.
 - Sync: whoever holds an invitation (its QR code photographed, a relay space's pairing link, or
   the sealed text together with its code) holds the space, as a device does, with no password to

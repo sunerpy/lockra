@@ -47,7 +47,11 @@
     "windows": {
       "nsis": { "installMode": "currentUser", "installerHooks": "windows/installer-hooks.nsh" }
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "linux": {
+      "deb": { "depends": ["libayatana-appindicator3-1"] },
+      "rpm": { "depends": ["libayatana-appindicator-gtk3"] }
+    }
   },
   "plugins": {
     "updater": {

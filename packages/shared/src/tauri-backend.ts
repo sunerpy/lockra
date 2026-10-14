@@ -17,6 +17,9 @@ import {
   type Unsubscribe,
 } from "./backend";
 import {
+  type BrowserId,
+  type BrowserStatus,
+  browserStatusSchema,
   type CommandName,
   type CommandOf,
   type ResultOf,
@@ -167,6 +170,18 @@ export class TauriBackend implements Backend {
 
   async pickSyncFolder(): Promise<string | null> {
     return fileNameSchema.parse(await this.call("sync_pick_folder"));
+  }
+
+  async browserEnable(browsers: readonly BrowserId[]): Promise<BrowserStatus[]> {
+    return z.array(browserStatusSchema).parse(await this.call("browser_enable", { browsers }));
+  }
+
+  async browserDisable(): Promise<BrowserStatus[]> {
+    return z.array(browserStatusSchema).parse(await this.call("browser_disable"));
+  }
+
+  async browserStatus(): Promise<BrowserStatus[]> {
+    return z.array(browserStatusSchema).parse(await this.call("browser_status"));
   }
 
   async pickRestoreFile(): Promise<boolean> {

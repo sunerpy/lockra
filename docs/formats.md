@@ -448,8 +448,8 @@ GET    <relay>/v1/                                              {service: "lockr
 The extension keeps no vault. It reaches the running app through native messaging: the browser
 starts the host (`lockra-desktop` in host mode, the shell's part), which only passes frames between
 its stdio and the app's local socket. Noise encrypts end to end between the extension and the app,
-so the host and the socket are untrusted pipes (`crates/lockra-browser`; the shell's listener and
-the host are PR 9 of the password plan).
+so the host and the socket are untrusted pipes (`crates/lockra-browser`, the shell's
+`apps/desktop/src-tauri/src/browser/`).
 
 - **Frames.** A 4-byte length, then that many bytes of JSON: the machine's byte order on stdio
   (native messaging), little-endian on the socket. At most 1 MiB either way, what a browser accepts
@@ -512,6 +512,41 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   asks for the master password or the biometric check. `settings.json`'s `browser_integration`
   only says whether the shell listens and keeps the browsers' manifests; only the shell changes
   it.
+
+- **The host's own.** The host answers by itself only what needs no app, on `hello` envelopes:
+  `{"op": "state", "state": "not_running"}` when a frame finds no app to go to (its socket cannot
+  be reached, or is not in a folder of the user's alone) and as the app's connection ends; the next
+  frame connects again. The extension's `{"op": "start_app"}` starts Lockra as the browser's
+  (`--from-browser`: in the tray while Lockra runs in the background, and a running Lockra keeps
+  its window as it is), and `{"op": "start_app", "show": true}` brings Lockra's window up; neither
+  is answered, nor passed on: the extension says `hello` again (every second, for at most 30
+  seconds) until Lockra does. The app never sees `start_app`; a `hello` envelope it gets with one
+  is a `bad_message`.
+- **Host mode.** The browser starts `lockra-desktop` with the extension's origin first
+  (`chrome-extension://<id>/`, then on Windows a `--parent-window=` handle) or, Firefox, with the
+  manifest's path and the add-on's id. Nothing of the app starts then: no Tauri context, no
+  single-instance check, no window; stdout carries the protocol alone, the log goes to stderr.
+- **The socket.** Linux: `$XDG_RUNTIME_DIR/lockra/browser.sock`, else
+  `<data>/browser/browser.sock`; macOS: `<data>/browser/browser.sock` while its path is at most
+  104 bytes, else `$TMPDIR/lockra/browser.sock`. Its folder is created 0700 (an existing one must
+  be the user's and is set to 0700); the app takes a connection only from a process of the same
+  user (`peer_cred`), and the host connects only to a socket in a folder of the user's alone. A
+  socket left by a Lockra that did not end is replaced; anything else in its place is left, and
+  nothing listens. Windows: the named pipe `\\.\pipe\lockra-browser-<SHA-256 of the config
+folder, hex>`, created as the first instance and refusing remote clients.
+- **The manifests** (`dev.lockra.browser`, `"type": "stdio"`, the program's path: the AppImage when
+  Lockra runs from one): Chrome, Chromium, Edge and Brave's allow `chrome-extension://<id>/` for
+  the Chrome Web Store's and Edge Add-ons' ids (Edge installs from the Chrome Web Store too) and, in
+  a debug build, the development id; Firefox's allows `lockra@firlab.app`. Linux:
+  `~/.config/{google-chrome, chromium, microsoft-edge, BraveSoftware/Brave-Browser}/NativeMessagingHosts/`
+  and `~/.mozilla/native-messaging-hosts/`; macOS: the same browsers' folders under
+  `~/Library/Application Support/` (`Mozilla/NativeMessagingHosts/` for Firefox); Windows: the
+  files in `%LOCALAPPDATA%\Lockra\browser\` (one for the Chromium browsers, one for Firefox),
+  pointed at by the default value of `HKCU\Software\{Google\Chrome, Chromium, Microsoft\Edge,
+Mozilla}\NativeMessagingHosts\dev.lockra.browser` (Brave reads Chrome's). Written for the
+  browsers the user turns the integration on for, written again at each start while it is on,
+  removed when it is turned off. A debug build may put the Chromium ones in
+  `$LOCKRA_DEV_BROWSER_MANIFEST_DIR/NativeMessagingHosts/` (a test browser's `--user-data-dir`).
 
 `crates/lockra-browser/tests/vectors/` holds every message as these types write it
 (`protocol.json`) and both handshakes with fixed keys, their hashes, the code and channel messages

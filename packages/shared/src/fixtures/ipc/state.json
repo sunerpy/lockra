@@ -86,6 +86,7 @@
       "item_sort": "name",
       "locale": "system",
       "reduce_motion": false,
+      "run_in_background": false,
       "sort": "name",
       "theme": "glass"
     },
@@ -194,6 +195,7 @@
       "item_sort": "name",
       "locale": "system",
       "reduce_motion": false,
+      "run_in_background": false,
       "sort": "name",
       "theme": "glass"
     },
@@ -295,6 +297,7 @@
       "item_sort": "name",
       "locale": "system",
       "reduce_motion": false,
+      "run_in_background": false,
       "sort": "name",
       "theme": "glass"
     },
@@ -888,6 +891,7 @@
       "item_sort": "recent",
       "locale": "zh-cn",
       "reduce_motion": true,
+      "run_in_background": true,
       "sort": "recent",
       "theme": "glass_night"
     },

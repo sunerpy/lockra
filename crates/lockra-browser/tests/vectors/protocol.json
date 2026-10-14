@@ -49,8 +49,7 @@
       "version": "0.10.0"
     },
     "start_app": {
-      "op": "start_app",
-      "show": false
+      "op": "start_app"
     },
     "start_app_show": {
       "op": "start_app",

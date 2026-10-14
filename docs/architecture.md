@@ -2,7 +2,8 @@
 
 Lockra is a desktop TOTP/HOTP authenticator: a Rust core in a Tauri 2 shell, with a React
 webview for the interface; an Android app on the same core ships from 0.7.0 (below, "The phone
-shell"). Read this first; `docs/formats.md` has the file formats,
+shell"). Password management (logins, the generator, the browser extension) is being built: a
+debug build offers it, a release build not yet (below, "The core"). Read this first; `docs/formats.md` has the file formats,
 `docs/security.md` the security model and `DESIGN.md` the design system.
 
 ## Layout
@@ -26,9 +27,13 @@ crates/
                    spaces whose devices have no storage, opening none; never linked into the apps.
   lockra-autofill  Autofill's pure logic: URL matching (Public Suffix List, equivalent domains),
                    password rules, the generator, strength (zxcvbn); bundled data under data/.
+  lockra-browser   The browser extension's channel (docs/formats.md §10): frames, envelopes, Noise
+                   (XX to pair, KK for a session), the app's service loop on a listener the shell
+                   gives it, the host's relay. Every decision on a request is the core's.
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
-                   screen-capture protection, single instance).
+                   screen-capture protection, single instance, the tray; the browser channel's
+                   socket and manifests, and the host mode the browsers start it in).
   src/             The React app: shell, pages, dialogs.
 apps/mobile/       The Android app (from 0.7.0).
   src-tauri/       lockra-mobile: the phone's Tauri shell; gen/android is its Gradle project, with
@@ -37,6 +42,9 @@ apps/mobile/       The Android app (from 0.7.0).
                    (the camera, photos, files, links, the clipboard, by hand) through the import
                    preview, an account's actions (edit, pin, show the secret, delete), settings,
                    sync.
+apps/extension/    The browser extension (Chrome, Edge, Firefox; Manifest V3): the background
+                   worker with Noise in TypeScript, the content scripts, the inline menu, the popup
+                   and the options page.
 packages/shared    zod contract, the Backend interface (TauriBackend, MockBackend), i18n, labels.
 packages/ui        The design system (Voltip's tokens and components, plus Lockra's own).
 ```
@@ -60,6 +68,20 @@ State machine: **NoVault → Locked → Unlocked**. Create or restore leads from
 unlock (password or device key) from Locked; lock, auto-lock and closing return to Locked; reset
 returns from Locked to NoVault. Only Unlocked holds decrypted entries, the import preview and
 export sessions; leaving it drops them.
+
+Beside the entries the vault keeps logins (`item.rs`, docs/formats.md §2). A login merges part by
+part, its metadata one register and each field another, so two devices changing different parts
+at once both keep their change; a hidden value a write replaces stays in a short history, from
+which a conflict is derived. The webview's view of a login holds no secret (`logins.rs`); one comes
+back only in `item_reveal` and the generator's answers. Their commands, the generator's and the
+site rules' (`session/items.rs`) answer `feature_unavailable` while the build does not offer
+password management (`Features.passwords`: on in a debug build, off in a release until it ships),
+and the vault still keeps and syncs what other devices wrote. The browser extension's part is
+`browser.rs` and `session/browser.rs`: what the vault keeps of it (the app's static key, the paired
+extensions, the policy) and every decision on a paired extension's request (the match for the
+frame, frames of other sites, the HTTP downgrade, the protection level, the rate limits).
+`lockra-browser` calls `Core::browser_*`; the core holds no port of it, and a browser request never
+restarts the idle timer.
 
 Argon2 and file I/O run on `spawn_blocking`. One **scheduler task** owns every timer — the next
 code window, auto-lock, clipboard clearing, the automatic backup debounce, export expiry, the
@@ -114,6 +136,43 @@ representative states, events, commands and answers into `packages/shared/src/fi
 (byte for byte; `UPDATE_IPC_FIXTURES=1` rewrites them after an intended change), and
 `ipc-contract.test.ts` parses the same files with the zod schemas and replays them through
 `TauriBackend`. Errors cross as `{code, retry_at_ms?}`; the webview translates the code.
+
+## The browser channel
+
+The extension keeps no vault and caches no secret: it asks the running app. The browser starts
+`lockra-desktop` as its native-messaging host (`dev.lockra.browser`), which passes frames between its
+stdio and the app's local socket. Noise is end to end between the extension and the app, so the
+host and the socket are pipes that read nothing (docs/formats.md §10, docs/security.md, "Browser
+extension").
+
+- The host mode (`src-tauri/src/browser/host.rs`): `run()` knows the browser's arguments (the
+  extension's origin first, or Firefox's manifest path and add-on id) and, before Tauri or the
+  single-instance check, runs `lockra_browser::host::relay` on a current-thread runtime. stdout is
+  the protocol's; the log goes to stderr. With no app on the socket the host answers `not_running`
+  itself; the extension's `start_app` starts Lockra with `--from-browser` (it stays in the tray
+  when it runs in the background, and a running Lockra keeps its window as it is) or, with `show`,
+  brings its window up.
+- The socket (`browser/socket.rs`): a Unix socket in a folder of the user's alone, connections
+  from the same user only (`peer_cred`); on Windows a named pipe named after the config folder,
+  created as the first instance, refusing remote clients.
+- The service (`browser/service.rs`): while `settings.json`'s `browser_integration` is on,
+  `lockra_browser::serve` runs on the socket from the start, answering even while the vault is
+  locked. The shell commands `browser_enable { browsers }` (the chosen browsers' manifests written,
+  `browser/manifest.rs`, with winreg's keys on Windows; the socket listened on; the flag set),
+  `browser_disable` (no longer listening: every session ended, the socket removed; every manifest
+  removed) and `browser_status` (per browser: installed, Lockra's manifest in place) answer
+  `browser_unavailable` without password management. At each start with the integration on, the
+  manifests are written again (the program may have moved with an update).
+- Running in the background (`src-tauri/src/background.rs`): with `run_in_background` on, closing
+  the window hides it and Lockra stays in the tray (open, lock, quit, in the app's language), so the
+  extension can reach it; off, closing the window quits as it always has. Another start brings the
+  window up, except one for the browser; on macOS the Dock's icon does too (`RunEvent::Reopen`).
+  The Linux packages depend on libayatana-appindicator for the tray.
+- The extension (`apps/extension`): the background worker holds the connection
+  (`background/connection.ts`: reconnecting with a backoff; after `start_app`, a hello every second
+  for thirty seconds), Noise in TypeScript (`noise/`), the content scripts that find the fields and
+  fill them (`content/`), the inline menu in an extension-origin frame (`inline/`), the popup and
+  the options page; `protocol/` holds the zod schemas of the messages.
 
 ## The phone shell
 
@@ -220,13 +279,14 @@ code stream in development (both fixed, both covered by tests).
 
 ## Tests
 
-| Layer    | How                                                                                                                                                                                                                                                                                                                             |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| crates   | unit tests and RFC vectors; core scenarios on fakes and a paused tokio clock; line coverage ≥ 90 % (`make coverage`)                                                                                                                                                                                                            |
-| contract | Rust fixtures ⇄ zod schemas, secret-leak assertions                                                                                                                                                                                                                                                                             |
-| shell    | `tests/ipc.rs` on `tauri::test::MockRuntime`: the registered commands, dispatch, typed errors, no path, the code channel; `tests/update.rs`: the real updater plugin against a local manifest (signature, signed version, tampering)                                                                                            |
-| web      | vitest + Testing Library on `MockBackend`, line coverage ≥ 85 % per package                                                                                                                                                                                                                                                     |
-| app      | `make smoke-desktop`: the real app under Xvfb driven over WebDriver and X input (`docs/acceptance/visual-qa.md`)                                                                                                                                                                                                                |
-| phone    | `apps/mobile/src-tauri/tests/ipc.rs` on `MockRuntime`; CI's `android-device`: the release APK on an emulator creates a vault, locks on leaving, unlocks again, adds an account by hand and copies its code, and reaches AWS S3 over HTTPS with the system's certificate authorities (`.github/scripts/android-device-smoke.sh`) |
+| Layer    | How                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| crates   | unit tests and RFC vectors; core scenarios on fakes and a paused tokio clock; line coverage ≥ 90 % (`make coverage`)                                                                                                                                                                                                                                                                                                                        |
+| contract | Rust fixtures ⇄ zod schemas, secret-leak assertions                                                                                                                                                                                                                                                                                                                                                                                         |
+| shell    | `tests/ipc.rs` on `tauri::test::MockRuntime`: the registered commands, dispatch, typed errors, no path, the code channel; `tests/update.rs`: the real updater plugin against a local manifest (signature, signed version, tampering)                                                                                                                                                                                                        |
+| web      | vitest + Testing Library on `MockBackend`, line coverage ≥ 85 % per package                                                                                                                                                                                                                                                                                                                                                                 |
+| app      | `make smoke-desktop`: the real app under Xvfb driven over WebDriver and X input (`docs/acceptance/visual-qa.md`); it turns the browser integration on and reaches the running app through the real binary in host mode                                                                                                                                                                                                                      |
+| browser  | `crates/lockra-browser/tests/vectors/`: every message and the Noise handshakes as the Rust types and snow write them (`UPDATE_BROWSER_FIXTURES=1`), read by the extension's tests too; the host's relay on fakes; the shell's socket and every system's manifest paths on any machine, the named pipe and the registry on CI's Windows; `tests/host_mode.rs`: the real binary started as a browser starts it (the release build on Windows) |
+| phone    | `apps/mobile/src-tauri/tests/ipc.rs` on `MockRuntime`; CI's `android-device`: the release APK on an emulator creates a vault, locks on leaving, unlocks again, adds an account by hand and copies its code, and reaches AWS S3 over HTTPS with the system's certificate authorities (`.github/scripts/android-device-smoke.sh`)                                                                                                             |
 
 `make verify` runs every gate; `make linux-x64` and `make windows-x64` build the packages.

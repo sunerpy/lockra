@@ -1345,7 +1345,8 @@ export const en: Messages = {
     browser_unavailable: "The browser extension cannot be used on this device",
     browser_not_paired: "This browser extension is not paired, or its pairing was removed",
     browser_pair_expired: "This request has expired; start it again in the browser",
-    browser_manifest_failed: "The browsers' connection files (native-messaging manifests) could not be written or removed",
+    browser_manifest_failed:
+      "The browsers' connection files (native-messaging manifests) could not be written or removed",
     feature_unavailable:
       "This version cannot do that yet; restore a backup that holds passwords with Replace",
     internal: "An internal error occurred",

@@ -65,7 +65,10 @@ timeout 20 sh -c "until DISPLAY=$display xdpyinfo >/dev/null 2>&1; do sleep 0.5;
 mkdir -p "$work/data" "$work/config/dev.lockra.desktop"
 # Chinese copy (the container has no zh_CN locale for the webview to follow).
 printf '{"locale":"zh-cn"}\n' >"$work/config/dev.lockra.desktop/settings.json"
-export DISPLAY="$display" XDG_DATA_HOME="$work/data" XDG_CONFIG_HOME="$work/config" LOCKRA_DEV_SECRET_STORE=memory LOCKRA_DEV_BIOMETRIC=touch_id
+# The browser integration's Chromium manifests go to a folder of the run's own (debug builds only),
+# never the user's browser profile.
+export DISPLAY="$display" XDG_DATA_HOME="$work/data" XDG_CONFIG_HOME="$work/config" LOCKRA_DEV_SECRET_STORE=memory LOCKRA_DEV_BIOMETRIC=touch_id \
+  LOCKRA_DEV_BROWSER_MANIFEST_DIR="$work/chrome"
 
 tauri-driver --port "$port" --native-port "$((port + 1))" >"$work/driver.log" 2>&1 &
 driver_pid=$!

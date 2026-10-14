@@ -85,8 +85,8 @@ pub enum ClientPlain {
     /// the browser's (`--from-browser`: in the tray where Lockra runs in the background); with it,
     /// Lockra's window comes up. No answer: the extension says `hello` again until Lockra does.
     StartApp {
-        /// Bring the window up.
-        #[serde(default)]
+        /// Bring the window up (written only when it is wanted, as the extension writes it).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         show: bool,
     },
 }
