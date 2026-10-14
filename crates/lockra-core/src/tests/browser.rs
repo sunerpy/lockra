@@ -1,0 +1,668 @@
+//! The browser extension's side of the core: the static key, pairing, the decisions on fills and
+//! the other requests of a session, the rate limits, the policy, and what the interface sees. The
+//! channel itself (Noise, framing) is lockra-browser's and has its own tests.
+
+use std::time::Duration;
+
+use super::*;
+use crate::browser::{
+    ActivityEvent, BrowserPolicy, ClientInfo, ConfirmReason, CopyRequest, FILLS_PER_MINUTE, FillRequest, FrameFacts, FrameRule, GenerateRequest, GenerateSave,
+    OtpRequest, QUERIES_PER_MINUTE, QueryPurpose, QueryRequest, Refusal, SITES_PER_TEN_MINUTES, SaveAction, SaveRequest, SearchRequest, SessionId,
+    SiteRuleRequest, Trigger, UpdateRequest,
+};
+use crate::item::{Matching, Protection, SiteRuleKind, Tri};
+use crate::logins::{CopyPart, ItemDraft, ItemPatch, RevealParts, SecretChange, UrlDraft};
+use crate::{AutofillChoice, Lenient};
+
+const KEY: [u8; 32] = [7; 32];
+const PASSWORD: &str = "hunter2-not-for-the-page";
+
+fn chrome() -> ClientInfo {
+    ClientInfo { browser: "Chrome".into(), label: "Work".into(), extension: "abcdefghijklmnop".into(), version: "0.10.0".into(), page_access: true }
+}
+
+fn facts(frame: &str) -> FrameFacts {
+    FrameFacts { frame_url: frame.into(), top_url: frame.into(), frame_chain: Vec::new() }
+}
+
+fn fill_at(url: &str) -> FillRequest {
+    FillRequest { facts: facts(url), ..FillRequest::default() }
+}
+
+fn login(title: &str, username: &str, url: &str, matching: Matching) -> ItemDraft {
+    ItemDraft {
+        title: title.into(),
+        username: username.into(),
+        password: SecretChange::Set { value: pw(PASSWORD) },
+        urls: vec![UrlDraft { url: url.into(), matching }],
+        ..ItemDraft::default()
+    }
+}
+
+/// A paired extension with an open session.
+async fn paired(h: &Harness) -> (Uuid, SessionId) {
+    let core = h.core.clone();
+    let pairing = tokio::spawn(async move { core.browser_pair(chrome(), KEY, "123456".into()).await });
+    settle().await;
+    let request = h.core.state().browser.pairing[0].id;
+    h.core.browser_pair_approve(request, Some(pw(MASTER)), None).await.unwrap();
+    let pairing = pairing.await.unwrap().unwrap();
+    let session = h.core.browser_session_open(pairing, chrome()).unwrap();
+    (pairing, session)
+}
+
+async fn riskier(h: &Harness, change: impl FnOnce(&mut BrowserPolicy)) {
+    let mut policy = h.core.state().browser.policy;
+    change(&mut policy);
+    h.core.browser_set_policy(policy, Some(pw(MASTER)), None).await.unwrap();
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_static_key_is_made_once_kept_in_the_vault_and_given_only_while_unlocked() {
+    let h = Harness::unlocked().await;
+    let key = h.core.browser_static_secret().unwrap();
+    assert_eq!(h.core.browser_static_secret().unwrap(), key, "made once");
+    assert_ne!(*key, [0; 32]);
+    // Nowhere the webview or a backup could see it.
+    let file = h.dir.path().join("keyless.lockrabackup");
+    h.core.backup_to(file.clone(), None).await.unwrap();
+    let state = serde_json::to_string(&h.core.state()).unwrap();
+    assert!(!state.contains(&data_encoding::BASE64.encode(key.as_slice())));
+    let backup = crate::entry::VaultData::from_bytes(&h.core.data().backup_bytes()).unwrap();
+    assert!(backup.local.is_none(), "a backup carries no local part");
+    h.core.lock_vault();
+    assert!(h.core.browser_static_secret().is_none(), "locked: no key");
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(restarted.browser_static_secret().unwrap(), key, "kept in the vault");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_pairing_waits_for_the_user_who_approves_it_with_proof() {
+    let mut h = Harness::unlocked().await;
+    let _ = h.notices();
+    let core = h.core.clone();
+    let pairing = tokio::spawn(async move { core.browser_pair(chrome(), KEY, "654321".into()).await });
+    settle().await;
+    let state = h.core.state();
+    let request = state.browser.pairing[0].clone();
+    assert_eq!((request.code.as_str(), request.browser.as_str(), request.label.as_str()), ("654321", "chrome", "Work"));
+    assert_eq!(request.expires_at_ms, T0 + 120_000);
+    assert!(h.notices().contains(&Notice::BrowserPairRequested { id: request.id, browser: "chrome".into(), code: "654321".into() }));
+    // Approving needs proof: no biometric check here, so the master password.
+    assert_eq!(code_err(h.core.browser_pair_approve(request.id, None, None).await), ErrorCode::BiometricUnavailable);
+    assert_eq!(code_err(h.core.browser_pair_approve(request.id, Some(pw("wrong password")), None).await), ErrorCode::WrongPassword);
+    assert!(!pairing.is_finished(), "still waiting");
+    h.core.browser_pair_approve(request.id, Some(pw(MASTER)), None).await.unwrap();
+    let id = pairing.await.unwrap().unwrap();
+    let state = h.core.state();
+    assert!(state.browser.pairing.is_empty());
+    let paired = &state.browser.paired[0];
+    assert_eq!((paired.id, paired.browser.as_str(), paired.connected, paired.paired_at_ms), (id, "chrome", false, T0));
+    assert_eq!(h.core.browser_peer(id), Some(KEY));
+    assert_eq!(state.browser.activity[0].event, ActivityEvent::Paired);
+    // Pairing the same extension again replaces its pairing.
+    let core = h.core.clone();
+    let again = tokio::spawn(async move { core.browser_pair(chrome(), KEY, "111111".into()).await });
+    settle().await;
+    let request = h.core.state().browser.pairing[0].id;
+    h.core.browser_pair_approve(request, Some(pw(MASTER)), None).await.unwrap();
+    let second = again.await.unwrap().unwrap();
+    assert_eq!(h.core.state().browser.paired.iter().map(|p| p.id).collect::<Vec<_>>(), [second]);
+    assert_eq!(h.core.browser_peer(id), None);
+    // Kept in the vault.
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(restarted.browser_peer(second), Some(KEY));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_pairing_request_is_denied_or_lapses_and_at_most_three_wait() {
+    let h = Harness::unlocked().await;
+    let mut waiting = Vec::new();
+    for n in 0..3 {
+        let core = h.core.clone();
+        waiting.push(tokio::spawn(async move { core.browser_pair(chrome(), [n; 32], format!("00000{n}")).await }));
+    }
+    settle().await;
+    assert_eq!(h.core.browser_pair(chrome(), KEY, "999999".into()).await, Err(Refusal::Busy));
+    let first = h.core.state().browser.pairing[0].id;
+    h.core.browser_pair_deny(first).unwrap();
+    assert_eq!(waiting.remove(0).await.unwrap(), Err(Refusal::Denied));
+    advance(Duration::from_secs(121)).await;
+    for request in waiting {
+        assert_eq!(request.await.unwrap(), Err(Refusal::Expired));
+    }
+    assert!(h.core.state().browser.pairing.is_empty(), "gone from the interface");
+    assert_eq!(code_err(h.core.browser_pair_approve(first, Some(pw(MASTER)), None).await), ErrorCode::BrowserPairExpired);
+    assert_eq!(code_err(h.core.browser_pair_deny(first)), ErrorCode::BrowserPairExpired);
+    // The channel gave up (the extension went away): the request goes with it.
+    let core = h.core.clone();
+    let gone = tokio::spawn(async move { core.browser_pair(chrome(), KEY, "222222".into()).await });
+    settle().await;
+    assert_eq!(h.core.state().browser.pairing.len(), 1);
+    gone.abort();
+    settle().await;
+    assert!(h.core.state().browser.pairing.is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn nothing_is_paired_or_answered_while_locked_and_locking_ends_it_all() {
+    let h = Harness::unlocked().await;
+    let (pairing, session) = paired(&h).await;
+    h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
+    h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
+    let core = h.core.clone();
+    let request = tokio::spawn(async move { core.browser_pair(chrome(), [9; 32], "333333".into()).await });
+    settle().await;
+    assert!(h.core.browser_session_alive(session));
+    assert!(!h.core.state().browser.activity.is_empty());
+    h.core.lock_vault();
+    assert_eq!(request.await.unwrap(), Err(Refusal::Locked));
+    assert!(!h.core.browser_session_alive(session));
+    assert_eq!(h.core.browser_fill(session, fill_at("https://github.com/login")).await, Err(Refusal::Locked));
+    assert_eq!(h.core.browser_peer(pairing), None);
+    assert_eq!(h.core.browser_session_open(pairing, chrome()), Err(Refusal::Locked));
+    assert_eq!(h.core.browser_pair(chrome(), KEY, "444444".into()).await, Err(Refusal::Locked));
+    let state = h.core.state();
+    assert!(state.browser.paired.is_empty() && state.browser.activity.is_empty(), "nothing shown while locked");
+    h.core.unlock(pw(MASTER)).await.unwrap();
+    let state = h.core.state();
+    assert!(state.browser.activity.is_empty(), "the activity list is emptied as the vault locks");
+    assert!(!state.browser.paired[0].connected, "the session ended");
+    assert_eq!(h.core.browser_session_open(pairing, chrome()).map(|_| ()), Ok(()), "a new session opens");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_fill_gets_the_best_match_for_the_frame_and_nothing_else() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let site = h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
+    let gist = h.core.item_add(login("Gist", "gister", "https://gist.github.com/", Matching::Host)).unwrap();
+    let hidden =
+        h.core.item_add(ItemDraft { protection: Protection::NoExtension, ..login("Hidden", "h", "https://gist.github.com/", Matching::Exact) }).unwrap();
+    // On github.com only the domain rule matches; on gist the host rule is closer and wins alone.
+    assert_eq!(h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap().item_id, site);
+    let answer = h.core.browser_fill(session, fill_at("https://gist.github.com/")).await.unwrap();
+    assert_eq!((answer.item_id, answer.username.as_str(), answer.password.as_str()), (gist, "gister", PASSWORD));
+    let named = FillRequest { item_id: Some(site), ..fill_at("https://gist.github.com/") };
+    assert_eq!(h.core.browser_fill(session, named).await, Err(Refusal::NoMatch), "a looser match is not offered");
+    let not_offered = FillRequest { item_id: Some(hidden), ..fill_at("https://gist.github.com/") };
+    assert_eq!(h.core.browser_fill(session, not_offered).await, Err(Refusal::NoMatch), "no_extension is never handed over");
+    assert_eq!(h.core.browser_fill(session, fill_at("https://example.org/")).await, Err(Refusal::NoMatch));
+    for page in ["about:blank", "data:text/html,x", "chrome-extension://abc/x.html", "not a url"] {
+        assert_eq!(h.core.browser_fill(session, fill_at(page)).await, Err(Refusal::Invalid), "{page}");
+    }
+    // The query shows the same, without a secret.
+    let query = h.core.browser_query(session, QueryRequest { facts: facts("https://gist.github.com/"), ..QueryRequest::default() }).unwrap();
+    assert_eq!(query.items.iter().map(|i| i.item_id).collect::<Vec<_>>(), [gist]);
+    assert_eq!((query.site.as_str(), query.level), ("github.com", Some(lockra_autofill::MatchLevel::Host)));
+    assert!(!serde_json::to_string(&query).unwrap().contains(PASSWORD));
+    // The never-fill list stops it before matching.
+    h.core.site_rule_add(SiteRuleKind::NeverFill, &["github.com".into()]).unwrap();
+    assert_eq!(h.core.browser_fill(session, fill_at("https://gist.github.com/")).await, Err(Refusal::NeverFill));
+    let query = h.core.browser_query(session, QueryRequest { facts: facts("https://gist.github.com/"), ..QueryRequest::default() }).unwrap();
+    assert!(query.never_fill && query.items.is_empty());
+    let refused = &h.core.state().browser.activity[0];
+    assert_eq!((refused.event, refused.refusal, refused.site.as_str()), (ActivityEvent::Refused, Some(Refusal::NeverFill), "github.com"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn frames_of_other_sites_and_plain_http_pages_are_refused_unless_allowed() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    h.core.item_add(login("Bank", "me", "https://bank.example/", Matching::Domain)).unwrap();
+    let framed = FrameFacts { frame_url: "https://bank.example/login".into(), top_url: "https://evil.example/".into(), frame_chain: Vec::new() };
+    let request = FillRequest { facts: framed.clone(), ..FillRequest::default() };
+    assert_eq!(h.core.browser_fill(session, request.clone()).await, Err(Refusal::CrossOrigin), "never, by default");
+    // A frame of the same site inside a frame of another site is cross-origin too.
+    let nested = FrameFacts {
+        frame_url: "https://bank.example/login".into(),
+        top_url: "https://bank.example/".into(),
+        frame_chain: vec!["https://ads.example/".into()],
+    };
+    assert_eq!(h.core.browser_fill(session, FillRequest { facts: nested, ..FillRequest::default() }).await, Err(Refusal::CrossOrigin));
+    // An https login on an http page: the extension asks in the page, then says so.
+    assert_eq!(h.core.browser_fill(session, fill_at("http://bank.example/login")).await, Err(Refusal::HttpDowngrade));
+    let agreed = FillRequest { allow_http: true, ..fill_at("http://bank.example/login") };
+    assert_eq!(h.core.browser_fill(session, agreed).await.unwrap().password.as_str(), PASSWORD);
+    // With the frame rule set to ask, Lockra asks; a click is enough (the login does not ask).
+    riskier(&h, |p| p.cross_origin_frames = Lenient::Known(FrameRule::Ask)).await;
+    let core = h.core.clone();
+    let fill = tokio::spawn(async move { core.browser_fill(session, request).await });
+    settle().await;
+    let waiting = h.core.state().browser.confirms[0].clone();
+    assert_eq!((waiting.reasons.clone(), waiting.needs_proof), (vec![ConfirmReason::CrossOrigin], false));
+    assert_eq!((waiting.frame_url.as_str(), waiting.top_url.as_deref()), ("https://bank.example/login", Some("https://evil.example/")));
+    h.core.browser_confirm(waiting.id, None, None).await.unwrap();
+    assert_eq!(fill.await.unwrap().unwrap().password.as_str(), PASSWORD);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_login_that_asks_first_waits_for_proof_in_lockra() {
+    let mut h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let bank = h.core.item_add(ItemDraft { protection: Protection::Confirm, ..login("Bank", "me", "https://bank.example/", Matching::Domain) }).unwrap();
+    let _ = h.notices();
+    let core = h.core.clone();
+    let fill = tokio::spawn(async move { core.browser_fill(session, fill_at("https://bank.example/")).await });
+    settle().await;
+    let waiting = h.core.state().browser.confirms[0].clone();
+    assert_eq!((waiting.item_id, waiting.needs_proof, waiting.title.as_str(), waiting.username.as_str()), (bank, true, "Bank", "me"));
+    assert!(h.notices().contains(&Notice::BrowserConfirmRequested { id: waiting.id, browser: "chrome".into(), title: "Bank".into() }));
+    assert!(!serde_json::to_string(&h.core.state()).unwrap().contains(PASSWORD), "the waiting request holds no secret");
+    assert_eq!(code_err(h.core.browser_confirm(waiting.id, None, None).await), ErrorCode::BiometricUnavailable);
+    h.core.browser_confirm(waiting.id, Some(pw(MASTER)), None).await.unwrap();
+    assert_eq!(fill.await.unwrap().unwrap().password.as_str(), PASSWORD);
+    // Denied, or not answered in time.
+    let core = h.core.clone();
+    let fill = tokio::spawn(async move { core.browser_fill(session, fill_at("https://bank.example/")).await });
+    settle().await;
+    h.core.browser_confirm_deny(h.core.state().browser.confirms[0].id).unwrap();
+    assert_eq!(fill.await.unwrap(), Err(Refusal::Denied));
+    let core = h.core.clone();
+    let fill = tokio::spawn(async move { core.browser_fill(session, fill_at("https://bank.example/")).await });
+    settle().await;
+    let lapsed = h.core.state().browser.confirms[0].id;
+    advance(Duration::from_secs(61)).await;
+    assert_eq!(fill.await.unwrap(), Err(Refusal::Expired));
+    assert!(h.core.state().browser.confirms.is_empty());
+    assert_eq!(code_err(h.core.browser_confirm(lapsed, Some(pw(MASTER)), None).await), ErrorCode::BrowserPairExpired);
+    // Copying its password from the popup waits the same way; its user name does not.
+    h.core.browser_copy(session, CopyRequest { item_id: bank, part: CopyPart::Username }).await.unwrap();
+    assert_eq!(h.clipboard.current().as_deref(), Some("me"));
+    let core = h.core.clone();
+    let copy = tokio::spawn(async move { core.browser_copy(session, CopyRequest { item_id: bank, part: CopyPart::Password }).await });
+    settle().await;
+    let waiting = h.core.state().browser.confirms[0].clone();
+    assert_eq!((waiting.action, waiting.needs_proof), (crate::browser::ConfirmAction::Copy, true));
+    h.core.browser_confirm(waiting.id, Some(pw(MASTER)), None).await.unwrap();
+    copy.await.unwrap().unwrap();
+    assert_eq!(h.clipboard.current().as_deref(), Some(PASSWORD));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_fill_brings_the_linked_code_and_a_second_step_gets_it_for_five_minutes() {
+    let mut h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let entry = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    let id = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("GitHub", "octocat", "https://github.com/", Matching::Domain) }).unwrap();
+    let _ = h.notices();
+    let answer = h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
+    let code = answer.otp.clone().unwrap();
+    assert_eq!(code.len(), 6);
+    assert!(!answer.submit, "the policy does not submit by default");
+    assert_eq!(h.clipboard.current().as_deref(), Some(code.as_str()), "copied as well");
+    assert!(h.notices().contains(&Notice::ItemCopied { item_id: Some(id), part: crate::ui::CopiedPart::Totp, clear_after_s: Some(30) }));
+    assert!(h.core.items_list().unwrap()[0].last_used_at_ms.is_some());
+    // The next page of the sign-in, on the same site.
+    let otp = OtpRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor") };
+    assert_eq!(h.core.browser_otp(session, otp.clone()).unwrap().code.len(), 6);
+    let elsewhere = OtpRequest { item_id: id, facts: facts("https://example.org/2fa") };
+    assert_eq!(h.core.browser_otp(session, elsewhere), Err(Refusal::NoMatch));
+    // The user is at work meanwhile (a browser request never keeps the vault open by itself).
+    advance(Duration::from_secs(4 * 60)).await;
+    h.core.activity();
+    advance(Duration::from_secs(60)).await;
+    assert_eq!(h.core.browser_otp(session, otp.clone()), Err(Refusal::NoMatch), "five minutes at most");
+    // The login's own choice wins over the policy.
+    h.core.item_update(id, ItemPatch { autofill: Some(AutofillChoice { fill_otp: Tri::Off, ..AutofillChoice::default() }), ..ItemPatch::default() }).unwrap();
+    let answer = h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
+    assert!(answer.otp.is_none());
+    assert_eq!(h.core.browser_otp(session, otp), Err(Refusal::Protected));
+    // Submitting is the login's or the policy's choice; copying the code can be turned off.
+    riskier(&h, |p| {
+        p.auto_submit = true;
+        p.copy_otp = false;
+    })
+    .await;
+    h.clipboard.put_text("something else");
+    let answer = h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
+    assert!(answer.submit);
+    assert_eq!(h.clipboard.current().as_deref(), Some("something else"), "not copied");
+}
+
+#[tokio::test(start_paused = true)]
+async fn page_load_fills_only_where_everything_is_plain() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let entry = h.core.add_uri(&otpauth("Shop", "me", SECRET)).unwrap();
+    let shop = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("Shop", "me", "https://shop.example/", Matching::Domain) }).unwrap();
+    let on_load = |url: &str| FillRequest { trigger: Trigger::PageLoad, ..fill_at(url) };
+    assert_eq!(h.core.browser_fill(session, on_load("https://shop.example/")).await, Err(Refusal::Protected), "off by default");
+    riskier(&h, |p| {
+        p.on_page_load = true;
+        p.auto_submit = true;
+    })
+    .await;
+    let answer = h.core.browser_fill(session, on_load("https://shop.example/")).await.unwrap();
+    assert_eq!(answer.item_id, shop);
+    assert!(answer.otp.is_none() && !answer.submit, "never a code, never a submit");
+    // Not in a frame, not with two matches, not over http, not a login that asks or says no.
+    let framed = FillRequest {
+        trigger: Trigger::PageLoad,
+        facts: FrameFacts {
+            frame_url: "https://shop.example/".into(),
+            top_url: "https://shop.example/".into(),
+            frame_chain: vec!["https://shop.example/outer".into()],
+        },
+        ..FillRequest::default()
+    };
+    assert_eq!(h.core.browser_fill(session, framed).await, Err(Refusal::Protected));
+    assert_eq!(h.core.browser_fill(session, FillRequest { allow_http: true, ..on_load("http://shop.example/") }).await, Err(Refusal::Protected));
+    h.core
+        .item_update(shop, ItemPatch { autofill: Some(AutofillChoice { on_page_load: Tri::Off, ..AutofillChoice::default() }), ..ItemPatch::default() })
+        .unwrap();
+    assert_eq!(h.core.browser_fill(session, on_load("https://shop.example/")).await, Err(Refusal::Protected));
+    h.core.item_update(shop, ItemPatch { autofill: Some(AutofillChoice::default()), protection: Some(Protection::Confirm), ..ItemPatch::default() }).unwrap();
+    assert_eq!(h.core.browser_fill(session, on_load("https://shop.example/")).await, Err(Refusal::Protected));
+    h.core.item_update(shop, ItemPatch { protection: Some(Protection::Fill), ..ItemPatch::default() }).unwrap();
+    h.core.item_add(login("Shop 2", "you", "https://shop.example/", Matching::Domain)).unwrap();
+    assert_eq!(h.core.browser_fill(session, on_load("https://shop.example/")).await, Err(Refusal::Protected), "two matches");
+    // An http login on an http page is plain enough.
+    let plain = h.core.item_add(login("Router", "admin", "http://192.168.1.1/", Matching::Host)).unwrap();
+    assert_eq!(h.core.browser_fill(session, on_load("http://192.168.1.1/")).await.unwrap().item_id, plain);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_policy_asks_for_proof_only_to_let_the_extensions_do_more() {
+    let h = Harness::unlocked().await;
+    let defaults = h.core.state().browser.policy;
+    assert_eq!(defaults, BrowserPolicy::default());
+    assert!(defaults.fill_otp && defaults.copy_otp && !defaults.auto_submit && !defaults.confirm_fill && !defaults.on_page_load);
+    assert_eq!(defaults.frames(), FrameRule::Never);
+    // Less: no proof.
+    let less = BrowserPolicy { fill_otp: false, copy_otp: false, confirm_fill: true, ..defaults.clone() };
+    h.core.browser_set_policy(less.clone(), None, None).await.unwrap();
+    assert_eq!(h.core.state().browser.policy, less);
+    // More, one change at a time: each needs proof.
+    for more in [
+        BrowserPolicy { on_page_load: true, ..less.clone() },
+        BrowserPolicy { auto_submit: true, ..less.clone() },
+        BrowserPolicy { fill_otp: true, ..less.clone() },
+        BrowserPolicy { confirm_fill: false, ..less.clone() },
+        BrowserPolicy { cross_origin_frames: Lenient::Known(FrameRule::Ask), ..less.clone() },
+    ] {
+        assert_eq!(code_err(h.core.browser_set_policy(more.clone(), None, None).await), ErrorCode::BiometricUnavailable, "{more:?}");
+        assert_eq!(h.core.state().browser.policy, less);
+    }
+    let more = BrowserPolicy { on_page_load: true, ..less };
+    h.core.browser_set_policy(more.clone(), Some(pw(MASTER)), None).await.unwrap();
+    // Kept in the vault, not in settings.json.
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(restarted.state().browser.policy, more);
+    assert!(!fs::read_to_string(h.dir.path().join("config").join("settings.json")).unwrap_or_default().contains("on_page_load"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_extension_that_asks_too_often_is_paused_until_resumed() {
+    let mut h = Harness::unlocked().await;
+    let (pairing, session) = paired(&h).await;
+    h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
+    for _ in 0..FILLS_PER_MINUTE {
+        h.core.browser_fill(session, fill_at("https://github.com/")).await.unwrap();
+    }
+    let _ = h.notices();
+    assert_eq!(h.core.browser_fill(session, fill_at("https://github.com/")).await, Err(Refusal::RateLimited));
+    assert!(h.notices().contains(&Notice::BrowserPaused { pairing, browser: "chrome".into(), label: "Work".into() }));
+    let state = h.core.state();
+    assert!(state.browser.paired[0].paused);
+    assert_eq!(state.browser.activity[0].event, ActivityEvent::Paused);
+    // Paused: nothing but the status, a minute later too, and a new session of it as well.
+    advance(Duration::from_secs(61)).await;
+    assert_eq!(h.core.browser_fill(session, fill_at("https://github.com/")).await, Err(Refusal::Paused));
+    let query = QueryRequest { facts: facts("https://github.com/"), ..QueryRequest::default() };
+    assert_eq!(h.core.browser_query(session, query.clone()), Err(Refusal::Paused));
+    assert!(h.core.browser_status(session).unwrap().paused);
+    let other = h.core.browser_session_open(pairing, chrome()).unwrap();
+    assert_eq!(h.core.browser_query(other, query.clone()), Err(Refusal::Paused));
+    h.core.browser_resume().unwrap();
+    assert!(!h.core.state().browser.paired[0].paused);
+    h.core.browser_fill(session, fill_at("https://github.com/")).await.unwrap();
+    // Queries have their own, larger budget.
+    h.core.browser_resume().unwrap();
+    advance(Duration::from_secs(61)).await;
+    for _ in 0..QUERIES_PER_MINUTE {
+        h.core.browser_query(other, query.clone()).unwrap();
+    }
+    assert_eq!(h.core.browser_query(other, query), Err(Refusal::RateLimited));
+}
+
+#[tokio::test(start_paused = true)]
+async fn secrets_of_too_many_sites_pause_the_extension() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    for n in 0..=SITES_PER_TEN_MINUTES {
+        h.core.item_add(login(&format!("Site {n}"), "me", &format!("https://site{n}.example/"), Matching::Domain)).unwrap();
+    }
+    for n in 0..SITES_PER_TEN_MINUTES {
+        // Spread over the minutes, so that only the sites count; the user is at work meanwhile.
+        advance(Duration::from_secs(20)).await;
+        h.core.activity();
+        h.core.browser_fill(session, fill_at(&format!("https://site{n}.example/"))).await.unwrap();
+    }
+    advance(Duration::from_secs(20)).await;
+    assert_eq!(h.core.browser_fill(session, fill_at(&format!("https://site{SITES_PER_TEN_MINUTES}.example/"))).await, Err(Refusal::RateLimited));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_busy_extension_does_not_keep_the_vault_open() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
+    let minutes = u64::from(h.core.state().settings.auto_lock_minutes);
+    for _ in 0..minutes {
+        advance(Duration::from_secs(60)).await;
+        let _ = h.core.browser_query(session, QueryRequest { facts: facts("https://github.com/"), ..QueryRequest::default() });
+        let _ = h.core.browser_fill(session, fill_at("https://github.com/")).await;
+    }
+    advance(Duration::from_secs(1)).await;
+    assert_eq!(h.core.state().phase, Phase::Locked, "locked after the idle time, the requests notwithstanding");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_submitted_form_is_offered_for_saving_or_updating_and_saved_from_the_page() {
+    let mut h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let ask = |username: &str, password: &str| QueryRequest {
+        facts: facts("https://login.example.com/sign-in"),
+        purpose: QueryPurpose::Save,
+        username: username.into(),
+        password: pw(password),
+    };
+    let advice = |h: &Harness, q: QueryRequest| h.core.browser_query(session, q).unwrap().save.unwrap();
+    assert_eq!(advice(&h, ask("alice", "s3cret")).action, SaveAction::Save);
+    let _ = h.notices();
+    let saved = SaveRequest { facts: facts("https://login.example.com/sign-in"), username: "alice".into(), password: pw("s3cret"), ..SaveRequest::default() };
+    let id = h.core.browser_save(session, saved).unwrap();
+    let item = h.core.items_list().unwrap().into_iter().find(|i| i.id == id).unwrap();
+    assert_eq!((item.title.as_str(), item.username.as_str()), ("example.com", "alice"));
+    assert_eq!(item.urls.iter().map(|u| (u.url.as_str(), u.matching)).collect::<Vec<_>>(), [("https://login.example.com/", Matching::Domain)]);
+    assert!(h.notices().contains(&Notice::ItemSaved { item_id: id, title: "example.com".into(), updated: false }));
+    assert_eq!(advice(&h, ask("alice", "s3cret")).action, SaveAction::None, "saved already");
+    assert_eq!(advice(&h, ask("ALICE", "s3cret")).action, SaveAction::None, "user names compare without case");
+    let update = advice(&h, ask("alice", "n3w"));
+    assert_eq!((update.action, update.item_id), (SaveAction::Update, Some(id)));
+    assert_eq!(advice(&h, ask("bob", "other")).action, SaveAction::Save);
+    // The change of password keeps the old one in the history.
+    let request = UpdateRequest { item_id: id, facts: facts("https://login.example.com/"), password: pw("n3w") };
+    h.core.browser_update(session, request).unwrap();
+    let revealed = h.core.item_reveal(id, RevealParts { password: true, history: true, ..RevealParts::default() }, None, None).await.unwrap();
+    assert_eq!(revealed.password.as_deref(), Some("n3w"));
+    assert!(revealed.history.unwrap().iter().any(|p| p.value == "s3cret"));
+    // Only a login that matches the page is updated from it.
+    let elsewhere = UpdateRequest { item_id: id, facts: facts("https://example.org/"), password: pw("x") };
+    assert_eq!(h.core.browser_update(session, elsewhere), Err(Refusal::NoMatch));
+    // "Not on this site".
+    let rule = SiteRuleRequest { kind: Some(SiteRuleKind::NeverSave), facts: facts("https://www.example.com/") };
+    h.core.browser_site_rule(session, rule).unwrap();
+    assert_eq!(advice(&h, ask("carol", "pw")).action, SaveAction::None);
+    let blocked = SaveRequest { facts: facts("https://login.example.com/"), username: "carol".into(), password: pw("pw"), ..SaveRequest::default() };
+    assert_eq!(h.core.browser_save(session, blocked), Err(Refusal::NeverSave));
+    let equivalent = SiteRuleRequest { kind: Some(SiteRuleKind::Equivalent), facts: facts("https://example.com/") };
+    assert_eq!(h.core.browser_site_rule(session, equivalent), Err(Refusal::Invalid), "only the two lists");
+    assert_eq!(h.core.state().site_rules.iter().map(|r| r.domains.clone()).collect::<Vec<_>>(), [vec!["example.com".to_owned()]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_sign_up_form_gets_a_password_to_its_rules_saved_at_once() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let request = GenerateRequest {
+        facts: facts("https://new.example/signup"),
+        rules: Some("minlength: 30; required: digit; allowed: lower;".into()),
+        save: Some(GenerateSave { username: Some("newbie".into()), title: String::new() }),
+        ..GenerateRequest::default()
+    };
+    let made = h.core.browser_generate(session, request).unwrap();
+    assert!(made.password.chars().count() >= 30 && made.password.chars().any(|c| c.is_ascii_digit()));
+    assert!(made.password.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()), "{}", made.password.as_str());
+    assert_eq!(made.username, "newbie");
+    let id = made.item_id.unwrap();
+    let revealed = h.core.item_reveal(id, RevealParts { password: true, ..RevealParts::default() }, None, None).await.unwrap();
+    assert_eq!(revealed.password.as_deref(), Some(made.password.as_str()));
+    assert_eq!(h.core.state().generator.history_count, 1, "in the generator's history");
+    // Without saving: the password only.
+    let plain = h.core.browser_generate(session, GenerateRequest { facts: facts("https://new.example/"), ..GenerateRequest::default() }).unwrap();
+    assert!(plain.item_id.is_none() && plain.password.chars().count() >= 20);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_popup_searches_every_login_and_tells_those_of_the_page() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let github = h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
+    let gitlab = h.core.item_add(login("GitLab", "tanuki", "https://gitlab.com/", Matching::Domain)).unwrap();
+    h.core.item_add(ItemDraft { protection: Protection::NoExtension, ..login("Git server", "root", "https://git.example/", Matching::Domain) }).unwrap();
+    let found = h.core.browser_search(session, SearchRequest { text: " GIT ".into(), top_url: "https://github.com/x".into() }).unwrap();
+    let ids: Vec<(Uuid, bool)> = found.iter().map(|i| (i.item_id, i.matches)).collect();
+    assert_eq!(ids, [(github, true), (gitlab, false)], "never a login kept from the extension");
+    assert!(h.core.browser_search(session, SearchRequest { text: "  ".into(), top_url: String::new() }).unwrap().is_empty());
+    assert_eq!(h.core.browser_search(session, SearchRequest { text: "tanuki".into(), top_url: String::new() }).unwrap()[0].item_id, gitlab);
+}
+
+#[tokio::test(start_paused = true)]
+async fn removing_a_pairing_ends_its_sessions_at_once() {
+    let h = Harness::unlocked().await;
+    let (pairing, session) = paired(&h).await;
+    assert!(h.core.state().browser.paired[0].connected);
+    assert_eq!(h.core.state().browser.paired[0].page_access, Some(true));
+    h.core.browser_unpair(pairing).unwrap();
+    assert!(!h.core.browser_session_alive(session));
+    assert_eq!(h.core.browser_status(session), Err(Refusal::NotPaired));
+    assert_eq!(h.core.browser_peer(pairing), None);
+    assert_eq!(h.core.browser_session_open(pairing, chrome()), Err(Refusal::NotPaired));
+    assert_eq!(h.core.state().browser.activity[0].event, ActivityEvent::Unpaired);
+    assert_eq!(code_err(h.core.browser_unpair(pairing)), ErrorCode::BrowserNotPaired);
+    // A session that ends by itself is no longer connected.
+    let (pairing, session) = paired(&h).await;
+    h.core.browser_session_close(session);
+    assert!(!h.core.state().browser.paired.iter().find(|p| p.id == pairing).unwrap().connected);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unlock_request_comes_through_at_most_every_ten_seconds_and_only_when_locked() {
+    let mut h = Harness::unlocked().await;
+    assert!(!h.core.browser_unlock_request(&chrome()), "unlocked already");
+    h.core.lock_vault();
+    let _ = h.notices();
+    assert!(h.core.browser_unlock_request(&chrome()));
+    assert!(h.notices().contains(&Notice::BrowserUnlockRequested { browser: "chrome".into() }));
+    assert!(!h.core.browser_unlock_request(&chrome()));
+    advance(Duration::from_secs(10)).await;
+    assert!(h.core.browser_unlock_request(&chrome()));
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_integration_switch_is_the_shells_and_shows_while_locked() {
+    let h = Harness::unlocked().await;
+    assert!(!h.core.browser_enabled());
+    h.core.browser_set_enabled(true).unwrap();
+    assert!(h.core.browser_enabled() && h.core.state().browser.enabled);
+    // The webview's settings leave it as it is.
+    let settings = Settings { browser_integration: false, ..h.core.state().settings };
+    h.core.set_settings(settings).unwrap();
+    assert!(h.core.browser_enabled());
+    h.core.lock_vault();
+    let state = h.core.state();
+    assert!(state.browser.available && state.browser.enabled, "readable locked: Lockra listens before unlocking");
+    let restarted = h.restart();
+    assert!(restarted.browser_enabled(), "kept in settings.json");
+    h.core.browser_set_enabled(false).unwrap();
+    assert!(!h.core.browser_enabled());
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_phone_and_a_build_without_password_management_offer_no_browser() {
+    let off = harness_with_features(Features { passwords: false });
+    off.core.create_vault(pw(MASTER)).await.unwrap();
+    assert!(!off.core.state().browser.available);
+    assert!(off.core.browser_static_secret().is_none());
+    assert_eq!(code_err(off.core.browser_set_enabled(true)), ErrorCode::FeatureUnavailable);
+    assert_eq!(off.core.browser_pair(chrome(), KEY, "1".into()).await, Err(Refusal::Unavailable));
+    let dir = tempfile::tempdir().unwrap();
+    let config = CoreConfig {
+        data_dir: dir.path().join("data"),
+        config_dir: dir.path().join("config"),
+        app_version: "0.1.0-test".into(),
+        kdf: KdfCost::FAST_INSECURE,
+        platform: Platform::Android,
+        features: Features { passwords: true },
+    };
+    let ports = Ports {
+        secrets: Arc::new(FakeKeychain::default()),
+        clipboard: Arc::new(FakeClipboard::default()),
+        clock: Arc::new(FakeClock::new(T0)),
+        updater: Arc::new(FakeUpdater::default()),
+        sync: Arc::new(FakeTransport::default()),
+        biometrics: Arc::new(FakeBiometrics::default()),
+    };
+    let phone = Core::start(config, ports);
+    phone.create_vault(pw(MASTER)).await.unwrap();
+    assert!(!phone.state().browser.available);
+    assert!(phone.browser_static_secret().is_none());
+    assert_eq!(code_err(phone.browser_set_enabled(true)), ErrorCode::BrowserUnavailable);
+    assert_eq!(code_err(phone.browser_resume()), ErrorCode::BrowserUnavailable);
+    assert_eq!(code_err(phone.browser_set_policy(BrowserPolicy::default(), None, None).await), ErrorCode::BrowserUnavailable);
+    assert_eq!(phone.browser_session_open(Uuid::new_v4(), chrome()), Err(Refusal::Unavailable));
+}
+
+#[tokio::test(start_paused = true)]
+async fn what_an_extension_says_of_itself_is_cut_to_size() {
+    let h = Harness::unlocked().await;
+    let noisy = ClientInfo { browser: "Chrome\u{7}".repeat(20), label: "x".repeat(500), extension: "\n".into(), version: "1".repeat(99), page_access: false };
+    let core = h.core.clone();
+    let request = tokio::spawn(async move { core.browser_pair(noisy, KEY, "1".into()).await });
+    settle().await;
+    let shown = h.core.state().browser.pairing[0].clone();
+    assert_eq!((shown.browser.chars().count(), shown.label.chars().count(), shown.extension.as_str()), (32, 64, ""));
+    assert!(!shown.browser.contains('\u{7}'));
+    request.abort();
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_fill_leaves_no_secret_in_the_state() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let entry = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    h.core
+        .item_add(ItemDraft {
+            totp_entry: Some(entry),
+            fields: vec![crate::logins::FieldChange {
+                label: Some("PIN".into()),
+                value: SecretChange::Set { value: pw("pin-4242") },
+                hidden: Some(true),
+                page_field: Some("pin".into()),
+                ..crate::logins::FieldChange::default()
+            }],
+            ..login("GitHub", "octocat", "https://github.com/", Matching::Domain)
+        })
+        .unwrap();
+    let answer = h.core.browser_fill(session, fill_at("https://github.com/")).await.unwrap();
+    assert_eq!(answer.fields.iter().map(|f| (f.page_field.as_str(), f.value.as_str())).collect::<Vec<_>>(), [("pin", "pin-4242")]);
+    let state = serde_json::to_string(&h.core.state()).unwrap();
+    for secret in [PASSWORD, "pin-4242", answer.otp.as_deref().unwrap()] {
+        assert!(!state.contains(secret), "{secret} in the state");
+    }
+}

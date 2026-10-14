@@ -186,6 +186,11 @@ pub struct Settings {
     pub biometric_offer: bool,
     /// What the password generator makes unless told otherwise: the last options chosen.
     pub generator: GeneratorOptions,
+    /// The browser extension's integration is on: Lockra listens for the extensions and keeps
+    /// their native-messaging manifests. Only the shell changes it (`Core::browser_set_enabled`),
+    /// after writing or removing the manifests; the webview's settings leave it as it is. What the
+    /// extensions may do is in the vault (`Local.browser`), not here.
+    pub browser_integration: bool,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -220,6 +225,7 @@ impl Default for Settings {
             default_unlock: DefaultUnlock::default(),
             biometric_offer: true,
             generator: GeneratorOptions::default(),
+            browser_integration: false,
         }
     }
 }
