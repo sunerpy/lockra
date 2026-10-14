@@ -339,7 +339,7 @@ export const en: Messages = {
       help: "Filled on these sites. Matched by registrable domain, a site's subdomains count too.",
       add: "Add a site",
       remove: "Remove this site",
-      placeholder: "https://example.com",
+      placeholder: "example.com",
       matching: "Matching",
     },
     matching: {

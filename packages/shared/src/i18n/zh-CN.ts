@@ -329,7 +329,7 @@ export const zhCN = {
       help: "在这些网站上填充。按注册域匹配时，同一个网站的子域也算。",
       add: "添加网址",
       remove: "删除这个网址",
-      placeholder: "https://example.com",
+      placeholder: "example.com",
       matching: "匹配方式",
     },
     matching: {
