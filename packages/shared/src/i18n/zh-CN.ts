@@ -143,7 +143,27 @@ export const zhCN = {
   },
   mobile: {
     emptyBody: "点按 + 添加：扫描二维码、读取截图、粘贴 otpauth 链接，或手动输入密钥。",
-    dock: { label: "主导航", codes: "验证码", scan: "扫码", settings: "设置" },
+    dock: {
+      label: "主导航",
+      codes: "验证码",
+      scan: "扫码",
+      passwords: "密码",
+      newLogin: "新建登录项",
+      settings: "设置",
+    },
+    logins: {
+      emptyBody: "导入浏览器或其他密码管理器的导出文件，或者点按下方的「+」手动添加。",
+      revealTitle: "显示密码",
+      autofill: "浏览器自动填充",
+      autofillDesktop: "跟随桌面设置",
+      autofillNote: "浏览器自动填充的设置只在桌面版里修改，这里原样保留。",
+      matching: "匹配：{name}",
+      matchingTitle: "匹配方式",
+      deleteLogin: "删除登录项…",
+      codeSheet: "关联验证码",
+      noCode: "不关联",
+      generatorUse: "使用此密码",
+    },
     add: {
       title: "添加账号",
       scan: "扫描二维码",

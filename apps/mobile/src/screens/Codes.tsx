@@ -27,7 +27,6 @@ import {
   EntryTile,
   FilterChips,
   Icon,
-  type IconName,
   IconButton,
   Input,
   Lamp,
@@ -47,6 +46,7 @@ import { type ReactNode, useMemo, useRef, useState } from "react";
 import { useNav } from "../app/nav";
 import { usePhoneImport } from "../app/phone-import";
 import { Dock } from "../components/Dock";
+import { RoundButton } from "../components/RoundButton";
 
 export function Codes() {
   const t = useT();
@@ -63,6 +63,7 @@ export function Codes() {
     entry_order: entryOrder,
     group_order: groupOrder,
     pinned_group: pinned,
+    features,
   } = useUiState();
   const [query, setQuery] = useState("");
   const pinnedValue = pinnedFilter(pinned);
@@ -359,8 +360,10 @@ export function Codes() {
         )}
       </main>
       <Dock
+        page="codes"
         onCodes={() => scroller.current?.scrollTo({ top: 0, behavior: "smooth" })}
-        onScan={() =>
+        onLogins={features.passwords ? () => nav.open({ name: "logins" }) : undefined}
+        onRaised={() =>
           void (async () => {
             if (await scan()) nav.open({ name: "preview" });
           })()
@@ -368,32 +371,6 @@ export function Codes() {
         onSettings={() => nav.open({ name: "settings" })}
       />
     </div>
-  );
-}
-
-/** A round 44 px button on the canvas (board A2): add and lock in the header, reorder by the
- *  filters. */
-function RoundButton({
-  icon,
-  label,
-  onClick,
-  testId,
-}: {
-  icon: IconName;
-  label: string;
-  onClick: () => void;
-  testId: string;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      data-testid={testId}
-      className="inline-flex size-11 shrink-0 items-center justify-center rounded-full bg-surface text-fg-muted hairline panel active:text-fg">
-      <Icon name={icon} size={18} />
-    </button>
   );
 }
 

@@ -10,12 +10,14 @@ import {
   ToastViewport,
   useAppearance,
   useBackend,
+  useItems,
   useToasts,
   useUiState,
 } from "@lockra/ui";
 import { useEffect, useRef } from "react";
 import { NavProvider, useNav } from "./app/nav";
 import { phoneScreenOpen } from "./app/phone-screen";
+import { VerifyProvider } from "./app/verify";
 import {
   FingerprintChoiceProvider,
   FingerprintOnboarding,
@@ -27,6 +29,10 @@ import { Codes } from "./screens/Codes";
 import { Edit } from "./screens/Edit";
 import { Export } from "./screens/Export";
 import { ExportView } from "./screens/ExportView";
+import { Login } from "./screens/Login";
+import { LoginEdit } from "./screens/LoginEdit";
+import { LoginReveal } from "./screens/LoginReveal";
+import { Logins } from "./screens/Logins";
 import { Manual } from "./screens/Manual";
 import { Password } from "./screens/Password";
 import { Preview } from "./screens/Preview";
@@ -80,16 +86,19 @@ function Screen() {
   if (state.phase === "locked") return <Unlock />;
   return (
     <NavProvider>
-      <Pages />
+      <VerifyProvider>
+        <Pages />
+      </VerifyProvider>
     </NavProvider>
   );
 }
 
 /** The codes, or the page on top of them. */
 function Pages() {
-  const { route, home, replace } = useNav();
+  const { route, home, replace, popTo } = useNav();
   const { backend } = useBackend();
   const { entries, import: pending, restore, sync } = useUiState();
+  const items = useItems();
   // Leaving the import preview or the restore before they are done (their buttons, the back
   // gesture) ends them.
   const last = useRef(route);
@@ -107,8 +116,17 @@ function Pages() {
         .dispatch({ command: "export_close", session: was.started.session })
         .catch(() => undefined);
   }, [route, pending, restore, backend]);
-  const id = route !== undefined && "id" in route ? route.id : undefined;
+  const id =
+    route?.name === "account" || route?.name === "edit" || route?.name === "reveal"
+      ? route.id
+      : undefined;
   const entry = id === undefined ? undefined : entries.find((e) => e.id === id);
+  // A login's pages: the login is among the logins once they have come (`items_list`).
+  const itemId =
+    route?.name === "login" || route?.name === "loginReveal" || route?.name === "loginEdit"
+      ? route.id
+      : undefined;
+  const item = itemId === undefined ? undefined : items?.find((i) => i.id === itemId);
   // What the top page shows: the account, the import, the backup being restored, the sync space
   // whose storage changes.
   const present =
@@ -118,7 +136,9 @@ function Pages() {
         ? restore !== null
         : route?.name === "syncStorage"
           ? sync.space !== null
-          : id === undefined || entry !== undefined;
+          : itemId !== undefined
+            ? item !== undefined
+            : id === undefined || entry !== undefined;
   // Once that was there and is gone (the account deleted, replaced by an import or merged away by a
   // sync; the import or the restore done), the page closes: a merged restore goes on to the import
   // preview, the rest back to the codes. Before it has been there, its state is still on the way
@@ -132,8 +152,10 @@ function Pages() {
     }
     if (seen.current !== route) return;
     if (route.name === "restore" && pending !== null) replace({ name: "preview" });
+    // A login gone (deleted here or on another device): back to the logins.
+    else if (itemId !== undefined) popTo("logins");
     else home();
-  }, [route, present, pending, home, replace]);
+  }, [route, present, pending, home, replace, popTo, itemId]);
   switch (route?.name) {
     case undefined:
       return <Codes />;
@@ -173,6 +195,15 @@ function Pages() {
       return entry ? <Edit entry={entry} /> : null;
     case "reveal":
       return entry ? <Reveal entry={entry} /> : null;
+    case "logins":
+      return <Logins />;
+    case "login":
+      return item ? <Login key={item.id} item={item} /> : null;
+    case "loginEdit":
+      if (route.id === undefined) return <LoginEdit key="new" title={route.title} />;
+      return item ? <LoginEdit key={item.id} item={item} /> : null;
+    case "loginReveal":
+      return item ? <LoginReveal key={item.id} item={item} /> : null;
   }
 }
 

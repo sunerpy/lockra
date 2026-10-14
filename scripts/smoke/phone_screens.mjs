@@ -8,8 +8,10 @@
 // Run by scripts/capture-site-screens.sh. Every wait is a condition with a deadline.
 //
 // Usage: phone_screens.mjs --cdp <host:port> --url <phone dev server> --lang en|zh
-//                          --state <state.json> --out <dir>
-// Writes <out>/<scheme>-<page>.png (scheme light|dark, page codes|add|sync), 1080 x 1920.
+//                          --state <state.json> --out <dir> [--passwords]
+// Writes <out>/<scheme>-<page>.png (scheme light|dark, page codes|add|sync), 1080 x 1920; with
+// --passwords the dev build offers password management (its `?passwords`, the sample logins) and
+// the logins and a login's page come too (logins|login).
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -21,6 +23,7 @@ const { values: args } = parseArgs({
     lang: { type: "string" },
     state: { type: "string" },
     out: { type: "string" },
+    passwords: { type: "boolean" },
   },
 });
 for (const name of ["cdp", "url", "lang", "state", "out"]) {
@@ -280,7 +283,9 @@ async function capture(scheme) {
       console.log(`phone-screens: ${file}`);
     };
 
-    await s("Page.navigate", { url: args.url });
+    const page = new URL(args.url);
+    if (args.passwords) page.searchParams.set("passwords", "");
+    await s("Page.navigate", { url: page.href });
     await until(
       "!!document.querySelector('[data-testid=page-unlock] input[type=password]')",
       "the lock screen",
@@ -303,6 +308,25 @@ async function capture(scheme) {
       "every account",
     );
     await shot("codes");
+    if (args.passwords) {
+      await click("[data-testid=dock-logins]");
+      await until(
+        "document.querySelectorAll('[data-testid=page-logins] [data-testid=password-row]').length > 0",
+        "the logins",
+      );
+      await shot("logins");
+      await click("[data-testid=page-logins] [data-testid=password-row]");
+      await until(
+        "!!document.querySelector('[data-testid=page-login] [data-testid=login-edit]')",
+        "a login",
+      );
+      await shot("login");
+      await evaluate("history.go(-2)");
+      await until(
+        "!!document.querySelector('[data-testid=page-codes] [data-testid=codes-add]')",
+        "the codes page again",
+      );
+    }
     await click("[data-testid=codes-add]");
     await until(
       "!!document.querySelector('[data-testid=page-add] [data-testid=add-manual]')",

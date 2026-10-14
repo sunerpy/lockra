@@ -36,6 +36,8 @@ export interface FieldRowProps {
   secret?: boolean;
   /** The buttons at the right (copy; show and copy for a secret). */
   actions?: ReactNode;
+  /** `lg` is the phone's (board 24): a 64 px row, the value in 15 px. */
+  size?: "md" | "lg";
   "data-testid"?: string;
 }
 
@@ -45,16 +47,24 @@ export function FieldRow({
   children,
   secret = false,
   actions,
+  size = "md",
   "data-testid": testId,
 }: FieldRowProps) {
+  const lg = size === "lg";
   return (
-    <div className="flex min-h-13 items-center gap-2 py-2" data-testid={testId}>
+    <div
+      className={cx("flex items-center gap-2", lg ? "min-h-16 py-2.5" : "min-h-13 py-2")}
+      data-testid={testId}>
       <div className="min-w-0 flex-1">
         <div className="text-[12px] text-fg-subtle">{label}</div>
         <div
           className={cx(
             "truncate text-fg",
-            secret ? "mono text-[13px] tracking-[1.5px]" : "text-[14px]",
+            secret
+              ? cx("mono tracking-[1.5px]", lg ? "text-[14px]" : "text-[13px]")
+              : lg
+                ? "text-[15px]"
+                : "text-[14px]",
           )}>
           {children}
         </div>
@@ -68,27 +78,52 @@ export function FieldRow({
 export function KeyValueRow({
   label,
   children,
+  size = "md",
   "data-testid": testId,
 }: {
   label: ReactNode;
   children: ReactNode;
+  /** `lg` is the phone's: a 49 px row in 15 px. */
+  size?: "md" | "lg";
   "data-testid"?: string;
 }) {
+  const text = size === "lg" ? "text-[15px]" : "text-[13px]";
   return (
-    <div className="flex min-h-10 items-center justify-between gap-3 py-1.5" data-testid={testId}>
-      <span className="min-w-0 truncate text-[13px] text-fg-muted">{label}</span>
-      <span className="min-w-0 truncate text-right text-[13px] text-fg">{children}</span>
+    <div
+      className={cx(
+        "flex items-center justify-between gap-3 py-1.5",
+        size === "lg" ? "min-h-[49px]" : "min-h-10",
+      )}
+      data-testid={testId}>
+      <span className={cx("min-w-0 truncate text-fg-muted", text)}>{label}</span>
+      <span className={cx("min-w-0 truncate text-right text-fg", text)}>{children}</span>
     </div>
   );
 }
 
 /** A site saved with a login and how it is matched. */
-export function UrlRow({ url, matching }: { url: string; matching: Matching }) {
+export function UrlRow({
+  url,
+  matching,
+  size = "md",
+}: {
+  url: string;
+  matching: Matching;
+  /** `lg` is the phone's: a 49 px row. */
+  size?: "md" | "lg";
+}) {
   const t = useT();
   return (
-    <div className="flex min-h-11 items-center gap-2 py-1.5" data-testid="url-row">
-      <Icon name="globe" size={14} className="shrink-0 text-fg-subtle" />
-      <span className="mono min-w-0 flex-1 truncate text-[13px] text-fg" title={url}>
+    <div
+      className={cx("flex items-center gap-2 py-1.5", size === "lg" ? "min-h-[49px]" : "min-h-11")}
+      data-testid="url-row">
+      <Icon name="globe" size={size === "lg" ? 16 : 14} className="shrink-0 text-fg-subtle" />
+      <span
+        className={cx(
+          "mono min-w-0 flex-1 truncate text-fg",
+          size === "lg" ? "text-[14px]" : "text-[13px]",
+        )}
+        title={url}>
         {url}
       </span>
       <Badge tone="neutral" className="shrink-0">

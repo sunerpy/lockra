@@ -7,6 +7,7 @@ import {
   Button,
   CountdownRing,
   Dialog,
+  ScoreMeter,
   useBackend,
   useClock,
   useFlash,
@@ -19,7 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { motionReduced } from "../../app/appearance";
 import { useSubmit } from "../../app/dispatch";
 import { useShell } from "../../app/shell-state";
-import { GeneratorDialog, Strength } from "./GeneratorDialog";
+import { GeneratorDialog } from "./GeneratorDialog";
 import { ItemFormDialog } from "./ItemForm";
 import { useItemActions } from "./actions";
 import { useSecretView } from "./secret-view";
@@ -258,7 +259,7 @@ function RevealItemDialog({ item, onClose }: { item: ItemView; onClose: () => vo
             {[t("item.reveal.chars", { n: length }), kinds].filter((s) => s !== "").join(" · ")}
           </span>
         </div>
-        <Strength score={score} />
+        <ScoreMeter score={score} />
         {platform === "linux" && (
           <p className="text-[12px] text-fg-subtle">{t("item.reveal.linux")}</p>
         )}
