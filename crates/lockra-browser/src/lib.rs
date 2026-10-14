@@ -10,6 +10,7 @@
 //! - [`noise`]: pairing (`Noise_XX`, a six-digit code the user compares) and sessions
 //!   (`Noise_KK` between the paired keys), fragmentation of the application messages.
 //! - [`server`]: the app's service loop over a [`server::Listener`] the shell provides.
+//! - [`host`]: the host process's relay between the browser's stdio and the app's socket.
 //! - [`ids`]: the extension's ids, which the native-messaging manifests allow.
 //!
 //! Every decision on a request (the match for the frame, frames of other sites, the HTTP
@@ -19,6 +20,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 pub mod frame;
+pub mod host;
 pub mod ids;
 pub mod noise;
 pub mod protocol;

@@ -214,6 +214,7 @@
         "item_sort": "recent",
         "locale": "zh-cn",
         "reduce_motion": true,
+        "run_in_background": true,
         "sort": "recent",
         "theme": "glass_night"
       }
@@ -508,6 +509,9 @@
     "restore_pick",
     "export_otpauth_file",
     "sync_key_save",
-    "sync_pick_folder"
+    "sync_pick_folder",
+    "browser_enable",
+    "browser_disable",
+    "browser_status"
   ]
 }

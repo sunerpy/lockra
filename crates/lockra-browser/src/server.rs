@@ -215,6 +215,8 @@ impl Conn {
                 let client = self.client.clone().unwrap_or_default();
                 vec![plain(&AppPlain::Unlock { accepted: self.core.browser_unlock_request(&client) })]
             }
+            // The host's alone: it never reaches the app from one.
+            ClientPlain::StartApp { .. } => vec![error("bad_message")],
         }
     }
 

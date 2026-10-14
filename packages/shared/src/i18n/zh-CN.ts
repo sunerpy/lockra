@@ -1284,6 +1284,7 @@ export const zhCN = {
     browser_unavailable: "这台设备上不能使用浏览器扩展",
     browser_not_paired: "这个浏览器扩展没有配对，或者配对已经取消",
     browser_pair_expired: "这个请求已经过期，请在浏览器里重新发起",
+    browser_manifest_failed: "无法写入或删除浏览器的连接配置（native messaging 清单）",
     feature_unavailable: "当前版本还不支持这项操作：含有密码的备份请用「替换」恢复",
     internal: "出现内部错误",
   },

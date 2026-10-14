@@ -16,8 +16,11 @@ import {
 } from "./backend";
 import {
   type ActivityView,
+  BROWSER_IDS,
   type BiometricKind,
+  type BrowserId,
   type BrowserPolicy,
+  type BrowserStatus,
   type BrowserView,
   type ConfirmView,
   type PairRequestView,
@@ -787,6 +790,8 @@ export class MockBackend implements Backend {
   private generatedHistory: GeneratedPastView[] = [];
   private itemFolds: string[] = [];
   private browser: Pick<BrowserView, "paired" | "pairing" | "confirms" | "policy" | "activity">;
+  /** The browsers whose manifests the mock's shell has written. */
+  private manifests = new Set<BrowserId>();
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -1042,6 +1047,41 @@ export class MockBackend implements Backend {
     if (this.folderPick === null) return null;
     this.chosenFolder = this.folderPick;
     return this.folderPick;
+  }
+
+  /** The mock's browsers: Chrome, Edge and Firefox have profiles here. */
+  private browserStatuses(): BrowserStatus[] {
+    return BROWSER_IDS.map((browser) => ({
+      browser,
+      installed: browser === "chrome" || browser === "edge" || browser === "firefox",
+      manifest: this.manifests.has(browser),
+    }));
+  }
+
+  private requireBrowserShell(): void {
+    if (!this.passwords) throw new LockraError("feature_unavailable");
+    if (this.state.platform === "android") throw new LockraError("browser_unavailable");
+  }
+
+  async browserEnable(browsers: readonly BrowserId[]): Promise<BrowserStatus[]> {
+    this.requireBrowserShell();
+    for (const browser of browsers) this.manifests.add(browser);
+    this.state.settings = { ...this.state.settings, browser_integration: true };
+    this.browserChanged();
+    return this.browserStatuses();
+  }
+
+  async browserDisable(): Promise<BrowserStatus[]> {
+    this.requireBrowserShell();
+    this.manifests.clear();
+    this.state.settings = { ...this.state.settings, browser_integration: false };
+    this.browserChanged();
+    return this.browserStatuses();
+  }
+
+  async browserStatus(): Promise<BrowserStatus[]> {
+    this.requireBrowserShell();
+    return this.browserStatuses();
   }
 
   /** Test hook: what the next camera scans read. */

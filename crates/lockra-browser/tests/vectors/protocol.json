@@ -28,6 +28,10 @@
       "op": "state",
       "state": "no_vault"
     },
+    "state_not_running": {
+      "op": "state",
+      "state": "not_running"
+    },
     "unlock": {
       "accepted": true,
       "op": "unlock"
@@ -43,6 +47,13 @@
       "proto_max": 1,
       "proto_min": 1,
       "version": "0.10.0"
+    },
+    "start_app": {
+      "op": "start_app"
+    },
+    "start_app_show": {
+      "op": "start_app",
+      "show": true
     },
     "unlock_request": {
       "op": "unlock_request"

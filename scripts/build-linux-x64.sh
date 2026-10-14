@@ -40,6 +40,10 @@ exe="$work/root/usr/bin/lockra-desktop"
 [ -x "$exe" ] || { echo "build-linux-x64: the deb has no usr/bin/lockra-desktop"; exit 1; }
 missing=$(ldd "$exe" | grep -c 'not found' || true)
 [ "$missing" = 0 ] || { ldd "$exe" | grep 'not found'; echo "build-linux-x64: unresolved libraries"; exit 1; }
+# The tray of the background mode loads libayatana-appindicator at run time (tauri.conf.json's
+# bundle.linux.deb.depends): the package must ask for it, as ldd cannot see a library opened later.
+dpkg-deb -f "$deb" Depends | grep -q 'libayatana-appindicator3-1' ||
+  { echo "build-linux-x64: the deb does not depend on libayatana-appindicator3-1"; exit 1; }
 
 rm -rf "$out"
 mkdir -p "$out"

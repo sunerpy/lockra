@@ -155,6 +155,9 @@ pub enum ErrorCode {
     /// The extension's request (pairing, fill or copy) is no longer waiting: it lapsed, or the
     /// extension went away.
     BrowserPairExpired,
+    /// The browsers' native-messaging manifests (on Windows, their registry keys) could not be
+    /// written or removed.
+    BrowserManifestFailed,
     /// This build does not offer it yet: password management before it ships, or a backup with
     /// logins merged before the preview can show them (a restore that replaces still takes them).
     FeatureUnavailable,

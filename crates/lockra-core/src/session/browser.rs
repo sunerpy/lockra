@@ -93,7 +93,7 @@ impl Drop for Waiting<'_> {
 
 impl Core {
     /// This build offers the browser extension here: password management on, the desktop app.
-    pub(super) fn browser_offered(&self) -> bool {
+    pub fn browser_offered(&self) -> bool {
         self.shared.config.features.passwords && self.shared.config.platform != Platform::Android
     }
 

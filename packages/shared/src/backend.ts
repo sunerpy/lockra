@@ -1,6 +1,8 @@
 // What the webview talks to: `TauriBackend` (the real core over Tauri IPC) or `MockBackend` (an
 // in-memory stand-in for the browser preview and the page tests).
 import type {
+  BrowserId,
+  BrowserStatus,
   CodesFrame,
   CommandName,
   CommandOf,
@@ -61,6 +63,13 @@ export interface Backend {
    *  sync: the core keeps it for the next storage `{ kind: "folder" }`. The folder, to show, or
    *  `null` when cancelled. */
   pickSyncFolder(): Promise<string | null>;
+  /** The browser integration (the desktop's): the chosen browsers' native-messaging manifests
+   *  written and Lockra listening for the extension; every browser's status after. */
+  browserEnable(browsers: readonly BrowserId[]): Promise<BrowserStatus[]>;
+  /** The integration off: no longer listening, every manifest removed. */
+  browserDisable(): Promise<BrowserStatus[]>;
+  /** Every browser's status: its profiles here, Lockra's manifest in place. */
+  browserStatus(): Promise<BrowserStatus[]>;
   /** Native file picker → a backup opened for restoring. `false` when cancelled. */
   pickRestoreFile(): Promise<boolean>;
   /** Native save dialog → a plain otpauth list. The file name, or `null` when cancelled. */

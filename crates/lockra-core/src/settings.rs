@@ -208,6 +208,9 @@ pub struct Settings {
     /// after writing or removing the manifests; the webview's settings leave it as it is. What the
     /// extensions may do is in the vault (`Local.browser`), not here.
     pub browser_integration: bool,
+    /// Closing the window leaves Lockra running in the tray (the browser extension and the quick
+    /// search need it running); off, closing the window quits, as before.
+    pub run_in_background: bool,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -244,6 +247,7 @@ impl Default for Settings {
             generator: GeneratorOptions::default(),
             item_sort: ItemSort::default(),
             browser_integration: false,
+            run_in_background: false,
         }
     }
 }

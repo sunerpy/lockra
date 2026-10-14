@@ -82,7 +82,8 @@
           "exclude": ""
         },
         "item_sort": "name",
-        "browser_integration": false
+        "browser_integration": false,
+        "run_in_background": false
       },
       "import": null,
       "backup": {

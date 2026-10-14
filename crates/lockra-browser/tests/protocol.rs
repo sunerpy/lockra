@@ -167,12 +167,17 @@ fn protocol_messages() {
         "client_plain": {
             "hello": to(ClientPlain::Hello { proto_min: 1, proto_max: 1, client: client() }),
             "unlock_request": to(ClientPlain::UnlockRequest),
+            // The host's alone: the app never gets them.
+            "start_app": to(ClientPlain::StartApp { show: false }),
+            "start_app_show": to(ClientPlain::StartApp { show: true }),
         },
         "app_plain": {
             "hello": to(AppPlain::Hello { proto_min: 1, proto_max: 1, proto: Some(1), app_version: "0.10.0".into(), state: AppState::Unlocked }),
             "hello_incompatible": to(AppPlain::Hello { proto_min: 1, proto_max: 1, proto: None, app_version: "0.10.0".into(), state: AppState::Locked }),
             "state": to(AppPlain::State { state: AppState::Locked }),
             "state_no_vault": to(AppPlain::State { state: AppState::NoVault }),
+            // The host's own, when no app is there to answer.
+            "state_not_running": to(AppPlain::State { state: AppState::NotRunning }),
             "unlock": to(AppPlain::Unlock { accepted: true }),
             "error": to(AppPlain::Error { error: "not_paired".into() }),
         },

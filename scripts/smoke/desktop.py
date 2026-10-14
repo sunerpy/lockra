@@ -13,7 +13,8 @@ right-click menu, several accounts ticked and moved to a group at once, the grou
 accounts reordered by a handle; the newer themes (澄空, 墨白 and their nights) as a list and as cards, a
 card and a row just copied, and Settings › 外观's grid of eight themes; the passwords page (a debug
 build offers password management) with logins whose password, copied from the list by Rust, is on
-the X clipboard.
+the X clipboard; the browser integration turned on, the real binary in host mode reaching the
+running app through its socket, and turned off.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -23,6 +24,7 @@ import hashlib
 import hmac
 import json
 import os
+import select
 import struct
 import subprocess
 import sys
@@ -134,6 +136,18 @@ class Session:
             sys.exit(f"smoke: {command['command']} failed: {answer['err']}")
         return answer["ok"]
 
+    def invoke_shell(self, name, args):
+        """One of the shell's own commands (not the core's), as the webview calls it."""
+        script = (
+            "const done = arguments[arguments.length - 1];"
+            "window['__' + 'TAURI_INTERNALS__'].invoke(arguments[0], arguments[1])"
+            ".then((ok) => done({ ok }), (err) => done({ err }));"
+        )
+        answer = self.call("POST", self.s("/execute/async"), {"script": script, "args": [name, args]})
+        if "err" in answer:
+            sys.exit(f"smoke: {name} failed: {answer['err']}")
+        return answer["ok"]
+
     def screenshot(self):
         return base64.b64decode(self.call("GET", self.s("/screenshot")))
 
@@ -142,6 +156,20 @@ class Session:
             self.call("DELETE", self.s(""))
         except SystemExit:
             pass
+
+
+def read_exactly(pipe, size, deadline):
+    """`size` bytes from `pipe`, or None if it ends or the deadline passes first."""
+    data = b""
+    while len(data) < size:
+        left = deadline - time.monotonic()
+        if left <= 0 or not select.select([pipe], [], [], left)[0]:
+            return None
+        chunk = os.read(pipe.fileno(), size - len(data))
+        if not chunk:
+            return None
+        data += chunk
+    return data
 
 
 def totp(secret, at, period=30, digits=6):
@@ -238,6 +266,47 @@ class Smoke:
         """The first row's 编辑…, from its menu: the row has no edit button of its own (board A1)."""
         self.web.click(self.web.wait(css='[data-testid="entry-row"] [data-testid="row-menu"]'))
         self.web.click(self.web.wait(xpath="//*[@role='menu']//*[@role='menuitem'][normalize-space()='编辑…']"))
+
+    def browser_channel(self):
+        """The browser integration on (the shell command Settings › 浏览器 calls): Chrome's manifest
+        is written (into the debug build's own folder, LOCKRA_DEV_BROWSER_MANIFEST_DIR) and points
+        at this binary; started as Chrome starts it, in host mode, the binary reaches the running app
+        through its socket and gets the app's own hello (unlocked); off again, the manifest goes."""
+        statuses = self.web.invoke_shell("browser_enable", {"browsers": ["chrome"]})
+        chrome = next(s for s in statuses if s["browser"] == "chrome")
+        if not chrome["manifest"]:
+            sys.exit(f"smoke: Chrome's manifest was not written: {statuses}")
+        manifest_path = os.path.join(os.environ["LOCKRA_DEV_BROWSER_MANIFEST_DIR"], "NativeMessagingHosts", "dev.lockra.browser.json")
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        if manifest["path"] != self.args.app or "chrome-extension://egbpficliljjnpkjbigonldakfllebco/" not in manifest["allowed_origins"]:
+            sys.exit(f"smoke: Chrome's manifest: {manifest}")
+        hello = json.dumps({"op": "hello", "proto_min": 1, "proto_max": 1, "browser": "chrome", "extension": "egbpficliljjnpkjbigonldakfllebco", "version": "0.0.0"})
+        envelope = json.dumps({"v": 1, "t": "hello", "d": base64.b64encode(hello.encode()).decode()}).encode()
+        host = subprocess.Popen([manifest["path"], "chrome-extension://egbpficliljjnpkjbigonldakfllebco/"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        # As a browser does: stdin stays open while the port does, so the answer comes first.
+        host.stdin.write(struct.pack("=I", len(envelope)) + envelope)
+        host.stdin.flush()
+        deadline = time.monotonic() + 30
+        length = read_exactly(host.stdout, 4, deadline)
+        answer = length and read_exactly(host.stdout, struct.unpack("=I", length)[0], deadline)
+        if not answer:
+            host.kill()
+            sys.exit("smoke: the host did not answer")
+        plain = json.loads(base64.b64decode(json.loads(answer)["d"]))
+        # The browser closes its end: the host ends, with success.
+        host.stdin.close()
+        try:
+            host.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            host.kill()
+            sys.exit("smoke: the host did not end with its stdin")
+        if host.returncode != 0 or plain.get("op") != "hello" or plain.get("state") != "unlocked" or plain.get("proto") != 1:
+            sys.exit(f"smoke: the host's answer: {plain} (status {host.returncode})")
+        print("smoke: Chrome's manifest points here, and the host reached the running app through its socket")
+        statuses = self.web.invoke_shell("browser_disable", {})
+        if any(s["manifest"] for s in statuses) or os.path.exists(manifest_path):
+            sys.exit(f"smoke: the manifests stayed: {statuses}")
 
     def settings(self, **patch):
         state = self.web.invoke({"command": "app_state"})
@@ -377,6 +446,7 @@ class Smoke:
         web.click(web.wait(xpath="//*[@data-testid='password-row'][.//*[normalize-space()='GitHub']]//*[@data-testid='row-copy-password']"))
         until("the login's password on the clipboard", lambda: self.clipboard() == LOGIN_PASSWORD)
         print("smoke: a login's password, copied from the list, is on the X clipboard")
+        self.browser_channel()
         self.nav("验证码")
         self.page("codes")
         for width, height in SIZES:

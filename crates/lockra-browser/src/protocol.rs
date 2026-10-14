@@ -81,6 +81,14 @@ pub enum ClientPlain {
     },
     /// Ask Lockra to unlock (the popup's 「在 Lockra 中解锁」).
     UnlockRequest,
+    /// Start Lockra: for the host alone, which never passes it on. Without `show` it starts as
+    /// the browser's (`--from-browser`: in the tray where Lockra runs in the background); with it,
+    /// Lockra's window comes up. No answer: the extension says `hello` again until Lockra does.
+    StartApp {
+        /// Bring the window up (written only when it is wanted, as the extension writes it).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        show: bool,
+    },
 }
 
 /// Whether the app can answer.
@@ -93,6 +101,9 @@ pub enum AppState {
     Locked,
     /// Unlocked: sessions open.
     Unlocked,
+    /// Lockra is not running: the host says so, when the app's socket cannot be reached or the
+    /// connection to it ends.
+    NotRunning,
 }
 
 /// The app's plain messages.

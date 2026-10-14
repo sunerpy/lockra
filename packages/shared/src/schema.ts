@@ -145,6 +145,7 @@ export const settingsSchema = z.object({
   /** The browser extension's integration is on. Only the shell changes it (after writing the
    *  browsers' manifests); `settings_set` leaves it as it is. */
   browser_integration: z.boolean(),
+  run_in_background: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -171,6 +172,7 @@ export function defaultSettings(): Settings {
     generator: defaultGeneratorOptions(),
     item_sort: "name",
     browser_integration: false,
+    run_in_background: false,
   };
 }
 
@@ -433,6 +435,7 @@ export const ERROR_CODES = [
   "browser_unavailable",
   "browser_not_paired",
   "browser_pair_expired",
+  "browser_manifest_failed",
   "feature_unavailable",
   "internal",
 ] as const;
@@ -863,6 +866,21 @@ export const activityViewSchema = z.object({
   title: z.string().nullable(),
 });
 export type ActivityView = z.infer<typeof activityViewSchema>;
+
+/** The browsers Lockra writes a native-messaging manifest for (the shell's `Browser`), in the
+ *  order Settings › Browser lists them. */
+export const BROWSER_IDS = ["chrome", "edge", "firefox", "chromium", "brave"] as const;
+export const browserIdSchema = z.enum(BROWSER_IDS);
+export type BrowserId = z.infer<typeof browserIdSchema>;
+
+/** A browser as the desktop shell sees it (`browser_status`): its profiles on this account, and
+ *  Lockra's manifest in place for it. */
+export const browserStatusSchema = z.object({
+  browser: browserIdSchema,
+  installed: z.boolean(),
+  manifest: z.boolean(),
+});
+export type BrowserStatus = z.infer<typeof browserStatusSchema>;
 
 /** Settings › Browser and the requests waiting for the user (lockra-core `BrowserView`). */
 export const browserViewSchema = z.object({
@@ -1467,6 +1485,9 @@ export const SHELL_COMMAND_NAMES = [
   "export_otpauth_file",
   "sync_key_save",
   "sync_pick_folder",
+  "browser_enable",
+  "browser_disable",
+  "browser_status",
 ] as const;
 
 /** The phone shell's own Tauri commands (lockra-bridge `PHONE_COMMANDS`). */
