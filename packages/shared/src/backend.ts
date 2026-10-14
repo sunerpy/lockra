@@ -7,6 +7,7 @@ import type {
   CommandName,
   CommandOf,
   ErrorCode,
+  ItemsExportFormat,
   ResultOf,
   StorageConfig,
   UiEvent,
@@ -79,10 +80,30 @@ export interface Backend {
     password?: string,
     reason?: string,
   ): Promise<string | null>;
+  /** Native save dialog (the phone's file picker) → the logins `ids` as a KeePass database or
+   *  Bitwarden's plain CSV, made in Rust once the user proved to be there; the file never comes
+   *  here. The file name, or `null` when cancelled. */
+  exportItemsFile(args: ExportItemsFile): Promise<string | null>;
   /** The phone's browser → the page of the release an update check found (else the newest
    *  release's), the address named by the shell. `null` once it opened, else the address, to
    *  show (no browser opened it). */
   openRelease(): Promise<string | null>;
+}
+
+/** What `exportItemsFile` exports, and how the user proves to be there. */
+export interface ExportItemsFile {
+  /** The logins, by id. */
+  ids: readonly string[];
+  format: ItemsExportFormat;
+  /** The master password; without it, the biometric check that unlocks this vault, asked with
+   *  `reason`. */
+  password?: string;
+  reason?: string;
+  /** The user confirmed that anyone who reads a CSV file reads every password in it: required
+   *  for `csv`. */
+  acknowledged: boolean;
+  /** The new database's own password, for `kdbx`. */
+  kdbxPassword?: string;
 }
 
 /** The words on the phone's camera page. */

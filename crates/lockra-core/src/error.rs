@@ -73,6 +73,9 @@ pub enum ErrorCode {
     ExportExpired,
     /// None of the chosen entries can go to that target.
     ExportNothing,
+    /// A plain export (logins as CSV) was asked for before the user confirmed that anyone who
+    /// reads the file reads every password in it.
+    ExportAcknowledgeNeeded,
     /// No restore is in progress.
     NoRestore,
     /// Automatic backup is on but no folder is set.

@@ -131,8 +131,8 @@ pub struct Login {
 }
 
 impl Login {
-    /// An empty login of `app`, to be filled in.
-    pub(crate) fn new(app: App) -> Self {
+    /// An empty login of `app` (the app it comes from, or the format it goes to), to be filled in.
+    pub fn new(app: App) -> Self {
         Self {
             app,
             title: String::new(),

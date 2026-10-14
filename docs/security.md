@@ -135,7 +135,11 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   Setting up a space (`sync_create`) answers nothing. Saving the sync
   key to a file (`sync_key_save`, the same proof) answers no secret: the core puts the key in the
   interface's words in Rust and writes the file where the user chose, readable by its owner only
-  on the desktop. The IPC contract test asserts that the known secrets of its fixtures, the sync
+  on the desktop. Exporting logins to a file (`export_items_file`, the same proof, asked before the
+  save dialog opens) answers the file's name only: the core makes the KeePass database or the
+  plain CSV in Rust and writes it where the user chose, readable by its owner only; a CSV is
+  refused (`export_acknowledge_needed`) until the user confirmed that it is plain text. The IPC
+  contract test asserts that the known secrets of its fixtures, the sync
   storage's credentials, the sync key, a login's password, notes and hidden field and a generated
   password included, appear in no other message (`crates/lockra-bridge/tests/contract.rs`). A
   password made by the generator stays in the core for the session, so that a login saved with it
@@ -452,8 +456,8 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   its state as soon as the core has them, but a compromised webview process could read them.
 - Memory is not locked (`mlock`); decrypted entries could reach swap or a crash dump.
 - On the phone, the fingerprint that unlocks the vault also shows secrets, exports the accounts
-  and joins the vault to a sync space: whoever passes the check (any finger enrolled on the phone)
-  can take every account off it, as whoever knows the master password can. The check proves that
+  and the logins and joins the vault to a sync space: whoever passes the check (any finger enrolled
+  on the phone) can take every account and login off it, as whoever knows the master password can. The check proves that
   an enrolled finger is there, nothing more.
 - The browser extension: malware running as the same user can copy the extension's key out of
   the browser's profile and act as the paired extension, within the rate limits and the protection

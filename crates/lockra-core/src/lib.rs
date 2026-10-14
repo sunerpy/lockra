@@ -39,6 +39,7 @@ pub use browser::{
 pub use entry::{AccountColor, Entry, EntryDraft, EntryPatch, EntryView, ExportCompat, Local, MARK_CHARS, PinnedGroup, VAULT_DATA_FORMAT, VaultData};
 pub use error::{CoreError, CoreResult, ErrorCode};
 pub use export::EXPORT_IDLE;
+pub use export::items::{ItemsFile, ItemsFormat};
 pub use import::{Choice, LoginOutcome, Outcome};
 pub use item::{
     AutofillPrefs, Field, ItemKind, MAX_FIELDS, MAX_HISTORY, MAX_NOTES_BYTES, MAX_URLS, Matching, PastValue, Protection, Purpose, SiteRule, SiteRuleKind, Tri,

@@ -9,6 +9,7 @@
 //! the password is empty and a key file is given), then the key file's ([`KeyFile`]).
 
 mod keyfile;
+mod writer;
 mod xml;
 
 use std::io::Read;
@@ -22,6 +23,7 @@ use sha2::{Digest, Sha256, Sha512};
 use zeroize::Zeroizing;
 
 pub use keyfile::{KeyFile, KeyFileError};
+pub use writer::{Argon2Cost, WriteError, write};
 
 use crate::login::{Found, MAX_EXPANDED_BYTES};
 

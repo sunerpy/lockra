@@ -560,7 +560,8 @@ Where password management is on (`UiState.features.passwords`), the import reads
 browsers, password managers and KeePass beside the accounts (`crates/lockra-transfer`: `csv_logins`,
 `bitwarden`, `onepux`, `kdbx`; `crates/lockra-core/src/import.rs`). Where it is off, none of these
 formats is recognised: such a file is read as it was before (unrecognised, or a text whose lines
-are no `otpauth://` URIs). The export half of this section comes with the export of logins.
+are no `otpauth://` URIs). The chosen logins also go out to a KeePass database or Bitwarden's CSV
+("Logins exported", at the end).
 
 ### What a file is
 
@@ -674,4 +675,44 @@ rounds; a database past them, of KDBX 3.1 or earlier, or of a cipher it does not
 be unreadable as the file is added. The header's SHA-256 and HMAC, then every block's HMAC, are
 checked; the payload expands to at most 64 MiB; the XML is read as events, its protected values
 unmasked in document order (the entries' histories included). The entries of the recycle bin
-(`Meta/RecycleBinUUID`, while `RecycleBinEnabled`) are left out; `KP2A_URL*` strings are more URLs.
+(`Meta/RecycleBinUUID`, while `RecycleBinEnabled`) are left out; `KP2A_URL*` strings are more URLs,
+in the order of their number (`KP2A_URL`, `KP2A_URL_1`, `KP2A_URL_2`, …).
+
+### Logins exported
+
+The chosen logins export to a file (`export_items_file`, a shell command), once the user proved to
+be there: the master password, or the biometric check that unlocks the vault. A login of a later
+Lockra's kind is not exported. The file is made in Rust before the save dialog (the phone's file
+picker) opens and written where the user chose, readable by its owner only, a file it replaces
+too; the webview hears its name. Where password management is off the command answers
+`feature_unavailable`.
+
+| Lockra's login                        | KeePass database (`lockra-logins.kdbx`)                                     | Bitwarden's CSV (`lockra-logins.csv`)           |
+| ------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------- |
+| `title`                               | `Title`                                                                     | `name`                                          |
+| the user name, else the email address | `UserName`                                                                  | `login_username`                                |
+| the email address beside a user name  | a string `Email`                                                            | a field `Email`                                 |
+| the password                          | `Password`, protected                                                       | `login_password`                                |
+| `urls`                                | the first in `URL`, the others in `KP2A_URL`, `KP2A_URL_1`, …               | `login_uri`, joined by commas                   |
+| `notes`                               | `Notes`                                                                     | `notes`                                         |
+| `group`                               | the entry's group, nested by `/` (`Dev/Web`), under the root group `Lockra` | `folder`                                        |
+| `tags`                                | `Tags`                                                                      | none                                            |
+| custom fields                         | strings of their names, the hidden ones protected                           | `fields`, one `name: value` a line, none hidden |
+| `favorite`                            | none                                                                        | `favorite` (`1`)                                |
+| `protection: confirm`                 | none                                                                        | `reprompt` (`1`)                                |
+| the linked account's code             | `otp`, protected: its `otpauth://` URI, as KeePassXC keeps it               | `login_totp`: its `otpauth://` URI              |
+
+Not exported: how each URL is compared (the import takes them back as `domain`), the history, the
+times, the colour, the mark and the autofill choices. In a KeePass entry a custom field named as
+one of KeePass's own strings (`Title`, `otp`, …) or as another field of the login takes a number
+(`Title (2)`), one whose name begins as the strings Lockra reads as more URLs or a code
+(`KP2A_URL…`, `TimeOtp-…`, `HmacOtp-…`) takes a `_` in front, and one without a name is `Field`.
+
+The KeePass database is KDBX 4.1 as the keepass crate writes it: AES-256, gzip, ChaCha20 for the
+protected values, the key derived with Argon2id at the vault's own cost (64 MiB, three passes, one
+lane), under a password of its own, typed twice in the interface and at least eight characters
+(`password_too_short`). The CSV is plain text, Bitwarden's export of a vault: the command asks that
+the user confirmed it is (`acknowledged`, else `export_acknowledge_needed`), before the proof. Its
+rows end with CRLF, a cell is quoted where it holds a comma, a quote, a line break or spaces at
+either end. Both come back through the import (above) with their codes linked, but for what their
+format has no place for.

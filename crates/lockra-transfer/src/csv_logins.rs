@@ -1,5 +1,8 @@
 //! Browsers' and password managers' CSV exports (docs/formats.md §11), recognised by their header
-//! row: Chrome and Edge, Firefox, Safari and Apple Passwords, Bitwarden, 1Password, LastPass.
+//! row: Chrome and Edge, Firefox, Safari and Apple Passwords, Bitwarden, 1Password, LastPass; and
+//! logins written as Bitwarden's CSV, which every one of them imports.
+
+use zeroize::Zeroizing;
 
 use crate::item::RejectReason;
 use crate::login::{App, Found, Login, non_blank, tags, totp};
@@ -164,9 +167,10 @@ fn read_row(row: &Row<'_>, format: CsvFormat) -> Option<Found> {
                 return Some(Found::left(&name, RejectReason::NoteItem));
             }
             login.title = name;
-            // An organization's export names its collections instead of a folder.
-            let folder = row.first(&["folder", "collections"]);
-            login.folder = folder.split(',').next().and_then(non_blank);
+            // An organization's export names its collections (the first of them, commas apart)
+            // instead of a folder; a folder's name is taken whole.
+            let folder = row.get("folder");
+            login.folder = non_blank(&folder).or_else(|| row.get("collections").split(',').next().and_then(non_blank));
             login.favorite = truthy(&row.get("favorite"));
             login.reprompt = truthy(&row.get("reprompt"));
             login.notes = row.get("notes").into();
@@ -204,6 +208,83 @@ fn read_row(row: &Row<'_>, format: CsvFormat) -> Option<Found> {
         }
     }
     Some(Found::Login(Box::new(login)))
+}
+
+/// The header of Bitwarden's CSV export of a vault.
+const BITWARDEN_HEADER: [&str; 11] =
+    ["folder", "favorite", "type", "name", "notes", "fields", "reprompt", "login_uri", "login_username", "login_password", "login_totp"];
+
+/// `logins` as Bitwarden's CSV export of a vault, as Bitwarden writes it (rows end with CRLF):
+/// plain text, every secret readable. The custom fields go as `name: value` lines, the URLs
+/// joined by commas, the code as its `otpauth://` URI; tags and which fields were hidden have no
+/// column.
+pub fn write_bitwarden(logins: &[Login]) -> Zeroizing<String> {
+    // Room for every cell quoted and doubled, so that the text is not moved (and copied) as it
+    // grows.
+    let room: usize = logins
+        .iter()
+        .map(|l| {
+            let fields: usize = l.fields.iter().map(|f| f.label.len() + f.value.len() + 3).sum();
+            let urls: usize = l.urls.iter().map(|u| u.url.len() + 1).sum();
+            l.title.len() + l.username.len() + l.password.len() + l.notes.len() + l.folder.as_ref().map_or(0, String::len) + fields + urls + 160
+        })
+        .sum();
+    let mut out = Zeroizing::new(String::with_capacity(2 * room + 128));
+    row(&mut out, BITWARDEN_HEADER.iter().copied());
+    for login in logins {
+        let mut fields = Zeroizing::new(String::new());
+        for field in &login.fields {
+            if !fields.is_empty() {
+                fields.push('\n');
+            }
+            fields.push_str(&field.label);
+            fields.push_str(": ");
+            fields.push_str(&field.value);
+        }
+        let urls = login.urls.iter().map(|u| u.url.as_str()).collect::<Vec<_>>().join(",");
+        let code = match &login.totp {
+            Some(crate::item::Item::Account(auth)) => auth.to_uri(),
+            _ => Zeroizing::new(String::new()),
+        };
+        let cells = [
+            login.folder.as_deref().unwrap_or_default(),
+            if login.favorite { "1" } else { "" },
+            "login",
+            &login.title,
+            &login.notes,
+            &fields,
+            if login.reprompt { "1" } else { "0" },
+            &urls,
+            &login.username,
+            &login.password,
+            &code,
+        ];
+        row(&mut out, cells.into_iter());
+    }
+    out
+}
+
+/// One CSV row of `cells`, each quoted where it has to be, and its CRLF.
+fn row<'a>(out: &mut String, cells: impl Iterator<Item = &'a str>) {
+    for (index, cell) in cells.enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        let quoted = cell.contains([',', '"', '\r', '\n']) || cell.starts_with(char::is_whitespace) || cell.ends_with(char::is_whitespace);
+        if quoted {
+            out.push('"');
+            for c in cell.chars() {
+                if c == '"' {
+                    out.push('"');
+                }
+                out.push(c);
+            }
+            out.push('"');
+        } else {
+            out.push_str(cell);
+        }
+    }
+    out.push_str("\r\n");
 }
 
 /// `1`, `true` or `yes` (any case).

@@ -169,3 +169,55 @@ fn notes_of_lastpass_say_what_they_are() {
     assert!(truthy(" TRUE ") && truthy("yes") && truthy("1") && !truthy("0") && !truthy(""));
     assert_eq!(cells_of("a,\"b,c\""), ["a", "b,c"]);
 }
+
+// ---- writing ---------------------------------------------------------------------------------
+
+const BITWARDEN_HEADER: &str = "folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp\r\n";
+
+fn written_field(label: &str, value: &str, hidden: bool) -> LoginField {
+    LoginField { label: label.into(), value: zeroize::Zeroizing::new(value.into()), hidden }
+}
+
+#[test]
+fn bitwarden_s_csv_is_written_with_its_header() {
+    let text = write_bitwarden(&[]);
+    assert_eq!(text.as_str(), BITWARDEN_HEADER);
+    assert_eq!(recognize(text.as_bytes()), Some(CsvFormat::Bitwarden));
+}
+
+#[test]
+fn a_written_bitwarden_csv_reads_back() {
+    let code = lockra_otp::uri::parse("otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub").unwrap();
+    let mut github = Login::new(App::Bitwarden);
+    github.title = "GitHub, Inc.".into();
+    github.username = "octocat".into();
+    github.password = zeroize::Zeroizing::new("pa\"ss, word".into());
+    github.urls = vec![LoginUrl::plain("https://github.com/login"), LoginUrl::plain("https://gist.github.com")];
+    github.notes = zeroize::Zeroizing::new("line one\r\nline \"two\"".into());
+    github.folder = Some("Work, Dev".into());
+    github.favorite = true;
+    github.reprompt = true;
+    github.fields = vec![written_field("PIN", "4242", true), written_field("Customer no.", "C-77", false)];
+    github.totp = Some(Item::Account(code));
+    let mut plain = Login::new(App::Bitwarden);
+    plain.title = "Plain".into();
+    plain.password = zeroize::Zeroizing::new(" spaced ".into());
+    let text = write_bitwarden(&[github.clone(), plain]);
+    assert!(text.starts_with(BITWARDEN_HEADER));
+    let found = read(text.as_bytes(), recognize(text.as_bytes()).unwrap()).unwrap();
+    let back: Vec<&Login> = found.iter().map(login).collect();
+    assert_eq!(back.len(), 2);
+    let read_github = back[0];
+    assert_eq!((read_github.title.as_str(), read_github.username.as_str(), read_github.password.as_str()), ("GitHub, Inc.", "octocat", "pa\"ss, word"));
+    assert_eq!(urls(read_github), ["https://github.com/login", "https://gist.github.com"]);
+    assert_eq!(read_github.notes.as_str(), "line one\r\nline \"two\"");
+    assert_eq!(read_github.folder.as_deref(), Some("Work, Dev"), "a folder's name, commas and all");
+    assert!(read_github.favorite && read_github.reprompt);
+    // Bitwarden's CSV keeps a field's name and value, not whether it was hidden.
+    assert_eq!(read_github.fields, [written_field("PIN", "4242", false), written_field("Customer no.", "C-77", false)]);
+    assert_eq!(read_github.totp, github.totp);
+    let read_plain = back[1];
+    assert_eq!((read_plain.title.as_str(), read_plain.password.as_str()), ("Plain", " spaced "));
+    assert_eq!((read_plain.folder.as_deref(), read_plain.favorite, read_plain.reprompt), (None, false, false));
+    assert!(read_plain.urls.is_empty() && read_plain.fields.is_empty() && read_plain.totp.is_none());
+}

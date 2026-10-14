@@ -6,6 +6,7 @@
 import {
   type Backend,
   type EventListener,
+  type ExportItemsFile,
   type FrameListener,
   type ImportPickKind,
   LockraError,
@@ -48,6 +49,7 @@ import {
   type Incompatible,
   type InstallMethod,
   type ItemDraft,
+  type ItemsExportFormat,
   type ItemPatch,
   type ItemRevealed,
   type ItemView,
@@ -1020,6 +1022,29 @@ export class MockBackend implements Backend {
     if (!entryIds.some((id) => this.state.entries.some((e) => e.id === id)))
       throw new LockraError("export_nothing");
     return "lockra-export.txt";
+  }
+
+  /** The exports of logins made, for tests: which logins and the format (no file, as in Rust). */
+  readonly exportedItems: { ids: string[]; format: ItemsExportFormat }[] = [];
+
+  async exportItemsFile(args: ExportItemsFile): Promise<string | null> {
+    this.requirePasswords();
+    const ids = args.ids.filter((id) =>
+      this.items.some((i) => i.view.id === id && !i.view.read_only),
+    );
+    if (ids.length === 0) throw new LockraError("export_nothing");
+    // What the user chose is checked before they are asked to prove they are there.
+    if (args.format === "csv" && !args.acknowledged)
+      throw new LockraError("export_acknowledge_needed");
+    if (args.format === "kdbx" && Array.from(args.kdbxPassword ?? "").length < MIN_PASSWORD)
+      throw new LockraError("password_too_short");
+    this.confirmPresence(args.password, args.reason);
+    if (this.cancelNextSave) {
+      this.cancelNextSave = false;
+      return null;
+    }
+    this.exportedItems.push({ ids, format: args.format });
+    return args.format === "kdbx" ? "lockra-logins.kdbx" : "lockra-logins.csv";
   }
 
   /** Test hook: what the clipboard holds for `import_clipboard`. */

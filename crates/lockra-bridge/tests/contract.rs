@@ -702,6 +702,7 @@ fn response_fixtures() {
         ErrorCode::WrongPassword.into(),
         CoreError { code: ErrorCode::RateLimited, retry_at_ms: Some(T0 + 4000) },
         ErrorCode::ExportExpired.into(),
+        ErrorCode::ExportAcknowledgeNeeded.into(),
         ErrorCode::SyncWrongCredentials.into(),
         ErrorCode::SyncInviteNeedsStorage.into(),
         ErrorCode::ImportKeyFileInvalid.into(),

@@ -290,12 +290,22 @@ fn login_of(entry: Entry, groups: &[Group]) -> Found {
         }
     }
     login.urls.retain(|url| !url.url.is_empty());
-    more_urls.sort_by(|a, b| a.0.cmp(&b.0));
+    more_urls.sort_by_cached_key(|(key, _)| (url_rank(key), key.clone()));
     for (_, url) in more_urls {
         login.add_url(&url, None);
     }
     login.totp = code_of(&codes, &login.title, &login.username);
     Found::Login(Box::new(login))
+}
+
+/// Where a further URL comes: `KP2A_URL` first, then `KP2A_URL_1`, `KP2A_URL_2`, … by number
+/// (so that the tenth comes after the ninth), then any other name.
+fn url_rank(key: &str) -> u64 {
+    match key.strip_prefix("KP2A_URL") {
+        Some("") => 0,
+        Some(rest) => rest.strip_prefix('_').and_then(|n| n.parse().ok()).unwrap_or(u64::MAX),
+        None => u64::MAX,
+    }
 }
 
 /// The one-time code of an entry, from the strings that hold one.

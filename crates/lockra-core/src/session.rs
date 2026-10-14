@@ -3219,6 +3219,13 @@ fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         options.mode(0o600);
     }
     let mut file = options.open(path)?;
+    // A file that was there keeps its permissions through the open: made its owner's alone before
+    // anything goes in, where the file system keeps permissions at all (a FAT drive does not).
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = file.set_permissions(fs::Permissions::from_mode(0o600));
+    }
     file.write_all(bytes)?;
     file.sync_all()
 }

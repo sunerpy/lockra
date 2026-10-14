@@ -231,6 +231,28 @@ fn the_password_is_checked_before_a_plain_export_opens_its_dialog() {
 }
 
 #[test]
+fn logins_export_to_a_file_only_once_the_user_and_a_plain_file_s_risk_are_checked() {
+    let shell = shell();
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    let draft = json!({ "title": "GitHub", "username": "octocat", "password": { "type": "set", "value": "hunter2-do-not-leak" } });
+    let id = shell.dispatch(json!({ "command": "item_add", "draft": draft })).unwrap()["id"].clone();
+    let export = |format: &str, password: &str, acknowledged: bool, kdbx: Option<&str>| {
+        let body = json!({ "ids": [id.clone()], "format": format, "password": password, "acknowledged": acknowledged, "kdbxPassword": kdbx });
+        shell.invoke("export_items_file", body).unwrap_err()["code"].clone()
+    };
+    // Every answer comes before the save dialog would open.
+    assert_eq!(export("csv", PASSWORD, false, None), "export_acknowledge_needed");
+    assert_eq!(export("csv", "wrong password", true, None), "wrong_password");
+    assert_eq!(export("kdbx", PASSWORD, false, Some("short")), "password_too_short");
+    assert_eq!(export("kdbx", "wrong password", false, Some("a database password")), "wrong_password");
+    let nothing = json!({ "ids": [], "format": "kdbx", "password": PASSWORD, "acknowledged": false, "kdbxPassword": "a database password" });
+    assert_eq!(shell.invoke("export_items_file", nothing).unwrap_err()["code"], "export_nothing");
+    // No command of the core's hands the webview the file instead.
+    let rejected = shell.dispatch(json!({ "command": "export_items_file", "ids": [id.clone()], "format": "csv" })).unwrap_err();
+    assert!(rejected.as_str().is_some_and(|e| e.contains("invalid args")), "{rejected}");
+}
+
+#[test]
 fn the_update_commands_run_through_lockra_dispatch() {
     // A build without an update source refuses, with the core's code.
     let shell = shell();

@@ -1,4 +1,4 @@
-import { MOCK_PASSWORD } from "@lockra/shared/mock";
+import { MOCK_PASSWORD, MockBackend, sampleEntries, sampleItems } from "@lockra/shared/mock";
 import { act, screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../test/render";
 
@@ -98,5 +98,95 @@ describe("Export", () => {
     expect(await screen.findByTestId("export-saved")).toHaveTextContent(
       "已保存：lockra-export.txt",
     );
+  });
+});
+
+/** The app with password management on, the sample accounts and their twelve logins. */
+function renderLogins() {
+  const entries = sampleEntries();
+  const backend = new MockBackend({
+    entries,
+    passwords: true,
+    items: sampleItems(entries),
+    settings: { locale: "zh-cn" },
+  });
+  return renderApp({ backend });
+}
+
+async function openLogins(user: ReturnType<typeof renderApp>["user"]) {
+  await openExport(user);
+  await user.click(
+    within(screen.getByTestId("export-kind")).getByRole("radio", { name: "登录项" }),
+  );
+  await screen.findByTestId("export-logins");
+}
+
+function login(name: string): HTMLElement {
+  return within(screen.getByTestId("export-logins")).getByRole("checkbox", { name });
+}
+
+describe("Export of logins", () => {
+  it("is not offered without password management", async () => {
+    const { user } = renderApp();
+    await ready();
+    await openExport(user);
+    expect(screen.queryByTestId("export-kind")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("export-logins")).not.toBeInTheDocument();
+  });
+
+  it("saves the chosen logins as a KeePass database under a password typed twice", async () => {
+    const { user, backend } = renderLogins();
+    await ready();
+    await openLogins(user);
+    expect(screen.getByTestId("page-subtitle")).toHaveTextContent("把选中的登录项连同关联的验证码");
+    // Every login is ticked, the ones with a code say so.
+    const count = screen.getByTestId("export-count");
+    expect(count).toHaveTextContent("已选 12 个");
+    expect(within(screen.getByTestId("export-logins")).getAllByText("带验证码")).toHaveLength(4);
+    await user.click(screen.getByRole("button", { name: "全不选" }));
+    expect(count).toHaveTextContent("已选 0 个");
+    await user.click(screen.getByRole("button", { name: "全选" }));
+    await user.click(login("GitHub: octocat"));
+    expect(count).toHaveTextContent("已选 11 个");
+    const save = screen.getByTestId("export-items-save");
+    await user.type(screen.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.type(screen.getByLabelText("数据库密码"), "a database password");
+    await user.type(screen.getByLabelText("再输入一次"), "a database passwor");
+    expect(screen.getByText("两次输入的密码不一致")).toBeInTheDocument();
+    expect(save).toBeDisabled();
+    await user.type(screen.getByLabelText("再输入一次"), "d");
+    await user.click(save);
+    expect(await screen.findByTestId("export-items-saved")).toHaveTextContent(
+      "已保存：lockra-logins.kdbx",
+    );
+    const exported = backend.exportedItems.at(-1);
+    expect(exported?.format).toBe("kdbx");
+    expect(exported?.ids).toHaveLength(11);
+    expect(screen.getByLabelText("主密码")).toHaveValue("");
+    expect(screen.getByLabelText("数据库密码")).toHaveValue("");
+  });
+
+  it("writes a plain CSV only once its risk is accepted, and says why it did not", async () => {
+    const { user, backend } = renderLogins();
+    await ready();
+    await openLogins(user);
+    await user.click(screen.getByRole("option", { name: "明文 CSV 文件" }));
+    expect(screen.getByText(/任何拿到这个文件的人都能看到其中的全部密码/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("数据库密码")).not.toBeInTheDocument();
+    const save = screen.getByTestId("export-items-save");
+    await user.type(screen.getByLabelText("主密码"), "wrong");
+    expect(save).toBeDisabled();
+    await user.click(
+      screen.getByRole("switch", { name: "我知道这个文件不加密，任何人都能读到其中的密码" }),
+    );
+    await user.click(save);
+    expect(await screen.findByText("密码错误")).toBeInTheDocument();
+    expect(backend.exportedItems).toEqual([]);
+    await user.type(screen.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(save);
+    expect(await screen.findByTestId("export-items-saved")).toHaveTextContent(
+      "已保存：lockra-logins.csv",
+    );
+    expect(backend.exportedItems.at(-1)?.format).toBe("csv");
   });
 });

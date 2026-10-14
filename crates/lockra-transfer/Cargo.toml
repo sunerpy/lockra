@@ -21,6 +21,8 @@ flate2.workspace = true
 getrandom.workspace = true
 hmac.workspace = true
 image.workspace = true
+# Writes the KeePass databases logins export to.
+keepass = { workspace = true, features = ["save_kdbx4"] }
 lockra-otp.workspace = true
 percent-encoding.workspace = true
 prost.workspace = true
@@ -39,7 +41,3 @@ thiserror.workspace = true
 twofish.workspace = true
 zeroize.workspace = true
 zip.workspace = true
-
-[dev-dependencies]
-# Writes the KeePass databases the reader is checked against (an independent implementation).
-keepass = { workspace = true, features = ["save_kdbx4"] }

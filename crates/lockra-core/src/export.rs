@@ -14,6 +14,8 @@ use crate::entry::Entry;
 use crate::error::{CoreResult, ErrorCode};
 use crate::ui::{Excluded, ExportTarget};
 
+pub(crate) mod items;
+
 /// How long an export session lives without a page being shown.
 pub const EXPORT_IDLE: Duration = Duration::from_secs(120);
 

@@ -294,6 +294,45 @@ describe("MockBackend", () => {
     expect(await errorCode(backend.pickKeyFile())).toBe("no_import");
   });
 
+  it("exports logins once the user, the choice and a plain file's risk are checked", async () => {
+    const github = { view: mockItemView("GitHub"), password: "github password" };
+    const backend = new MockBackend({ phase: "unlocked", passwords: true, items: [github] });
+    const ids = [github.view.id];
+    const csv = { ids, format: "csv", password: MOCK_PASSWORD, acknowledged: true } as const;
+    const kdbx = {
+      ...csv,
+      format: "kdbx",
+      acknowledged: false,
+      kdbxPassword: "a database pw",
+    } as const;
+    expect(await errorCode(backend.exportItemsFile({ ...csv, ids: ["nope"] }))).toBe(
+      "export_nothing",
+    );
+    expect(await errorCode(backend.exportItemsFile({ ...csv, acknowledged: false }))).toBe(
+      "export_acknowledge_needed",
+    );
+    expect(await errorCode(backend.exportItemsFile({ ...kdbx, kdbxPassword: "short" }))).toBe(
+      "password_too_short",
+    );
+    expect(await errorCode(backend.exportItemsFile({ ...csv, password: "wrong" }))).toBe(
+      "wrong_password",
+    );
+    expect(await errorCode(backend.exportItemsFile({ ...csv, password: undefined }))).toBe(
+      "biometric_unavailable",
+    );
+    expect(await backend.exportItemsFile(csv)).toBe("lockra-logins.csv");
+    expect(await backend.exportItemsFile(kdbx)).toBe("lockra-logins.kdbx");
+    backend.cancelNextSave = true;
+    expect(await backend.exportItemsFile(kdbx)).toBeNull();
+    expect(backend.exportedItems).toEqual([
+      { ids, format: "csv" },
+      { ids, format: "kdbx" },
+    ]);
+    // Without password management, nothing of it.
+    const off = new MockBackend({ phase: "unlocked" });
+    expect(await errorCode(off.exportItemsFile(csv))).toBe("feature_unavailable");
+  });
+
   it("scans with the camera into the preview, or says why it could not", async () => {
     const TEXTS = { prompt: "Point at a code", cancel: "Cancel" };
     const backend = new MockBackend({ phase: "unlocked" });

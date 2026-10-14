@@ -5,12 +5,14 @@ use std::time::Duration;
 
 use lockra_autofill::{GeneratorError, GeneratorOptions, OsRandom, bundled_password_rules, generate, strength};
 use lockra_sync::{Hlc, Tombstone};
+use lockra_transfer::App;
 use tokio::time::Instant;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use super::{Core, PhaseState, Session, State, current_code, touch_items, unlocked, unlocked_mut};
+use super::{Core, PhaseState, Session, State, blocking, check_password, current_code, file_name, touch_items, unlocked, unlocked_mut, write_private};
 use crate::error::{CoreResult, ErrorCode};
+use crate::export::items::{ItemsFile, ItemsFormat, encode, login_of};
 use crate::item::{Field, GeneratedPassword, Protection, Purpose, SiteRule, SiteRuleKind, VaultItem, random_write_id};
 use crate::lenient::Lenient;
 use crate::logins::{
@@ -37,6 +39,65 @@ fn purpose_of(field: &Field) -> Purpose {
 impl Core {
     pub(super) fn passwords_on(&self) -> CoreResult<()> {
         if self.shared.config.features.passwords { Ok(()) } else { Err(ErrorCode::FeatureUnavailable.into()) }
+    }
+
+    /// The logins `ids` as a file of `format`, once the user proved to be at this device (the
+    /// master password, or without it the biometric check that unlocks this vault, asked with
+    /// `reason`): a KeePass database under `kdbx_password`, or Bitwarden's CSV, which the user
+    /// `acknowledged` is plain text. Made here, saved by the shell ([`Self::export_items_write`],
+    /// or the phone's file picker); the webview hears the file's name only.
+    pub async fn export_items(
+        &self,
+        ids: &[Uuid],
+        format: ItemsFormat,
+        password: Option<Zeroizing<String>>,
+        reason: Option<String>,
+        acknowledged: bool,
+        kdbx_password: Option<Zeroizing<String>>,
+    ) -> CoreResult<ItemsFile> {
+        self.passwords_on()?;
+        let logins = {
+            let st = self.lock();
+            let session = unlocked(&st)?;
+            let app = match format {
+                ItemsFormat::Kdbx => App::KeePass,
+                ItemsFormat::Csv => App::Bitwarden,
+            };
+            let mut chosen = std::collections::HashSet::new();
+            ids.iter()
+                .filter(|id| chosen.insert(**id))
+                .filter_map(|id| session.data.items.iter().find(|item| item.id == *id && !item.read_only()))
+                .map(|item| login_of(item, &session.data, app))
+                .collect::<Vec<_>>()
+        };
+        if logins.is_empty() {
+            return Err(ErrorCode::ExportNothing.into());
+        }
+        // What the user chose is checked before they are asked to prove they are there.
+        let kdbx_password = match format {
+            ItemsFormat::Csv if !acknowledged => return Err(ErrorCode::ExportAcknowledgeNeeded.into()),
+            ItemsFormat::Csv => Zeroizing::new(String::new()),
+            ItemsFormat::Kdbx => {
+                let password = kdbx_password.unwrap_or_default();
+                check_password(&password)?;
+                password
+            }
+        };
+        self.confirm_presence(password, reason).await?;
+        let cost = self.shared.config.kdf;
+        blocking(move || encode(&logins, format, &kdbx_password, cost)).await
+    }
+
+    /// Save `file` ([`Self::export_items`]'s) at `path`, the shell's save dialog's, readable by its
+    /// owner only; its name. The vault must still be unlocked: it may have locked while the
+    /// dialog was open.
+    pub async fn export_items_write(&self, file: ItemsFile, path: std::path::PathBuf) -> CoreResult<String> {
+        self.ensure_unlocked()?;
+        blocking(move || {
+            write_private(&path, file.bytes())?;
+            Ok(file_name(&path))
+        })
+        .await
     }
 
     /// Every login, without its secrets.
