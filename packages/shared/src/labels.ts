@@ -90,6 +90,16 @@ export function noticeText(t: TFunction, notice: Notice, name?: string): string 
       return notice.clear_after_s === null
         ? t("notice.copiedKept")
         : t("notice.copied", { s: notice.clear_after_s });
+    case "item_copied": {
+      const part = t(`notice.copiedPart.${notice.part}`);
+      if (name !== undefined && name !== "")
+        return notice.clear_after_s === null
+          ? t("notice.itemCopiedKeptName", { name, part })
+          : t("notice.itemCopiedName", { name, part, s: notice.clear_after_s });
+      return notice.clear_after_s === null
+        ? t("notice.itemCopiedKept", { part })
+        : t("notice.itemCopied", { part, s: notice.clear_after_s });
+    }
     case "clipboard_cleared":
       return t("notice.clipboardCleared");
     case "imported":

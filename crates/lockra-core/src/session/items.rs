@@ -550,7 +550,7 @@ fn remember_generated(session: &mut Session, password: Zeroizing<String>, site: 
 fn kept_history(mut history: Vec<GeneratedPassword>, now: u64) -> Vec<GeneratedPassword> {
     let oldest = now.saturating_sub(GENERATOR_HISTORY_DAYS * 24 * 3_600_000);
     history.retain(|g| g.at_ms >= oldest);
-    history.sort_by(|a, b| b.at_ms.cmp(&a.at_ms));
+    history.sort_by_key(|g| std::cmp::Reverse(g.at_ms));
     history.truncate(GENERATOR_HISTORY_MAX);
     history
 }

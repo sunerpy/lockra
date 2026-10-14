@@ -1,17 +1,71 @@
 import {
   type Backend,
   type CodeView,
+  type ItemView,
   type Notice,
   type UiEvent,
   type UiState,
 } from "@lockra/shared";
-import { type ReactNode, createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
+
+const NO_ITEMS: ItemView[] = [];
+
+/** The logins as `items_list` last answered, asked for once per `items_rev`, whoever asks. */
+class ItemsStore {
+  private rev: number | null = null;
+  private value: ItemView[] | undefined = undefined;
+  private readonly listeners = new Set<() => void>();
+
+  constructor(private readonly backend: Backend) {}
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  readonly snapshot = (): ItemView[] | undefined => this.value;
+
+  /** The list of revision `rev`, asked for unless it was already; `null`: none (locked, or not
+   *  offered by this build). */
+  want(rev: number | null): void {
+    if (rev === null) {
+      this.rev = null;
+      this.set(NO_ITEMS);
+      return;
+    }
+    if (this.rev === rev) return;
+    this.rev = rev;
+    this.backend.dispatch({ command: "items_list" }).then(
+      (list) => {
+        if (this.rev === rev) this.set(list);
+      },
+      () => {
+        if (this.rev === rev) this.set(NO_ITEMS);
+      },
+    );
+  }
+
+  private set(value: ItemView[]): void {
+    if (this.value === value) return;
+    this.value = value;
+    for (const listener of this.listeners) listener();
+  }
+}
 
 export interface BackendContextValue {
   backend: Backend;
   /** `undefined` until the first state arrived. */
   state: UiState | undefined;
   error: string | undefined;
+  items: ItemsStore;
 }
 
 const BackendContext = createContext<BackendContextValue | undefined>(undefined);
@@ -49,7 +103,8 @@ export function BackendProvider({ backend, children, onNotice }: BackendProvider
     };
   }, [backend, onNotice]);
 
-  const value = useMemo(() => ({ backend, state, error }), [backend, state, error]);
+  const items = useMemo(() => new ItemsStore(backend), [backend]);
+  const value = useMemo(() => ({ backend, state, error, items }), [backend, state, error, items]);
   return <BackendContext.Provider value={value}>{children}</BackendContext.Provider>;
 }
 
@@ -88,4 +143,18 @@ export function useCodes(): ReadonlyMap<string, CodeView> {
     };
   }, [backend]);
   return codes;
+}
+
+/** The logins, from `items_list`: asked for again whenever the state's `items_rev` moves, once
+ *  per revision however many components ask. `undefined` until the first list arrives; empty
+ *  while locked, or where this build does not offer password management. The last list stays
+ *  shown while the next one is on its way. */
+export function useItems(): ItemView[] | undefined {
+  const { state, items } = useBackend();
+  const rev = state?.phase === "unlocked" && state.features.passwords ? state.items_rev : null;
+  const list = useSyncExternalStore(items.subscribe, items.snapshot);
+  useEffect(() => {
+    items.want(rev);
+  }, [items, rev]);
+  return state === undefined ? undefined : list;
 }

@@ -54,9 +54,12 @@ make help                        # everything else
   fixtures: `UPDATE_IPC_FIXTURES=1 cargo test -p lockra-bridge --test contract`. They are compared
   byte for byte, so formatters must not touch them (`.oxfmtignore`).
 - **No path and no secret to the webview**: files are opened in Rust after a native dialog or a
-  drop (on the phone, the photo picker or the camera); only `entry_reveal`, `export_page`, `sync_key_reveal` (the recovery key) and `sync_invite`
-  answer with secret material (docs/security.md). A new command needs its zod schema, its fixture
-  and its i18n strings.
+  drop (on the phone, the photo picker or the camera); only seven answers carry secret material:
+  `entry_reveal`, `export_page`, `sync_key_reveal` (the recovery key), `sync_invite`,
+  `item_reveal`, `generator_generate` and `generator_history_reveal` (docs/security.md; the
+  contract test's leak check and `UiCommand::shows_secret` list the same). `item_reveal` asks for
+  proof only for a login of the `confirm` level, the user's choice per login. A new command needs
+  its zod schema, its fixture and its i18n strings.
 - **Commands are `async`** in the shell; Argon2 and file I/O go through `spawn_blocking` in the core.
 - **Copy** lives in `packages/shared/src/i18n/zh-CN.ts` (the keys) and `en.ts` (same shape, tested).
   No colour literals in components (`scripts/check-no-literal-colors.sh`); use the tokens.

@@ -115,18 +115,31 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   and a path in its place is refused), and the capability file grants the webview no `fs`, `dialog`, `shell` or `http`
   permission — only Lockra's own commands and the title bar's window buttons
   (`apps/desktop/src-tauri/tests/ipc.rs`, `apps/desktop/src/window-config.test.ts`).
-- What the webview receives is entry metadata and current codes. Four answers carry a secret, all
-  behind the master password entered again or the biometric check that unlocks the vault (Touch
-  ID, Windows Hello, the fingerprint; the phone offers it for all four, the desktop for the last
-  two): _reveal_ (the secret, its URI and QR code), an _export_ (QR codes; a plain otpauth file
-  asks for the proof before the save dialog opens), the space's sync key, which the interface
-  calls the recovery key (`sync_key_reveal`), and a sync invitation (`sync_invite`).
+- What the webview receives is entry metadata and current codes, and the logins' metadata
+  (`items_list`: titles, user names, email addresses, sites, the values of custom fields that are
+  not hidden; no password, notes or hidden value). Seven answers carry a secret. Four are behind
+  the master password entered again or the biometric check that unlocks the vault (Touch ID,
+  Windows Hello, the fingerprint; the phone offers it for all four, the desktop for the last two):
+  _reveal_ (the secret, its URI and QR code), an _export_ (QR codes; a plain otpauth file asks for
+  the proof before the save dialog opens), the space's sync key, which the interface calls the
+  recovery key (`sync_key_reveal`), and a sync invitation (`sync_invite`). The generator's history
+  (`generator_history_reveal`) is behind the same proof. A login's secrets (`item_reveal`: its
+  password, notes, hidden fields and earlier values) follow the login's own protection level,
+  which the user picks per login: one of the `confirm` level asks for the proof first, one of the
+  `fill` or `no_extension` levels shows them as it would fill them, without asking (so a login is
+  as easy to see as its password is to fill). A password just made (`generator_generate`) comes
+  back without proof: it protects nothing yet. Copying a login's part (`item_copy`) answers
+  nothing: Rust writes the clipboard, with the hints and the clearing a code gets, and a secret
+  of a `confirm` login asks for the proof first; the user name, the email and the linked code do
+  not.
   Setting up a space (`sync_create`) answers nothing. Saving the sync
   key to a file (`sync_key_save`, the same proof) answers no secret: the core puts the key in the
   interface's words in Rust and writes the file where the user chose, readable by its owner only
   on the desktop. The IPC contract test asserts that the known secrets of its fixtures, the sync
-  storage's credentials and the sync key included, appear in no other message
-  (`crates/lockra-bridge/tests/contract.rs`).
+  storage's credentials, the sync key, a login's password, notes and hidden field and a generated
+  password included, appear in no other message (`crates/lockra-bridge/tests/contract.rs`). A
+  password made by the generator stays in the core for the session, so that a login saved with it
+  takes it without the webview sending it back.
 - While a secret view is open the window is excluded from screen capture
   (`set_content_protected`, Windows and macOS); it is lifted when the view closes or the vault
   locks. Revealed secrets and export codes hide themselves after two minutes; the core drops an

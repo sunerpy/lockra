@@ -19,36 +19,50 @@ import {
   type CandidateAction,
   type CandidateView,
   type Choice,
-  type CodeView,
   type CodesFrame,
+  type CodeView,
   type CommandName,
   type CommandOf,
+  type CopyPart,
+  defaultSettings,
   type EntryView,
   type ErrorCode,
   type ExportPage,
   type ExportStarted,
   type ExportTarget,
+  type FieldChange,
+  type GeneratedPastView,
+  type GeneratedView,
+  type GeneratorOptions,
   type GoogleBatchView,
   type ImportOutcome,
   type Incompatible,
   type InstallMethod,
+  type ItemDraft,
+  type ItemPatch,
+  type ItemRevealed,
+  type ItemView,
   type JoinSource,
   MARK_CHARS,
+  MAX_DEVICE_NAME_CHARS,
   type Notice,
   type OtpKind,
+  type PastView,
   type PinnedGroup,
   type Platform,
   type ResultOf,
   type Revealed,
+  type RevealParts,
+  type ScoreView,
+  type SecretChange,
   type Settings,
+  type SiteRuleView,
   type StorageConfig,
   type StorageView,
   type SyncInvite,
   type SyncSpaceView,
   type UiCommand,
   type UiState,
-  MAX_DEVICE_NAME_CHARS,
-  defaultSettings,
 } from "./schema";
 import { MIN_PASSWORD } from "./password";
 import { isSealedInvite } from "./storage-form";
@@ -99,6 +113,49 @@ export interface MockOptions {
   collapsedGroups?: string[];
   /** The group pinned at the top of the code list (shown once unlocked). */
   pinnedGroup?: PinnedGroup | null;
+  /** The logins (shown once unlocked; password management must be on). */
+  items?: MockItem[];
+}
+
+/** A login of the mock: its view and its secrets. */
+export interface MockItem {
+  view: ItemView;
+  password?: string;
+  notes?: string;
+  /** Hidden custom fields' values, by field id. */
+  hidden?: Record<string, string>;
+  history?: PastView[];
+}
+
+/** A login's view with every part at its default but `title` (and what `fields` adds). */
+export function mockItemView(title: string, fields: Partial<ItemView> = {}): ItemView {
+  return {
+    id: nextId(),
+    kind: "login",
+    title,
+    username: "",
+    email: "",
+    has_password: false,
+    urls: [],
+    has_notes: false,
+    tags: [],
+    group: null,
+    favorite: false,
+    color: "auto",
+    mark: null,
+    protection: "fill",
+    autofill: { on_page_load: "default", auto_submit: "default", fill_otp: "default" },
+    totp_entry: null,
+    fields: [],
+    history_count: 0,
+    conflicts: [],
+    source: null,
+    created_at_ms: 1_790_000_000_000,
+    updated_at_ms: 1_790_000_000_000,
+    last_used_at_ms: null,
+    read_only: false,
+    ...fields,
+  };
 }
 
 /** A release the mock's update check announces. */
@@ -130,6 +187,17 @@ export const MOCK_SYNC_KEY =
   "LKS1-MFRG-GZDF-MZTW-Q2LK-NNWG-23TP-OBYX-E43U-OR3W-C6DZ-PI2D-AMBR-GQ2D-ARQA";
 const FREE_ATTEMPTS = 3;
 const EXPORT_PER_CODE = 10;
+
+/** A stand-in for zxcvbn: the common passwords score 0, then length and variety count. */
+function mockScore(password: string): ScoreView {
+  if (["password", "123456", "qwerty", "letmein"].includes(password.toLowerCase()))
+    return { score: 0, warning: "top_ten" };
+  const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter((r) =>
+    r.test(password),
+  ).length;
+  const score = Math.max(0, Math.min(4, Math.floor(password.length / 4) + classes - 3));
+  return { score, warning: score < 2 ? "common" : null };
+}
 
 let idCounter = 0;
 function nextId(): string {
@@ -470,6 +538,11 @@ export class MockBackend implements Backend {
   /** The last join was by the fingerprint: the space's keyring waits for the master password. */
   private joinedUnsealed = false;
   private biometricAnswer: ErrorCode | null;
+  private readonly passwords: boolean;
+  private items: MockItem[];
+  private siteRules: SiteRuleView[] = [];
+  private generated: { password: string; site: string | null } | null = null;
+  private generatedHistory: GeneratedPastView[] = [];
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
 
@@ -486,6 +559,8 @@ export class MockBackend implements Backend {
     this.collapsed = options.collapsedGroups ?? [];
     this.pinned = options.pinnedGroup ?? null;
     this.biometricAnswer = options.biometricAnswer ?? null;
+    this.passwords = options.passwords ?? false;
+    this.items = options.items ?? [];
     const entries = options.entries ?? [];
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
     const phase = options.phase ?? (entries.length > 0 ? "unlocked" : "no_vault");
@@ -505,6 +580,10 @@ export class MockBackend implements Backend {
         retry_at_ms: null,
       },
       entries: phase === "unlocked" ? entries.map((e) => e.view) : [],
+      items_rev: 0,
+      items_count: phase === "unlocked" ? this.items.length : 0,
+      site_rules: [],
+      generator: { history_count: 0 },
       collapsed_groups: phase === "unlocked" ? [...this.collapsed] : [],
       entry_order: [],
       group_order: [],
@@ -1087,6 +1166,79 @@ export class MockBackend implements Backend {
       case "sync_now":
         this.syncRun(this.requireSpace());
         return null;
+      case "items_list":
+        this.requirePasswords();
+        return this.items.map((item) => structuredClone(item.view));
+      case "item_add":
+        return this.itemAdd(command.draft);
+      case "item_update":
+        return this.itemUpdate(command.id, command.patch);
+      case "item_delete": {
+        this.requirePasswords();
+        if (!command.ids.some((id) => this.items.some((i) => i.view.id === id)))
+          throw new LockraError("item_not_found");
+        this.items = this.items.filter((i) => !command.ids.includes(i.view.id));
+        this.itemsChanged();
+        return null;
+      }
+      case "item_reveal":
+        return this.itemReveal(command.id, command.parts, command.password, command.reason);
+      case "item_copy":
+        return this.itemCopy(command.id, command.part, command.password, command.reason);
+      case "generator_generate":
+        return this.generatorGenerate(command.options, command.domain ?? null);
+      case "generator_copy": {
+        this.requirePasswords();
+        if (this.generated === null) throw new LockraError("item_invalid");
+        this.rememberGenerated();
+        this.clipboard = this.generated.password;
+        const clear = this.state.settings.clipboard_clear_seconds;
+        this.changed();
+        this.notice({
+          type: "item_copied",
+          item_id: null,
+          part: "generated",
+          clear_after_s: clear > 0 ? clear : null,
+        });
+        return null;
+      }
+      case "generator_history_reveal":
+        this.requirePasswords();
+        this.confirmPresence(command.password, command.reason);
+        return structuredClone(this.generatedHistory);
+      case "generator_history_clear":
+        this.requirePasswords();
+        this.generatedHistory = [];
+        this.state.generator = { history_count: 0 };
+        this.changed();
+        return null;
+      case "password_score":
+        this.requirePasswords();
+        return mockScore(command.password);
+      case "site_rule_add": {
+        this.requirePasswords();
+        const domains = command.domains.map((d) => d.trim().toLowerCase()).filter((d) => d !== "");
+        if (domains.length === 0 || (command.kind === "equivalent" && domains.length < 2))
+          throw new LockraError("item_invalid");
+        const same = this.siteRules.find(
+          (r) =>
+            r.kind === command.kind &&
+            domains.length === 1 &&
+            r.domains.length === 1 &&
+            r.domains[0] === domains[0],
+        );
+        if (!same) this.siteRules.push({ id: nextId(), kind: command.kind, domains });
+        this.itemsChanged();
+        return null;
+      }
+      case "site_rule_remove": {
+        this.requirePasswords();
+        if (!this.siteRules.some((r) => r.id === command.id))
+          throw new LockraError("item_not_found");
+        this.siteRules = this.siteRules.filter((r) => r.id !== command.id);
+        this.itemsChanged();
+        return null;
+      }
       case "sync_disable":
         this.requireSpace();
         this.setSpace(null);
@@ -1387,6 +1539,10 @@ export class MockBackend implements Backend {
 
   private enterUnlocked(entries: EntryView[]): void {
     this.state.phase = "unlocked";
+    this.state.items_rev += 1;
+    this.state.items_count = this.items.length;
+    this.state.site_rules = structuredClone(this.siteRules);
+    this.state.generator = { history_count: this.generatedHistory.length };
     this.state.entries = entries;
     this.state.collapsed_groups = [...this.collapsed];
     this.state.entry_order = [...this.order];
@@ -1402,6 +1558,11 @@ export class MockBackend implements Backend {
 
   private lock(): void {
     if (this.state.phase !== "unlocked") return;
+    this.generated = null;
+    this.state.items_rev += 1;
+    this.state.items_count = 0;
+    this.state.site_rules = [];
+    this.state.generator = { history_count: 0 };
     this.lockedEntries = this.state.entries;
     this.state.entries = [];
     this.state.collapsed_groups = [];
@@ -1657,6 +1818,301 @@ export class MockBackend implements Backend {
     const entry = this.state.entries.find((e) => e.id === id);
     if (!entry) throw new LockraError("entry_not_found");
     return entry;
+  }
+
+  private requirePasswords(): void {
+    if (!this.passwords) throw new LockraError("feature_unavailable");
+    this.requireUnlocked();
+  }
+
+  /** The logins or the site rules changed: the list is to be asked for again. */
+  private itemsChanged(): void {
+    this.state.items_rev += 1;
+    this.state.items_count = this.items.length;
+    this.state.site_rules = structuredClone(this.siteRules);
+    this.changed();
+  }
+
+  private item(id: string): MockItem {
+    this.requirePasswords();
+    const item = this.items.find((i) => i.view.id === id);
+    if (!item) throw new LockraError("item_not_found");
+    return item;
+  }
+
+  /** The value a secret change leaves, `undefined` for one that leaves it as it was. */
+  private secretValue(change: SecretChange | undefined): string | undefined {
+    if (change === undefined || change.type === "keep") return undefined;
+    if (change.type === "clear") return "";
+    if (change.type === "set") return change.value;
+    if (this.generated === null) throw new LockraError("item_invalid");
+    this.rememberGenerated();
+    return this.generated.password;
+  }
+
+  private rememberGenerated(): void {
+    if (this.generated === null) return;
+    const { password, site } = this.generated;
+    this.generatedHistory = [
+      { password, at_ms: this.now(), site },
+      ...this.generatedHistory.filter((g) => g.password !== password),
+    ].slice(0, 100);
+    this.state.generator = { history_count: this.generatedHistory.length };
+  }
+
+  private applyFields(item: MockItem, changes: readonly FieldChange[]): void {
+    for (const change of changes) {
+      const existing =
+        change.id === undefined ? undefined : item.view.fields.find((f) => f.id === change.id);
+      if (change.id !== undefined && !existing) throw new LockraError("item_not_found");
+      if (change.remove === true) {
+        item.view.fields = item.view.fields.filter((f) => f.id !== change.id);
+        if (change.id !== undefined) delete item.hidden?.[change.id];
+        continue;
+      }
+      const field = existing ?? {
+        id: nextId(),
+        label: "",
+        hidden: false,
+        value: "",
+        has_value: false,
+        page_field: null,
+      };
+      if (change.label !== undefined) field.label = change.label.trim();
+      if (change.hidden !== undefined) field.hidden = change.hidden;
+      if (change.page_field !== undefined)
+        field.page_field = change.page_field.trim() === "" ? null : change.page_field.trim();
+      const value =
+        this.secretValue(change.value) ??
+        (field.hidden ? (item.hidden?.[field.id] ?? "") : (field.value ?? ""));
+      field.has_value = value !== "";
+      if (field.hidden) {
+        item.hidden = { ...item.hidden, [field.id]: value };
+        field.value = null;
+      } else {
+        field.value = value;
+      }
+      if (!existing) item.view.fields.push(field);
+    }
+    if (item.view.fields.length > 61) throw new LockraError("item_invalid");
+  }
+
+  private itemAdd(draft: ItemDraft): { id: string } {
+    this.requirePasswords();
+    if (draft.totp_entry != null && !this.state.entries.some((e) => e.id === draft.totp_entry))
+      throw new LockraError("entry_not_found");
+    const now = this.now();
+    const title = (draft.title ?? "").trim();
+    if (Array.from(title).length > 200) throw new LockraError("item_invalid");
+    const password = this.secretValue(draft.password) ?? "";
+    const item: MockItem = {
+      view: mockItemView(title, {
+        username: (draft.username ?? "").trim(),
+        email: (draft.email ?? "").trim(),
+        has_password: password !== "",
+        urls: (draft.urls ?? [])
+          .filter((u) => u.url.trim() !== "")
+          .map((u) => ({ url: u.url.trim(), matching: u.matching ?? "domain" })),
+        has_notes: (draft.notes ?? "") !== "",
+        tags: [...new Set((draft.tags ?? []).map((t) => t.trim()).filter((t) => t !== ""))],
+        group: draft.group?.trim() || null,
+        favorite: draft.favorite ?? false,
+        color: draft.color ?? "auto",
+        mark: draft.mark?.trim() || null,
+        protection: draft.protection ?? "fill",
+        autofill: {
+          on_page_load: "default",
+          auto_submit: "default",
+          fill_otp: "default",
+          ...draft.autofill,
+        },
+        totp_entry: draft.totp_entry ?? null,
+        created_at_ms: now,
+        updated_at_ms: now,
+      }),
+      password,
+      notes: draft.notes ?? "",
+      history: [],
+    };
+    this.applyFields(
+      item,
+      (draft.fields ?? []).map((f) => ({ ...f, id: undefined })),
+    );
+    this.items.push(item);
+    this.itemsChanged();
+    return { id: item.view.id };
+  }
+
+  private itemUpdate(id: string, patch: ItemPatch): null {
+    const item = this.item(id);
+    if (item.view.read_only) throw new LockraError("item_read_only");
+    if (patch.totp_entry != null && !this.state.entries.some((e) => e.id === patch.totp_entry))
+      throw new LockraError("entry_not_found");
+    const view = item.view;
+    if (patch.title !== undefined) {
+      if (Array.from(patch.title.trim()).length > 200) throw new LockraError("item_invalid");
+      view.title = patch.title.trim();
+    }
+    if (patch.username !== undefined) view.username = patch.username.trim();
+    if (patch.email !== undefined) view.email = patch.email.trim();
+    const password = this.secretValue(patch.password);
+    if (password !== undefined && password !== item.password) {
+      if ((item.password ?? "") !== "") {
+        item.history = [
+          {
+            id: String(this.now()),
+            field: "password",
+            value: item.password ?? "",
+            set_at_ms: view.updated_at_ms,
+            conflict: false,
+          },
+          ...(item.history ?? []),
+        ].slice(0, 20);
+      }
+      item.password = password;
+      view.has_password = password !== "";
+    }
+    const notes = patch.notes === undefined ? undefined : this.secretValue(patch.notes);
+    if (notes !== undefined) {
+      item.notes = notes;
+      view.has_notes = notes !== "";
+    }
+    if (patch.urls !== undefined)
+      view.urls = patch.urls
+        .filter((u) => u.url.trim() !== "")
+        .map((u) => ({ url: u.url.trim(), matching: u.matching ?? "domain" }));
+    if (patch.tags !== undefined)
+      view.tags = [...new Set(patch.tags.map((t) => t.trim()).filter((t) => t !== ""))];
+    if (patch.group !== undefined) view.group = patch.group.trim() || null;
+    if (patch.favorite !== undefined) view.favorite = patch.favorite;
+    if (patch.color !== undefined) view.color = patch.color;
+    if (patch.mark !== undefined) view.mark = patch.mark.trim() || null;
+    if (patch.protection !== undefined) view.protection = patch.protection;
+    if (patch.autofill !== undefined) view.autofill = { ...view.autofill, ...patch.autofill };
+    if (patch.totp_entry !== undefined) view.totp_entry = patch.totp_entry;
+    this.applyFields(item, patch.fields ?? []);
+    for (const settle of patch.settle ?? []) {
+      const past =
+        settle.take === undefined ? undefined : item.history?.find((p) => p.id === settle.take);
+      if (settle.take !== undefined && past === undefined) throw new LockraError("item_not_found");
+      if (past !== undefined) item.password = past.value;
+      view.conflicts = view.conflicts.filter((c) => c.field !== settle.field);
+      item.history = (item.history ?? []).map((p) => ({ ...p, conflict: false }));
+    }
+    view.history_count = item.history?.length ?? 0;
+    view.updated_at_ms = this.now();
+    this.itemsChanged();
+    return null;
+  }
+
+  private itemReveal(
+    id: string,
+    parts: RevealParts,
+    password: string | undefined,
+    reason: string | undefined,
+  ): ItemRevealed {
+    const item = this.item(id);
+    if (item.view.protection === "confirm") this.confirmPresence(password, reason);
+    return {
+      item_id: id,
+      password: parts.password === true ? (item.password ?? "") : null,
+      notes: parts.notes === true ? (item.notes ?? "") : null,
+      fields: (parts.fields ?? []).flatMap((field) => {
+        const value = item.hidden?.[field];
+        return value === undefined ? [] : [{ id: field, value }];
+      }),
+      history: parts.history === true ? structuredClone(item.history ?? []) : null,
+    };
+  }
+
+  private itemCopy(
+    id: string,
+    part: CopyPart,
+    password: string | undefined,
+    reason: string | undefined,
+  ): null {
+    const item = this.item(id);
+    const secret =
+      part.type === "password" || (part.type === "field" && item.hidden?.[part.id] !== undefined);
+    if (secret && item.view.protection === "confirm") this.confirmPresence(password, reason);
+    let text: string | undefined;
+    if (part.type === "username") text = item.view.username;
+    else if (part.type === "email") text = item.view.email;
+    else if (part.type === "password") text = item.password;
+    else if (part.type === "field")
+      text =
+        item.hidden?.[part.id] ??
+        item.view.fields.find((f) => f.id === part.id)?.value ??
+        undefined;
+    else {
+      const entry = this.state.entries.find((e) => e.id === item.view.totp_entry);
+      if (!entry) throw new LockraError("entry_not_found");
+      text = this.frame().codes.find((c) => c.entry_id === entry.id)?.code;
+    }
+    if (text === undefined || text === "") throw new LockraError("item_not_found");
+    this.clipboard = text;
+    item.view.last_used_at_ms = this.now();
+    const clear = this.state.settings.clipboard_clear_seconds;
+    this.itemsChanged();
+    this.notice({
+      type: "item_copied",
+      item_id: id,
+      part: part.type,
+      clear_after_s: clear > 0 ? clear : null,
+    });
+    return null;
+  }
+
+  private generatorGenerate(options: GeneratorOptions, domain: string | null): GeneratedView {
+    this.requirePasswords();
+    let password: string;
+    let bits: number;
+    if (options.kind === "passphrase") {
+      const words = Math.min(20, Math.max(3, options.words));
+      const list = [
+        "plaza",
+        "ribbon",
+        "onward",
+        "lucky",
+        "cosmic",
+        "fable",
+        "harbor",
+        "velvet",
+        "maple",
+        "quartz",
+      ];
+      const picked = Array.from(
+        { length: words },
+        (_, n) => list[(this.generatedHistory.length + n * 7) % list.length] ?? "word",
+      );
+      password =
+        picked
+          .map((w) => (options.capitalize ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+          .join(options.separator) + (options.number ? "7" : "");
+      bits = Math.floor(words * 12.925);
+    } else {
+      const groups = [
+        options.lower ? "abcdefghijkmnopqrstuvwxyz" : "",
+        options.upper ? "ABCDEFGHJKLMNPQRSTUVWXYZ" : "",
+        options.digits ? "23456789" : "",
+        options.symbols ? "!#$%&*+-=?@^_" : "",
+      ].filter((g) => g !== "");
+      const alphabet = groups
+        .join("")
+        .split("")
+        .filter((c) => !options.exclude.includes(c))
+        .join("");
+      if (alphabet === "") throw new LockraError("item_invalid");
+      const length = Math.min(128, Math.max(4, options.length));
+      const seed = this.now() + this.generatedHistory.length;
+      password = Array.from(
+        { length },
+        (_, n) => alphabet[(seed + n * 31 + n * n) % alphabet.length],
+      ).join("");
+      bits = Math.floor(length * Math.log2(alphabet.length));
+    }
+    this.generated = { password, site: domain };
+    return { password, bits, rules_met: domain !== null };
   }
 
   private requireUnlocked(): void {

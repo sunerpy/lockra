@@ -1,8 +1,8 @@
 import { type Notice } from "@lockra/shared";
-import { MockBackend, mockEntry } from "@lockra/shared/mock";
+import { MockBackend, mockEntry, mockItemView } from "@lockra/shared/mock";
 import { act, render, renderHook, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { BackendProvider, useBackend, useCodes, useUiState } from "./BackendProvider";
+import { BackendProvider, useBackend, useCodes, useItems, useUiState } from "./BackendProvider";
 
 function Phase() {
   return <span data-testid="phase">{useUiState().phase}</span>;
@@ -67,5 +67,58 @@ describe("BackendProvider", () => {
     });
     await waitFor(() => expect(result.current.get(entry.view.id)?.code).toMatch(/^\d{6}$/));
     unmount();
+  });
+
+  it("asks for the logins once per revision, again as they change, and has none while locked", async () => {
+    const backend = new MockBackend({
+      passwords: true,
+      phase: "unlocked",
+      items: [{ view: mockItemView("GitHub") }],
+    });
+    function Titles({ id }: { id: string }) {
+      const items = useItems();
+      const text = items === undefined ? "loading" : items.map((i) => i.title).join(",");
+      return <span data-testid={id}>{text === "" ? "none" : text}</span>;
+    }
+    render(
+      <BackendProvider backend={backend}>
+        <Gate>
+          <Titles id="a" />
+          <Titles id="b" />
+        </Gate>
+      </BackendProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("a")).toHaveTextContent("GitHub"));
+    expect(screen.getByTestId("b")).toHaveTextContent("GitHub");
+    const lists = () => backend.calls.filter((c) => c.command === "items_list").length;
+    expect(lists()).toBe(1);
+    await act(async () => {
+      await backend.dispatch({ command: "item_add", draft: { title: "Mail" } });
+    });
+    await waitFor(() => expect(screen.getByTestId("a")).toHaveTextContent("GitHub,Mail"));
+    expect(lists()).toBe(2);
+    await act(async () => {
+      await backend.dispatch({ command: "vault_lock" });
+    });
+    await waitFor(() => expect(screen.getByTestId("a")).toHaveTextContent("none"));
+  });
+
+  it("has no logins where the build does not offer them, and none from a failed list", async () => {
+    const off = new MockBackend({ phase: "unlocked" });
+    const wrap = (backend: MockBackend) =>
+      function Wrapper({ children }: { children: ReactNode }) {
+        return <BackendProvider backend={backend}>{children}</BackendProvider>;
+      };
+    const { result } = renderHook(() => useItems(), { wrapper: wrap(off) });
+    await waitFor(() => expect(result.current).toEqual([]));
+    expect(off.calls.some((c) => c.command === "items_list")).toBe(false);
+    const failing = new MockBackend({ passwords: true, phase: "unlocked" });
+    const dispatch = failing.dispatch.bind(failing);
+    vi.spyOn(failing, "dispatch").mockImplementation(async (command) => {
+      if (command.command === "items_list") throw new Error("no core");
+      return dispatch(command);
+    });
+    const failed = renderHook(() => useItems(), { wrapper: wrap(failing) });
+    await waitFor(() => expect(failed.result.current).toEqual([]));
   });
 });

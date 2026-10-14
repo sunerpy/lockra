@@ -7,7 +7,7 @@ use super::*;
 use crate::item::SiteRuleKind;
 use crate::logins::{CopyPart, FieldChange, ItemDraft, ItemPatch, RevealParts, SecretChange, Settle, UrlDraft};
 use crate::ui::CopiedPart;
-use crate::{Matching, Protection};
+use crate::{Matching, Protection, SYNC_DEBOUNCE};
 
 const LEAKY: &str = "hunter2-do-not-leak";
 
@@ -364,6 +364,33 @@ async fn the_list_is_asked_for_again_after_every_change_and_as_the_vault_opens_a
     h.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
     h.core.activity();
     assert_eq!(rev(), before);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_list_is_asked_for_again_when_a_sync_brings_logins_or_rules() {
+    let (desktop, phone) = super::items::two_devices().await;
+    let run = || async {
+        advance(SYNC_DEBOUNCE).await;
+        settle().await;
+        phone.core.sync_now().unwrap();
+        settle().await;
+    };
+    let before = phone.core.state().items_rev;
+    desktop.core.item_add(github("first")).unwrap();
+    run().await;
+    assert_eq!(phone.core.state().items_count, 1);
+    assert!(phone.core.state().items_rev > before, "a login came");
+    let before = phone.core.state().items_rev;
+    desktop.core.site_rule_add(SiteRuleKind::NeverSave, &["bank.example".into()]).unwrap();
+    run().await;
+    assert_eq!(phone.core.state().site_rules.len(), 1);
+    assert!(phone.core.state().items_rev > before, "a rule came");
+    // A run that brings only codes leaves it.
+    let before = phone.core.state().items_rev;
+    desktop.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    run().await;
+    assert_eq!(phone.core.state().entries.len(), 1);
+    assert_eq!(phone.core.state().items_rev, before);
 }
 
 #[tokio::test(start_paused = true)]

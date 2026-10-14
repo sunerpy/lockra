@@ -38,6 +38,7 @@ pub use item::{
     UrlRule, VaultItem,
 };
 pub use lenient::Lenient;
+pub use lockra_autofill::{GeneratorOptions, PassphraseOptions, PasswordOptions};
 pub use lockra_sync::StorageConfig;
 pub use lockra_vault::KdfCost;
 pub use logins::{
