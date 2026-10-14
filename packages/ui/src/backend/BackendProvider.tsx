@@ -1,10 +1,12 @@
 import {
   type Backend,
   type CodeView,
+  type ErrorCode,
   type ItemView,
   type Notice,
   type UiEvent,
   type UiState,
+  isLockraError,
 } from "@lockra/shared";
 import {
   type ReactNode,
@@ -22,6 +24,8 @@ const NO_ITEMS: ItemView[] = [];
 class ItemsStore {
   private rev: number | null = null;
   private value: ItemView[] | undefined = undefined;
+  /** What the last list failed with; `null` once one arrived. */
+  private failure: ErrorCode | null = null;
   private readonly listeners = new Set<() => void>();
 
   constructor(private readonly backend: Backend) {}
@@ -32,6 +36,15 @@ class ItemsStore {
   };
 
   readonly snapshot = (): ItemView[] | undefined => this.value;
+
+  readonly failed = (): ErrorCode | null => this.failure;
+
+  /** Ask for the list of the current revision again, after a failure. */
+  readonly retry = (): void => {
+    const rev = this.rev;
+    this.rev = null;
+    if (rev !== null) this.want(rev);
+  };
 
   /** The list of revision `rev`, asked for unless it was already; `null`: none (locked, or not
    *  offered by this build). */
@@ -45,16 +58,21 @@ class ItemsStore {
     this.rev = rev;
     this.backend.dispatch({ command: "items_list" }).then(
       (list) => {
-        if (this.rev === rev) this.set(list);
+        if (this.rev !== rev) return;
+        this.failure = null;
+        this.set(list, true);
       },
-      () => {
-        if (this.rev === rev) this.set(NO_ITEMS);
+      (error: unknown) => {
+        if (this.rev !== rev) return;
+        this.failure = isLockraError(error) ? error.code : "internal";
+        // The last list stays shown; a first one that failed is an empty one.
+        this.set(this.value ?? NO_ITEMS, true);
       },
     );
   }
 
-  private set(value: ItemView[]): void {
-    if (this.value === value) return;
+  private set(value: ItemView[], always = false): void {
+    if (this.value === value && !always) return;
     this.value = value;
     for (const listener of this.listeners) listener();
   }
@@ -143,6 +161,13 @@ export function useCodes(): ReadonlyMap<string, CodeView> {
     };
   }, [backend]);
   return codes;
+}
+
+/** Why the last list of logins failed (it then keeps the one before), and a retry. */
+export function useItemsFailure(): { error: ErrorCode | null; retry: () => void } {
+  const { items } = useBackend();
+  const error = useSyncExternalStore(items.subscribe, items.failed);
+  return { error, retry: items.retry };
 }
 
 /** The logins, from `items_list`: asked for again whenever the state's `items_rev` moves, once

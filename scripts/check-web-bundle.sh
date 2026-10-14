@@ -14,7 +14,7 @@ pnpm --filter @lockra/desktop build >/dev/null
 dist=apps/desktop/dist
 status=0
 
-for marker in "MockBackend" "correct horse battery" "sampleEntries" "placeholderSvg" "showcase-freeze" "FROZEN_NOW" "awaitBackup"; do
+for marker in "MockBackend" "correct horse battery" "sampleEntries" "sampleItems" "placeholderSvg" "showcase-freeze" "FROZEN_NOW" "awaitBackup"; do
   if grep -rqF -- "$marker" "$dist"; then
     echo "check-web-bundle: development code shipped: $marker"
     status=1

@@ -16,6 +16,7 @@ export interface BannerProps {
   /** `bar`: 3 px colour bar at the left edge (load errors, conflicts). `lamp`: 8 px dot. `icon`: ⚠. */
   marker?: "bar" | "lamp" | "icon";
   className?: string;
+  "data-testid"?: string;
 }
 
 const LAMP_TONE: Record<BannerTone, LampTone> = {
@@ -48,12 +49,14 @@ export function Banner({
   onDismiss,
   marker = "lamp",
   className,
+  "data-testid": testId,
 }: BannerProps) {
   const t = useT();
   return (
     <div
       role={tone === "danger" ? "alert" : "status"}
       data-tone={tone}
+      data-testid={testId}
       className={cx(
         "flex items-start gap-3 rounded-10 px-4 py-3 text-[13px] hairline",
         marker === "bar" ? cx("border-l-[3px]", BAR_CLASS[tone], SOFT_CLASS[tone]) : "bg-surface",

@@ -25,6 +25,7 @@
       "items_rev": 8,
       "items_count": 0,
       "site_rules": [],
+      "item_collapsed_groups": [],
       "generator": {
         "history_count": 0
       },
@@ -80,6 +81,7 @@
           "avoid_ambiguous": false,
           "exclude": ""
         },
+        "item_sort": "name",
         "browser_integration": false
       },
       "import": null,

@@ -208,6 +208,7 @@
         },
         "group_codes": false,
         "hide_codes": true,
+        "item_sort": "recent",
         "locale": "zh-cn",
         "reduce_motion": true,
         "sort": "recent",
@@ -430,6 +431,13 @@
     {
       "command": "site_rule_remove",
       "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000001e"
+    },
+    {
+      "command": "view_collapse_items",
+      "groups": [
+        "",
+        "Work"
+      ]
     },
     {
       "command": "browser_pair_approve",

@@ -383,6 +383,12 @@ pub enum UiCommand {
         /// Which.
         id: Uuid,
     },
+    /// Fold these groups of the password list ("" for the logins in no group), unfold the others.
+    ViewCollapseItems {
+        /// The groups folded from now on.
+        #[serde(default)]
+        groups: Vec<String>,
+    },
     /// Approve a browser extension's pairing (the user compared the codes), with the master
     /// password or the biometric check.
     BrowserPairApprove {
@@ -442,7 +448,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 71] = [
+pub const COMMANDS: [&str; 72] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -506,6 +512,7 @@ pub const COMMANDS: [&str; 71] = [
     "password_score",
     "site_rule_add",
     "site_rule_remove",
+    "view_collapse_items",
     "browser_pair_approve",
     "browser_pair_deny",
     "browser_fill_confirm",
@@ -652,6 +659,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::PasswordScore { password } => json!(core.password_score(&password)?),
         UiCommand::SiteRuleAdd { kind, domains } => unit(core.site_rule_add(kind, &domains))?,
         UiCommand::SiteRuleRemove { id } => unit(core.site_rule_remove(id))?,
+        UiCommand::ViewCollapseItems { groups } => unit(core.collapse_item_groups(groups))?,
         UiCommand::BrowserPairApprove { id, password, reason } => unit(core.browser_pair_approve(id, password, reason).await)?,
         UiCommand::BrowserPairDeny { id } => unit(core.browser_pair_deny(id))?,
         UiCommand::BrowserFillConfirm { id, password, reason } => unit(core.browser_confirm(id, password, reason).await)?,

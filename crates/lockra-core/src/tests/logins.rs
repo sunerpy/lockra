@@ -394,6 +394,26 @@ async fn the_list_is_asked_for_again_when_a_sync_brings_logins_or_rules() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn the_password_lists_folds_are_this_devices_and_kept() {
+    let h = Harness::unlocked().await;
+    h.core.item_add(ItemDraft { group: Some("Work".into()), ..github("a") }).unwrap();
+    h.core.item_add(ItemDraft { group: None, ..github("b") }).unwrap();
+    assert!(h.core.state().item_collapsed_groups.is_empty());
+    let rev = h.core.state().items_rev;
+    h.core.collapse_item_groups(vec!["Work".into(), String::new(), "Gone".into(), " Work ".into()]).unwrap();
+    let state = h.core.state();
+    assert_eq!(state.item_collapsed_groups, ["", "Work"], "groups that exist, once each, and the logins in none");
+    assert_eq!(state.items_rev, rev, "a fold is no change of the logins");
+    h.core.lock_vault();
+    assert!(h.core.state().item_collapsed_groups.is_empty(), "nothing shown while locked");
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert_eq!(restarted.state().item_collapsed_groups, ["", "Work"], "kept in the vault");
+    restarted.collapse_item_groups(Vec::new()).unwrap();
+    assert!(restarted.state().item_collapsed_groups.is_empty());
+}
+
+#[tokio::test(start_paused = true)]
 async fn nothing_of_it_answers_while_password_management_is_off() {
     let h = harness_with_features(Features { passwords: false });
     h.core.create_vault(pw(MASTER)).await.unwrap();
@@ -413,6 +433,7 @@ async fn nothing_of_it_answers_while_password_management_is_off() {
     assert_eq!(code_err(h.core.password_score("x")), off);
     assert_eq!(code_err(h.core.site_rule_add(SiteRuleKind::NeverSave, &["a.example".into()])), off);
     assert_eq!(code_err(h.core.site_rule_remove(id)), off);
+    assert_eq!(code_err(h.core.collapse_item_groups(Vec::new())), off);
 }
 
 #[tokio::test(start_paused = true)]

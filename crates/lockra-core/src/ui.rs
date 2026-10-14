@@ -99,6 +99,9 @@ pub struct UiState {
     pub items_count: u32,
     /// The site rules (never save, never fill, equivalent domains); empty unless unlocked.
     pub site_rules: Vec<SiteRuleView>,
+    /// The groups folded in the password list ("" for the logins in no group); this device's, kept
+    /// in the vault, so empty unless unlocked.
+    pub item_collapsed_groups: Vec<String>,
     /// The password generator.
     pub generator: GeneratorStatus,
     /// The browser extension: the integration, the pairings, the requests waiting for the user.

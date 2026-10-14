@@ -38,6 +38,22 @@ describe("AccountAppearance", () => {
     expect(screen.getByLabelText("头像文字")).toHaveValue("👨‍💻🚀");
   });
 
+  it("keeps its legend for screen readers only where the form's group title says it", () => {
+    render(
+      <AccountAppearance
+        hideLegend
+        issuer="GitHub"
+        account="octocat"
+        color="auto"
+        mark=""
+        onColor={vi.fn()}
+        onMark={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("group", { name: "外观" })).toBeInTheDocument();
+    expect(screen.getByText("外观")).toHaveClass("sr-only");
+  });
+
   it("comes in the phone's touch size", () => {
     const { unmount } = render(<Editor />);
     expect(screen.getByRole("radio", { name: "自动" })).toHaveClass("h-6", "w-6");

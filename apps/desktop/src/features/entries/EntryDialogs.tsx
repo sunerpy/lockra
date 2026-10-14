@@ -46,7 +46,11 @@ export function EntryDialogs() {
   const shell = useShell();
   const { entries } = useUiState();
   const overlay = shell.overlay;
-  const id = overlay !== null && "id" in overlay ? overlay.id : undefined;
+  // An account's own overlays: a login's (`item_edit`, …) have ids of their own.
+  const id =
+    overlay?.type === "edit" || overlay?.type === "delete" || overlay?.type === "reveal"
+      ? overlay.id
+      : undefined;
   const entry = id === undefined ? undefined : entries.find((e) => e.id === id);
   // The account went away meanwhile (an import replaced it, the vault was restored): close.
   const missing = id !== undefined && entry === undefined;
@@ -66,8 +70,7 @@ export function EntryDialogs() {
       return entry ? <DeleteDialog entry={entry} onClose={close} /> : null;
     case "reveal":
       return entry ? <RevealDialog entry={entry} onClose={close} /> : null;
-    case "export":
-    case "settings":
+    default:
       return null;
   }
 }

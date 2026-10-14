@@ -77,6 +77,48 @@ describe("CommandPalette", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
+  it("goes through a login's own actions with Tab; Enter or a click runs the one chosen (board 11)", async () => {
+    const user = userEvent.setup();
+    const ran: string[] = [];
+    const login: CommandItem = {
+      id: "login",
+      group: "登录项",
+      label: "GitHub · octocat",
+      run: () => ran.push("run"),
+      actions: ["复制密码", "复制用户名", "显示密码"].map((label) => ({
+        id: label,
+        label,
+        run: () => ran.push(label),
+      })),
+    };
+    const onClose = vi.fn();
+    render(<CommandPalette open items={[login, ...items()]} onClose={onClose} />);
+    const active = () =>
+      screen
+        .getAllByTestId("palette-action")
+        .filter((a) => a.dataset.active)
+        .map((a) => a.textContent);
+    expect(active()).toEqual(["复制密码↵"]);
+    expect(screen.getByText("↑↓ 选择 · ↵ 执行 · Tab 切换操作 · Esc 关闭")).toBeInTheDocument();
+    await user.keyboard("{Tab}{Tab}");
+    expect(active()).toEqual(["显示密码↵"]);
+    await user.keyboard("{Tab}");
+    expect(active()).toEqual(["复制密码↵"]);
+    await user.keyboard("{Shift>}{Tab}{/Shift}");
+    expect(active()).toEqual(["显示密码↵"]);
+    await user.keyboard("{Enter}");
+    expect(ran).toEqual(["显示密码"]);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    // Away and back: the first action again; a pill runs its own.
+    await user.keyboard("{ArrowDown}");
+    expect(screen.queryAllByTestId("palette-action")).toHaveLength(0);
+    expect(screen.getByText("↑↓ 选择 · ↵ 执行 · Esc 关闭")).toBeInTheDocument();
+    await user.keyboard("{ArrowUp}");
+    expect(active()).toEqual(["复制密码↵"]);
+    await user.click(screen.getByText("复制用户名"));
+    expect(ran).toEqual(["显示密码", "复制用户名"]);
+  });
+
   it("mouse hover moves the cursor and click runs", async () => {
     const user = userEvent.setup();
     const run = vi.fn();

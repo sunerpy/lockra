@@ -358,6 +358,199 @@ export function sampleEntries(): MockEntry[] {
   ];
 }
 
+/** A day of September 2026, the samples' time. */
+const sampleDay = (d: number) => Date.UTC(2026, 8, d);
+
+/** A sample login: `fields` over the defaults, with the secrets the mock keeps. */
+const sampleLogin = (
+  title: string,
+  fields: Partial<ItemView>,
+  secrets: Omit<MockItem, "view"> = {},
+): MockItem => ({
+  view: mockItemView(title, {
+    has_password: secrets.password !== undefined,
+    has_notes: (secrets.notes ?? "") !== "",
+    ...fields,
+  }),
+  ...secrets,
+});
+
+/** The sample logins (board 01 of Penpot 「Lockra 密码管理」): twelve, in 工作, 个人 and none, three
+ *  favourites; GitHub, AWS, Cloudflare and Google go with the accounts of `entries` of their name,
+ *  the bank asks for proof, V2EX holds a conflict. */
+export function sampleItems(entries: readonly MockEntry[] = []): MockItem[] {
+  const code = (issuer: string) => entries.find((e) => e.view.issuer === issuer)?.view.id ?? null;
+  const recovery = nextId();
+  return [
+    sampleLogin(
+      "GitHub",
+      {
+        username: "octocat",
+        email: "octocat@github.com",
+        urls: [{ url: "https://github.com/login", matching: "domain" }],
+        group: "工作",
+        tags: ["开发", "常用"],
+        favorite: true,
+        totp_entry: code("GitHub"),
+        fields: [
+          {
+            id: recovery,
+            label: "恢复码",
+            hidden: true,
+            value: null,
+            has_value: true,
+            page_field: null,
+          },
+        ],
+        history_count: 2,
+        last_used_at_ms: sampleDay(28),
+        created_at_ms: sampleDay(1),
+        updated_at_ms: sampleDay(20),
+      },
+      {
+        password: "x7#Kq9!vLm2@Rt4z",
+        notes: "公司组织 acme-corp 的管理员。\n恢复码打印件在抽屉里。",
+        hidden: { [recovery]: "a1b2-c3d4-e5f6" },
+        history: [
+          {
+            id: "gh-1",
+            field: "password",
+            value: "OldPass#2025",
+            set_at_ms: sampleDay(10),
+            conflict: false,
+          },
+          {
+            id: "gh-2",
+            field: "password",
+            value: "Older!2024",
+            set_at_ms: sampleDay(2),
+            conflict: false,
+          },
+        ],
+      },
+    ),
+    sampleLogin(
+      "AWS 控制台",
+      {
+        username: "root@acme-corp",
+        urls: [{ url: "https://signin.aws.amazon.com", matching: "host" }],
+        group: "工作",
+        tags: ["开发"],
+        totp_entry: code("AWS"),
+        protection: "confirm",
+      },
+      { password: "Aws!Root-2026-q3" },
+    ),
+    sampleLogin(
+      "Cloudflare",
+      {
+        email: "ops@acme.dev",
+        urls: [{ url: "https://dash.cloudflare.com", matching: "domain" }],
+        group: "工作",
+        tags: ["开发"],
+        totp_entry: code("Cloudflare"),
+      },
+      { password: "cf-Ops_93kd!a" },
+    ),
+    sampleLogin(
+      "Figma",
+      {
+        email: "alex@acme.dev",
+        urls: [{ url: "https://www.figma.com", matching: "domain" }],
+        group: "工作",
+        tags: ["设计"],
+        last_used_at_ms: sampleDay(29),
+      },
+      { password: "Figma#Design42" },
+    ),
+    sampleLogin(
+      "Notion",
+      {
+        email: "alex@acme.dev",
+        urls: [{ url: "https://www.notion.so", matching: "domain" }],
+        group: "工作",
+        tags: ["常用"],
+      },
+      { password: "n0tion-Pages!7" },
+    ),
+    sampleLogin(
+      "招商银行",
+      {
+        username: "6222 •••• 1234",
+        urls: [{ url: "https://pbsz.ebank.cmbchina.com", matching: "host" }],
+        group: "个人",
+        favorite: true,
+        protection: "confirm",
+        color: "red",
+        mark: "招",
+      },
+      { password: "Cmb#880613" },
+    ),
+    sampleLogin(
+      "Google",
+      {
+        email: "alex@gmail.com",
+        urls: [{ url: "https://accounts.google.com", matching: "domain" }],
+        group: "个人",
+        favorite: true,
+        tags: ["常用"],
+        totp_entry: code("Google"),
+      },
+      { password: "g00gle-Alex!92" },
+    ),
+    sampleLogin(
+      "Apple ID",
+      {
+        email: "alex@icloud.com",
+        urls: [{ url: "https://appleid.apple.com", matching: "domain" }],
+        group: "个人",
+      },
+      { password: "Apple-Id#2026" },
+    ),
+    sampleLogin(
+      "Steam",
+      {
+        username: "player-one",
+        urls: [{ url: "https://store.steampowered.com", matching: "domain" }],
+        group: "个人",
+        tags: ["游戏"],
+      },
+      { password: "Steam!Play3r" },
+    ),
+    sampleLogin(
+      "路由器",
+      { username: "admin", urls: [{ url: "http://192.168.1.1", matching: "host" }] },
+      { password: "router-admin" },
+    ),
+    sampleLogin(
+      "Netflix",
+      { email: "alex@gmail.com", urls: [{ url: "https://www.netflix.com", matching: "domain" }] },
+      { password: "Netfl1x&Chill" },
+    ),
+    sampleLogin(
+      "V2EX",
+      {
+        username: "alex",
+        urls: [{ url: "https://www.v2ex.com", matching: "domain" }],
+        conflicts: [{ field: "password", purpose: "password", label: "" }],
+        history_count: 1,
+      },
+      {
+        password: "v2ex-New!2026",
+        history: [
+          {
+            id: "v2-1",
+            field: "password",
+            value: "v2ex-Other#99",
+            set_at_ms: sampleDay(27),
+            conflict: true,
+          },
+        ],
+      },
+    ),
+  ];
+}
+
 interface MockCandidate {
   view: CandidateView;
   secret: string;
@@ -574,6 +767,7 @@ export class MockBackend implements Backend {
   private siteRules: SiteRuleView[] = [];
   private generated: { password: string; site: string | null } | null = null;
   private generatedHistory: GeneratedPastView[] = [];
+  private itemFolds: string[] = [];
   private browser: Pick<BrowserView, "paired" | "pairing" | "confirms" | "policy" | "activity">;
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
@@ -622,6 +816,7 @@ export class MockBackend implements Backend {
       items_rev: 0,
       items_count: phase === "unlocked" ? this.items.length : 0,
       site_rules: [],
+      item_collapsed_groups: [],
       generator: { history_count: 0 },
       browser: {
         available: false,
@@ -1288,6 +1483,17 @@ export class MockBackend implements Backend {
         this.itemsChanged();
         return null;
       }
+      case "view_collapse_items": {
+        this.requirePasswords();
+        const groups = new Set(this.items.map((i) => i.view.group).filter((g) => g !== null));
+        this.itemFolds = [...new Set(command.groups.map((g) => g.trim()))]
+          .filter((g) => g === "" || groups.has(g))
+          // oxlint-disable-next-line unicorn/no-array-sort
+          .sort();
+        this.state.item_collapsed_groups = [...this.itemFolds];
+        this.changed();
+        return null;
+      }
       case "browser_pair_approve": {
         this.requireBrowser();
         const request = this.browser.pairing.find((p) => p.id === command.id);
@@ -1678,6 +1884,7 @@ export class MockBackend implements Backend {
     this.lockedEntries = [];
     this.state.lock = { ...this.state.lock, failed_attempts: 0, retry_at_ms: null };
     this.state.browser = this.browserView();
+    this.state.item_collapsed_groups = this.passwords ? [...this.itemFolds] : [];
     this.refreshAutoLock();
     this.publish();
     this.pushFrame();
@@ -1693,6 +1900,7 @@ export class MockBackend implements Backend {
     this.state.items_rev += 1;
     this.state.items_count = 0;
     this.state.site_rules = [];
+    this.state.item_collapsed_groups = [];
     this.state.generator = { history_count: 0 };
     this.lockedEntries = this.state.entries;
     this.state.entries = [];

@@ -3,7 +3,7 @@
 import type { ExportStarted } from "@lockra/shared";
 import { type ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
 
-export const PAGES = ["codes", "import", "export", "backup"] as const;
+export const PAGES = ["codes", "passwords", "import", "export", "backup"] as const;
 export type PageId = (typeof PAGES)[number];
 
 export function isPageId(value: string): value is PageId {
@@ -19,7 +19,13 @@ export type Overlay =
   | { type: "delete"; id: string }
   | { type: "reveal"; id: string }
   | { type: "export"; started: ExportStarted }
-  | { type: "settings"; section: SettingsSection };
+  | { type: "settings"; section: SettingsSection }
+  // Password management (the passwords page and the palette).
+  | { type: "item_new"; title?: string }
+  | { type: "item_edit"; id: string }
+  | { type: "item_delete"; id: string }
+  | { type: "item_reveal"; id: string }
+  | { type: "generator" };
 
 export interface ShellState {
   page: PageId;
@@ -32,9 +38,12 @@ export interface ShellState {
   /** The update dialog: over any overlay (Settings opens it), opened from the title bar too. */
   updateOpen: boolean;
   setUpdateOpen: (open: boolean) => void;
-  /** Bumped to ask the codes page to focus its search field. */
+  /** Bumped to ask the page's search field (the codes', the passwords') to take the focus. */
   searchFocus: number;
   focusSearch: () => void;
+  /** The login the passwords page shows in its detail pane (a new one is selected once saved). */
+  selectedItem: string | null;
+  selectItem: (id: string | null) => void;
 }
 
 const ShellContext = createContext<ShellState | undefined>(undefined);
@@ -51,6 +60,7 @@ export function ShellStateProvider({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [updateOpen, setUpdateOpenState] = useState(false);
   const [searchFocus, setSearchFocus] = useState(0);
+  const [selectedItem, selectItem] = useState<string | null>(null);
   const navigate = useCallback((next: PageId) => setPage(next), []);
   const open = useCallback((next: Overlay) => {
     setPaletteOpen(false);
@@ -62,7 +72,8 @@ export function ShellStateProvider({
     setUpdateOpenState(next);
   }, []);
   const focusSearch = useCallback(() => {
-    setPage("codes");
+    // The passwords page has a search of its own; any other page goes to the codes'.
+    setPage((current) => (current === "passwords" ? current : "codes"));
     setSearchFocus((n) => n + 1);
   }, []);
   const value = useMemo(
@@ -78,6 +89,8 @@ export function ShellStateProvider({
       setUpdateOpen,
       searchFocus,
       focusSearch,
+      selectedItem,
+      selectItem,
     }),
     [
       page,
@@ -90,6 +103,7 @@ export function ShellStateProvider({
       setUpdateOpen,
       searchFocus,
       focusSearch,
+      selectedItem,
     ],
   );
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;

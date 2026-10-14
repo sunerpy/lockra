@@ -40,7 +40,7 @@ export function ToasterProvider({ store, children }: { store: ToastStore; childr
       push({
         message: noticeText(t, n, name),
         tone: noticeIsProblem(n) ? "danger" : "neutral",
-        ...(n.type === "copied" ? { icon: "check" as const } : {}),
+        ...(n.type === "copied" || n.type === "item_copied" ? { icon: "check" as const } : {}),
       });
     },
     [push, t],
@@ -71,7 +71,7 @@ export function useToaster(): Toaster {
 /** The core's notices as toasts (inside the i18n tree, so they are translated); a copy names the
  *  account it came from. */
 export function NoticeBridge() {
-  const { backend, state } = useBackend();
+  const { backend, state, items } = useBackend();
   const toaster = useToaster();
   const entries = useRef<readonly EntryView[]>([]);
   useEffect(() => {
@@ -82,13 +82,19 @@ export function NoticeBridge() {
       backend.on((event) => {
         if (event.type !== "notice") return;
         const notice = event.notice;
+        if (notice.type === "item_copied") {
+          // A login's copy names the login, from the list the page asked for last.
+          const item = items.snapshot()?.find((i) => i.id === notice.item_id);
+          toaster.notice(notice, item ? item.title || item.username || item.email : undefined);
+          return;
+        }
         const entry =
           notice.type === "copied"
             ? entries.current.find((e) => e.id === notice.entry_id)
             : undefined;
         toaster.notice(notice, entry ? entry.issuer || entry.account : undefined);
       }),
-    [backend, toaster],
+    [backend, toaster, items],
   );
   return null;
 }

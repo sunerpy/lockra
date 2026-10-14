@@ -19,6 +19,8 @@ export interface AccountAppearanceProps {
   onMark: (mark: string) => void;
   /** `lg` is the phone's: 36 px swatches and a 44 px field. */
   size?: "md" | "lg";
+  /** The legend for screen readers only: a form whose group title already says 外观 (a login's). */
+  hideLegend?: boolean;
 }
 
 export function AccountAppearance({
@@ -29,6 +31,7 @@ export function AccountAppearance({
   onColor,
   onMark,
   size = "md",
+  hideLegend = false,
 }: AccountAppearanceProps) {
   const t = useT();
   const labelId = useId();
@@ -49,7 +52,9 @@ export function AccountAppearance({
   };
   return (
     <fieldset className="flex flex-col gap-2" data-testid="entry-appearance">
-      <legend className="mb-1 text-[12px] text-fg-muted">{t("entry.appearance")}</legend>
+      <legend className={hideLegend ? "sr-only" : "mb-1 text-[12px] text-fg-muted"}>
+        {t("entry.appearance")}
+      </legend>
       <div className="flex items-start gap-3">
         <EntryAvatar
           issuer={issuer}

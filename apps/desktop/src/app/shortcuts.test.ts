@@ -21,6 +21,7 @@ describe("shortcutFor", () => {
     expect(shortcutFor(key("k", { ctrlKey: true }))).toBe("palette");
     expect(shortcutFor(key("K", { metaKey: true }))).toBe("palette");
     expect(shortcutFor(key("n", { ctrlKey: true }))).toBe("add");
+    expect(shortcutFor(key("g", { ctrlKey: true }))).toBe("generate");
     expect(shortcutFor(key("l", { ctrlKey: true }))).toBe("lock");
     expect(shortcutFor(key(",", { metaKey: true }))).toBe("settings");
     expect(shortcutFor(key("f", { ctrlKey: true }))).toBe("search");
