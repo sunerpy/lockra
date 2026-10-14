@@ -9,13 +9,16 @@ import { BottomSheet } from "./BottomSheet";
 export function GroupInput({
   value,
   onChange,
+  groups: offered,
 }: {
   value: string;
   onChange: (value: string) => void;
+  /** The groups to offer; the accounts' by default (a login's form gives the logins'). */
+  groups?: readonly string[];
 }) {
   const t = useT();
   const { entries } = useUiState();
-  const groups = entryGroups(entries);
+  const groups = offered ?? entryGroups(entries);
   const labelId = useId();
   const [open, setOpen] = useState(false);
   const [fresh, setFresh] = useState("");

@@ -146,7 +146,28 @@ export const en: Messages = {
   mobile: {
     emptyBody:
       "Tap + to add one: scan a QR code, read a screenshot, paste otpauth links or type the secret in.",
-    dock: { label: "Main navigation", codes: "Codes", scan: "Scan", settings: "Settings" },
+    dock: {
+      label: "Main navigation",
+      codes: "Codes",
+      scan: "Scan",
+      passwords: "Passwords",
+      newLogin: "New login",
+      settings: "Settings",
+    },
+    logins: {
+      emptyBody:
+        "Import the export of a browser or another password manager, or tap + below to add one.",
+      revealTitle: "Show password",
+      autofill: "Browser autofill",
+      autofillDesktop: "As set on the desktop",
+      autofillNote: "Browser autofill is set in the desktop app only; it is kept here as it is.",
+      matching: "Match: {name}",
+      matchingTitle: "How it matches",
+      deleteLogin: "Delete login…",
+      codeSheet: "Link a code",
+      noCode: "No code",
+      generatorUse: "Use this password",
+    },
     add: {
       title: "Add an account",
       scan: "Scan a QR code",

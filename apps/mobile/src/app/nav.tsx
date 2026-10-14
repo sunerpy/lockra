@@ -34,7 +34,13 @@ export type Route =
   | { name: "syncStorage" }
   | { name: "account"; id: string }
   | { name: "edit"; id: string }
-  | { name: "reveal"; id: string };
+  | { name: "reveal"; id: string }
+  // Password management: the list (over the codes, the dock's 密码), a login, its form (a new
+  // login without `id`, named `title` from a search that found nothing) and its password.
+  | { name: "logins" }
+  | { name: "login"; id: string }
+  | { name: "loginEdit"; id?: string; title?: string }
+  | { name: "loginReveal"; id: string };
 
 export interface Nav {
   /** The top page; `undefined` while the codes show. */
@@ -46,6 +52,8 @@ export interface Nav {
   home: () => void;
   /** Put `route` in place of the top page (its history entry stays). */
   replace: (route: Route) => void;
+  /** Close the pages above the last one named `name` (all of them when there is none). */
+  popTo: (name: Route["name"]) => void;
 }
 
 const NavContext = createContext<Nav | null>(null);
@@ -59,6 +67,10 @@ export function depthOf(state: unknown): number {
 export function NavProvider({ children }: { children: ReactNode }) {
   const [stack, setStack] = useState<Route[]>([]);
   const depth = useRef(0);
+  const routes = useRef<Route[]>([]);
+  useEffect(() => {
+    routes.current = stack;
+  }, [stack]);
   useEffect(() => {
     const onPop = (event: PopStateEvent) => {
       const reached = depthOf(event.state);
@@ -95,9 +107,16 @@ export function NavProvider({ children }: { children: ReactNode }) {
   const replace = useCallback((route: Route) => {
     setStack((pages) => (pages.length === 0 ? pages : [...pages.slice(0, -1), route]));
   }, []);
+  const popTo = useCallback((name: Route["name"]) => {
+    const target = routes.current.map((r) => r.name).lastIndexOf(name) + 1;
+    const above = depth.current - target;
+    if (above <= 0) return;
+    depth.current = target;
+    history.go(-above);
+  }, []);
   const nav = useMemo<Nav>(
-    () => ({ route: stack.at(-1), open, back, home, replace }),
-    [stack, open, back, home, replace],
+    () => ({ route: stack.at(-1), open, back, home, replace, popTo }),
+    [stack, open, back, home, replace, popTo],
   );
   return <NavContext.Provider value={nav}>{children}</NavContext.Provider>;
 }

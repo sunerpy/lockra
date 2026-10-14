@@ -16,6 +16,8 @@ export interface ProtectionChoiceProps {
   value: Protection;
   onChange: (value: Protection) => void;
   disabled?: boolean;
+  /** `lg` is the phone's (board 27): 64 px cards, 15 px names. */
+  size?: "md" | "lg";
   "data-testid"?: string;
 }
 
@@ -26,8 +28,10 @@ export function ProtectionChoice({
   value,
   onChange,
   disabled = false,
+  size = "md",
   "data-testid": testId,
 }: ProtectionChoiceProps) {
+  const lg = size === "lg";
   const t = useT();
   const cards = useRef<(HTMLButtonElement | null)[]>([]);
   const at = Math.max(0, PROTECTION_ORDER.indexOf(value));
@@ -70,7 +74,8 @@ export function ProtectionChoice({
             data-testid="protection-option"
             data-level={level}
             className={cx(
-              "flex min-h-13 items-center gap-3 rounded-10 px-3.5 py-2 text-left transition-colors disabled:opacity-50",
+              "flex items-center gap-3 rounded-10 px-3.5 py-2 text-left transition-colors disabled:opacity-50",
+              lg ? "min-h-16" : "min-h-13",
               on
                 ? "bg-accent-soft/40 shadow-[inset_0_0_0_1.5px_var(--accent)]"
                 : "bg-surface hairline hover:bg-inset",
@@ -81,10 +86,12 @@ export function ProtectionChoice({
               className={on ? "shrink-0 text-accent-text" : "shrink-0 text-fg-muted"}
             />
             <span className="flex min-w-0 flex-col">
-              <span className="text-[13px] font-medium text-fg">
+              <span className={cx("font-medium text-fg", lg ? "text-[15px]" : "text-[13px]")}>
                 {t(`item.protection.${level}`)}
               </span>
-              <span className="text-[12px] text-fg-muted">{t(`item.protection.${level}Help`)}</span>
+              <span className={cx("text-fg-muted", lg ? "text-[13px]" : "text-[12px]")}>
+                {t(`item.protection.${level}Help`)}
+              </span>
             </span>
           </button>
         );

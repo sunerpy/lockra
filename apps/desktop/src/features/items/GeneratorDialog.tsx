@@ -20,6 +20,7 @@ import {
   Icon,
   IconButton,
   Input,
+  ScoreMeter,
   Segmented,
   Slider,
   Toggle,
@@ -34,50 +35,8 @@ import { useDispatch } from "../../app/dispatch";
 import { useSecretView } from "./secret-view";
 import { useVerify } from "./verify";
 
-const STRENGTH = [
-  "generator.strength.s0",
-  "generator.strength.s1",
-  "generator.strength.s2",
-  "generator.strength.s3",
-  "generator.strength.s4",
-] as const;
-
 type PasswordOptions = Extract<GeneratorOptions, { kind: "password" }>;
 type PassphraseOptions = Extract<GeneratorOptions, { kind: "passphrase" }>;
-
-const strengthLabel = (t: ReturnType<typeof useT>, score: number) =>
-  t(STRENGTH[Math.min(4, Math.max(0, score))] ?? "generator.strength.s0");
-
-/** A strength from zxcvbn's score (and the generator's bits, when it made the password). */
-export function Strength({ score, bits }: { score: number | undefined; bits?: number }) {
-  const t = useT();
-  return (
-    <div className="flex items-center gap-2" data-testid="generator-strength">
-      <span className="flex gap-[3px]" aria-hidden>
-        {[0, 1, 2, 3].map((i) => (
-          <span
-            key={i}
-            className={cx(
-              "h-[3.5px] w-9 rounded-pill",
-              score !== undefined && i < Math.max(1, score)
-                ? score >= 3
-                  ? "bg-accent"
-                  : "bg-warning"
-                : "bg-track",
-            )}
-          />
-        ))}
-      </span>
-      <span className="text-[12px] text-fg-muted">
-        {score === undefined
-          ? ""
-          : bits === undefined
-            ? strengthLabel(t, score)
-            : t("generator.strength.bits", { label: strengthLabel(t, score), n: bits })}
-      </span>
-    </div>
-  );
-}
 
 export interface GeneratorDialogProps {
   onClose: () => void;
@@ -337,7 +296,7 @@ export function GeneratorDialog({ onClose, onUse, domain }: GeneratorDialogProps
             />
           )}
         </div>
-        {made !== undefined && <Strength score={score} bits={made.bits} />}
+        {made !== undefined && <ScoreMeter score={score} bits={made.bits} />}
         {made !== undefined && score !== undefined && score < 2 && (
           <p className="flex items-center gap-1.5 text-[12px] text-fg-muted">
             <Icon name="alert" size={14} className="text-warning-text" />

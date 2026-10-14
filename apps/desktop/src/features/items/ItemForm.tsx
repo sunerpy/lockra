@@ -5,22 +5,25 @@
 // made by the generator is saved as the generator's (`{"type": "generated"}`), so it does not go
 // back from the webview.
 import {
-  type AccountColor,
   type EntryView,
-  type FieldChange,
-  type ItemDraft,
-  type ItemPatch,
   type ItemView,
+  type LoginFieldDraft,
+  type LoginForm,
   MATCHINGS,
   type Matching,
-  type Protection,
-  type SecretChange,
-  type Tri,
+  blankField,
+  blankLoginForm,
+  blankUrl,
   entryLabel,
   errorText,
-  hostOf,
   itemGroups,
   itemTags,
+  loginDraft,
+  loginFormHost,
+  loginFormOf,
+  loginPatch,
+  loginProblems,
+  typedPassword,
 } from "@lockra/shared";
 import {
   AccountAppearance,
@@ -61,148 +64,8 @@ import { LinkedCode } from "./ItemDetail";
 import { useItemActions } from "./actions";
 import { useSecretView } from "./secret-view";
 
-/** A password as the form holds it: kept (an edit), typed, or made by the generator. */
-type PasswordValue =
-  | { kind: "keep" }
-  | { kind: "set"; value: string }
-  | { kind: "generated"; value: string };
-
-interface UrlRow {
-  key: number;
-  url: string;
-  matching: Matching;
-}
-
-interface FieldDraft {
-  key: number;
-  /** The field's id, for one the login has. */
-  id?: string;
-  label: string;
-  /** What was typed; `undefined` keeps the value of a hidden field being edited. */
-  value: string | undefined;
-  hidden: boolean;
-  pageField: string;
-  removed: boolean;
-}
-
-interface Form {
-  title: string;
-  username: string;
-  email: string;
-  password: PasswordValue;
-  urls: UrlRow[];
-  totp: string | null;
-  /** `undefined` keeps the notes of a login being edited (not shown until asked for). */
-  notes: string | undefined;
-  fields: FieldDraft[];
-  group: string;
-  tags: string[];
-  favorite: boolean;
-  color: AccountColor;
-  mark: string;
-  protection: Protection;
-  autofill: { on_page_load: Tri; auto_submit: Tri; fill_otp: Tri };
-}
-
 const AUTOFILL_PREFS = ["on_page_load", "auto_submit", "fill_otp"] as const;
 const TRIS = ["default", "on", "off"] as const;
-
-let lastKey = 0;
-const nextKey = () => ++lastKey;
-const blankUrl = (): UrlRow => ({ key: nextKey(), url: "", matching: "domain" });
-
-function blank(title: string): Form {
-  return {
-    title,
-    username: "",
-    email: "",
-    password: { kind: "set", value: "" },
-    urls: [blankUrl()],
-    totp: null,
-    notes: "",
-    fields: [],
-    group: "",
-    tags: [],
-    favorite: false,
-    color: "auto",
-    mark: "",
-    protection: "fill",
-    autofill: { on_page_load: "default", auto_submit: "default", fill_otp: "default" },
-  };
-}
-
-function fromItem(item: ItemView): Form {
-  return {
-    title: item.title,
-    username: item.username,
-    email: item.email,
-    password: { kind: "keep" },
-    urls:
-      item.urls.length > 0
-        ? item.urls.map((u) => ({ key: nextKey(), url: u.url, matching: u.matching }))
-        : [blankUrl()],
-    totp: item.totp_entry,
-    notes: item.has_notes ? undefined : "",
-    fields: item.fields.map((f) => ({
-      key: nextKey(),
-      id: f.id,
-      label: f.label,
-      value: f.hidden ? undefined : (f.value ?? ""),
-      hidden: f.hidden,
-      pageField: f.page_field ?? "",
-      removed: false,
-    })),
-    group: item.group ?? "",
-    tags: [...item.tags],
-    favorite: item.favorite,
-    color: item.color,
-    mark: item.mark ?? "",
-    protection: item.protection,
-    autofill: { ...item.autofill },
-  };
-}
-
-/** The password's change: none when kept or left empty. */
-function passwordChange(value: PasswordValue): SecretChange | undefined {
-  if (value.kind === "keep") return undefined;
-  if (value.kind === "generated") return { type: "generated" };
-  return value.value === "" ? undefined : { type: "set", value: value.value };
-}
-
-/** What the form would get wrong: the title, and the sites that are no address (a regex aside). */
-function problems(form: Form): { title: boolean; urls: Set<number> } {
-  const urls = new Set<number>();
-  for (const row of form.urls)
-    if (row.url.trim() !== "" && row.matching !== "regex" && hostOf(row.url) === null)
-      urls.add(row.key);
-  return { title: form.title.trim() === "", urls };
-}
-
-function fieldChanges(fields: readonly FieldDraft[]): FieldChange[] {
-  return fields.flatMap((f): FieldChange[] => {
-    if (f.id === undefined) {
-      if (f.removed || (f.label.trim() === "" && (f.value ?? "") === "")) return [];
-      return [
-        {
-          label: f.label,
-          value: { type: "set", value: f.value ?? "" },
-          hidden: f.hidden,
-          page_field: f.pageField,
-        },
-      ];
-    }
-    if (f.removed) return [{ id: f.id, remove: true }];
-    return [
-      {
-        id: f.id,
-        label: f.label,
-        hidden: f.hidden,
-        page_field: f.pageField,
-        ...(f.value === undefined ? {} : { value: { type: "set", value: f.value } }),
-      },
-    ];
-  });
-}
 
 export interface ItemFormDialogProps {
   /** The login being edited; none for a new one. */
@@ -231,17 +94,19 @@ export function ItemFormDialog({
   const formId = useId();
   const submit = useSubmit();
   const formRef = useRef<HTMLFormElement>(null);
-  const [form, setForm] = useState<Form>(() => (item ? fromItem(item) : blank(title)));
+  const [form, setForm] = useState<LoginForm>(() =>
+    item ? loginFormOf(item) : blankLoginForm(title),
+  );
   const [tried, setTried] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [notesShown, setNotesShown] = useState(false);
   const groups = useMemo(() => itemGroups(items ?? []), [items]);
   const tagSuggestions = useMemo(() => itemTags(items ?? []).map((c) => c.tag), [items]);
-  const set = (change: Partial<Form>) => setForm((f) => ({ ...f, ...change }));
-  const found = problems(form);
-  const count = (found.title ? 1 : 0) + found.urls.size;
-  const firstHost = form.urls.map((u) => hostOf(u.url)).find((h) => h !== null) ?? undefined;
+  const set = (change: Partial<LoginForm>) => setForm((f) => ({ ...f, ...change }));
+  const found = loginProblems(form);
+  const { count } = found;
+  const firstHost = loginFormHost(form);
 
   // The notes shown for editing are a secret view; it ends with the dialog, however it goes.
   useSecretView(notesShown);
@@ -274,57 +139,17 @@ export function ItemFormDialog({
       setAttempt((n) => n + 1);
       return;
     }
-    const urls = form.urls
-      .filter((u) => u.url.trim() !== "")
-      .map((u) => ({ url: u.url.trim(), matching: u.matching }));
-    const fields = fieldChanges(form.fields);
-    const password = passwordChange(form.password);
     if (item === undefined) {
-      const draft: ItemDraft = {
-        title: form.title.trim(),
-        username: form.username,
-        email: form.email,
-        ...(password === undefined ? {} : { password }),
-        urls,
-        notes: form.notes ?? "",
-        tags: form.tags,
-        group: form.group.trim() === "" ? null : form.group.trim(),
-        favorite: form.favorite,
-        color: form.color,
-        mark: form.mark.trim() === "" ? null : form.mark,
-        protection: form.protection,
-        autofill: form.autofill,
-        totp_entry: form.totp,
-        fields,
-      };
-      const added = await submit.run(() => backend.dispatch({ command: "item_add", draft }));
+      const added = await submit.run(() =>
+        backend.dispatch({ command: "item_add", draft: loginDraft(form) }),
+      );
       if (added === undefined) return;
       onSaved?.(added.id);
       onClose();
       return;
     }
-    // The core writes only what changed: a part named here with its old value stays as it was.
-    const patch: ItemPatch = {
-      title: form.title.trim(),
-      username: form.username,
-      email: form.email,
-      ...(password === undefined ? {} : { password }),
-      urls,
-      ...(form.notes === undefined
-        ? {}
-        : { notes: form.notes === "" ? { type: "clear" } : { type: "set", value: form.notes } }),
-      tags: form.tags,
-      group: form.group.trim(),
-      favorite: form.favorite,
-      color: form.color,
-      mark: form.mark,
-      protection: form.protection,
-      autofill: form.autofill,
-      totp_entry: form.totp,
-      fields,
-    };
     const done = await submit.run(() =>
-      backend.dispatch({ command: "item_update", id: item.id, patch }),
+      backend.dispatch({ command: "item_update", id: item.id, patch: loginPatch(form) }),
     );
     if (done !== undefined) onClose();
   };
@@ -422,12 +247,7 @@ export function ItemFormDialog({
               value={form.password.kind === "keep" ? "" : form.password.value}
               // Emptied while editing: the password stays as it is, never lost to a slip of the
               // backspace key.
-              onChange={(value) =>
-                set({
-                  password:
-                    value === "" && item !== undefined ? { kind: "keep" } : { kind: "set", value },
-                })
-              }
+              onChange={(value) => set({ password: typedPassword(value, item !== undefined) })}
               placeholder={keeping ? t("item.fields.keep") : undefined}
               strength={!keeping}
               autoComplete="new-password"
@@ -540,17 +360,7 @@ export function ItemFormDialog({
               className="self-start"
               onClick={() =>
                 set({
-                  fields: [
-                    ...form.fields,
-                    {
-                      key: nextKey(),
-                      label: "",
-                      value: "",
-                      hidden: false,
-                      pageField: "",
-                      removed: false,
-                    },
-                  ],
+                  fields: [...form.fields, blankField()],
                 })
               }
               data-testid="item-form-add-field">
@@ -679,8 +489,8 @@ function CustomField({
   field,
   onChange,
 }: {
-  field: FieldDraft;
-  onChange: (patch: Partial<FieldDraft>) => void;
+  field: LoginFieldDraft;
+  onChange: (patch: Partial<LoginFieldDraft>) => void;
 }) {
   const t = useT();
   return (

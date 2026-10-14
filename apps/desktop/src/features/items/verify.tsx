@@ -7,6 +7,9 @@ import {
   Button,
   Dialog,
   PasswordField,
+  type Proof,
+  type Verify,
+  type VerifyAction,
   biometricFellThrough,
   unlockBiometric,
   useT,
@@ -25,15 +28,6 @@ import {
 } from "react";
 import { useSubmit } from "../../app/dispatch";
 
-/** What the core takes as proof: the master password, or the words of the system check. */
-export interface Proof {
-  password?: string;
-  reason?: string;
-}
-
-/** What the user is about to do, as the dialog says it. */
-export type VerifyAction = "copy" | "show" | "view";
-
 interface Request {
   action: VerifyAction;
   name: string;
@@ -42,12 +36,6 @@ interface Request {
   attempt: (proof: Proof) => Promise<void>;
   cancel: () => void;
 }
-
-type Verify = <T>(
-  action: VerifyAction,
-  name: string,
-  run: (proof: Proof) => Promise<T>,
-) => Promise<T | undefined>;
 
 const VerifyContext = createContext<Verify | undefined>(undefined);
 
