@@ -15,7 +15,7 @@ version=$(python3 -c 'import json; print(json.load(open("package.json"))["versio
 
 gz() { gzip -9 -c "$1" | wc -c; }
 
-for target in chromium chromium-dev firefox; do
+for target in chromium chromium-unpacked chromium-dev firefox; do
   dist=apps/extension/dist/$target
   manifest_version=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$dist/manifest.json")
   if [ "$manifest_version" != "$version" ]; then

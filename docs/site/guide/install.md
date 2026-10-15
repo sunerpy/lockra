@@ -110,13 +110,11 @@ key.
 
 ## The browser extension
 
-<StatusTag status="building" />
-
 The extension for Chrome, Edge and Firefox fills logins from Lockra 0.10.0 or later running on the
-same computer. It comes from each browser's store: the Chrome Web Store (for Chrome, Chromium and
-Brave), Microsoft Edge Add-ons and Firefox Add-ons. Its listings are not live yet. Once it is
-installed, turn on **Settings › Browser › Browser integration** in Lockra and pair the two
-([The browser extension](/passwords/browser)).
+same computer. Chrome, Edge and Brave load it unpacked from the release's
+`lockra-extension_<version>_chromium-unpacked.zip`; the Microsoft Edge Add-ons and Firefox Add-ons
+listings are not live yet. Once it is installed, turn on **Settings › Browser › Browser
+integration** in Lockra and pair the two ([The browser extension](/passwords/browser)).
 
 ## Next steps
 

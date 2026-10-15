@@ -2,27 +2,35 @@
 
 本页介绍如何使用 Lockra 扩展在 Chrome、Edge 和 Firefox 中填充密码和验证码：安装与配对、填充与保存，以及决定扩展可以做什么的设置。
 
-<StatusTag status="available" /> 自 0.10.0 版起在 Windows、macOS 和 Linux 上提供。扩展本身需要从浏览器的商店安装，各商店的情况见[安装扩展](#安装扩展)。
+<StatusTag status="available" /> 自 0.10.0 版起在 Windows、macOS 和 Linux 上提供。扩展从 Lockra 的发布页安装，见[安装扩展](#安装扩展)，那里也说明了各商店的情况。
 
 扩展本身不保存任何密码。它向同一台电脑上的 Lockra 请求，两者之间的连接经过加密，并且只在 Lockra 运行且已解锁时才能请求；是否可以填充某个网页、填充哪个登录项，都由 Lockra 决定。扩展随 Lockra 一起锁定和解锁，从不要求输入主密码。
 
 ## 准备工作
 
 - Windows、macOS 或 Linux 上的 Lockra 0.10.0 或更高版本，与浏览器在同一台电脑上运行。
-- Chrome 或 Microsoft Edge 133 及以上，或 Firefox 140 及以上。Lockra 也会为 Chromium 和 Brave 完成设置，它们从 Chrome 网上应用店安装扩展。不支持以 Snap 或 Flatpak 形式安装的浏览器（[平台说明](/zh/reference/platforms#浏览器扩展)）。
+- Chrome 或 Microsoft Edge 133 及以上，或 Firefox 140 及以上。Lockra 也会为 Chromium 和 Brave 完成设置，它们安装和 Chrome 相同的程序包。不支持以 Snap 或 Flatpak 形式安装的浏览器（[平台说明](/zh/reference/platforms#浏览器扩展)）。
 - 保险库中已有登录项（[密码](/zh/passwords/)）。
 
 ## 安装扩展
 
-<StatusTag status="building" />
+| 浏览器                        | 来源                            | 状态                             |
+| ----------------------------- | ------------------------------- | -------------------------------- |
+| Chrome、Edge、Brave、Chromium | Lockra 的发布页，以解压方式加载 | <StatusTag status="available" /> |
+| Microsoft Edge                | Microsoft Edge 加载项           | <StatusTag status="building" />  |
+| Firefox                       | Firefox 附加组件                | <StatusTag status="building" />  |
 
-| 浏览器                  | 商店                  | 状态                            |
-| ----------------------- | --------------------- | ------------------------------- |
-| Chrome、Chromium、Brave | Chrome 网上应用店     | <StatusTag status="building" /> |
-| Microsoft Edge          | Microsoft Edge 加载项 | <StatusTag status="building" /> |
-| Firefox                 | Firefox 附加组件      | <StatusTag status="building" /> |
+扩展没有上架 Chrome 网上应用店。在 Chrome、Edge 和 Brave 中，从 Lockra 的发布页安装：
 
-扩展尚未上架这些商店，而 Lockra 只与商店发布的扩展连接。Edge 也可以安装 Chrome 网上应用店中的扩展。
+1. 在 [Lockra 的发布页](https://github.com/sunerpy/lockra/releases/latest)下载 `lockra-extension_<版本>_chromium-unpacked.zip`，解压到一个会长期保留的文件夹：浏览器每次启动都从这个文件夹加载扩展，移动或删除文件夹，扩展也就没有了。
+2. 打开浏览器的扩展页面（`chrome://extensions`、`edge://extensions` 或 `brave://extensions`），开启「开发者模式」。
+3. 选择「加载已解压的扩展程序」，选中这个文件夹，也就是包含 `manifest.json` 的那一层。
+
+扩展的卡片上显示的 ID 是 `flgfdomeabdfbebfjonaocddjcamgblk`，与 Edge 加载项将要发布的扩展相同；Lockra 不与其他 Chromium 扩展连接。发布页上另一个 Chromium 文件 `lockra-extension_<版本>_chromium-store.zip` 是提交给商店的程序包，以解压方式加载时 ID 不同，无法连接。
+
+更新时，用新版本的程序包替换文件夹中的文件，再点击扩展卡片上的重新加载按钮，配对仍然保留。移除扩展会清除配对，重新加载扩展后需要再配对一次。Edge 加载项上架后，Edge 也可以改从那里安装；两者 ID 相同，请先移除以解压方式加载的扩展。
+
+Firefox 只安装经 Firefox 附加组件签名的扩展，所以 Firefox 版扩展要等商店页面上线后才能安装。
 
 ## 开启浏览器集成
 

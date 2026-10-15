@@ -1,6 +1,7 @@
 //! The browser extension's ids, defined once (plan §九): the native-messaging manifests the shell
 //! writes allow exactly these, and the tests check them against the extension's own manifests
-//! (`apps/extension/manifest/`). The store ids come when the first drafts are uploaded.
+//! (`apps/extension/manifest/`). A store's id comes when its first draft is uploaded: Edge Add-ons'
+//! came on 2026-10-15; the Chrome Web Store has none, the extension is not listed there.
 
 use data_encoding::{BASE64, HEXLOWER};
 use sha2::{Digest, Sha256};
@@ -15,16 +16,19 @@ pub const FIREFOX: &str = "lockra@firlab.app";
 /// Lockra allow it.
 pub const CHROMIUM_DEV: &str = "egbpficliljjnpkjbigonldakfllebco";
 
-/// The Chrome Web Store's id, assigned when the first draft is uploaded: a placeholder until then
-/// (PR 14 fills it in).
+/// The Chrome Web Store's id, assigned when a first draft is uploaded: none, the extension is not
+/// listed there (Chrome installs the self-install package, under [`EDGE_ADDONS`]' id).
 pub const CHROME_WEB_STORE: Option<&str> = None;
 
-/// Microsoft Edge Add-ons' id, the same way: a placeholder until the first draft.
-pub const EDGE_ADDONS: Option<&str> = None;
+/// Microsoft Edge Add-ons' id, assigned to the draft uploaded on 2026-10-15 (Partner Center's
+/// "CRX ID"; the item's public key gives it). The release's self-install package carries that
+/// public key (`apps/extension/manifest/unpacked.json`), so Chrome, Edge and Brave give it this id
+/// too when it is loaded unpacked. The store package carries no key: Edge Add-ons refuses one.
+pub const EDGE_ADDONS: Option<&str> = Some("flgfdomeabdfbebfjonaocddjcamgblk");
 
 /// The Chromium extension ids a native-messaging manifest allows: the stores' (Edge installs from
-/// the Chrome Web Store too, so both go in every Chromium manifest) and, in a debug build, the
-/// development one.
+/// the Chrome Web Store too, so both go in every Chromium manifest; the self-install package has
+/// Edge Add-ons') and, in a debug build, the development one.
 pub fn chromium(debug: bool) -> Vec<&'static str> {
     let mut ids: Vec<&'static str> = [CHROME_WEB_STORE, EDGE_ADDONS].into_iter().flatten().collect();
     if debug {
@@ -76,6 +80,13 @@ mod tests {
         assert!(manifest("base.json").get("key").is_none());
         assert!(manifest("chromium.json").get("key").is_none());
         assert_eq!(chromium_id_of_key("not base64!"), None);
+    }
+
+    #[test]
+    fn the_self_install_package_has_edge_addons_id() {
+        let key = manifest("unpacked.json")["key"].as_str().unwrap().to_owned();
+        assert_eq!(chromium_id_of_key(&key).as_deref(), EDGE_ADDONS);
+        assert!(chromium(false).contains(&EDGE_ADDONS.unwrap()));
     }
 
     #[test]

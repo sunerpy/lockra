@@ -4,9 +4,9 @@ This page explains how to fill passwords and codes in Chrome, Edge and Firefox w
 extension: installing and pairing it, filling and saving, and the settings that decide what it may
 do.
 
-<StatusTag status="available" /> Available from version 0.10.0, on Windows, macOS and Linux. The
-extension itself comes from your browser's store: see
-[Installing the extension](#installing-the-extension) for where each store stands.
+<StatusTag status="available" /> Available from version 0.10.0, on Windows, macOS and Linux. You
+install the extension from Lockra's release: see
+[Installing the extension](#installing-the-extension), also for where the stores stand.
 
 The extension keeps no passwords of its own. It asks Lockra on the same computer, over a connection
 encrypted between the two, and only while Lockra runs and is unlocked; Lockra decides whether a page
@@ -17,22 +17,41 @@ the master password.
 
 - Lockra 0.10.0 or later on Windows, macOS or Linux, running on the same computer as the browser.
 - Chrome or Microsoft Edge 133 or later, or Firefox 140 or later. Lockra also sets up Chromium and
-  Brave, which install the extension from the Chrome Web Store. Browsers installed as a Snap or a
-  Flatpak are not supported ([Platform notes](/reference/platforms#browser-extension)).
+  Brave, which install the same package as Chrome. Browsers installed as a Snap or a Flatpak are not
+  supported ([Platform notes](/reference/platforms#browser-extension)).
 - Logins in the vault ([Passwords](/passwords/)).
 
 ## Installing the extension
 
-<StatusTag status="building" />
+| Browser                       | Where from                        | Status                           |
+| ----------------------------- | --------------------------------- | -------------------------------- |
+| Chrome, Edge, Brave, Chromium | Lockra's release, loaded unpacked | <StatusTag status="available" /> |
+| Microsoft Edge                | Microsoft Edge Add-ons            | <StatusTag status="building" />  |
+| Firefox                       | Firefox Add-ons                   | <StatusTag status="building" />  |
 
-| Browser                 | Store                  | Status                          |
-| ----------------------- | ---------------------- | ------------------------------- |
-| Chrome, Chromium, Brave | Chrome Web Store       | <StatusTag status="building" /> |
-| Microsoft Edge          | Microsoft Edge Add-ons | <StatusTag status="building" /> |
-| Firefox                 | Firefox Add-ons        | <StatusTag status="building" /> |
+The extension is not in the Chrome Web Store. In Chrome, Edge and Brave you install it from Lockra's
+release:
 
-The extension is not in the stores yet, and Lockra connects only to the extension the stores
-publish. Edge can also install the Chrome Web Store's extension.
+1. From [Lockra's releases](https://github.com/sunerpy/lockra/releases/latest), download
+   `lockra-extension_<version>_chromium-unpacked.zip` and unzip it into a folder you keep: the
+   browser loads the extension from that folder every time it starts, so moving or deleting the
+   folder removes the extension.
+2. Open the browser's extensions page (`chrome://extensions`, `edge://extensions` or
+   `brave://extensions`) and turn on **Developer mode**.
+3. Choose **Load unpacked** and pick the folder, the one that holds `manifest.json`.
+
+The extension's card shows the ID `flgfdomeabdfbebfjonaocddjcamgblk`, the same as the extension
+Edge Add-ons will publish; Lockra connects to no other Chromium extension. The release's other
+Chromium file, `lockra-extension_<version>_chromium-store.zip`, is the stores' package: loaded
+unpacked it gets another ID and cannot connect.
+
+To update it, replace the folder's files with the newer release's package and choose the reload
+button on the extension's card: the extension stays paired. Removing the extension forgets the
+pairing, so pair again after loading it anew. Once Edge Add-ons lists the extension, Edge can install
+it from there instead; remove the unpacked one first, since both have the same ID.
+
+Firefox installs an extension only once Firefox Add-ons has signed it, so the Firefox extension
+comes with its listing.
 
 ## Turning on browser integration
 
