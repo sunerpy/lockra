@@ -19,8 +19,8 @@ sync on, says how it stands; beside it are the search field and **Add login**, w
 login…** (`Ctrl N`), **Generate a password…** (`Ctrl G`) and **Import from another app…**.
 
 The search looks through the titles, user names, email addresses, groups, sites and tags. Under
-the header, the filters show **All**, **Pinned** (the logins marked **Favorite**), each group and
-**No group**, each with its number of logins. **Tags** picks one or more tags, and the list then
+the header, the filters show **All**, **Favorites**, each group and **No group**, each with its
+number of logins. **Tags** picks one or more tags, and the list then
 shows the logins that carry all of them. On the right, the sort menu orders the list **By name**,
 **Recently used**, **Recently changed** or **Recently added**; favorite logins come first in every
 order. In **All**, the logins of each group sit under the group's heading: click it to fold the
@@ -33,8 +33,9 @@ and ⋯.
 
 Click a row, or move with the arrow keys, to show the login in the pane on the right; Enter copies
 its password. The ⋯ button, a right-click or the context-menu key opens the row's menu: **Copy user
-name**, **Copy password**, **Copy code**, **Show password…**, **Edit…**, **Favorite** and
-**Delete…**.
+name**, **Copy password**, **Copy code**, **Show password…**, **Edit…**, **Favorite**, **Move to
+group…** and **Delete…**. **Move to group…** puts the login in a group of the list or a new one;
+**No group** takes it out of its group.
 
 A user name, password or code copied from a login goes to the clipboard as a code copied on the
 codes page does: marked to stay out of clipboard history, and cleared after the time set in
@@ -56,7 +57,8 @@ The pane beside the list shows the login you selected, in sections:
 - **Record**: how many earlier passwords are kept (**Password history**), when the login was
   created and changed, and the app an imported login came from (**Source**).
 
-**Edit** opens the login's form; ⋯ offers **Show password…**, **Favorite** and **Delete…**.
+**Edit** opens the login's form; ⋯ offers **Show password…**, **Favorite**, **Move to group…** and
+**Delete…**.
 **Show password…** shows the password in large type with its length, the kinds of characters in it
 and its strength, and hides it after two minutes. While a password or a note is shown, Windows and
 macOS keep the window out of screenshots and screen recordings.
@@ -80,9 +82,13 @@ opens it for a login you have. Only the title is required.
 - **Password**: with a strength bar. **Generate…** opens the [generator](#the-password-generator),
   and **Use this password** puts its password in the form.
 - **Sites**: the addresses the login is for, each with how it matches. **Add a site** adds one more.
-- **Code**: **Link a code…** picks one of the accounts in your vault. After the extension fills the
-  password, that account's code goes into the page's code field. **Change…** and **Unlink** change
-  it later.
+- **Code**: **Link a code…** picks one of the accounts in your vault, or makes a new one under
+  **Make a new one**: **Scan a QR code…** reads the QR code of a site's two-factor setup from a
+  screenshot on the clipboard or from an image, **Paste an otpauth link…** takes a link, and **Type
+  in the key…** takes the key the site shows. The new account is linked as soon as it is added; a
+  QR code or an image with several accounts is imported on the codes page instead. After the
+  extension fills the password, the linked account's code goes into the page's code field.
+  **Change…** and **Unlink** change it later.
 - **Notes**: treated as a secret, so a login being edited shows them only after you choose
   **Show**.
 - **Custom fields**: **Add a field** adds a name and a value, as **Text** or **Hidden**. A field
@@ -202,8 +208,16 @@ opens in Lockra 0.9, and a backup that holds logins does not restore there eithe
 
 A key combination of your choice brings up Lockra's command palette over any app, to copy a login's
 password, user name or code, or an account's code. It is off until you set it in **Settings ›
-General**; `Ctrl Shift Space` is suggested (`⌘ Shift Space` on macOS). Lockra has to be running,
-in the tray if its window is closed ([Running in the background](/passwords/browser#running-in-the-background)).
+General › Quick search**: click the field and press the keys, with `Ctrl`, `Alt` or `⌘` among
+them, or choose **Use Ctrl+Shift+Space** (`⌘⇧Space` on macOS). The tray's menu has **Quick
+search** too. Lockra has to be running, in the tray if its window is closed
+([Running in the background](/passwords/browser#running-in-the-background)).
 
-On Wayland, an app cannot set a shortcut for the whole desktop: bind the command
-`lockra-desktop --palette` to a key in your desktop's keyboard settings instead.
+While the vault is locked, the window comes up with the unlock screen and no palette. After you copy
+something from the palette the quick search opened, the window goes back where it was: into the
+tray, or minimized.
+
+When another app already uses the keys, Settings says so: choose others. On Wayland, an app cannot
+set a shortcut for the whole desktop, and Settings gives the command `lockra-desktop --palette`
+instead: bind it to a key in your desktop's keyboard settings, and it brings up the palette of the
+running Lockra.

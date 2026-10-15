@@ -72,8 +72,8 @@ other language, uses a component the site does not register, or uses a word from
   Passwords page, sites and matching, protection (**Fill directly**, **Verify first**, **Not for
   the extension**), password generator and generated passwords, browser extension, browser
   integration, pair, popup, site access, site lists, tray, running in the background (**Keep
-  running after the window closes**). A login is a favorite (**Favorite**) where an account is
-  pinned, and the Passwords page's filter still reads **Pinned**; in Chinese both are 收藏. An
+  running after the window closes**). A login is a favorite (**Favorite**, the filter **Favorites**)
+  where an account is pinned (**Pin to top**, the filter **Pinned**); in Chinese both are 收藏. An
   account's secret is 密钥, a login's password 密码.
 - Name a control as the app labels it: in bold in English (**Save backup…**), in 「」 in Chinese
   (「保存备份…」), with `›` between levels (**Settings › Security › Auto-lock**). Read the label

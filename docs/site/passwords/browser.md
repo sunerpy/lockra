@@ -209,7 +209,8 @@ are sure the requests were yours.
 
 **Settings › Browser › Keep running after the window closes** keeps Lockra running in the tray when
 you close its window, so the extension can still reach it. The tray icon (in the notification area
-on Windows, in the menu bar on macOS) opens a menu with **Open Lockra**, **Lock** and **Quit
+on Windows, in the menu bar on macOS) opens a menu with **Open Lockra**, **Quick search**
+([Quick search from anywhere](/passwords/#quick-search-from-anywhere)), **Lock** and **Quit
 Lockra**; a click on it opens the window, and on macOS so does Lockra's icon in the Dock. A pairing
 or a fill that waits for you brings the window up by itself. With the setting off, closing the
 window quits Lockra, as before.

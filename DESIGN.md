@@ -272,7 +272,9 @@ Boards 06–12 of Penpot 「Lockra 密码管理」.
   with a 13 / 600 title: the title beside a 40 px avatar that previews it, 用户名 and 邮箱 side by
   side, 密码 (`PasswordField` with its strength) with 生成…, 网站 (an `Input` per address, its
   matching in a menu of two sections, 常用 and 高级), 验证码 (the linked account on `inset`
-  with its code, or 关联验证码… opening a 420 px picker of the accounts), 备注, 自定义字段 (name,
+  with its code, or 关联验证码… opening a 420 px picker: the accounts with their codes, then under
+  a hairline 新建一个 with 扫描二维码… (a 420 px dialog: 读取剪贴板 or 选择图片…), 粘贴 otpauth
+  链接… and 手动输入密钥…, the code dialogs' own; cancelled, each goes back to the picker), 备注, 自定义字段 (name,
   文本 or 隐藏, value, page field on `inset`), 整理 (`GroupCombobox`, `TagsInput`, 收藏),
   外观 (`AccountAppearance`), 保护级别 (`ProtectionChoice`) and 自动填充 (three `Segmented sm`,
   跟随设置 · 开 · 关, each saying what 跟随设置 means now). Problems: a `Banner danger bar` counting
