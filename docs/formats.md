@@ -312,6 +312,13 @@ webview shows them through an `<img>` data URL, so nothing in the SVG can run. D
 from PNG, JPEG and WebP images (several codes per image, photos at an angle); a picked file's type
 is judged from its first bytes, not its name: Lockra magic, `SQLite format 3`, an image, or text.
 
+A login's form adds one account on the spot to link it (board 07-c): `entry_add_clipboard` reads
+the clipboard (an image's QR codes, else text with an `otpauth` link) and the desktop shell's
+`entry_add_image` an image picked in its open dialog. What they hold is read as the import reads it
+(Google Authenticator export codes included), but nothing goes to the preview: exactly one account
+the vault can take is added at once and its id answered; none is `import_empty` (`clipboard_empty`
+for an empty clipboard), several are `several_accounts`, to go through the import instead.
+
 ## 9. Sync
 
 A sync space lives under the prefix the user chose on their storage (an S3-compatible bucket or a

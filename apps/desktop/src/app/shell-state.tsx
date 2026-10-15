@@ -24,6 +24,7 @@ export type Overlay =
   | { type: "item_new"; title?: string }
   | { type: "item_edit"; id: string }
   | { type: "item_delete"; id: string }
+  | { type: "item_move"; id: string }
   | { type: "item_reveal"; id: string }
   | { type: "generator" };
 

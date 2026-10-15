@@ -1,12 +1,21 @@
 // The dialogs of a login, opened through the shell's overlay: new, edit (with its 「删除…」), delete,
-// show the password (board 08), and the generator on its own (Ctrl G, the add menu). A login that
+// move to a group (board 04-g), show the password (board 08), and the generator on its own (Ctrl G,
+// the add menu). A login that
 // went away meanwhile (a sync deleted it, a restore replaced the vault) closes its dialog.
-import { type ItemView, REVEAL_SECONDS, errorText, itemAccount, itemName } from "@lockra/shared";
+import {
+  type ItemView,
+  REVEAL_SECONDS,
+  errorText,
+  itemAccount,
+  itemGroups,
+  itemName,
+} from "@lockra/shared";
 import {
   Banner,
   Button,
   CountdownRing,
   Dialog,
+  GroupCombobox,
   ScoreMeter,
   useBackend,
   useClock,
@@ -16,9 +25,10 @@ import {
   useT,
   useUiState,
 } from "@lockra/ui";
-import { useEffect, useRef, useState } from "react";
+import { type SubmitEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { motionReduced } from "../../app/appearance";
 import { useSubmit } from "../../app/dispatch";
+import { useToaster } from "../../app/notices";
 import { useShell } from "../../app/shell-state";
 import { GeneratorDialog } from "./GeneratorDialog";
 import { ItemFormDialog } from "./ItemForm";
@@ -33,6 +43,7 @@ export function ItemDialogs() {
   const id =
     overlay?.type === "item_edit" ||
     overlay?.type === "item_delete" ||
+    overlay?.type === "item_move" ||
     overlay?.type === "item_reveal"
       ? overlay.id
       : undefined;
@@ -61,6 +72,8 @@ export function ItemDialogs() {
       return item ? (
         <DeleteItemDialog key={item.id} item={item} onClose={close} onDeleted={close} />
       ) : null;
+    case "item_move":
+      return item ? <MoveItemDialog key={item.id} item={item} onClose={close} /> : null;
     case "item_reveal":
       return item ? <RevealItemDialog key={item.id} item={item} onClose={close} /> : null;
     case "generator":
@@ -68,6 +81,67 @@ export function ItemDialogs() {
     default:
       return null;
   }
+}
+
+/** 移到分组 (board 04-g): the login into a group of the list or a new one, or out of every group. */
+function MoveItemDialog({ item, onClose }: { item: ItemView; onClose: () => void }) {
+  const t = useT();
+  const { backend } = useBackend();
+  const toaster = useToaster();
+  const items = useItems();
+  const groups = useMemo(() => itemGroups(items ?? []), [items]);
+  const formId = useId();
+  const [group, setGroup] = useState(item.group ?? "");
+  const submit = useSubmit();
+  const name = itemName(item);
+  const onSubmit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    const target = group.trim();
+    const moved = await submit.run(() =>
+      backend.dispatch({ command: "item_update", id: item.id, patch: { group: target } }),
+    );
+    if (moved === undefined) return;
+    toaster.info(
+      target === ""
+        ? t("passwords.move.ungrouped", { name })
+        : t("passwords.move.moved", { name, group: target }),
+    );
+    onClose();
+  };
+  return (
+    <Dialog
+      open
+      title={t("passwords.move.title")}
+      onClose={onClose}
+      width={420}
+      actions={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="primary" type="submit" form={formId} loading={submit.busy}>
+            {t("passwords.move.submit")}
+          </Button>
+        </>
+      }>
+      <form id={formId} onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-3">
+        <p className="text-[13px] text-fg-muted">{t("passwords.move.prompt", { name })}</p>
+        <GroupCombobox
+          label={t("item.organize.group")}
+          value={group}
+          onChange={setGroup}
+          groups={groups}
+          placeholder={t("entry.groupPlaceholder")}
+          autoFocus
+        />
+        {submit.error !== undefined && (
+          <p role="alert" className="text-[12px] text-danger">
+            {errorText(t, submit.error)}
+          </p>
+        )}
+      </form>
+    </Dialog>
+  );
 }
 
 /** The edit form, and its 「删除…」 over it: cancelling the deletion goes back to the edits. */
