@@ -3,10 +3,12 @@
 import type {
   BrowserApi,
   BrowserEvent,
+  BrowserSetting,
   Command,
   FrameDetails,
   InjectionResult,
   InjectionTarget,
+  LevelOfControl,
   MessageListener,
   MessageSender,
   Permissions,
@@ -28,6 +30,34 @@ export class FakeEvent<F extends (...args: any[]) => unknown> implements Browser
   }
   emit(...args: Parameters<F>): unknown[] {
     return this.listeners.map((listener) => listener(...args));
+  }
+}
+
+/** A browser setting the fake holds: the user's value, and who holds it. */
+export class FakeSetting implements BrowserSetting<boolean> {
+  value = true;
+  holder: "user" | "us" | "other" | "policy" = "user";
+  async get(_: Record<string, never>) {
+    const levelOfControl: LevelOfControl =
+      this.holder === "us"
+        ? "controlled_by_this_extension"
+        : this.holder === "other"
+          ? "controlled_by_other_extensions"
+          : this.holder === "policy"
+            ? "not_controllable"
+            : "controllable_by_this_extension";
+    return { value: this.value, levelOfControl };
+  }
+  async set({ value }: { value: boolean }) {
+    // As the browser does: accepted, and overridden at once where another holds it.
+    if (this.holder === "other" || this.holder === "policy") return;
+    this.holder = "us";
+    this.value = value;
+  }
+  async clear(_: Record<string, never>) {
+    if (this.holder !== "us") return;
+    this.holder = "user";
+    this.value = true;
   }
 }
 
@@ -119,6 +149,14 @@ export class FakeBrowser implements BrowserApi {
   injected: { target: InjectionTarget; files?: string[] }[] = [];
   registered: RegisteredContentScript[] = [];
   granted = false;
+  /** The optional `privacy` permission, and what the user answers when asked for it. */
+  privacyGranted = false;
+  privacyAnswer = true;
+  services = {
+    passwordSavingEnabled: new FakeSetting(),
+    autofillAddressEnabled: new FakeSetting(),
+    autofillCreditCardEnabled: new FakeSetting(),
+  };
   created: string[] = [];
   popupOpened = 0;
 
@@ -204,13 +242,19 @@ export class FakeBrowser implements BrowserApi {
   };
 
   permissions = {
-    contains: async (_: Permissions) => this.granted,
-    request: async (_: Permissions) => {
+    contains: async (asked: Permissions) =>
+      asked.permissions?.includes("privacy") ? this.privacyGranted : this.granted,
+    request: async (asked: Permissions) => {
+      if (asked.permissions?.includes("privacy")) {
+        this.privacyGranted = this.privacyAnswer;
+        return this.privacyAnswer;
+      }
       this.granted = true;
       return true;
     },
-    remove: async (_: Permissions) => {
-      this.granted = false;
+    remove: async (asked: Permissions) => {
+      if (asked.permissions?.includes("privacy")) this.privacyGranted = false;
+      else this.granted = false;
       return true;
     },
     onAdded: new FakeEvent<(permissions: Permissions) => void>(),
@@ -218,6 +262,11 @@ export class FakeBrowser implements BrowserApi {
   };
 
   storage = { local: new MemoryArea(), session: new MemoryArea() };
+
+  /** As the browser does: there once the permission is. */
+  get privacy() {
+    return this.privacyGranted ? { services: this.services } : undefined;
+  }
 
   commands = {
     getAll: async (): Promise<Command[]> => [{ name: "fill-login", shortcut: "Ctrl+Shift+L" }],

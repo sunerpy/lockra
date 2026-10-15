@@ -13,6 +13,8 @@ export class FieldIcon {
     private readonly doc: Document,
     iconUrl: string,
     onClick: (anchor: HTMLElement) => void,
+    /** Only what the user does counts (`isTrusted`); the tests' clicks are not. */
+    trusted: (event: Event) => boolean = (event) => event.isTrusted,
   ) {
     this.host = doc.createElement("div");
     const root = this.host.attachShadow({ mode: "closed" });
@@ -29,7 +31,7 @@ export class FieldIcon {
       event.preventDefault();
     });
     this.host.addEventListener("click", (event) => {
-      if (event.isTrusted && this.anchor) onClick(this.anchor);
+      if (trusted(event) && this.anchor) onClick(this.anchor);
     });
   }
 
@@ -49,6 +51,11 @@ export class FieldIcon {
       "style",
       `all: initial !important; position: fixed !important; left: ${left}px !important; top: ${top}px !important; width: ${SIZE}px !important; height: ${SIZE}px !important; z-index: 2147483646 !important; display: block !important;`,
     );
+  }
+
+  /** The field it is shown at, if it is. */
+  get field(): HTMLElement | null {
+    return this.anchor;
   }
 
   hide(): void {

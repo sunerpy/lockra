@@ -13,6 +13,7 @@ const contentSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("content.focus"),
     form: z.enum(["login", "signup", "username", "otp"]),
+    explicit: z.literal(true).optional(),
     signup: z
       .object({
         rules: text.nullable(),

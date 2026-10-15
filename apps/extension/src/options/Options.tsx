@@ -1,7 +1,9 @@
-// The extension's options page (board 35): the connection to Lockra, the shortcuts, site access and
-// what the extension keeps (nothing). The policy is Lockra's (Settings › Browser), not set here.
-import { Badge, Button, Card, Keycaps, Logo, StatusRow } from "@lockra/ui";
+// The extension's options page (board 35): the connection to Lockra, the shortcuts, site access, the
+// browser's own password features and how the menu opens, and what the extension keeps (nothing).
+// The policy is Lockra's (Settings › Browser), not set here.
+import { Badge, Button, Card, Keycaps, Logo, StatusRow, Toggle } from "@lockra/ui";
 import { type ReactNode, useEffect, useState } from "react";
+import type { BrowserFeatures, Feature, Holder } from "../popup/browser-features";
 import type { PageClient } from "../popup/client";
 import { usePage } from "../popup/usePage";
 import { useText } from "../shared/text";
@@ -22,8 +24,12 @@ export function Options({ client, locale }: { client: PageClient; locale: string
   const { state, send } = usePage(client);
   const [shortcuts, setShortcuts] = useState({ fill: "", popup: "" });
   const [copied, setCopied] = useState(false);
+  const [features, setFeatures] = useState<BrowserFeatures | null>(null);
+  const [onFocus, setOnFocus] = useState(true);
   useEffect(() => {
     void client.shortcuts().then(setShortcuts);
+    void client.browserFeatures().then(setFeatures);
+    void client.menuOnFocus().then(setOnFocus);
   }, [client]);
 
   const paired =
@@ -53,6 +59,13 @@ export function Options({ client, locale }: { client: PageClient; locale: string
         .filter(Boolean)
         .join(" · ")
     : [t("options.notPaired"), stateLabel].filter(Boolean).join(" · ");
+
+  // In the click, like the site access: taking a feature over asks for the `privacy` permission.
+  const feature = (which: Feature, take: boolean) => {
+    void client.setBrowserFeature(which, take).then(setFeatures);
+  };
+  const featureHelp = (holder: Holder, help: string) =>
+    holder === "locked" ? t("options.lockedHelp") : help;
 
   const access = (grant: boolean) => {
     // In the click: the browser asks only from a user's action.
@@ -120,6 +133,52 @@ export function Options({ client, locale }: { client: PageClient; locale: string
                 {t("options.grant")}
               </Button>
             )}
+          </StatusRow>
+        </Section>
+        <Section title={t("options.browserOwn")}>
+          {features ? (
+            <>
+              <StatusRow
+                label={t("options.takePasswords")}
+                help={featureHelp(features.passwords, t("options.takePasswordsHelp"))}>
+                <Toggle
+                  checked={features.passwords === "lockra"}
+                  disabled={features.passwords === "locked"}
+                  onChange={(take) => feature("passwords", take)}
+                  ariaLabel={t("options.takePasswords")}
+                />
+              </StatusRow>
+              <p className="pb-2 text-[12px] text-fg-subtle">{t("options.savedPasswordsNote")}</p>
+              {client.openPasswordManager ? (
+                <div className="pb-2">
+                  <Button size="sm" onClick={client.openPasswordManager}>
+                    {t("options.openPasswordManager")}
+                  </Button>
+                </div>
+              ) : null}
+              {features.forms === null ? null : (
+                <StatusRow
+                  label={t("options.takeForms")}
+                  help={featureHelp(features.forms, t("options.takeFormsHelp"))}>
+                  <Toggle
+                    checked={features.forms === "lockra"}
+                    disabled={features.forms === "locked"}
+                    onChange={(take) => feature("forms", take)}
+                    ariaLabel={t("options.takeForms")}
+                  />
+                </StatusRow>
+              )}
+            </>
+          ) : null}
+          <StatusRow label={t("options.menuOnFocus")} help={t("options.menuOnFocusHelp")}>
+            <Toggle
+              checked={onFocus}
+              onChange={(on) => {
+                setOnFocus(on);
+                void client.setMenuOnFocus(on);
+              }}
+              ariaLabel={t("options.menuOnFocus")}
+            />
           </StatusRow>
         </Section>
         <Section title={t("options.about")}>

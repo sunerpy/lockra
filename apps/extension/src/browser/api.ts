@@ -85,6 +85,23 @@ export interface Command {
   shortcut?: string;
 }
 
+/** Who has a browser setting (`privacy`): the browser's own value can be changed by this extension
+ *  (`controllable_by_this_extension`), already is (`controlled_by_this_extension`), or cannot be
+ *  (another extension's or a policy's). */
+export type LevelOfControl =
+  | "not_controllable"
+  | "controlled_by_other_extensions"
+  | "controllable_by_this_extension"
+  | "controlled_by_this_extension";
+
+/** A browser setting the extension may hold (`ChromeSetting` in Chromium, `BrowserSetting` in
+ *  Firefox): set takes it over, clear gives the user's value back. */
+export interface BrowserSetting<T> {
+  get(details: Record<string, never>): Promise<{ value: T; levelOfControl: LevelOfControl }>;
+  set(details: { value: T }): Promise<unknown>;
+  clear(details: Record<string, never>): Promise<unknown>;
+}
+
 export interface InstalledDetails {
   reason: "install" | "update" | "browser_update" | "chrome_update" | "shared_module_update";
 }
@@ -160,6 +177,15 @@ export interface BrowserApi {
   /** The toolbar button: `openPopup` from a user action (Chrome 127+, Firefox). */
   action?: {
     openPopup?(): Promise<void>;
+  };
+  /** Present once the optional `privacy` permission is granted. The address and card autofill are
+   *  Chromium's (70+); Firefox has the password saving alone. */
+  privacy?: {
+    services: {
+      passwordSavingEnabled: BrowserSetting<boolean>;
+      autofillAddressEnabled?: BrowserSetting<boolean>;
+      autofillCreditCardEnabled?: BrowserSetting<boolean>;
+    };
   };
 }
 

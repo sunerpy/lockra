@@ -35,7 +35,11 @@ const measurer: Measurer = {
   style: () => CLEAN,
 };
 
-function setup(start: Partial<StartAnswer> = {}, focusToken: string | null = "a".repeat(32)) {
+function setup(
+  start: Partial<StartAnswer> = {},
+  focusToken: string | null = "a".repeat(32),
+  focus?: (message: Extract<ContentMessage, { kind: "content.focus" }>) => unknown,
+) {
   const sent: ContentMessage[] = [];
   let listener: ((message: unknown) => Promise<unknown> | undefined) | null = null;
   const runtime: Runtime = {
@@ -44,7 +48,7 @@ function setup(start: Partial<StartAnswer> = {}, focusToken: string | null = "a"
       if (message.kind === "content.start")
         return { features: true, otp: false, pageLoad: false, prompt: null, ...start };
       if (message.kind === "content.focus")
-        return { token: message.form === "otp" ? null : focusToken };
+        return focus ? focus(message) : { token: message.form === "otp" ? null : focusToken };
       return null;
     },
     listen: (handler) => {
@@ -136,6 +140,34 @@ describe("the inline menu", () => {
     input("search").focus();
     await vi.waitFor(() => expect(hosts()).toHaveLength(0));
     expect(sent.at(-1)).toEqual({ kind: "content.closed", token: "a".repeat(32) });
+    agent.stop();
+  });
+
+  it("shows the field's mark alone when the background says so, and opens the menu from it", async () => {
+    document.body.innerHTML = LOGIN;
+    const { agent, sent } = setup({}, null, (message) =>
+      message.explicit ? { token: "b".repeat(32) } : { token: null, mark: true },
+    );
+    await agent.start();
+    const marks = () => document.documentElement.querySelectorAll(":scope > div:not([popover])");
+    input("user").focus();
+    await vi.waitFor(() => expect(marks()).toHaveLength(1));
+    expect(hosts()).toHaveLength(0);
+    expect(sent.at(-1)).toEqual({ kind: "content.focus", form: "login" });
+    // A click on the mark asks for the menu, which opens under the field.
+    (marks()[0] as HTMLElement).click();
+    await vi.waitFor(() => expect(hosts()).toHaveLength(1));
+    expect(sent.at(-1)).toEqual({ kind: "content.focus", form: "login", explicit: true });
+    expect(agent.menuFrame?.src).toBe(`chrome-extension://ext/inline.html#${"b".repeat(32)}`);
+    // The focus leaves: the menu and the mark go.
+    input("search").focus();
+    await vi.waitFor(() => expect(hosts()).toHaveLength(0));
+    expect(marks()).toHaveLength(0);
+    // The mark alone goes with the focus too.
+    input("user").focus();
+    await vi.waitFor(() => expect(marks()).toHaveLength(1));
+    document.querySelector("button")?.focus();
+    await vi.waitFor(() => expect(marks()).toHaveLength(0));
     agent.stop();
   });
 

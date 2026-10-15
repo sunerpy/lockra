@@ -1069,7 +1069,8 @@ export const zhCN = {
         copyOtp: "复制验证码",
         copyOtpHelp: "同时把验证码放进剪贴板。",
         autoSubmit: "填充后自动提交",
-        autoSubmitHelp: "填好后替你提交表单。",
+        autoSubmitHelp:
+          "填入密码后替你提交表单；只要求用户名的一步（分两步登录的第一页）不会自动提交。",
         confirmFill: "填充前确认",
         confirmFillHelp: "每次填充前先在网页里确认一次。",
         frames: "其他网站框架里的登录框",

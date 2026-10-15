@@ -73,6 +73,11 @@ function setup(initial: PopupState | null = state(), extra: Partial<PageClient> 
     close: vi.fn(),
     copyText: vi.fn(async () => undefined),
     shortcuts: async () => ({ fill: "Ctrl+Shift+L", popup: "Ctrl+Shift+Y" }),
+    browserFeatures: async () => ({ passwords: "browser", forms: "browser" }),
+    setBrowserFeature: async () => ({ passwords: "browser", forms: "browser" }),
+    openPasswordManager: null,
+    menuOnFocus: async () => true,
+    setMenuOnFocus: async () => undefined,
     target: "chromium",
     ...extra,
   };

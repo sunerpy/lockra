@@ -10,6 +10,7 @@ import { generateKeyPair, type KeyPair } from "../noise/crypto";
 import { Connection, type Keys, type PairingRecord } from "./connection";
 import { Controller } from "./controller";
 import type { BackgroundMessage, InlineView, PopupEvent, PopupState } from "../shared/messages";
+import { MENU_ON_FOCUS } from "../shared/prefs";
 
 class MemoryKeys implements Keys {
   pair: KeyPair | null = null;
@@ -259,6 +260,28 @@ describe("the inline menu", () => {
       { tabId: 1, frameId: 0, documentId: "doc-0" },
     );
     await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "frame.close")).toBe(true));
+  });
+
+  it("offers the field's mark alone when the menu is not to open on focus, and the menu from the mark", async () => {
+    // 2026-10-16, the user: the menu and the browser's own list of saved passwords overlapped.
+    const { browser } = await setup();
+    await browser.storage.local.set({ [MENU_ON_FOCUS]: false });
+    expect(await browser.fromContent({ kind: "content.focus", form: "login" })).toEqual({
+      token: null,
+      mark: true,
+    });
+    const asked = (await browser.fromContent({
+      kind: "content.focus",
+      form: "login",
+      explicit: true,
+    })) as { token: string | null };
+    expect(typeof asked.token).toBe("string");
+    // On again: the menu opens as the field gets the focus.
+    await browser.storage.local.set({ [MENU_ON_FOCUS]: true });
+    const focused = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string | null;
+    };
+    expect(typeof focused.token).toBe("string");
   });
 
   it("shows nothing to a frame without the token, or one that is not under the page's frame", async () => {

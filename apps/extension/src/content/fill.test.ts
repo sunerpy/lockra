@@ -102,6 +102,41 @@ describe("filling a sign-in form", () => {
     expect(submitted).toHaveBeenCalledTimes(1);
   });
 
+  it("regression: a first step with the user name alone is filled but never submitted", () => {
+    // 2026-10-16, the AWS console's root sign-in: its first page asks for the e-mail alone; sent
+    // by Lockra, it answered 400. Only a step that took a password is sent.
+    document.body.innerHTML = `
+      <form id="f"><input id="email" type="email" autocomplete="username"><button>Next</button></form>`;
+    const form = document.getElementById("f") as HTMLFormElement;
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    // A valid address: an invalid one would stop the browser's own submit before the page's.
+    const values = { ...VALUES, username: "root@example.com", submit: true };
+    expect(fillForm(scanField(input("email"), view), values, view)).toBe(1);
+    expect(input("email").value).toBe("root@example.com");
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it("does not submit when the password field is there but hidden, as a step before it shows", () => {
+    document.body.innerHTML = `
+      <form id="f"><input id="user" autocomplete="username"><input type="password" id="pass" style="display: none"></form>`;
+    const form = document.getElementById("f") as HTMLFormElement;
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    fillForm(scanField(input("user"), view), { ...VALUES, submit: true }, view);
+    expect([input("user").value, input("pass").value]).toEqual(["alice", ""]);
+    expect(submitted).not.toHaveBeenCalled();
+  });
+
+  it("submits the password step of a split sign-in when told", () => {
+    document.body.innerHTML = `<form id="f"><input type="password" id="pass"></form>`;
+    const form = document.getElementById("f") as HTMLFormElement;
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    fillForm(scanField(input("pass"), view), { ...VALUES, submit: true }, view);
+    expect(submitted).toHaveBeenCalledTimes(1);
+  });
+
   it("submits a form without a <form> by its submit button", () => {
     document.body.innerHTML = `<div><input id="user" autocomplete="username"><input type="password" id="pass"><button id="go" type="button">Sign in</button><button>Help</button></div>`;
     const clicked = vi.fn();

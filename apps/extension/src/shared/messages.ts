@@ -17,10 +17,12 @@ export type FocusKind = "login" | "signup" | "username" | "otp";
 export type ContentMessage =
   /** The content script started in a frame: is anything waiting for this tab? */
   | { kind: "content.start"; top: boolean }
-  /** A field the user focused: offer the inline menu. */
+  /** A field the user focused: offer the inline menu. `explicit`: the user clicked the field's
+   *  Lockra mark, so the menu opens whatever opens it on focus. */
   | {
       kind: "content.focus";
       form: FocusKind;
+      explicit?: true;
       /** Sign-up forms: the page's rules for the generator, and the user name typed. */
       signup?: {
         rules: string | null;
@@ -62,6 +64,9 @@ export interface StartAnswer {
 export interface FocusAnswer {
   /** The inline frame's token, when there is a menu to show. */
   token: string | null;
+  /** There is one, but it opens only from the field's mark (the options page's choice): show the
+   *  mark alone. */
+  mark?: true;
 }
 
 // ---- background → content script ------------------------------------------------------------

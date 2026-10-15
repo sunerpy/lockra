@@ -38,6 +38,7 @@ import { type InlineFrame, InlineFrames } from "./inline-frames";
 import { chooseFrame, probe } from "./shortcut";
 import { type Submission, TabMemory } from "./tabs";
 import { contentMessage, inlineMessage, popupMessage } from "./validate";
+import { menuOnFocus } from "../shared/prefs";
 
 export interface ControllerDeps {
   api: BrowserApi;
@@ -196,10 +197,14 @@ export class Controller {
       this.connection.ensure(true);
       return none;
     }
-    if (message.form === "signup") return this.openSignup(frame, message.signup);
+    if (message.form === "signup") {
+      if (!(await this.opensNow(message))) return { token: null, mark: true };
+      return this.openSignup(frame, message.signup);
+    }
     const answer = await this.query(frame);
     if (!answer || answer.never_fill || answer.items.length === 0) return none;
     if (answer.cross_origin && answer.policy.cross_origin_frames !== "ask") return none;
+    if (!(await this.opensNow(message))) return { token: null, mark: true };
     const opened = this.frames.open({
       kind: "menu",
       frame,
@@ -212,6 +217,14 @@ export class Controller {
       trigger: "inline_menu",
     });
     return { token: opened.token };
+  }
+
+  /** The menu opens now: the user clicked the field's mark, or it opens as a field gets the focus
+   *  (the options page's choice, read each time so a change counts at once). */
+  private async opensNow(
+    message: Extract<ContentMessage, { kind: "content.focus" }>,
+  ): Promise<boolean> {
+    return message.explicit === true || (await menuOnFocus(this.api.storage.local));
   }
 
   private async query(frame: TrustedFrame): Promise<QueryAnswer | null> {

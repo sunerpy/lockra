@@ -181,6 +181,20 @@ export const extensionZhCN = {
     accessOn: "已授予：内联菜单、保存提示、注册表单的生成按钮和下一页的验证码框可以工作。",
     grant: "授予权限",
     revoke: "收回权限",
+    browserOwn: "浏览器自带的功能",
+    takePasswords: "让 Lockra 接管浏览器的密码功能",
+    takePasswordsHelp:
+      "关闭浏览器的「提示保存密码」，改由 Lockra 提示保存和更新。需要「更改隐私相关设置」的权限，关掉这个开关时一并收回。",
+    lockedHelp: "未生效：浏览器的策略或其他扩展控制着这项设置。",
+    savedPasswordsNote:
+      "浏览器里已经保存的密码不受这个开关影响，仍会以带钥匙图标的下拉框出现在输入框下方。要让它消失：先把浏览器导出的密码导入 Lockra（Lockra 的「导入」，选择浏览器导出的 CSV 文件），核对无误后，再到浏览器的密码管理中删除它们。",
+    openPasswordManager: "打开浏览器的密码管理",
+    takeForms: "同时关闭地址和付款方式的自动填充",
+    takeFormsHelp:
+      "浏览器不再在表单中提示地址和银行卡。Lockra 不填写这些内容，需要浏览器帮你填写时请保持关闭。",
+    menuOnFocus: "点击输入框时打开 Lockra 菜单",
+    menuOnFocusHelp:
+      "关闭后，只在点击输入框末端的 Lockra 标志时打开，不会与浏览器自己的下拉框重叠。",
     about: "关于",
     keepsNothing: "扩展不保存登录项",
     keepsNothingHelp:

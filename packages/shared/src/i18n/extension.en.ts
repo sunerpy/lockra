@@ -188,6 +188,20 @@ export const extensionEn: typeof extensionZhCN = {
       "Granted: the inline menu, the save prompt, the sign-up generator and the next page's code field work.",
     grant: "Grant access",
     revoke: "Remove access",
+    browserOwn: "The browser's own features",
+    takePasswords: "Let Lockra take over the browser's passwords",
+    takePasswordsHelp:
+      "Turns off the browser's offer to save passwords; Lockra offers to save and update them instead. It needs the permission to change privacy-related settings, given back when this is turned off.",
+    lockedHelp: "Not in effect: a policy of the browser or another extension holds this setting.",
+    savedPasswordsNote:
+      "Passwords the browser already keeps are not affected: its drop-down with a key still shows them under the field. To make it go, import them into Lockra (Lockra's Import, with the CSV file the browser exports), check them, then delete them in the browser's password manager.",
+    openPasswordManager: "Open the browser's password manager",
+    takeForms: "Also turn off address and payment autofill",
+    takeFormsHelp:
+      "The browser no longer suggests addresses and cards in forms. Lockra does not fill these: leave this off if you want the browser to.",
+    menuOnFocus: "Open Lockra's menu when a field is clicked",
+    menuOnFocusHelp:
+      "When off, it opens only from the Lockra mark at the end of the field, clear of the browser's own drop-down.",
     about: "About",
     keepsNothing: "The extension keeps no logins",
     keepsNothingHelp:

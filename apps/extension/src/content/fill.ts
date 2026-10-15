@@ -45,18 +45,22 @@ export function submitForm(root: HTMLElement): void {
   button?.click();
 }
 
-/** Fill the scanned form; how many fields took a value. */
+/** Fill the scanned form; how many fields took a value. Sent (when the policy says so) only once a
+ *  password went in: a first step that asks for the user name alone stays for the user to send,
+ *  as some pages refuse it sent any other way (the AWS console's root sign-in answered 400). */
 export function fillForm(scan: FormScan, values: FillValues, view: View): number {
   let filled = 0;
+  let password = false;
   const put = (input: HTMLInputElement | null | undefined, value: string) => {
-    if (!input || value === "" || !isFillable(input) || !view.visible(input)) return;
+    if (!input || value === "" || !isFillable(input) || !view.visible(input)) return false;
     setValue(input, value);
     filled++;
+    return true;
   };
   // A sign-up keeps a user name the user typed.
   if (!values.newPassword || scan.username?.value === "") put(scan.username, values.username);
   const passwords = values.newPassword ? scan.newPasswords : scan.passwords.slice(0, 1);
-  for (const field of passwords) put(field, values.password);
+  for (const field of passwords) password = put(field, values.password) || password;
   for (const { page_field, value } of values.fields) {
     const named = Array.from(scan.root.querySelectorAll("input")).find(
       (input) => input.name === page_field || input.id === page_field,
@@ -70,6 +74,6 @@ export function fillForm(scan: FormScan, values: FillValues, view: View): number
       filled += otp.length;
     }
   }
-  if (values.submit && filled > 0) submitForm(scan.root);
+  if (values.submit && password) submitForm(scan.root);
   return filled;
 }
