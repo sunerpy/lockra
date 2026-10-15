@@ -105,8 +105,8 @@ pinned at the top, `{pinned_group}`: `{"type": "favorites"}`, `{"type": "group",
 `{"type": "ungrouped"}`, a kind this version cannot read being no pin; each is left out while
 empty: group names stay inside the encrypted file, never in `settings.json`), `generator_history`
 (the passwords the generator made here, `{password, at_ms, site?}`: secrets, in the vault file
-only), `item_view` (the groups folded in the password list, `{collapsed_groups}`) and `identity`
-(the user name and email a sign-up form gets, `{username, email}`). Every part but `clock` and
+only) and `item_view` (the groups folded in the password list, `{collapsed_groups}`; development
+builds of 0.10 also wrote an `identity` there, which is dropped). Every part but `clock` and
 `sync` reads leniently: one that does not read (a later version's shape) is reset alone and the
 vault opens. With sync on, `local` also holds `sync` (the storage settings and credentials, the space id, its
 data key, the sync key, this device's name, its keyring and what the runs remember, among it

@@ -693,7 +693,7 @@ pub struct UpdateRequest {
 /// A new login saved with a generated password, in the same step.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GenerateSave {
-    /// The user name; none: this device's default one.
+    /// The user name typed on the page; none: an empty one.
     #[serde(default)]
     pub username: Option<String>,
     /// The title; empty: the site's name.

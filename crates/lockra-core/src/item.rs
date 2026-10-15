@@ -771,23 +771,6 @@ impl ItemListView {
     }
 }
 
-/// What a sign-up form is filled with by default (the vault's local part).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct Identity {
-    /// The user name.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub username: String,
-    /// The email address.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub email: String,
-}
-
-impl Identity {
-    pub(crate) fn is_empty(&self) -> bool {
-        self.username.is_empty() && self.email.is_empty()
-    }
-}
-
 /// A new write id: 64 random bits (the two halves of a random UUID, whose fixed bits sit at
 /// different places, folded together).
 pub(crate) fn random_write_id() -> u64 {
