@@ -45,9 +45,10 @@ make coverage                    # crates/* line coverage, floor 90 %
 make sync-it                     # the sync storage against S3 and WebDAV servers in Docker
 make pre-ci                      # the real app under Xvfb, the deb, the cross-built installer
 make smoke-desktop               # the real app alone: flows and screenshots
+make smoke-browser               # the extension in Chrome for Testing and Firefox with the real app
 make showcase                    # the component showcase in the four themes
 make android-apk                 # the phone app's debug APK (JDK 21, Android SDK 36, NDK)
-make extension                   # the browser extension's Chrome, Edge and Firefox zips (CONTRIBUTING.md)
+make extension                   # the browser extension's zips: Chrome (and Edge), Firefox (CONTRIBUTING.md)
 make site-screens                # the documentation site's screenshots (docs/site/README.md)
 scripts/update-vendored-data.sh  # lockra-autofill's bundled data, from the pins in its data/SOURCES
 UPDATE_BROWSER_FIXTURES=1 cargo test -p lockra-browser --test protocol  # the extension's contract vectors

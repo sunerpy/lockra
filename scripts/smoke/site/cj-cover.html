@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Covered · login.test</title>
+    <style>
+      #cover {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 2147483647;
+        background: rgba(255, 255, 255, 0.01);
+      }
+      #late {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        border: 0;
+        background: rgba(255, 255, 255, 0.01);
+      }
+    </style>
+  </head>
+  <body>
+    <form id="login" action="/welcome.html" method="get">
+      <input id="username" name="username" autocomplete="username" />
+      <input id="password" name="password" type="password" autocomplete="current-password" />
+    </form>
+    <!-- An element over everything (no z-index reaches the top layer), and a popover the page
+         opens after the menu, in the top layer above it: the menu must come back on top. -->
+    <div id="cover"></div>
+    <div id="late" popover="manual"></div>
+    <script>
+      new MutationObserver(() => {
+        const menu = [...document.querySelectorAll("[popover]")].find(
+          (el) => el.id !== "late" && el.matches(":popover-open"),
+        );
+        if (menu && !document.getElementById("late").matches(":popover-open"))
+          document.getElementById("late").showPopover();
+      }).observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+    </script>
+  </body>
+</html>

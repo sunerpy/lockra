@@ -63,7 +63,7 @@ android-clippy: frontend-dist-dirs ## clippy -D warnings for aarch64-linux-andro
 	./scripts/clippy-android.sh
 
 .PHONY: extension
-extension: ## The browser extension's Chrome, Edge and Firefox zips, deterministic, in apps/extension/dist
+extension: ## The browser extension's zips, deterministic, in apps/extension/dist: Chrome (and Edge), Firefox
 	$(PNPM) --filter @lockra/extension run package
 
 .PHONY: android-apk
@@ -80,6 +80,10 @@ deny: ## Licences, bans and sources of the dependency graph
 .PHONY: smoke-desktop
 smoke-desktop: ## Drive the real app under Xvfb; screenshots to docs/acceptance/screens/desktop
 	scripts/smoke-desktop-linux.sh
+
+.PHONY: smoke-browser
+smoke-browser: ## The extension in Chrome for Testing and Firefox paired with the real app under Xvfb (pinned browsers, cached in ~/.cache/lockra-smoke)
+	scripts/smoke-browser-linux.sh
 
 .PHONY: sync-it
 sync-it: ## The sync storage against an S3 gateway (versitygw) and a WebDAV server (rclone) in Docker

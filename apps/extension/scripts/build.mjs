@@ -2,8 +2,10 @@
 //   dist/chromium      Chrome and Edge (the stores assign their ids; no `key`)
 //   dist/chromium-dev  the same with the development key: a fixed id when loaded unpacked
 //   dist/firefox       Firefox (gecko id lockra@firlab.app)
-//   dist/lockra-extension_<version>_{chrome,edge,firefox}.zip   (--zip; deterministic)
-// The version is the root package.json's (release-please's), written into every manifest.
+//   dist/lockra-extension_<version>_{chrome,firefox}.zip   (--zip; deterministic; the Chrome
+//                      zip is the package of the Chrome Web Store and of Edge Add-ons alike)
+// The version is the root package.json's (release-please's), written into every manifest. A release
+// ships exactly these two zips (scripts/package-extension.sh checks it).
 // Usage: node scripts/build.mjs [--zip]
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -58,9 +60,8 @@ writeFileSync(
 
 if (zip) {
   const name = (browser) => join(dist, `lockra-extension_${version}_${browser}.zip`);
-  // Edge installs the same package as Chrome; each store gets its own file name.
+  // Edge Add-ons takes the Chrome Web Store's package as it is: one file for both.
   writeZip(chromium, name("chrome"));
-  writeZip(chromium, name("edge"));
   writeZip(firefox, name("firefox"));
 }
 
