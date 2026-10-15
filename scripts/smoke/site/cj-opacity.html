@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Invisible · login.test</title>
+  </head>
+  <body>
+    <form id="login" action="/welcome.html" method="get">
+      <input id="username" name="username" autocomplete="username" />
+      <input id="password" name="password" type="password" autocomplete="current-password" />
+    </form>
+    <!-- Once the menu is up, the page turns itself (the menu's host with it) transparent, the way a
+         page hides what it wants clicked: a key or a click on the menu now must fill nothing. -->
+    <script>
+      new MutationObserver(() => {
+        if (document.querySelector("[popover]:popover-open"))
+          document.documentElement.style.opacity = "0";
+      }).observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+    </script>
+  </body>
+</html>

@@ -201,6 +201,46 @@ describe("the inline menu", () => {
     agent.stop();
   });
 
+  it("regression: raises the menu again only for what may cover it, not for any change of the page", async () => {
+    // The browser smoke test, 2026-10-15: every batch of the page's changes raised the menu (out of
+    // the top layer and back), after which Chrome's IntersectionObserver v2 kept reporting the frame
+    // unseen, and the next Enter or click was refused: on any page that changes, no fill went in.
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = LOGIN;
+      const { agent, deliver } = setup();
+      await agent.start();
+      input("user").focus();
+      await vi.waitFor(() => expect(hosts()).toHaveLength(1));
+      // On to the next field while the menu is up: from now on the page is watched.
+      input("pass").focus();
+      await vi.waitFor(() => expect(hosts()).toHaveLength(1));
+      topmost = hosts()[0] ?? null;
+      const verify = () =>
+        deliver({
+          kind: "frame.verify",
+          token: "a".repeat(32),
+          point: null,
+          trusted: true,
+          visible: true,
+        });
+      now += 300;
+      expect(await verify()).toEqual({ ok: true });
+      // The page adds content; the watcher's next look comes and goes: the menu stays as it was.
+      document.body.append(document.createElement("p"));
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await verify()).toEqual({ ok: true });
+      // A dialog the page opens may cover it: then it goes back on top and waits 300 ms again.
+      const dialog = document.createElement("dialog");
+      document.body.append(dialog);
+      dialog.setAttribute("open", "");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await verify()).toEqual({ ok: false, reason: "too_soon" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("refuses a click too soon, covered, or after the page touched the host; and goes when tampered with", async () => {
     document.body.innerHTML = LOGIN;
     const { agent, sent, deliver } = setup();

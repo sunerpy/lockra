@@ -235,7 +235,7 @@ client: it keeps no vault and caches no secret, and every decision is the core's
   the popup's last list of the site's logins (no secret) in `storage.session`, emptied as Lockra
   locks. The content script runs in its isolated world, listens to no `window` message and reports
   no address; the menu and the save prompt are extension frames in a closed shadow root in the top
-  layer, shown nothing without the token the background handed out, and a click in them counts only
+  layer, shown nothing without the token the background handed out (where the browser lists the frame, it must also sit under the page's; Chromium's webNavigation leaves the extension's own frames out, so there the token alone binds it), and a click in them counts only
   when the frame has shown unmoved for 300 ms, is on top at the click, has no see-through, filtered,
   clipped or blended ancestor, was not touched by the page, and (Chromium) its IntersectionObserver
   v2 saw it visible.

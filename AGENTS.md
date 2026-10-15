@@ -45,6 +45,7 @@ make coverage                    # crates/* line coverage, floor 90 %
 make sync-it                     # the sync storage against S3 and WebDAV servers in Docker
 make pre-ci                      # the real app under Xvfb, the deb, the cross-built installer
 make smoke-desktop               # the real app alone: flows and screenshots
+make smoke-browser               # the extension in Chrome for Testing and Firefox with the real app
 make showcase                    # the component showcase in the four themes
 make android-apk                 # the phone app's debug APK (JDK 21, Android SDK 36, NDK)
 make extension                   # the browser extension's Chrome, Edge and Firefox zips (CONTRIBUTING.md)

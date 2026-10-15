@@ -18,6 +18,11 @@
 #   app sync through the Versity S3 gateway in Docker (scripts/smoke-sync-linux.sh): one sets up
 #   the space in Settings › Sync, the other joins from the welcome screen with the sync key, their
 #   changes meet, and an older snapshot put back on the storage is refused.
+# - `browser-smoke` pairs the development build of the extension with the real app under Xvfb, in
+#   Chrome for Testing and in Firefox (scripts/smoke-browser-linux.sh, pinned browsers and drivers
+#   checked by SHA-256): filling from the menu and the shortcut, the next page's code, the policy's
+#   limits, pages that try to hijack a click, a sign-up's password, the save and update prompts,
+#   and locking with the app.
 # - `sync-it` runs the sync storage against real servers in Docker (make sync-it): the Versity S3
 #   gateway, for S3's conditional writes, and rclone's WebDAV server.
 # - `windows-check` is the template's optional early warning, enabled: the shell and the
@@ -378,6 +383,76 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  browser-smoke:
+    name: Browser smoke (Chrome, Firefox)
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install the app's and the display stack's dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf xdg-utils \
+            xvfb x11-utils xdotool webkit2gtk-driver libdbus-glib-1-2 libasound2
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: package.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12
+        with:
+          toolchain: 1.98.0
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: . -> target
+          shared-key: tauri-smoke
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked --version "$TAURI_DRIVER_VERSION"
+
+      # The pinned browsers and drivers (their versions and hashes are the script's): the script
+      # checks every file against its SHA-256 whether it came from the cache or the network.
+      - name: Cache the test browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/lockra-smoke/downloads
+          key: smoke-browsers-${{ hashFiles('scripts/smoke-browser-linux.sh') }}
+
+      - name: Pair, fill and save in both browsers (make smoke-browser)
+        run: make smoke-browser
+
+      - name: Kernel messages after a failure
+        if: failure()
+        run: sudo dmesg --ctime | grep -iE 'segfault|killed process|out of memory|general protection|traps:' | tail -n 40 || true
+
+      - name: Screenshots of the run
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-screens
+          path: target/smoke-browser
+          if-no-files-found: ignore
+          retention-days: 7
+
   sync-it:
     name: Sync storage (S3, WebDAV)
     runs-on: ubuntu-latest
@@ -666,6 +741,7 @@ jobs:
         repo,
         deny,
         smoke,
+        browser-smoke,
         sync-it,
         windows-check,
         macos-check,
