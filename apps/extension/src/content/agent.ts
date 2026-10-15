@@ -107,6 +107,8 @@ export class ContentAgent {
   private lastObserved = 0;
   private observeTimer: ReturnType<typeof setTimeout> | undefined;
   private otpUntil = 0;
+  /** The page set `open` (a dialog) since the last look: what it opened may cover the menu. */
+  private opened = false;
   private readonly trusted: (event: Event) => boolean;
   private readonly bound: [EventTarget, string, (event: Event) => void, boolean][] = [];
 
@@ -438,7 +440,7 @@ export class ContentAgent {
   /** Observe the page while there is something to watch, at most every 500 ms. */
   private watch(): void {
     if (this.observer || !this.watching) return;
-    this.observer = new MutationObserver(() => this.observed());
+    this.observer = new MutationObserver((records) => this.observed(records));
     this.observer.observe(this.options.doc.documentElement, {
       childList: true,
       subtree: true,
@@ -447,7 +449,9 @@ export class ContentAgent {
     });
   }
 
-  private observed(): void {
+  private observed(records: readonly MutationRecord[]): void {
+    if (records.some((record) => record.type === "attributes" && record.attributeName === "open"))
+      this.opened = true;
     if (this.observeTimer !== undefined) return;
     const wait = Math.max(0, this.lastObserved + OBSERVE_EVERY_MS - this.options.now());
     this.observeTimer = setTimeout(() => {
@@ -461,8 +465,13 @@ export class ContentAgent {
     this.watcher.check();
     if (this.otpUntil > 0) this.lookForOtp();
     if (this.menu && this.anchor && !this.anchor.isConnected) this.closeMenu();
-    // A dialog the page opened (`open` set) may cover the menu.
-    this.raise();
+    // A dialog the page opened (`open` set) may cover the menu. Nothing else does (popovers and full
+    // screen have their own events), and raising it for nothing costs it Chrome's visibility check:
+    // after, IntersectionObserver v2 kept the frame unseen and every Enter or click was refused.
+    if (this.opened) {
+      this.opened = false;
+      this.raise();
+    }
     if (!this.watching) {
       this.observer?.disconnect();
       this.observer = null;

@@ -141,11 +141,19 @@ async function setup() {
 
 type Context = Awaited<ReturnType<typeof setup>>;
 
-/** The inline frame `token` connects from frame 5 under the page, as the browser reports it. */
-function inlineFrame(context: Context, token: string, frameId = 5, parent = 0): FakePortEnd {
+/** The inline frame `token` connects from frame 5 under the page, as the browser reports it
+ *  (`listed`: webNavigation lists it, as Firefox does; Chromium leaves the extension's own frames
+ *  out, the browser smoke test found). */
+function inlineFrame(
+  context: Context,
+  token: string,
+  frameId = 5,
+  parent = 0,
+  listed = true,
+): FakePortEnd {
   const { browser } = context;
   const frames = browser.frames.get(1) ?? [];
-  if (!frames.some((f) => f.frameId === frameId)) {
+  if (listed && !frames.some((f) => f.frameId === frameId)) {
     frames.push({
       frameId,
       parentFrameId: parent,
@@ -171,6 +179,24 @@ function lastView(port: FakePortEnd): InlineView | undefined {
 }
 
 describe("the inline menu", () => {
+  it("regression: gets its view where webNavigation does not list the extension's own frame", async () => {
+    // The browser smoke test, 2026-10-15: Chrome's webNavigation.getAllFrames has no entry for the
+    // inline frame, so the parent check refused every menu and the menu stayed 0 px high.
+    const context = await setup();
+    const answer = (await context.browser.fromContent({
+      kind: "content.focus",
+      form: "login",
+    })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token, 5, 0, false);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    // A token no content script handed out still gets nothing.
+    const stranger = inlineFrame(context, "0".repeat(32), 6, 0, false);
+    await vi.waitFor(() => expect(stranger.closed).toBe(true));
+    expect(lastView(stranger)).toBeUndefined();
+  });
+
   it("opens for a sign-in field with the app's matches, and fills the chosen login after the click checks", async () => {
     const context = await setup();
     const { browser, app, contentGot } = context;

@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Checkout · shop.test</title>
+  </head>
+  <body>
+    <h1>Pay with your account</h1>
+    <!-- The sign-in form of another site, in a frame: Lockra fills it only where the policy says so. -->
+    <iframe id="pay" title="pay.test" width="640" height="240"></iframe>
+    <script>
+      document.getElementById("pay").src = `https://pay.test:${location.port}/login.html`;
+    </script>
+  </body>
+</html>

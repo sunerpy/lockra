@@ -513,7 +513,14 @@ export class Controller {
     if (valid && frame && sender) {
       const tree = await this.framesOf(frame.frame.tabId).catch(() => null);
       const self = tree?.find((f) => f.frameId === sender.frameId);
-      valid = self !== undefined && self.parentFrameId === frame.frame.frameId;
+      // Where the browser lists the frame, it must sit under the one that asked for it. Chromium's
+      // webNavigation leaves the extension's own frames out (the browser smoke test found): there
+      // the token binds it, which only the content script that made the frame was handed, and
+      // which only ever went into that frame's address, inside a closed shadow root.
+      valid =
+        self === undefined
+          ? TARGET === "chromium" && tree !== null
+          : self.parentFrameId === frame.frame.frameId;
     }
     if (!valid || !frame) {
       port.disconnect();
