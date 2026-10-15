@@ -77,7 +77,7 @@ fn never_save(data: &mut crate::VaultData, domain: &str) -> SiteRule {
 async fn the_state_says_which_features_this_build_offers() {
     let h = Harness::unlocked().await;
     assert!(h.core.state().features.passwords, "on in the tests");
-    assert_eq!(crate::ui::Features::default().passwords, cfg!(debug_assertions), "a release build turns it on when it ships");
+    assert!(crate::ui::Features::default().passwords, "password management ships in 0.10.0: every build offers it");
 }
 
 /// A build without password management cannot show the logins in the preview (PR 6 shows them

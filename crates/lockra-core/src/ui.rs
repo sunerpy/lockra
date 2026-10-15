@@ -59,19 +59,20 @@ pub enum Phase {
     Unlocked,
 }
 
-/// What this build offers of what is still being finished. A release build turns a feature on
-/// only once it ships; a debug build and the tests have everything on.
+/// What this build offers of what may still be switched off: a feature being finished stays off in
+/// a release build until it ships, while a debug build and the tests have everything on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Features {
-    /// Password management: logins, the generator, the browser extension. Off: the commands
-    /// answer `feature_unavailable` and the interface shows none of it, while the vault keeps
-    /// reading, keeping and syncing what devices with it wrote.
+    /// Password management: logins, the generator, the browser extension, the quick search; in
+    /// every build since 0.10.0. Off: the commands answer `feature_unavailable` and the interface
+    /// shows none of it, while the vault keeps reading, keeping and syncing what devices with it
+    /// wrote.
     pub passwords: bool,
 }
 
 impl Default for Features {
     fn default() -> Self {
-        Self { passwords: cfg!(debug_assertions) }
+        Self { passwords: true }
     }
 }
 

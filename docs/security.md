@@ -191,8 +191,7 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 
 ## Browser extension
 
-Password management's browser extension (behind the `passwords` switch until it ships) is a thin
-client: it keeps no vault and caches no secret, and every decision is the core's.
+Password management's browser extension (since 0.10.0) is a thin client: it keeps no vault and caches no secret, and every decision is the core's.
 
 - **The channel.** The extension reaches the running app through native messaging, a host process
   that only passes frames between its stdio and the app's local socket. Both are treated as

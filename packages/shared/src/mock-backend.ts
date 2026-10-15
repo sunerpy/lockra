@@ -89,7 +89,8 @@ export type MockScan = string | null | { error: ErrorCode };
 
 export interface MockOptions {
   phase?: UiState["phase"];
-  /** The build offers password management (off by default, as a release build before it ships). */
+  /** The build offers password management (off by default here: the tests of what a build without
+   *  it shows stay short). */
   passwords?: boolean;
   entries?: MockEntry[];
   password?: string;
