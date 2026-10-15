@@ -65,7 +65,7 @@ export function useItemFilterChips(items: readonly ItemView[]): FilterChip[] {
           f.kind === "all"
             ? t("codes.chips.all")
             : f.kind === "favorites"
-              ? t("codes.chips.favorites")
+              ? t("passwords.favorites")
               : f.kind === "ungrouped"
                 ? t("codes.groupNone")
                 : f.value,

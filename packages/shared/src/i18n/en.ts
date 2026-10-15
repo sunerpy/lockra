@@ -280,6 +280,7 @@ export const en: Messages = {
       added: "Recently added",
     },
     more: "List options",
+    favorites: "Favorites",
     groupView: "Show by group",
     collapseAll: "Collapse all",
     expandAll: "Expand all",

@@ -271,6 +271,7 @@ export const zhCN = {
       added: "最近添加",
     },
     more: "列表选项",
+    favorites: "收藏",
     groupView: "按分组显示",
     collapseAll: "全部折叠",
     expandAll: "全部展开",

@@ -86,7 +86,7 @@ export const extensionEn: typeof extensionZhCN = {
     body: "The extension needs Lockra on this computer to fill passwords and codes.",
     start: "Start Lockra",
     starting: "Starting…",
-    note: "Turn on “Keep running when the window is closed” in Lockra's Settings › Browser to keep it in the tray.",
+    note: "Turn on “Keep running after the window closes” in Lockra's Settings › Browser to keep it in the tray.",
   },
   noHost: {
     title: "Lockra not found",
