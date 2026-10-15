@@ -1,6 +1,7 @@
 import { type CodeView, type EntryView } from "@lockra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { heardByWindow } from "../test/keys";
 import { RecentCard } from "./RecentCard";
 
 const T = 1_790_000_010_000;
@@ -81,6 +82,37 @@ describe("RecentCard", () => {
     );
     expect(screen.queryByTestId("countdown-ring")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "生成下一个" }));
+    expect(onNext).toHaveBeenCalledOnce();
+    expect(onCopy).not.toHaveBeenCalled();
+  });
+
+  it("regression: the app's shortcuts get through its next-code button, other keys do not", async () => {
+    // 2026-10-15: with the button focused, Ctrl+, opened no settings.
+    const user = userEvent.setup();
+    const onCopy = vi.fn();
+    const onNext = vi.fn();
+    render(
+      <RecentCard
+        entry={entry({ kind: { type: "hotp", counter: 4 } })}
+        code={code({ next_code: null, valid_from_ms: null, valid_until_ms: null })}
+        nowMs={T}
+        onCopy={onCopy}
+        onNext={onNext}
+      />,
+    );
+    const next = screen.getByRole("button", { name: "生成下一个" });
+    const heard = await heardByWindow(
+      next,
+      "{Control>},{/Control}",
+      "{Meta>}k{/Meta}",
+      "/",
+      "{ArrowDown}",
+    );
+    expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k", "/"]));
+    expect(heard).not.toContain("ArrowDown");
+    // The button keeps its own keys, and the card does not copy.
+    next.focus();
+    await user.keyboard("{Enter}");
     expect(onNext).toHaveBeenCalledOnce();
     expect(onCopy).not.toHaveBeenCalled();
   });

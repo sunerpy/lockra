@@ -1,5 +1,6 @@
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { cx } from "../cx";
+import { keepKey } from "../keys";
 import { Icon, type IconName } from "./Icon";
 
 export interface OptionCardProps {
@@ -23,7 +24,7 @@ export interface OptionCardProps {
   "aria-label"?: string;
 }
 
-function stop(e: MouseEvent | KeyboardEvent) {
+function stop(e: MouseEvent) {
   e.stopPropagation();
 }
 
@@ -92,7 +93,7 @@ export function OptionCard({
         <div
           className="mt-auto flex items-center gap-2 border-t border-border pt-3"
           onClick={stop}
-          onKeyDown={stop}>
+          onKeyDown={keepKey}>
           {footer}
         </div>
       )}
