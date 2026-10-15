@@ -9,6 +9,7 @@ import {
   groupCode,
   incompatibleText,
   noticeIsProblem,
+  noticeIsToast,
   noticeText,
   browserName,
   pairingCode,
@@ -94,6 +95,12 @@ describe("labels", () => {
     );
     expect(noticeIsProblem({ type: "backup_failed", code: "io_failed" })).toBe(true);
     expect(noticeIsProblem({ type: "auto_locked" })).toBe(false);
+  });
+
+  it("every notice is a toast but the quick search's request for the palette", () => {
+    expect(noticeIsToast({ type: "open_palette" })).toBe(false);
+    expect(noticeIsToast({ type: "auto_locked" })).toBe(true);
+    expect(noticeIsToast({ type: "browser_unlock_requested", browser: "chrome" })).toBe(true);
   });
 
   it("names browsers and groups pairing codes as both sides show them", () => {

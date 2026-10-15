@@ -64,6 +64,13 @@ export const en: Messages = {
       results: { one: "{n} result", other: "{n} results" },
     },
     banner: { close: "Close" },
+    shortcut: {
+      none: "Not set",
+      recording: "Press the shortcut…",
+      needsModifier: "Hold Ctrl or Alt with the key",
+      needsModifierMac: "Hold ⌘, ⌃ or ⌥ with the key",
+      clear: "Clear the shortcut",
+    },
     sortable: {
       role: "sortable item",
       handle: "Move “{name}”: drag it, or press the up and down arrow keys",
@@ -934,6 +941,13 @@ export const en: Messages = {
       autoUpdate: "Automatic updates",
       autoUpdateHelp:
         "Lockra looks for an update 10 seconds after start and downloads it in the background; it installs when Lockra restarts. Off: Lockra goes online only when you choose Check for updates.",
+      quickAccess: {
+        label: "Quick search",
+        field: "Quick search shortcut",
+        help: "Press the shortcut in any app to bring up the command menu and copy a user name, password or code; after a copy the window goes back where it was.",
+        suggest: "Use {keys}",
+        bind: "Or bind this command to a shortcut in your desktop's keyboard settings; it does the same:",
+      },
     },
     appearance: {
       lede: "Theme, view, accent, density and text size; every change applies at once.",
@@ -1498,6 +1512,8 @@ export const en: Messages = {
     browser_pair_expired: "This request has expired; start it again in the browser",
     browser_manifest_failed:
       "The browsers' connection files (native-messaging manifests) could not be written or removed",
+    shortcut_unavailable:
+      "The shortcut could not be registered: another app may be using it, or the desktop does not let apps register global shortcuts",
     feature_unavailable:
       "This version cannot do that yet; restore a backup that holds passwords with Replace",
     internal: "An internal error occurred",
@@ -1560,6 +1576,7 @@ export const en: Messages = {
     browserConfirmRequested: "{browser} asks to fill “{title}”",
     browserPaused: "“{name}” asked too often and is paused",
     browserUnlockRequested: "{browser} asks Lockra to unlock",
+    openPalette: "Quick search opened",
     imported: "Imported {added}, replaced {replaced}, skipped {skipped}",
     importedLogins: "Imported {added} logins, replaced {replaced}, skipped {skipped}",
     importedBoth:

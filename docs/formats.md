@@ -194,6 +194,14 @@ codes, code order (`name`, `added`, `recent`, `manual`: the order of the local p
 a file without it (0.2.0 to 0.3.1) has `auto_update` read as off, because 0.3.0 could have carried
 0.2.0's check-only `auto_check_updates` over into it, and 0.2.0's field itself is not read. Unknown or missing fields take their defaults.
 
+The quick search's global shortcut is `quick_access_shortcut`: an accelerator in the syntax the
+desktop shell registers (tauri-plugin-global-shortcut), modifiers then one key joined by `+`, the
+key named by its physical position (`KeyboardEvent.code`: `KeyK`, `Digit1`, `Space`), for instance
+`CommandOrControl+Shift+Space` (⌘ on a Mac, Ctrl elsewhere) or `Control+Alt+KeyK`. `null`, the
+default, registers none; a blank value reads as `null`. Only a build that offers password
+management registers it (docs/architecture.md, "The quick search"); whether the system took it is
+not kept in the file.
+
 `update-ready.json` in the data directory, next to the vault: `{"version": "0.3.0"}`, the release
 the automatic update downloaded and has not installed yet; the next start installs that version
 at once. It is removed when a check finds nothing newer or the update is installed, and a file

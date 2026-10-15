@@ -106,6 +106,8 @@ pub struct UiState {
     pub generator: GeneratorStatus,
     /// The browser extension: the integration, the pairings, the requests waiting for the user.
     pub browser: BrowserView,
+    /// The quick search's global shortcut, as the desktop shell registers it.
+    pub quick_access: QuickAccessView,
     /// The groups folded in the code list ("" for the accounts in no group); this device's, kept in
     /// the vault, so empty unless unlocked.
     pub collapsed_groups: Vec<String>,
@@ -132,6 +134,16 @@ pub struct UiState {
     pub update: UpdateView,
     /// Multi-device sync.
     pub sync: SyncView,
+}
+
+/// The quick search (the command palette brought up from anywhere), as Settings › General shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct QuickAccessView {
+    /// The global shortcut the shell registers (`settings.json`'s `quick_access_shortcut`); none
+    /// when none is chosen, and where the build or the platform offers no quick search.
+    pub shortcut: Option<String>,
+    /// Why the shell could not register it (`shortcut_unavailable`); in memory only.
+    pub error: Option<ErrorCode>,
 }
 
 /// The password generator, as the interface shows it.
@@ -821,6 +833,10 @@ pub enum Notice {
         /// The browser.
         browser: String,
     },
+    /// The quick search was asked for (its global shortcut, the tray, `lockra-desktop --palette`):
+    /// the shell brought the window up, and the webview opens the command palette. Sent only while
+    /// unlocked; not a toast.
+    OpenPalette,
     /// An import was committed.
     Imported {
         /// New entries.

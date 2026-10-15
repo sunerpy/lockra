@@ -53,6 +53,10 @@
     "phase": "locked",
     "pinned_group": null,
     "platform": "linux",
+    "quick_access": {
+      "error": null,
+      "shortcut": null
+    },
     "restore": null,
     "settings": {
       "accent": "default",
@@ -85,6 +89,7 @@
       "hide_codes": false,
       "item_sort": "name",
       "locale": "system",
+      "quick_access_shortcut": null,
       "reduce_motion": false,
       "run_in_background": false,
       "sort": "name",
@@ -158,6 +163,10 @@
     "phase": "no_vault",
     "pinned_group": null,
     "platform": "linux",
+    "quick_access": {
+      "error": null,
+      "shortcut": null
+    },
     "restore": {
       "created_at_ms": 1789136000000,
       "file_name": "restore-me.lockrabackup",
@@ -194,6 +203,7 @@
       "hide_codes": false,
       "item_sort": "name",
       "locale": "system",
+      "quick_access_shortcut": null,
       "reduce_motion": false,
       "run_in_background": false,
       "sort": "name",
@@ -264,6 +274,10 @@
     "phase": "locked",
     "pinned_group": null,
     "platform": "android",
+    "quick_access": {
+      "error": null,
+      "shortcut": null
+    },
     "restore": null,
     "settings": {
       "accent": "default",
@@ -296,6 +310,7 @@
       "hide_codes": false,
       "item_sort": "name",
       "locale": "system",
+      "quick_access_shortcut": null,
       "reduce_motion": false,
       "run_in_background": false,
       "sort": "name",
@@ -861,6 +876,10 @@
       "type": "favorites"
     },
     "platform": "linux",
+    "quick_access": {
+      "error": "shortcut_unavailable",
+      "shortcut": "CommandOrControl+Shift+Space"
+    },
     "restore": null,
     "settings": {
       "accent": "green",
@@ -890,6 +909,7 @@
       "hide_codes": true,
       "item_sort": "recent",
       "locale": "zh-cn",
+      "quick_access_shortcut": "CommandOrControl+Shift+Space",
       "reduce_motion": true,
       "run_in_background": true,
       "sort": "recent",

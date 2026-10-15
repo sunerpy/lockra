@@ -42,6 +42,9 @@ sha2.workspace = true
 tauri = { version = "=2.11.6", features = ["tray-icon"] }
 # Native file dialogs, called from Rust only: the webview never holds a path (docs/security.md).
 tauri-plugin-dialog = "=2.7.3"
+# The quick search's global shortcut (src/quick_access.rs), registered from Rust only and only once
+# one is chosen: the webview has no permission for the plugin. 2.4 needs tauri 2.12.
+tauri-plugin-global-shortcut = "=2.3.2"
 # One process writes the vault: a second start focuses the first window instead.
 tauri-plugin-single-instance = { version = "=2.4.3", default-features = false }
 # In-app updates, driven from Rust only when the user asks (src/updater.rs): the webview has no

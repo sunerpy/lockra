@@ -1,7 +1,8 @@
 //! Running in the background (plan §四, "后台运行"): with Settings' `run_in_background` on,
 //! closing the window hides it and Lockra stays in the tray, so the browser extension and the
-//! quick search can reach it; the tray's menu opens the window, locks the vault and quits. Off,
-//! closing the window quits, as it always has. The tray comes and goes with the setting.
+//! quick search can reach it; the tray's menu opens the window, opens the quick search (where the
+//! build offers it), locks the vault and quits. Off, closing the window quits, as it always has.
+//! The tray comes and goes with the setting.
 
 use lockra_core::Core;
 use lockra_core::settings::LocaleSetting;
@@ -10,7 +11,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager as _, Runtime};
 
-use crate::MAIN_WINDOW;
+use crate::{MAIN_WINDOW, quick_access};
 
 /// The tray icon's id.
 pub const TRAY_ID: &str = "lockra";
@@ -19,6 +20,7 @@ pub const TRAY_ID: &str = "lockra";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TrayWords {
     pub open: &'static str,
+    pub search: &'static str,
     pub lock: &'static str,
     pub quit: &'static str,
 }
@@ -32,9 +34,9 @@ pub fn tray_words(locale: LocaleSetting, system: Option<&str>) -> TrayWords {
         LocaleSetting::System => system.is_some_and(|l| l.to_ascii_lowercase().starts_with("zh")),
     };
     if chinese {
-        TrayWords { open: "打开 Lockra", lock: "锁定", quit: "退出 Lockra" }
+        TrayWords { open: "打开 Lockra", search: "快捷搜索", lock: "锁定", quit: "退出 Lockra" }
     } else {
-        TrayWords { open: "Open Lockra", lock: "Lock", quit: "Quit Lockra" }
+        TrayWords { open: "Open Lockra", search: "Quick search", lock: "Lock", quit: "Quit Lockra" }
     }
 }
 
@@ -45,8 +47,13 @@ pub fn brings_window_up(notice: &Notice) -> bool {
     matches!(notice, Notice::BrowserPairRequested { .. } | Notice::BrowserConfirmRequested { .. } | Notice::BrowserUnlockRequested { .. })
 }
 
-/// Bring the window up: shown, not minimized, focused.
+/// Bring the window up: shown, not minimized, focused. Brought up this way, it stays up after a copy
+/// from a palette the quick search had opened (`quick_access::forget`).
 pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
+    quick_access::forget(app);
+    // macOS: the app the quick search hid after a copy comes back first.
+    #[cfg(target_os = "macos")]
+    let _ = app.show();
     if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
         let _ = window.unminimize();
         let _ = window.show();
@@ -54,11 +61,12 @@ pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// The tray as the setting wants it: there while Lockra runs in the background, gone otherwise.
-pub fn sync_tray<R: Runtime>(app: &AppHandle<R>, on: bool, locale: LocaleSetting) {
+/// The tray as the setting wants it: there while Lockra runs in the background, gone otherwise;
+/// with 「快捷搜索」 where the build offers the quick search (`quick`).
+pub fn sync_tray<R: Runtime>(app: &AppHandle<R>, on: bool, locale: LocaleSetting, quick: bool) {
     let present = app.tray_by_id(TRAY_ID).is_some();
     if on && !present {
-        if let Err(error) = build_tray(app, tray_words(locale, sys_locale::get_locale().as_deref())) {
+        if let Err(error) = build_tray(app, tray_words(locale, sys_locale::get_locale().as_deref()), quick) {
             tracing::warn!(%error, "the tray icon could not be shown");
         }
     } else if !on && present {
@@ -66,17 +74,19 @@ pub fn sync_tray<R: Runtime>(app: &AppHandle<R>, on: bool, locale: LocaleSetting
     }
 }
 
-fn build_tray<R: Runtime>(app: &AppHandle<R>, words: TrayWords) -> tauri::Result<()> {
+fn build_tray<R: Runtime>(app: &AppHandle<R>, words: TrayWords, quick: bool) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", words.open, true, None::<&str>)?;
+    let search = MenuItem::with_id(app, "search", words.search, true, None::<&str>)?;
     let lock = MenuItem::with_id(app, "lock", words.lock, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", words.quit, true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &lock, &quit])?;
+    let menu = if quick { Menu::with_items(app, &[&open, &search, &lock, &quit])? } else { Menu::with_items(app, &[&open, &lock, &quit])? };
     let mut tray = TrayIconBuilder::with_id(TRAY_ID).tooltip("Lockra").menu(&menu).show_menu_on_left_click(false);
     if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
     }
     tray.on_menu_event(|app, event| match event.id().as_ref() {
         "open" => show_main(app),
+        "search" => quick_access::summon(app),
         "lock" => {
             if let Some(core) = app.try_state::<Core>() {
                 core.lock_vault();
@@ -105,6 +115,8 @@ mod tests {
         assert_eq!(tray_words(LocaleSetting::System, Some("zh-Hans-CN")).quit, "退出 Lockra");
         assert_eq!(tray_words(LocaleSetting::System, Some("de-DE")).open, "Open Lockra");
         assert_eq!(tray_words(LocaleSetting::System, None).open, "Open Lockra");
+        assert_eq!(tray_words(LocaleSetting::ZhCn, None).search, "快捷搜索");
+        assert_eq!(tray_words(LocaleSetting::En, None).search, "Quick search");
     }
 
     #[test]

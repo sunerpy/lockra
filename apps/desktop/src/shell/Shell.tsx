@@ -98,7 +98,57 @@ function ShellLayout() {
     [shell, lock, page, passwords],
   );
   useShortcuts(handlers, shell.overlay === null && !shell.paletteOpen);
-  const commands = useCommands();
+
+  // The quick search (its global shortcut, the tray's 「快捷搜索」, `lockra-desktop --palette`): the
+  // shell has brought the window up and asks for the palette, never over a dialog (the window then
+  // shows what is open). When that palette closes the shell hears whether something was copied from
+  // it, and after a copy the window goes back where it was.
+  const quick = useRef(false);
+  const blocked = useRef(false);
+  const busy =
+    shell.overlay !== null ||
+    shell.updateOpen ||
+    state.browser.pairing.length > 0 ||
+    state.browser.confirms.length > 0;
+  useEffect(() => {
+    blocked.current = busy;
+  }, [busy]);
+  const { setPaletteOpen } = shell;
+  const endQuick = useCallback(
+    (copied: boolean) => void backend.quickAccessDone(copied).catch(() => undefined),
+    [backend],
+  );
+  useEffect(
+    () =>
+      backend.on((event) => {
+        if (event.type !== "notice" || event.notice.type !== "open_palette") return;
+        if (blocked.current) {
+          endQuick(false);
+          return;
+        }
+        quick.current = true;
+        setPaletteOpen(true);
+      }),
+    [backend, setPaletteOpen, endQuick],
+  );
+  const onCopy = useCallback(
+    (work: Promise<boolean>) => {
+      const fromQuick = quick.current;
+      // The palette closes next: the copy, not the close, ends this quick search.
+      quick.current = false;
+      if (!fromQuick) return;
+      void work.then(endQuick, () => endQuick(false));
+    },
+    [endQuick],
+  );
+  const closePalette = useCallback(() => {
+    setPaletteOpen(false);
+    if (quick.current) {
+      quick.current = false;
+      endQuick(false);
+    }
+  }, [setPaletteOpen, endQuick]);
+  const commands = useCommands(onCopy);
 
   const groups: SidebarGroup[] = [
     {
@@ -245,7 +295,7 @@ function ShellLayout() {
       <CommandPalette
         open={shell.paletteOpen}
         items={commands}
-        onClose={() => shell.setPaletteOpen(false)}
+        onClose={closePalette}
         placeholder={t("ui.palette.placeholder")}
       />
       <EntryDialogs />

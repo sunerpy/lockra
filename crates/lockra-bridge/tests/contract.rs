@@ -16,8 +16,8 @@ use lockra_core::settings::{AccentId, AutoBackup, CodesView, DefaultUnlock, Dens
 use lockra_core::ui::{
     AwaitingKind, AwaitingView, BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame,
     ConflictReason, CopiedPart, DeviceUnlockView, Excluded, ExportPage, ExportStarted, ExportTarget, Features, GeneratorStatus, GoogleBatchView, ImportSource,
-    ImportView, InstallMethod, LockView, LoginCandidateView, Notice, Phase, Platform, RestoreView, Revealed, SharedInvite, StorageView, SyncDeviceView,
-    SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    ImportView, InstallMethod, LockView, LoginCandidateView, Notice, Phase, Platform, QuickAccessView, RestoreView, Revealed, SharedInvite, StorageView,
+    SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use lockra_core::{
     AccountColor, ActivityEvent, ActivityView, AutofillChoice, BrowserPolicy, BrowserView, ConfirmAction, ConfirmReason, ConfirmView, ConflictView, Core,
@@ -139,6 +139,7 @@ fn settings() -> Settings {
         biometric_offer: false,
         browser_integration: true,
         run_in_background: true,
+        quick_access_shortcut: Some(QUICK_ACCESS_SHORTCUT.into()),
         item_sort: lockra_core::settings::ItemSort::Recent,
         generator: GeneratorOptions::Passphrase(PassphraseOptions { words: 5, separator: " ".into(), capitalize: true, number: true }),
     }
@@ -165,6 +166,9 @@ fn update_statuses() -> Vec<UpdateStatus> {
         UpdateStatus::Failed { code: ErrorCode::UpdateKeychain, at_ms: T0 - 4_000 },
     ]
 }
+
+/// The quick search's shortcut of the unlocked state (and its settings).
+const QUICK_ACCESS_SHORTCUT: &str = "CommandOrControl+Shift+Space";
 
 const DESKTOP_TAG: &str = "6c1f0b5e2d9a4f7380e1c2b3a4d5e6f7";
 const PHONE_TAG: &str = "0a9b8c7d6e5f40312233445566778899";
@@ -311,6 +315,12 @@ fn state(phase: Phase) -> UiState {
         generator: GeneratorStatus { history_count: if unlocked { 3 } else { 0 } },
         item_collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
         browser: if unlocked { browser() } else { BrowserView { available: true, enabled: true, ..BrowserView::default() } },
+        // Unlocked: the shortcut chosen and taken by another app; locked: none chosen.
+        quick_access: if unlocked {
+            QuickAccessView { shortcut: Some(QUICK_ACCESS_SHORTCUT.into()), error: Some(ErrorCode::ShortcutUnavailable) }
+        } else {
+            QuickAccessView { shortcut: None, error: None }
+        },
         collapsed_groups: if unlocked { vec![String::new(), "Work".into()] } else { Vec::new() },
         entry_order: if unlocked { vec![id(2), id(1)] } else { Vec::new() },
         group_order: if unlocked { vec!["Work".into(), String::new()] } else { Vec::new() },
@@ -348,6 +358,7 @@ fn notices() -> Vec<Notice> {
         Notice::BrowserConfirmRequested { id: id(41), browser: "firefox".into(), title: "Bank".into() },
         Notice::BrowserPaused { pairing: id(42), browser: "edge".into(), label: "Work".into() },
         Notice::BrowserUnlockRequested { browser: "chrome".into() },
+        Notice::OpenPalette,
         Notice::ClipboardCleared,
         Notice::Imported { added: 3, replaced: 1, skipped: 2, logins: LoginOutcome::default() },
         Notice::Imported { added: 1, replaced: 0, skipped: 0, logins: LoginOutcome { added: 12, replaced: 2, skipped: 3 } },
@@ -714,6 +725,7 @@ fn response_fixtures() {
         ErrorCode::BrowserUnavailable.into(),
         ErrorCode::BrowserNotPaired.into(),
         ErrorCode::BrowserPairExpired.into(),
+        ErrorCode::ShortcutUnavailable.into(),
         ErrorCode::Internal.into(),
     ];
     check(

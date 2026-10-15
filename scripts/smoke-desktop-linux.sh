@@ -3,14 +3,15 @@
 # the in-memory keychain and the stand-in Touch ID of debug builds) under Xvfb, in throwaway data
 # and config folders.
 # scripts/smoke/desktop.py drives it over WebDriver (tauri-driver + WebKitWebDriver) with real X
-# input; then the app is started once more on its own and closed with the title bar's button,
-# which must end the process with status 0. Screenshots go to the given folder.
+# input, on a session bus of the run's own (the single-instance check is D-Bus on Linux); then the
+# app is started once more on its own and closed with the title bar's button, which must end the
+# process with status 0. Screenshots go to the given folder.
 # Usage: scripts/smoke-desktop-linux.sh [out-dir]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 root=$(pwd)
 out=${1:-docs/acceptance/screens/desktop}
-for tool in Xvfb xdpyinfo xdotool xclip tauri-driver WebKitWebDriver python3 cargo pnpm curl; do
+for tool in Xvfb xdpyinfo xdotool xclip dbus-daemon tauri-driver WebKitWebDriver python3 cargo pnpm curl; do
   command -v "$tool" >/dev/null || { echo "smoke: $tool not installed"; exit 2; }
 done
 
@@ -35,6 +36,7 @@ done
 
 work=$(mktemp -d)
 xvfb_pid=""
+bus_pid=""
 driver_pid=""
 app_pid=""
 cleanup() {
@@ -51,7 +53,7 @@ cleanup() {
       fi
     done
   fi
-  for pid in "$app_pid" "$driver_pid" "$xvfb_pid"; do
+  for pid in "$app_pid" "$driver_pid" "$bus_pid" "$xvfb_pid"; do
     if [ -n "$pid" ]; then kill "$pid" 2>/dev/null || true; fi
   done
   rm -rf "$work"
@@ -69,6 +71,16 @@ printf '{"locale":"zh-cn"}\n' >"$work/config/dev.lockra.desktop/settings.json"
 # never the user's browser profile.
 export DISPLAY="$display" XDG_DATA_HOME="$work/data" XDG_CONFIG_HOME="$work/config" LOCKRA_DEV_SECRET_STORE=memory LOCKRA_DEV_BIOMETRIC=touch_id \
   LOCKRA_DEV_BROWSER_MANIFEST_DIR="$work/chrome"
+
+# A session bus of the run's own: the single-instance check then sees only this run's app (never a
+# Lockra the user has open, nor another run's), and `lockra-desktop --palette` started again in the
+# flow reaches the running app through it.
+dbus-daemon --session --nofork --nopidfile --address="unix:path=$work/bus" >/dev/null 2>&1 &
+bus_pid=$!
+if ! timeout 10 sh -c "until [ -S '$work/bus' ]; do sleep 0.2; done"; then
+  echo "smoke: the session bus did not start"; exit 1
+fi
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$work/bus"
 
 tauri-driver --port "$port" --native-port "$((port + 1))" >"$work/driver.log" 2>&1 &
 driver_pid=$!
@@ -89,6 +101,12 @@ driver_pid=""
 if ! timeout 30 sh -c 'while xdotool search --onlyvisible --name "^Lockra$" >/dev/null 2>&1; do sleep 0.5; done'; then
   echo "smoke: the WebDriver session's window is still open"; exit 1
 fi
+# Started alone, without the run's bus: a session app still on its way out cannot take this start
+# for a second one.
+kill "$bus_pid" 2>/dev/null || true
+wait "$bus_pid" 2>/dev/null || true
+bus_pid=""
+unset DBUS_SESSION_BUS_ADDRESS
 "$app" >"$work/app.log" 2>&1 &
 app_pid=$!
 if ! timeout 60 sh -c "until xdotool search --onlyvisible --pid $app_pid --name '^Lockra\$' >/dev/null 2>&1; do sleep 0.5; done"; then

@@ -155,6 +155,17 @@ describe("TauriBackend", () => {
     ]);
   });
 
+  it("ends a quick search through the shell, saying whether something was copied", async () => {
+    const f = fake();
+    const backend = new TauriBackend(f.transport);
+    await backend.quickAccessDone(true);
+    await backend.quickAccessDone(false);
+    expect(f.calls).toEqual([
+      ["quick_access_done", { copied: true }],
+      ["quick_access_done", { copied: false }],
+    ]);
+  });
+
   it("calls the shell commands with their arguments", async () => {
     const f = fake({
       import_pick_files: true,

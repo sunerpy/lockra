@@ -112,8 +112,8 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 - **The webview holds no paths and no secrets.** Every file is opened by Rust after a native dialog
   or a drop on the window (the webview only hears that a drag is over it); no command carries a
   path (a sync folder neither: the webview asks for "the folder chosen" through the folder dialog,
-  and a path in its place is refused), and the capability file grants the webview no `fs`, `dialog`, `shell` or `http`
-  permission — only Lockra's own commands and the title bar's window buttons
+  and a path in its place is refused), and the capability file grants the webview no `fs`, `dialog`, `shell`, `http`
+  or `global-shortcut` permission — only Lockra's own commands and the title bar's window buttons
   (`apps/desktop/src-tauri/tests/ipc.rs`, `apps/desktop/src/window-config.test.ts`).
 - What the webview receives is entry metadata and current codes, and the logins' metadata
   (`items_list`: titles, user names, email addresses, sites, the values of custom fields that are
@@ -157,6 +157,14 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 - The vault locks after the configured idle time and on demand (Ctrl+L); locking drops the
   decrypted entries, the import preview and every export session.
 - One process at a time writes the vault (single instance: a second start focuses the first).
+- The quick search (docs/architecture.md, "The quick search") brings the window up over other
+  apps, and its command palette opens only while the vault is unlocked: locked, its shortcut, the
+  tray's 「快捷搜索」 and `lockra-desktop --palette` show the unlock screen and nothing of the vault.
+  The palette lists what the window already shows (names, user names) and copies as the window
+  does (`item_copy`, with a `confirm` login's proof). Rust registers the shortcut; the webview has
+  no permission for the plugin (`apps/desktop/src-tauri/tests/ipc.rs`). Any program of the user's
+  can run `lockra-desktop --palette`, as it can start Lockra: that brings the window up and copies
+  nothing by itself.
 - The Android app (`apps/mobile`, from 0.7.0) keeps these rules with the phone's
   means: its window is always `FLAG_SECURE` (no screenshots or screen recording, a blank card among
   the recent apps); a copied code goes on marked `EXTRA_IS_SENSITIVE` (the paste preview and the

@@ -208,6 +208,12 @@ New for Lockra:
 |                 | `fg-muted` words), the actions on the right and an optional note under it; Settings › 浏览器's browsers and paired  |
 |                 | extensions                                                                                                          |
 
+`ShortcutRecorder` (Settings › 通用 › 快捷搜索) is a global shortcut's field, drawn as an input (32 px):
+the keys as keycaps in the platform's words (⌘ ⇧ on a Mac, Ctrl Shift elsewhere). Focused, it
+records the next key pressed with Ctrl, Alt or ⌘; the modifiers show as they are held, and a key
+without one says, in `danger`, what it needs. Esc cancels, Tab moves on, an `x` clears it, and
+`invalid` draws the edge in `danger`.
+
 Every interactive primitive has `default hover focus-visible active disabled` states, plus
 `loading` (buttons: spinner, label kept) and `error` (inputs: `danger` border and message below).
 Everything a mouse does is reachable by keyboard; icon-only buttons carry an `aria-label` and a

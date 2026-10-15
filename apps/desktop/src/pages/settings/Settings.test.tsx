@@ -1,5 +1,5 @@
 import { MOCK_PASSWORD, MockBackend, sampleEntries } from "@lockra/shared/mock";
-import { screen, within } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../../test/render";
 
 async function openSettings(user: ReturnType<typeof renderApp>["user"], section?: string) {
@@ -62,6 +62,56 @@ describe("SettingsDialog", () => {
     await openSettings(user);
     await user.selectOptions(screen.getByRole("combobox", { name: "置顶分组" }), "不置顶");
     expect(backend.calls.at(-1)).toEqual({ command: "view_pin_group", pinned: null });
+  });
+
+  it("chooses the quick search's shortcut, and says what to bind where it cannot be taken", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      passwords: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const dialog = await openSettings(user);
+    const row = within(dialog.getByTestId("quick-access"));
+    const field = row.getByRole("button", { name: "快捷搜索的快捷键" });
+    expect(field).toHaveAccessibleDescription("未设置");
+    await user.click(row.getByRole("button", { name: "使用 Ctrl+Shift+Space" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "settings_set",
+      settings: { quick_access_shortcut: "CommandOrControl+Shift+Space" },
+    });
+    expect(field).toHaveAccessibleDescription("Ctrl Shift Space");
+    expect(row.queryByRole("button", { name: "使用 Ctrl+Shift+Space" })).toBeNull();
+    // Recorded as it is pressed.
+    await user.click(field);
+    await user.keyboard("{Control>}{Alt>}[KeyK]{/Alt}{/Control}");
+    expect(backend.calls.at(-1)).toMatchObject({
+      settings: { quick_access_shortcut: "Control+Alt+KeyK" },
+    });
+    expect(dialog.getByRole("tab", { name: "通用" })).toBeInTheDocument();
+    // The shell could not take it: why, and the command to bind in the desktop instead.
+    act(() => backend.reportShortcut(false));
+    expect(
+      row.getByText(
+        "无法注册这个快捷键：可能已被其他应用占用，或者桌面环境不允许应用注册全局快捷键",
+      ),
+    ).toBeInTheDocument();
+    expect(row.getByText("lockra-desktop --palette")).toBeInTheDocument();
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    // Turned off: nothing to register, nothing to say.
+    await user.click(row.getByRole("button", { name: "清除快捷键" }));
+    expect(backend.calls.at(-1)).toMatchObject({ settings: { quick_access_shortcut: null } });
+    expect(row.queryByText("lockra-desktop --palette")).toBeNull();
+    expect(field).toHaveAccessibleDescription("未设置");
+  });
+
+  it("offers no quick search where password management is not offered", async () => {
+    const { user } = renderApp();
+    await ready();
+    const dialog = await openSettings(user);
+    expect(dialog.queryByTestId("quick-access")).toBeNull();
+    expect(dialog.queryByText("快捷搜索")).toBeNull();
   });
 
   it("applies the theme, accent, density, font size and motion at once", async () => {
