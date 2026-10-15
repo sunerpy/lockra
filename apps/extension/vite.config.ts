@@ -11,6 +11,7 @@ import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { readFrameLook } from "./scripts/frame-look.mjs";
 
 const root = import.meta.dirname;
 const target = process.env.LOCKRA_EXTENSION_TARGET ?? "chromium";
@@ -26,6 +27,7 @@ const SCRIPTS = {
 export default defineConfig(({ mode }) => {
   const define = {
     LOCKRA_TARGET: JSON.stringify(target),
+    LOCKRA_FRAME_LOOK: JSON.stringify(readFrameLook()),
   };
   if (mode === "background" || mode === "content") {
     return {
