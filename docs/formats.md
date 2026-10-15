@@ -105,8 +105,8 @@ pinned at the top, `{pinned_group}`: `{"type": "favorites"}`, `{"type": "group",
 `{"type": "ungrouped"}`, a kind this version cannot read being no pin; each is left out while
 empty: group names stay inside the encrypted file, never in `settings.json`), `generator_history`
 (the passwords the generator made here, `{password, at_ms, site?}`: secrets, in the vault file
-only), `item_view` (the groups folded in the password list, `{collapsed_groups}`) and `identity`
-(the user name and email a sign-up form gets, `{username, email}`). Every part but `clock` and
+only) and `item_view` (the groups folded in the password list, `{collapsed_groups}`; development
+builds of 0.10 also wrote an `identity` there, which is dropped). Every part but `clock` and
 `sync` reads leniently: one that does not read (a later version's shape) is reset alone and the
 vault opens. With sync on, `local` also holds `sync` (the storage settings and credentials, the space id, its
 data key, the sync key, this device's name, its keyring and what the runs remember, among it
@@ -311,6 +311,13 @@ Encoded by the core as SVG: black modules on a white background, a 4-module quie
 webview shows them through an `<img>` data URL, so nothing in the SVG can run. Decoded with rxing
 from PNG, JPEG and WebP images (several codes per image, photos at an angle); a picked file's type
 is judged from its first bytes, not its name: Lockra magic, `SQLite format 3`, an image, or text.
+
+A login's form adds one account on the spot to link it (board 07-c): `entry_add_clipboard` reads
+the clipboard (an image's QR codes, else text with an `otpauth` link) and the desktop shell's
+`entry_add_image` an image picked in its open dialog. What they hold is read as the import reads it
+(Google Authenticator export codes included), but nothing goes to the preview: exactly one account
+the vault can take is added at once and its id answered; none is `import_empty` (`clipboard_empty`
+for an empty clipboard), several are `several_accounts`, to go through the import instead.
 
 ## 9. Sync
 

@@ -128,6 +128,14 @@ export class TauriBackend implements Backend {
     return z.boolean().parse(await this.call("import_pick_key_file"));
   }
 
+  async addEntryFromImage(): Promise<string | null> {
+    return z
+      .string()
+      .min(1)
+      .nullable()
+      .parse(await this.call("entry_add_image"));
+  }
+
   async scanImport(texts: ScanTexts): Promise<boolean> {
     return z
       .boolean()

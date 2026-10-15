@@ -1079,6 +1079,64 @@ impl Core {
         self.stage(batches)
     }
 
+    /// The one account the clipboard holds (an image with a QR code, a screenshot of a site's
+    /// two-factor setup; or text with an `otpauth` link), added at once for a login's form to link
+    /// it. Several go through the import (`import_clipboard`).
+    pub async fn add_from_clipboard(&self) -> CoreResult<Uuid> {
+        self.ensure_unlocked()?;
+        let clipboard = Arc::clone(&self.shared.ports.clipboard);
+        let texts = blocking(move || {
+            if let Ok(Some(image)) = clipboard.image() {
+                let texts = qr::decode_rgba(image.width, image.height, &image.rgba).unwrap_or_default();
+                if !texts.is_empty() {
+                    return Ok(texts);
+                }
+            }
+            let text = clipboard.text().map_err(|_| ErrorCode::ClipboardFailed)?.filter(|t| t.to_ascii_lowercase().contains("otpauth"));
+            Ok(text.into_iter().collect::<Vec<_>>())
+        })
+        .await?;
+        if texts.is_empty() {
+            return Err(ErrorCode::ClipboardEmpty.into());
+        }
+        self.add_one(&texts)
+    }
+
+    /// The one account the QR code in an image file holds (the user picked it in the shell's
+    /// dialog), added at once for a login's form to link it.
+    pub async fn add_from_image(&self, path: PathBuf) -> CoreResult<Uuid> {
+        self.ensure_unlocked()?;
+        let texts = blocking(move || {
+            let bytes = Zeroizing::new(read_limited(&path).map_err(|_| ErrorCode::ImportUnreadable)?);
+            Ok(qr::decode_image(&bytes).map_err(|_| ErrorCode::ImportUnreadable)?)
+        })
+        .await?;
+        self.add_one(&texts)
+    }
+
+    /// Add the one account `texts` (QR codes' or links') hold: none it can take is `ImportEmpty`,
+    /// several are `SeveralAccounts`; nothing is added then.
+    fn add_one(&self, texts: &[Zeroizing<String>]) -> CoreResult<Uuid> {
+        let mut found = Vec::new();
+        for text in texts {
+            for line in text::read(text) {
+                let (origin, items) = match line {
+                    text::Line::Uri(item) => (Origin::Uri, vec![item]),
+                    text::Line::Google { items, .. } => (Origin::Google, items),
+                };
+                found.extend(items.into_iter().filter_map(|item| match item {
+                    Item::Account(auth) => Some((origin, auth)),
+                    Item::Rejected { .. } => None,
+                }));
+            }
+        }
+        if found.len() > 1 {
+            return Err(ErrorCode::SeveralAccounts.into());
+        }
+        let (origin, auth) = found.pop().ok_or(ErrorCode::ImportEmpty)?;
+        self.add_entry(Entry::from_auth(auth, origin, self.now_ms()))
+    }
+
     /// Read a QR code the phone's camera scanned into the import preview. A QR code is one piece
     /// of text: the line an account came from means nothing there.
     pub fn import_scanned(&self, text: &str) -> CoreResult<()> {
@@ -3149,6 +3207,7 @@ fn unlocked(st: &State) -> CoreResult<&Session> {
 mod browser;
 mod items;
 mod quick_access;
+mod tray;
 
 pub use items::{GENERATOR_HISTORY_DAYS, GENERATOR_HISTORY_MAX};
 

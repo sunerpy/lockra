@@ -164,10 +164,20 @@ extension").
   removed) and `browser_status` (per browser: installed, Lockra's manifest in place) answer
   `browser_unavailable` without password management. At each start with the integration on, the
   manifests are written again (the program may have moved with an update).
-- Running in the background (`src-tauri/src/background.rs`): with `run_in_background` on, closing
-  the window hides it and Lockra stays in the tray (open, the quick search where it is offered,
-  lock, quit, in the app's language), so the extension can reach it; off, closing the window quits
-  as it always has. Another start brings the window up, except one for the browser (and one with
+- The tray (`src-tauri/src/background.rs`): an icon whenever Lockra runs on a desktop, the app
+  icon's padlock without its tile (`icons/tray/`, drawn at the size the system shows it; a template
+  image on macOS). A left press brings the window up (Windows, macOS: the press alone, never its
+  release or a double click's second press); the right button opens the menu, and on Linux, whose
+  AppIndicator sends no clicks, any click does: open, the quick search where it is offered, lock,
+  settings, check for updates where this copy updates itself, quit, in the app's language, rebuilt
+  as that, the lock or the offer changes (lock, settings and check for updates are off while
+  locked). Settings and check for updates bring the window up and ask the core
+  (`Core::open_settings`, `Core::open_updates`), which sends `Notice::OpenSettings` /
+  `Notice::OpenUpdates` while unlocked; `open_updates` asks for a newer release first only when no
+  run is in flight and no release waits, so a download never starts over from the tray.
+- Running in the background (`background.rs`, `watch_close` in `lib.rs`): with `run_in_background`
+  on, closing the window hides it and Lockra stays in the tray, so the extension and the quick
+  search can reach it; off, closing the window quits as it always has. Another start brings the window up, except one for the browser (and one with
   `--palette` brings the palette too, below); on macOS the Dock's icon does too
   (`RunEvent::Reopen`). The Linux packages depend on libayatana-appindicator for the tray.
 - The interface: Settings › 浏览器 (`apps/desktop/src/pages/settings/Browser.tsx`) turns the

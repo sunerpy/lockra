@@ -182,6 +182,34 @@ describe("MockBackend", () => {
     );
   });
 
+  it("adds the one account the clipboard or an image holds, at once", async () => {
+    const backend = new MockBackend({ phase: "unlocked", clipboard: "nothing here" });
+    expect(await errorCode(backend.dispatch({ command: "entry_add_clipboard" }))).toBe(
+      "clipboard_empty",
+    );
+    backend.setClipboard(
+      "otpauth://totp/A:a?secret=MFRGGZDF\notpauth://totp/B:b?secret=MZXW6YTBOI",
+    );
+    expect(await errorCode(backend.dispatch({ command: "entry_add_clipboard" }))).toBe(
+      "several_accounts",
+    );
+    backend.setClipboard("otpauth://totp/Clip:board?secret=MFRGGZDF");
+    const { id } = await backend.dispatch({ command: "entry_add_clipboard" });
+    const added = (await backend.getState()).entries.find((e) => e.id === id);
+    expect([added?.issuer, added?.account, added?.origin]).toEqual(["Clip", "board", "uri"]);
+    expect((await backend.getState()).import).toBeNull();
+    // An image's QR code; the dialog cancelled; one with two accounts.
+    backend.setImagePick("otpauth://totp/Shot:me?secret=JBSWY3DPEHPK3PXP&issuer=Shot");
+    const shot = await backend.addEntryFromImage();
+    expect((await backend.getState()).entries.find((e) => e.id === shot)?.issuer).toBe("Shot");
+    backend.setImagePick(null);
+    expect(await backend.addEntryFromImage()).toBeNull();
+    backend.setImagePick("otpauth://totp/A:a?secret=GEZDGNBV\notpauth://totp/B:b?secret=MFRGGZDF");
+    expect(await errorCode(backend.addEntryFromImage())).toBe("several_accounts");
+    await backend.dispatch({ command: "vault_lock" });
+    expect(await errorCode(backend.dispatch({ command: "entry_add_clipboard" }))).toBe("locked");
+  });
+
   it("previews and commits imports", async () => {
     const backend = new MockBackend({
       entries: [mockEntry("GitHub", "octocat", { secret: "JBSWY3DPEHPK3PXP" })],

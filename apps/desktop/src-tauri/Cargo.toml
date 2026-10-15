@@ -39,7 +39,7 @@ serde_json.workspace = true
 sha2.workspace = true
 # CVE-2026-42184 / GHSA-7gmj-67g7-phm9 (remote pages reaching local-only IPC) is fixed from 2.11.1.
 # The tray while Lockra runs in the background (src/background.rs).
-tauri = { version = "=2.11.6", features = ["tray-icon"] }
+tauri = { version = "=2.11.6", features = ["tray-icon", "image-png"] }
 # Native file dialogs, called from Rust only: the webview never holds a path (docs/security.md).
 tauri-plugin-dialog = "=2.7.3"
 # The quick search's global shortcut (src/quick_access.rs), registered from Rust only and only once

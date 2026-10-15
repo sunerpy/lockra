@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 100 100">
+  <!-- The tray's padlock (src/background.rs): the app icon's padlock without its tile, in the tile's
+       blue-violet, the code's three dots cut out, filling the image: the system paints the tray
+       behind it (the tauri-desktop-engineering skill, "A tray icon must have no plate of its own").
+       scripts/build-icons.sh renders icons/tray/ from it. -->
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3D7BFF"/>
+      <stop offset="1" stop-color="#7C5CFF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(50 50) scale(1.5) translate(-50 -49.75)">
+    <path d="M37 45 V36 A13 13 0 0 1 63 36 V45" fill="none" stroke="url(#ink)" stroke-width="7.5" stroke-linecap="round"/>
+    <path d="M35 43 H65 A9 9 0 0 1 74 52 V71 A9 9 0 0 1 65 80 H35 A9 9 0 0 1 26 71 V52 A9 9 0 0 1 35 43 Z M33.2 61.5 a4.8 4.8 0 1 0 9.6 0 a4.8 4.8 0 1 0 -9.6 0 Z M45.2 61.5 a4.8 4.8 0 1 0 9.6 0 a4.8 4.8 0 1 0 -9.6 0 Z M57.2 61.5 a4.8 4.8 0 1 0 9.6 0 a4.8 4.8 0 1 0 -9.6 0 Z" fill="url(#ink)" fill-rule="evenodd"/>
+  </g>
+</svg>

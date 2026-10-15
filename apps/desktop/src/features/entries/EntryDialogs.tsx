@@ -129,7 +129,15 @@ export function GroupField({
   );
 }
 
-function AddManualDialog({ onClose }: { onClose: () => void }) {
+/** Add an account by hand; `onAdded`, when given, hears its id instead of `onClose` (a login's
+ *  form links it). */
+export function AddManualDialog({
+  onClose,
+  onAdded,
+}: {
+  onClose: () => void;
+  onAdded?: (id: string) => void;
+}) {
   const t = useT();
   const { backend } = useBackend();
   const formId = useId();
@@ -161,7 +169,9 @@ function AddManualDialog({ onClose }: { onClose: () => void }) {
       group: group.trim() === "" ? null : group.trim(),
     };
     const added = await submit.run(() => backend.dispatch({ command: "entry_add_manual", draft }));
-    if (added !== undefined) onClose();
+    if (added === undefined) return;
+    if (onAdded) onAdded(added.id);
+    else onClose();
   };
   const fieldError =
     submit.error === "invalid_secret" || submit.error === "invalid_parameters"
@@ -297,7 +307,15 @@ function AddManualDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function AddUriDialog({ onClose }: { onClose: () => void }) {
+/** Add an account from an otpauth link; `onAdded`, when given, hears its id instead of
+ *  `onClose` (a login's form links it). */
+export function AddUriDialog({
+  onClose,
+  onAdded,
+}: {
+  onClose: () => void;
+  onAdded?: (id: string) => void;
+}) {
   const t = useT();
   const { backend } = useBackend();
   const formId = useId();
@@ -309,7 +327,9 @@ function AddUriDialog({ onClose }: { onClose: () => void }) {
     const added = await submit.run(() =>
       backend.dispatch({ command: "entry_add_uri", uri: uri.trim() }),
     );
-    if (added !== undefined) onClose();
+    if (added === undefined) return;
+    if (onAdded) onAdded(added.id);
+    else onClose();
   };
   return (
     <Dialog

@@ -280,6 +280,7 @@ export const en: Messages = {
       added: "Recently added",
     },
     more: "List options",
+    favorites: "Favorites",
     groupView: "Show by group",
     collapseAll: "Collapse all",
     expandAll: "Expand all",
@@ -307,6 +308,13 @@ export const en: Messages = {
       unfavorite: "Remove from favorites",
       move: "Move to group…",
       delete: "Delete…",
+    },
+    move: {
+      title: "Move to group",
+      prompt: "Move “{name}” to:",
+      submit: "Move",
+      moved: "“{name}” moved to “{group}”",
+      ungrouped: "“{name}” taken out of its group",
     },
     detail: {
       label: "Login details",
@@ -399,6 +407,18 @@ export const en: Messages = {
       search: "Search accounts…",
       existing: "Code accounts",
       none: "No code account matches",
+      create: "Make a new one",
+      scan: "Scan a QR code…",
+      uri: "Paste an otpauth link…",
+      manual: "Type in the key…",
+      scanTitle: "Scan a QR code",
+      scanBody:
+        "Take a screenshot of the site's QR code to the clipboard first, then read it; or choose an image with the QR code.",
+      scanHintWindows: "Win Shift S takes a part of the screen.",
+      scanHintMac: "⌃⇧⌘4 takes a part of the screen to the clipboard.",
+      scanHintLinux: "Copy the QR code to the clipboard with the desktop's screenshot tool.",
+      readClipboard: "Read the clipboard",
+      pickImage: "Choose an image…",
     },
     notes: { label: "Notes", secret: "Treated as a secret: sent only when shown" },
     fields: {
@@ -1456,6 +1476,8 @@ export const en: Messages = {
     import_unrecognized: "This file is not recognized",
     import_unreadable: "This file cannot be read",
     import_key_file_invalid: "The key file is not valid, or does not go with this password",
+    several_accounts:
+      "There is more than one account here: import them on the Codes page first, then link one",
     clipboard_empty: "The clipboard holds no QR code and no otpauth link",
     clipboard_failed: "The clipboard cannot be accessed",
     camera_denied:
@@ -1577,6 +1599,8 @@ export const en: Messages = {
     browserPaused: "“{name}” asked too often and is paused",
     browserUnlockRequested: "{browser} asks Lockra to unlock",
     openPalette: "Quick search opened",
+    openSettings: "Settings opened",
+    openUpdates: "Software update opened",
     imported: "Imported {added}, replaced {replaced}, skipped {skipped}",
     importedLogins: "Imported {added} logins, replaced {replaced}, skipped {skipped}",
     importedBoth:

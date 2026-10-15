@@ -133,6 +133,12 @@ function useRowMenu() {
                   : t("passwords.menu.favorite"),
                 icon: "star" as const,
               },
+              {
+                kind: "action" as const,
+                id: "move",
+                label: t("passwords.menu.move"),
+                icon: "folder" as const,
+              },
             ]),
       ],
     },
@@ -151,6 +157,7 @@ function useRowMenu() {
     else if (id === "edit") shell.open({ type: "item_edit", id: item.id });
     else if (id === "favorite")
       void dispatch({ command: "item_update", id: item.id, patch: { favorite: !item.favorite } });
+    else if (id === "move") shell.open({ type: "item_move", id: item.id });
     else shell.open({ type: "item_delete", id: item.id });
   };
   return { sections, run };

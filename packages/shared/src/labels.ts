@@ -133,6 +133,10 @@ export function noticeText(t: TFunction, notice: Notice, name?: string): string 
       return t("notice.browserUnlockRequested", { browser: browserName(notice.browser) });
     case "open_palette":
       return t("notice.openPalette");
+    case "open_settings":
+      return t("notice.openSettings");
+    case "open_updates":
+      return t("notice.openUpdates");
     case "imported":
       return importedText(t, notice);
     case "file_unrecognized":
@@ -204,10 +208,14 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** Whether a notice is told as a toast: every one but the quick search's request for the command
- *  palette, which the palette itself answers. */
+/** Whether a notice is told as a toast: every one but the requests to open the command palette
+ *  (the quick search), Settings or the update dialog (the tray), which the window answers itself. */
 export function noticeIsToast(notice: Notice): boolean {
-  return notice.type !== "open_palette";
+  return (
+    notice.type !== "open_palette" &&
+    notice.type !== "open_settings" &&
+    notice.type !== "open_updates"
+  );
 }
 
 /** Whether a notice is bad news (the toast is drawn in the danger tone). */

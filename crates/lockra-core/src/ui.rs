@@ -837,6 +837,13 @@ pub enum Notice {
     /// the shell brought the window up, and the webview opens the command palette. Sent only while
     /// unlocked; not a toast.
     OpenPalette,
+    /// The tray's 「设置…」: the shell brought the window up, and the webview opens Settings. Sent
+    /// only while unlocked; not a toast.
+    OpenSettings,
+    /// The tray's 「检查更新…」: the shell brought the window up, and the webview opens the update
+    /// dialog (a check started first when no run is in flight and no release waits). Sent only
+    /// while unlocked; not a toast.
+    OpenUpdates,
     /// An import was committed.
     Imported {
         /// New entries.

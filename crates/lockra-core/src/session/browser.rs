@@ -619,9 +619,8 @@ impl Core {
             if request.save.is_some() && listed(&vault.data, SiteRuleKind::NeverSave, &frame.frame) {
                 return Err(Refusal::NeverSave);
             }
-            let identity = vault.data.local.as_ref().map(|l| l.identity.clone()).unwrap_or_default();
-            let default = if identity.username.is_empty() { identity.email } else { identity.username };
-            let username = request.save.as_ref().and_then(|s| s.username.clone()).unwrap_or(default);
+            // The user name typed on the page: no default is filled in for the user.
+            let username = request.save.as_ref().and_then(|s| s.username.clone()).unwrap_or_default();
             if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.query(Instant::now())) {
                 return Err(self.pause(st, session, &site));
             }

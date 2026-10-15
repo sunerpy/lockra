@@ -395,6 +395,7 @@ export const ERROR_CODES = [
   "import_unrecognized",
   "import_unreadable",
   "import_key_file_invalid",
+  "several_accounts",
   "clipboard_empty",
   "clipboard_failed",
   "camera_denied",
@@ -1017,6 +1018,8 @@ export const noticeSchema = z.discriminatedUnion("type", [
   /** The quick search was asked for (its shortcut, the tray, `lockra-desktop --palette`): open the
    *  command palette. Only while unlocked; not a toast. */
   z.object({ type: z.literal("open_palette") }),
+  z.object({ type: z.literal("open_settings") }),
+  z.object({ type: z.literal("open_updates") }),
   z.object({
     type: z.literal("imported"),
     added: z.number().int(),
@@ -1330,6 +1333,7 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
   z.object({ command: z.literal("device_biometric_disable"), password }),
   z.object({ command: z.literal("entry_add_uri"), uri: z.string() }),
   z.object({ command: z.literal("entry_add_manual"), draft: entryDraftSchema }),
+  z.object({ command: z.literal("entry_add_clipboard") }),
   z.object({ command: z.literal("entry_update"), id: idSchema, patch: entryPatchSchema }),
   z.object({ command: z.literal("entry_delete"), id: idSchema }),
   z.object({ command: z.literal("entries_set_group"), ids: z.array(idSchema), group: z.string() }),
@@ -1505,6 +1509,7 @@ export const SHELL_COMMAND_NAMES = [
   "codes_unsubscribe",
   "import_pick_files",
   "import_pick_key_file",
+  "entry_add_image",
   "backup_save",
   "backup_pick_dir",
   "restore_pick",
@@ -1540,6 +1545,7 @@ export interface CommandResults {
   app_state: UiState;
   entry_add_uri: EntryAdded;
   entry_add_manual: EntryAdded;
+  entry_add_clipboard: EntryAdded;
   entry_reveal: Revealed;
   import_commit: ImportOutcome;
   export_start: ExportStarted;
@@ -1561,6 +1567,7 @@ export const RESULT_SCHEMAS: { [C in keyof CommandResults]: z.ZodType<CommandRes
   app_state: uiStateSchema,
   entry_add_uri: entryAddedSchema,
   entry_add_manual: entryAddedSchema,
+  entry_add_clipboard: entryAddedSchema,
   entry_reveal: revealedSchema,
   import_commit: importOutcomeSchema,
   export_start: exportStartedSchema,

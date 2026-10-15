@@ -97,8 +97,10 @@ describe("labels", () => {
     expect(noticeIsProblem({ type: "auto_locked" })).toBe(false);
   });
 
-  it("every notice is a toast but the quick search's request for the palette", () => {
+  it("every notice is a toast but the requests to open the palette, Settings or the update dialog", () => {
     expect(noticeIsToast({ type: "open_palette" })).toBe(false);
+    expect(noticeIsToast({ type: "open_settings" })).toBe(false);
+    expect(noticeIsToast({ type: "open_updates" })).toBe(false);
     expect(noticeIsToast({ type: "auto_locked" })).toBe(true);
     expect(noticeIsToast({ type: "browser_unlock_requested", browser: "chrome" })).toBe(true);
   });

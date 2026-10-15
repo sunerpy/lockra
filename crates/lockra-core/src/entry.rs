@@ -9,7 +9,7 @@ use zeroize::Zeroizing;
 
 use crate::browser::BrowserLocal;
 use crate::error::{CoreResult, ErrorCode};
-use crate::item::{GeneratedPassword, Identity, ItemListView, SiteRule, VaultItem};
+use crate::item::{GeneratedPassword, ItemListView, SiteRule, VaultItem};
 use crate::lenient::{self, Lenient};
 use crate::sync::SyncLocal;
 
@@ -354,9 +354,6 @@ pub struct Local {
     /// How this device shows the password list.
     #[serde(default, skip_serializing_if = "ItemListView::is_empty", deserialize_with = "lenient::or_default")]
     pub(crate) item_view: ItemListView,
-    /// The user name and email a sign-up form gets.
-    #[serde(default, skip_serializing_if = "Identity::is_empty", deserialize_with = "lenient::or_default")]
-    pub(crate) identity: Identity,
     /// The browser extension: the app's static key, the paired extensions, the policy. One that
     /// does not read is reset alone: the extensions pair again.
     #[serde(default, skip_serializing_if = "BrowserLocal::is_empty", deserialize_with = "lenient::or_default")]
@@ -372,7 +369,6 @@ impl Local {
             view: View::default(),
             generator_history: Vec::new(),
             item_view: ItemListView::default(),
-            identity: Identity::default(),
             browser: BrowserLocal::default(),
         }
     }
@@ -507,8 +503,6 @@ struct LocalWithoutSync {
     #[serde(default, deserialize_with = "lenient::or_default")]
     item_view: ItemListView,
     #[serde(default, deserialize_with = "lenient::or_default")]
-    identity: Identity,
-    #[serde(default, deserialize_with = "lenient::or_default")]
     browser: BrowserLocal,
 }
 
@@ -583,7 +577,6 @@ impl VaultData {
                 view: local.view,
                 generator_history: local.generator_history,
                 item_view: local.item_view,
-                identity: local.identity,
                 browser: local.browser,
             });
             Some(Self {
@@ -1136,7 +1129,6 @@ mod tests {
             at_ms: 12,
             site: Some("example.com".into()),
         });
-        data.local_mut().identity = Identity { username: "me".into(), email: "me@example.com".into() };
         data.local_mut().view.group_order = vec!["Work".into()];
         data.local_mut().browser.key = Some(crate::browser::StaticKey(Zeroizing::new([3; 32])));
         let storage = lockra_sync::StorageConfig::Folder { path: std::env::temp_dir().join("Drive") };
@@ -1152,7 +1144,7 @@ mod tests {
         assert_eq!((opened.site_rules.clone(), opened.item_tombstones.clone()), (data.site_rules.clone(), data.item_tombstones.clone()));
         let local = opened.local.as_ref().unwrap();
         assert_eq!(local.generator_history, data.local.as_ref().unwrap().generator_history, "and the generated passwords");
-        assert_eq!((local.identity.username.as_str(), local.view.group_order.clone()), ("me", vec!["Work".to_owned()]), "and every part that reads");
+        assert_eq!(local.view.group_order, ["Work"], "and every part that reads");
         assert_eq!(local.browser, data.local.as_ref().unwrap().browser, "the browser extension's pairings too");
         assert_eq!(opened.device(), data.device());
     }
@@ -1167,20 +1159,32 @@ mod tests {
     }
 
     #[test]
+    fn a_default_identity_of_a_development_build_opens_and_is_written_no_more() {
+        // Development builds of 0.10 had `local.identity` (a sign-up form's default user name and
+        // email), which nothing set: a file with one opens, and the next write leaves it out.
+        let mut data = VaultData::new();
+        data.local_mut().item_view.collapsed_groups = vec!["Bank".into()];
+        let mut earlier: serde_json::Value = serde_json::from_slice(&data.to_bytes()).unwrap();
+        earlier["local"]["identity"] = serde_json::json!({"username": "me", "email": "me@example.com"});
+        let opened = VaultData::open(&serde_json::to_vec(&earlier).unwrap()).unwrap();
+        assert_eq!(opened.local.as_ref().unwrap().item_view.collapsed_groups, ["Bank"]);
+        let written: serde_json::Value = serde_json::from_slice(&opened.to_bytes()).unwrap();
+        assert!(written["local"].get("identity").is_none(), "{written}");
+    }
+
+    #[test]
     fn a_local_part_of_a_later_shape_is_reset_alone() {
         let mut data = VaultData::new();
         data.local_mut().generator_history.push(GeneratedPassword { password: Zeroizing::new("generated".into()), at_ms: 12, site: None });
-        data.local_mut().identity = Identity { username: "me".into(), email: String::new() };
         data.local_mut().item_view.collapsed_groups = vec!["Bank".into()];
         data.local_mut().browser.key = Some(crate::browser::StaticKey(Zeroizing::new([3; 32])));
         let mut later: serde_json::Value = serde_json::from_slice(&data.to_bytes()).unwrap();
         later["local"]["browser"]["paired"] = serde_json::json!([{"id": "not a uuid"}]);
         later["local"]["generator_history"] = serde_json::json!({"a later": "shape"});
-        later["local"]["identity"] = serde_json::json!(7);
         later["local"]["view"] = serde_json::json!("not a view");
         let opened = VaultData::open(&serde_json::to_vec(&later).unwrap()).unwrap();
         let local = opened.local.as_ref().unwrap();
-        assert!(local.generator_history.is_empty() && local.identity.is_empty() && local.view.is_empty(), "each reset alone");
+        assert!(local.generator_history.is_empty() && local.view.is_empty(), "each reset alone");
         assert!(local.browser.is_empty(), "the browser part too: the extensions pair again");
         assert_eq!(local.item_view.collapsed_groups, ["Bank"], "the rest kept");
         assert_eq!(opened.device(), data.device());
