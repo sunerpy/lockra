@@ -3,6 +3,7 @@ import { extensionTranslator } from "@lockra/shared/i18n/extension";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { PopupEvent, PopupRequest, PopupState } from "../shared/messages";
 import { TextProvider } from "../shared/text";
+import type { BrowserFeatures, Feature } from "../popup/browser-features";
 import type { PageClient } from "../popup/client";
 import { Options, SOURCE_URL } from "./Options";
 
@@ -39,6 +40,14 @@ async function setup(initial: PopupState, extra: Partial<PageClient> = {}) {
     close: vi.fn(),
     copyText: vi.fn(async () => undefined),
     shortcuts: async () => ({ fill: "Ctrl+Shift+L", popup: "" }),
+    browserFeatures: async () => ({ passwords: "browser", forms: "browser" }),
+    setBrowserFeature: vi.fn(async (feature: Feature, take: boolean): Promise<BrowserFeatures> => ({
+      passwords: feature === "passwords" && take ? "lockra" : "browser",
+      forms: feature === "forms" && take ? "lockra" : "browser",
+    })),
+    openPasswordManager: vi.fn(),
+    menuOnFocus: async () => true,
+    setMenuOnFocus: vi.fn(async () => undefined),
     target: "chromium",
     ...extra,
   };
@@ -87,6 +96,51 @@ describe("the options page", () => {
       fireEvent.click(screen.getByRole("button", { name: "收回权限" }));
     });
     expect(client.removeAccess).toHaveBeenCalled();
+  });
+
+  it("takes the browser's password saving over in the click, and opens its password manager", async () => {
+    const { client } = await setup(state());
+    const take = screen.getByRole("switch", { name: "让 Lockra 接管浏览器的密码功能" });
+    expect(take).toHaveAttribute("aria-checked", "false");
+    await act(async () => {
+      fireEvent.click(take);
+    });
+    expect(client.setBrowserFeature).toHaveBeenCalledWith("passwords", true);
+    expect(take).toHaveAttribute("aria-checked", "true");
+    // What the switch cannot do: the passwords the browser keeps, and where they are deleted.
+    expect(screen.getByText(/浏览器里已经保存的密码不受这个开关影响/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "打开浏览器的密码管理" }));
+    expect(client.openPasswordManager).toHaveBeenCalled();
+    // The address and card autofill: a choice of its own.
+    const forms = screen.getByRole("switch", { name: "同时关闭地址和付款方式的自动填充" });
+    await act(async () => {
+      fireEvent.click(forms);
+    });
+    expect(client.setBrowserFeature).toHaveBeenLastCalledWith("forms", true);
+  });
+
+  it("says when a policy or another extension holds the setting; Firefox offers the password saving alone", async () => {
+    await setup(state(), {
+      browserFeatures: async () => ({ passwords: "locked", forms: null }),
+      openPasswordManager: null,
+      target: "firefox",
+    });
+    const take = screen.getByRole("switch", { name: "让 Lockra 接管浏览器的密码功能" });
+    expect(take).toBeDisabled();
+    expect(screen.getByText("未生效：浏览器的策略或其他扩展控制着这项设置。")).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "同时关闭地址和付款方式的自动填充" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "打开浏览器的密码管理" })).toBeNull();
+  });
+
+  it("opens the menu on a field's focus, or only from its mark", async () => {
+    const { client } = await setup(state());
+    const onFocus = screen.getByRole("switch", { name: "点击输入框时打开 Lockra 菜单" });
+    expect(onFocus).toHaveAttribute("aria-checked", "true");
+    await act(async () => {
+      fireEvent.click(onFocus);
+    });
+    expect(client.setMenuOnFocus).toHaveBeenCalledWith(false);
+    expect(onFocus).toHaveAttribute("aria-checked", "false");
   });
 
   it("copies the source link, and says the extension keeps nothing", async () => {

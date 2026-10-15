@@ -111,11 +111,14 @@ Shortcuts**).
 
 With [site access](#site-access), Lockra's menu opens under a sign-in field when you click into it:
 the site's logins, chosen with the arrow keys and Enter, or a click; Esc closes it. Lockra's mark at
-the end of the field opens it again.
+the end of the field opens it again. When the menu gets in the way of the browser's own list, turn
+off **Open Lockra's menu when a field is clicked** on the extension's settings page: the menu then
+opens only from that mark ([The browser's own password manager](#the-browser-s-own-password-manager)).
 
 Whichever way you fill, only the visible fields of the form you are in are filled, and the custom
 fields of the login that name a page field. A form is submitted after filling only if you turned
-that on.
+that on, and only once a password went in: a first step that asks for the user name alone is left
+for you to send.
 
 ### When a fill asks first
 
@@ -170,18 +173,42 @@ forms, the code on the next page and, if you turn it on, filling as pages load.
 The browser's own extension settings, or **Remove access** on the extension's settings page, take
 it back. **Settings › Browser** in Lockra notes a paired extension that has no site access.
 
+## The browser's own password manager
+
+The browser keeps passwords of its own, and its list of them, with a key, can open under the same
+field as Lockra's menu. The extension's settings page (the gear in the popup) has, under **The
+browser's own features**:
+
+- **Let Lockra take over the browser's passwords** turns off the browser's offer to save
+  passwords, so that only Lockra offers to save and update them. The first time, the browser asks
+  for the permission to change privacy-related settings; turning the switch off gives the browser
+  its own setting back, and the permission with it.
+- The passwords the browser already keeps stay as they are: it goes on listing them under the field
+  until you delete them there. Import them into Lockra first (the browser exports them as a CSV
+  file, [Importing and exporting](/passwords/import-export)), check them, then delete them in the
+  browser's password manager; in Chrome and Edge, **Open the browser's password manager** goes
+  there.
+- **Also turn off address and payment autofill** (Chrome and Edge) stops the browser suggesting
+  addresses and cards in forms. Lockra fills neither, so leave it off if you want the browser to.
+- **Open Lockra's menu when a field is clicked**, on by default: off, the menu opens only from
+  Lockra's mark at the end of the field, clear of the browser's list.
+
+When a policy of the browser, or another password manager's extension, holds these settings, the
+page says the switch is not in effect. Firefox lets an extension turn off the saving of passwords
+alone.
+
 ## What the extension may do
 
 **Settings › Browser › Autofill** decides what every paired extension may do on this computer:
 
-| Setting                                    | Default    | What it does                                              |
-| ------------------------------------------ | ---------- | --------------------------------------------------------- |
-| **Fill in codes**                          | On         | Fill a login's linked code into the page's code field     |
-| **Copy codes**                             | On         | Put that code on the clipboard as well                    |
-| **Submit after filling**                   | Off        | Submit the form once it is filled                         |
-| **Confirm before filling**                 | Off        | Confirm in the page each time before filling              |
-| **Sign-in forms in frames of other sites** | Never fill | **Never fill**, or **Ask first** in Lockra                |
-| **Fill as pages load**                     | Off        | Fill matching pages as they open, without a click (below) |
+| Setting                                    | Default    | What it does                                                                                |
+| ------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------- |
+| **Fill in codes**                          | On         | Fill a login's linked code into the page's code field                                       |
+| **Copy codes**                             | On         | Put that code on the clipboard as well                                                      |
+| **Submit after filling**                   | Off        | Submit the form once a password is filled; a step with the user name alone is not submitted |
+| **Confirm before filling**                 | Off        | Confirm in the page each time before filling                                                |
+| **Sign-in forms in frames of other sites** | Never fill | **Never fill**, or **Ask first** in Lockra                                                  |
+| **Fill as pages load**                     | Off        | Fill matching pages as they open, without a click (below)                                   |
 
 A change that lets the extension do more asks for the master password, Touch ID or Windows Hello:
 turning on **Fill in codes**, **Submit after filling** or **Fill as pages load**, turning off
@@ -247,7 +274,8 @@ window otherwise.
 - **No vault.** The extension keeps no logins. A login's password reaches it only when you fill or
   copy it, and for filling only from a login that matches the page. It never sees a login set to
   **Not for the extension**, not even in its search.
-- **What stays in the browser.** Its own key and the pairing, in your browser profile; while you use
+- **What stays in the browser.** Its own key, the pairing and whether its menu opens on a click
+  into a field, in your browser profile; while you use
   it, the site's logins as it last listed them (titles and user names, no password), in the
   browser's memory until Lockra locks.
 - **No network.** It talks only to Lockra on the same computer, through the browser's native

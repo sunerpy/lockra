@@ -77,6 +77,11 @@ function isStart(value: unknown): value is StartAnswer {
   );
 }
 
+/** The background's word that the menu waits for the field's mark. */
+function markOnly(value: unknown): boolean {
+  return typeof value === "object" && value !== null && "mark" in value && value.mark === true;
+}
+
 function tokenOf(value: unknown): string | null {
   return typeof value === "object" &&
     value !== null &&
@@ -114,9 +119,14 @@ export class ContentAgent {
 
   constructor(private readonly options: AgentOptions) {
     this.trusted = options.trusted ?? ((event) => event.isTrusted);
-    this.icon = new FieldIcon(options.doc, options.runtime.url("icons/icon-32.png"), (anchor) => {
-      if (anchor instanceof HTMLInputElement) void this.focused(anchor, true);
-    });
+    this.icon = new FieldIcon(
+      options.doc,
+      options.runtime.url("icons/icon-32.png"),
+      (anchor) => {
+        if (anchor instanceof HTMLInputElement) void this.focused(anchor, true);
+      },
+      this.trusted,
+    );
     this.watcher = new SubmitWatcher(
       options.doc,
       options.win,
@@ -213,6 +223,7 @@ export class ContentAgent {
     if (target === this.menu?.host || target === this.icon.host) return;
     if (!isFillable(target)) {
       this.closeMenu();
+      this.hideMark();
       return;
     }
     void this.focused(target, false);
@@ -227,19 +238,33 @@ export class ContentAgent {
       return;
     }
     this.watch();
-    const message = this.focusMessage(scan);
-    const token = tokenOf(await this.send(message));
-    if (scan.kind === "otp") return;
-    if (!token || deepActive(this.options.doc) !== field) return;
-    this.openMenu(token, field, false);
+    const message = this.focusMessage(scan, again);
+    const answer = await this.send(message);
+    const token = tokenOf(answer);
+    if (scan.kind === "otp" || deepActive(this.options.doc) !== field) return;
+    if (token) {
+      this.openMenu(token, field, false);
+      return;
+    }
+    // The menu opens only from the field's mark (the options page's choice): the mark alone.
+    if (markOnly(answer)) {
+      this.closeMenu();
+      this.icon.show(field);
+    }
   }
 
-  private focusMessage(scan: FormScan): ContentMessage {
+  private hideMark(): void {
+    if (!this.menu) this.icon.hide();
+  }
+
+  private focusMessage(scan: FormScan, explicit: boolean): ContentMessage {
     const form: FocusKind = scan.kind === "none" ? "login" : scan.kind;
-    if (form !== "signup") return { kind: "content.focus", form };
+    const asked = explicit ? { explicit: true as const } : {};
+    if (form !== "signup") return { kind: "content.focus", form, ...asked };
     return {
       kind: "content.focus",
       form,
+      ...asked,
       signup: {
         rules: scan.rules,
         minlength: scan.minlength,
@@ -308,7 +333,16 @@ export class ContentAgent {
 
   private onFocusOut(event: Event): void {
     const menu = this.menu;
-    if (!menu) return;
+    if (!menu) {
+      // The mark alone goes with its field's focus, once the browser has moved it.
+      const field = this.icon.field;
+      if (field)
+        setTimeout(() => {
+          if (!this.menu && this.icon.field === field && deepActive(this.options.doc) !== field)
+            this.icon.hide();
+        }, 0);
+      return;
+    }
     // Focus that goes into the menu's own frame stays with the menu.
     if (event instanceof FocusEvent && event.relatedTarget === menu.host) return;
     // Where the focus went is known once the browser has moved it: a task later, not a microtask

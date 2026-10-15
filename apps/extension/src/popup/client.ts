@@ -1,8 +1,17 @@
 // What the popup and the options page need of the browser: a port to the background, the site
-// access request (made in the click, as both browsers require), the options page, the shortcuts.
+// access request (made in the click, as both browsers require), the options page, the shortcuts,
+// the browser's own password features and how the inline menu opens.
 import { type BrowserApi, TARGET } from "../browser/api";
 import { ALL_SITES } from "../background/access";
 import { FILL_COMMAND, type PopupEvent, type PopupRequest } from "../shared/messages";
+import { menuOnFocus, setMenuOnFocus } from "../shared/prefs";
+import {
+  type BrowserFeatures,
+  type Feature,
+  passwordManagerUrl,
+  readFeatures,
+  setFeature,
+} from "./browser-features";
 
 export interface PageClient {
   connect: (onEvent: (event: PopupEvent) => void) => {
@@ -20,6 +29,16 @@ export interface PageClient {
   copyText: (text: string) => Promise<void>;
   /** The keys of the fill shortcut and of the popup's, as the browser shows them ("" when unset). */
   shortcuts: () => Promise<{ fill: string; popup: string }>;
+  /** Who holds the browser's own password saving and its address and card autofill. */
+  browserFeatures: () => Promise<BrowserFeatures>;
+  /** Take one over for Lockra or give it back; taking asks for a permission: call it from the
+   *  click. */
+  setBrowserFeature: (feature: Feature, take: boolean) => Promise<BrowserFeatures>;
+  /** Open the browser's own password manager, where an extension may (Chromium). */
+  openPasswordManager: (() => void) | null;
+  /** The inline menu opens as a sign-in field gets the focus, or only from the field's mark. */
+  menuOnFocus: () => Promise<boolean>;
+  setMenuOnFocus: (on: boolean) => Promise<void>;
   target: "chromium" | "firefox";
 }
 
@@ -65,6 +84,14 @@ export function browserClient(api: BrowserApi, portName: string, win: Window): P
       const keys = (name: string) => commands.find((c) => c.name === name)?.shortcut ?? "";
       return { fill: keys(FILL_COMMAND), popup: keys("_execute_action") };
     },
+    browserFeatures: () => readFeatures(api),
+    setBrowserFeature: (feature, take) => setFeature(api, feature, take),
+    openPasswordManager: (() => {
+      const url = passwordManagerUrl(win.navigator.userAgent);
+      return url ? () => void api.tabs.create({ url }).catch(() => undefined) : null;
+    })(),
+    menuOnFocus: () => menuOnFocus(api.storage.local),
+    setMenuOnFocus: (on) => setMenuOnFocus(api.storage.local, on),
     target: TARGET,
   };
 }

@@ -22,6 +22,7 @@
     "open_in_tab": true
   },
   "permissions": ["nativeMessaging", "activeTab", "scripting", "storage", "webNavigation"],
+  "optional_permissions": ["privacy"],
   "optional_host_permissions": ["<all_urls>"],
   "commands": {
     "fill-login": {
