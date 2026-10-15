@@ -243,7 +243,11 @@ class Capture:
         # The Passwords page, GitHub's login in the pane beside the list.
         self.nav("passwords")
         rows = until("eight logins", lambda: (lambda r: r if len(r) == 8 else None)(web.find_all('[data-testid="password-row"]')))
-        github = next(r for r in rows if web.text(r).startswith("GitHub"))
+        # The row's title by its text content (WebDriver's visible text leaves the truncated title out).
+        index = web.run("return [...document.querySelectorAll('[data-testid=\"password-row\"]')].findIndex((r) => r.textContent.includes('GitHub'))")
+        if index < 0:
+            sys.exit("site-screens: no GitHub row on the Passwords page")
+        github = rows[index]
         web.click(github)
         web.wait('[data-testid="item-detail"]')
         self.quiet()
