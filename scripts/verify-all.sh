@@ -4,8 +4,8 @@
 # are compared byte for byte there), the crates' line coverage floor, the web packages' lint,
 # types and tests with their own coverage floors, the release configuration, no colour literal in
 # a component, no window message listener, a release bundle free of development code, the browser
-# extension's sizes and contents, cargo-deny, actionlint, shellcheck and the one-line installers
-# (offline).
+# extension's sizes and contents and its release files (built twice, the same bytes), cargo-deny,
+# actionlint, shellcheck and the one-line installers (offline).
 # The desktop smoke test and the packages are separate (make pre-ci): they need a display server
 # stack and the cross toolchain. Usage: scripts/verify-all.sh   (make check)
 set -euo pipefail
@@ -39,6 +39,7 @@ step "colour literals";  scripts/check-no-literal-colors.sh
 step "window messages";  scripts/check-no-window-message.sh
 step "release bundle";   scripts/check-web-bundle.sh
 step "extension bundle"; scripts/check-extension-bundle.sh
+step "extension files";  scripts/package-extension.sh --check
 step "cargo-deny";       cargo deny check licenses bans sources
 step "actionlint";       actionlint
 step "shellcheck";       shellcheck scripts/*.sh .github/scripts/*.sh

@@ -23,8 +23,11 @@ its debug APK and `make android-clippy` lints the crates it links for the phone.
 `pnpm --filter @lockra/extension build` builds `apps/extension` into `apps/extension/dist/`:
 `chromium` (Chrome and Edge as the stores get it, without a key), `chromium-dev` (the same with the
 development key, so that it always has the id `egbpficliljjnpkjbigonldakfllebco`) and `firefox`.
-`make extension` also writes the three store zips there, deterministic (sorted entries, fixed
-times).
+`make extension` also writes the store packages there, deterministic (sorted entries, fixed
+times): `lockra-extension_<version>_chrome.zip`, which the Chrome Web Store and Edge Add-ons both
+take, and `lockra-extension_<version>_firefox.zip`. A release builds them with
+`scripts/package-extension.sh`, beside the source package addons.mozilla.org asks for
+([docs/release.md](docs/release.md), "The browser extension").
 
 - **Chrome or Edge**: open `chrome://extensions` (`edge://extensions`), turn on developer mode,
   choose _Load unpacked_ and pick `apps/extension/dist/chromium-dev`. Branded Chrome ignores the
