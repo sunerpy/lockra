@@ -61,9 +61,10 @@ describe("EntryTile", () => {
         screen.getByRole("button", { name }),
         "{Control>},{/Control}",
         "{Meta>}k{/Meta}",
+        "/",
         "{ArrowRight}",
       );
-      expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k"]));
+      expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k", "/"]));
       expect(heard).not.toContain("ArrowRight");
     }
     // The buttons keep their own keys, and the card does not copy.

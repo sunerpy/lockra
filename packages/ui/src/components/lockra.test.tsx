@@ -180,9 +180,10 @@ describe("EntryRow", () => {
         screen.getByRole("button", { name }),
         "{Control>},{/Control}",
         "{Meta>}k{/Meta}",
+        "/",
         "{ArrowDown}",
       );
-      expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k"]));
+      expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k", "/"]));
       expect(heard).not.toContain("ArrowDown");
     }
     // The buttons keep their own keys, and the row does not copy.

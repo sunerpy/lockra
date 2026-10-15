@@ -495,6 +495,9 @@ describe("Codes · row actions", () => {
     await user.keyboard("{Control>},{/Control}");
     expect(await screen.findByRole("dialog", { name: "设置" })).toBeInTheDocument();
     await user.keyboard("{Escape}");
+    within(row).getByRole("button", { name: "收藏" }).focus();
+    await user.keyboard("/");
+    expect(screen.getByTestId("codes-search")).toHaveFocus();
     within(row).getByTestId("row-menu").focus();
     await user.keyboard("{Control>}k{/Control}");
     expect(await screen.findByRole("dialog", { name: "命令菜单" })).toBeInTheDocument();

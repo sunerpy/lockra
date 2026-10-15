@@ -43,11 +43,12 @@ describe("PasswordRow", () => {
       );
       screen.getByTestId("row-copy-password").focus();
       await user.keyboard("{Control>},{/Control}");
+      await user.keyboard("/");
       await user.keyboard("{ArrowDown}");
     } finally {
       window.removeEventListener("keydown", onKey);
     }
-    expect(heard).toContain("Ctrl+,");
+    expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "/"]));
     expect(heard).not.toContain("ArrowDown");
   });
 

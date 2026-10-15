@@ -105,9 +105,10 @@ describe("RecentCard", () => {
       next,
       "{Control>},{/Control}",
       "{Meta>}k{/Meta}",
+      "/",
       "{ArrowDown}",
     );
-    expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k"]));
+    expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k", "/"]));
     expect(heard).not.toContain("ArrowDown");
     // The button keeps its own keys, and the card does not copy.
     next.focus();
