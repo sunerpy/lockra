@@ -8,6 +8,11 @@ describe("the extension's strings", () => {
     expect(en.extension).toBe(extensionEn);
   });
 
+  it("name Lockra's settings in Lockra's own words", () => {
+    expect(extensionEn.notRunning.note).toContain(`“${en.settings.browser.background}”`);
+    expect(extensionZhCN.notRunning.note).toContain(`「${zhCN.settings.browser.background}」`);
+  });
+
   it("follow the browser's language and format like the app's", () => {
     expect(extensionLocale("zh-TW")).toBe("zh-CN");
     expect(extensionLocale("en-GB")).toBe("en");

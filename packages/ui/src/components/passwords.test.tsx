@@ -4,7 +4,8 @@ import type { ItemView, Protection } from "@lockra/shared";
 import { mockItemView } from "@lockra/shared/mock";
 import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
+import { I18nProvider } from "../i18n/I18nProvider";
 import { DetailSection, FieldRow, KeyValueRow, UrlRow } from "./DetailRows";
 import { useItemFilterChips } from "./FilterChips";
 import { PasswordRow } from "./PasswordRow";
@@ -352,5 +353,15 @@ describe("useItemFilterChips", () => {
           `${c.label} ${c.count}${c.icon === undefined ? "" : ` ${c.icon}`}${c.userText ? " user" : ""}`,
       ),
     ).toEqual(["全部 3", "收藏 1 star", "工作 2 user", "未分组 1"]);
+  });
+
+  it("calls the favourites what the logins' menu calls them, in English too", () => {
+    const items = [mockItemView("A", { favorite: true })];
+    const { result } = renderHook(() => useItemFilterChips(items), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <I18nProvider locale="en">{children}</I18nProvider>
+      ),
+    });
+    expect(result.current.map((c) => c.label)).toEqual(["All", "Favorites"]);
   });
 });
