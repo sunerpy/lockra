@@ -1,6 +1,7 @@
 import { type CodeView, type EntryView } from "@lockra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { heardByWindow } from "../test/keys";
 import { EntryTile, tileStep } from "./EntryTile";
 
 const T = 1_790_000_010_000;
@@ -38,6 +39,42 @@ function code(overrides: Partial<CodeView> = {}): CodeView {
 }
 
 describe("EntryTile", () => {
+  it("regression: the app's shortcuts get through its buttons, the cards' keys do not", async () => {
+    // 2026-10-15: with a card's star focused, Ctrl+, opened no settings.
+    const user = userEvent.setup();
+    const onCopy = vi.fn();
+    const onNext = vi.fn();
+    const onFavorite = vi.fn();
+    render(
+      <EntryTile
+        entry={entry({ kind: { type: "hotp", counter: 3 } })}
+        code={code({ next_code: null, valid_from_ms: null, valid_until_ms: null })}
+        nowMs={T}
+        onCopy={onCopy}
+        onNext={onNext}
+        onFavorite={onFavorite}
+        menu={<button type="button">menu</button>}
+      />,
+    );
+    for (const name of ["收藏", "menu", "生成下一个"]) {
+      const heard = await heardByWindow(
+        screen.getByRole("button", { name }),
+        "{Control>},{/Control}",
+        "{Meta>}k{/Meta}",
+        "/",
+        "{ArrowRight}",
+      );
+      expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k", "/"]));
+      expect(heard).not.toContain("ArrowRight");
+    }
+    // The buttons keep their own keys, and the card does not copy.
+    screen.getByRole("button", { name: "收藏" }).focus();
+    await user.keyboard("{Enter}");
+    screen.getByRole("button", { name: "生成下一个" }).focus();
+    await user.keyboard(" ");
+    expect([onFavorite, onNext, onCopy].map((f) => f.mock.calls.length)).toEqual([1, 1, 0]);
+  });
+
   it("copies on click, Enter and Space, but not from its own buttons; a counter card counts", async () => {
     const onCopy = vi.fn();
     const onNext = vi.fn();

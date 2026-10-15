@@ -2,6 +2,7 @@ import { type CodeView, type EntryView, groupCode } from "@lockra/shared";
 import type { KeyboardEvent, MouseEvent, ReactNode, SyntheticEvent } from "react";
 import { cx } from "../cx";
 import { useT } from "../i18n/I18nProvider";
+import { keepKey } from "../keys";
 import { Button } from "./Button";
 import { WARNING_SECONDS, remaining } from "./CountdownRing";
 import { EntryAvatar } from "./EntryAvatar";
@@ -66,7 +67,7 @@ const SIZE = {
   },
 } as const;
 
-/** Clicks and keys inside the card's own controls do not copy. */
+/** Clicks inside the card's own controls do not copy (their keys: `keepKey`). */
 const stop = (event: SyntheticEvent) => event.stopPropagation();
 
 /** One account as a card: avatar, names, the star and the menu above a large code; below it a bar
@@ -158,7 +159,7 @@ export function EntryTile({
           <div
             className={cx("flex shrink-0 items-center", m.buttons)}
             onClick={stop}
-            onKeyDown={stop}>
+            onKeyDown={keepKey}>
             {onFavorite && (
               <IconButton
                 icon="star"
@@ -242,7 +243,7 @@ export function EntryTile({
               <span
                 className={size === "md" ? "ml-auto" : undefined}
                 onClick={stop}
-                onKeyDown={stop}>
+                onKeyDown={keepKey}>
                 <Button icon="refresh" onClick={onNext}>
                   {t("codes.hotpNext")}
                 </Button>

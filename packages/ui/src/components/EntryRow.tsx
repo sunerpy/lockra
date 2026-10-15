@@ -2,6 +2,7 @@ import { type CodeView, type EntryView, groupCode } from "@lockra/shared";
 import type { KeyboardEvent, MouseEvent, ReactNode, SyntheticEvent } from "react";
 import { cx } from "../cx";
 import { useT } from "../i18n/I18nProvider";
+import { keepKey } from "../keys";
 import { CountdownRing, WARNING_SECONDS, remaining } from "./CountdownRing";
 import { EntryAvatar } from "./EntryAvatar";
 import { Icon } from "./Icon";
@@ -221,7 +222,7 @@ export function EntryRow({
             event.stopPropagation();
             onNext();
           }}
-          onKeyDown={stop}
+          onKeyDown={keepKey}
           className={cx(
             "inline-flex shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text transition-opacity hover:opacity-80",
             card ? "size-[28px]" : "size-[30px]",
@@ -239,7 +240,7 @@ export function EntryRow({
               "transition-opacity pointer-fine:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 has-[[aria-expanded=true]]:opacity-100",
           )}
           onClick={stop}
-          onKeyDown={stop}>
+          onKeyDown={keepKey}>
           {onFavorite && (
             <IconButton
               icon="star"

@@ -485,6 +485,28 @@ describe("Codes · row actions", () => {
     expect(backend.calls.some((c) => c.command === "entry_copy")).toBe(false);
   });
 
+  it("regression: the app's shortcuts get through a row's buttons", async () => {
+    // 2026-10-15: with the pin beside a row's menu focused, Ctrl+, opened no settings.
+    const { user } = renderApp();
+    await ready();
+    const row = screen.getAllByTestId("entry-row")[0];
+    if (!row) throw new Error("no row");
+    within(row).getByRole("button", { name: "收藏" }).focus();
+    await user.keyboard("{Control>},{/Control}");
+    expect(await screen.findByRole("dialog", { name: "设置" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    within(row).getByRole("button", { name: "收藏" }).focus();
+    await user.keyboard("/");
+    expect(screen.getByTestId("codes-search")).toHaveFocus();
+    within(row).getByTestId("row-menu").focus();
+    await user.keyboard("{Control>}k{/Control}");
+    expect(await screen.findByRole("dialog", { name: "命令菜单" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    screen.getByRole("button", { name: "生成下一个" }).focus();
+    await user.keyboard("{Control>}l{/Control}");
+    expect(await screen.findByTestId("page-unlock")).toBeInTheDocument();
+  });
+
   it("opens the row's menu where it was right-clicked, and beside the row from the keyboard", async () => {
     const { user, backend } = renderApp();
     await ready();
@@ -717,6 +739,25 @@ describe("Codes · cards", () => {
     // jsdom lays nothing out: every card is in the first row, so up leaves for the search.
     await user.keyboard("{ArrowUp}");
     expect(search).toHaveFocus();
+  });
+
+  it("regression: the app's shortcuts get through a card's buttons", async () => {
+    // 2026-10-15: with a card's star focused, Ctrl+, opened no settings.
+    const { user } = cards();
+    await ready();
+    const tile = screen.getAllByTestId("entry-tile")[0];
+    if (!tile) throw new Error("no cards");
+    within(tile).getByRole("button", { name: "收藏" }).focus();
+    await user.keyboard("{Control>},{/Control}");
+    expect(await screen.findByRole("dialog", { name: "设置" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    within(tile).getByTestId("row-menu").focus();
+    await user.keyboard("{Control>}k{/Control}");
+    expect(await screen.findByRole("dialog", { name: "命令菜单" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    screen.getByRole("button", { name: "生成下一个" }).focus();
+    await user.keyboard("{Control>}l{/Control}");
+    expect(await screen.findByTestId("page-unlock")).toBeInTheDocument();
   });
 
   it("folds sections, pins, opens the menu and generates the next HOTP code from the cards", async () => {

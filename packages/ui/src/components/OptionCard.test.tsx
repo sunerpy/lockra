@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { heardByWindow } from "../test/keys";
 import { OptionCard } from "./OptionCard";
 
 describe("OptionCard", () => {
@@ -83,6 +84,42 @@ describe("OptionCard", () => {
     expect(onSelect).toHaveBeenCalledTimes(3);
     await user.keyboard("{ArrowDown}");
     expect(onSelect).toHaveBeenCalledTimes(3);
+  });
+
+  it("regression: the app's shortcuts get through its footer, the list's keys do not", async () => {
+    // 2026-10-15: the footer stopped every key, as the rows' buttons did: Ctrl+, opened nothing.
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onAction = vi.fn();
+    render(
+      <div role="listbox" aria-label="models">
+        <OptionCard
+          title="A"
+          onSelect={onSelect}
+          aria-label="a"
+          footer={
+            <button type="button" onClick={onAction}>
+              更多
+            </button>
+          }
+        />
+      </div>,
+    );
+    const more = screen.getByRole("button", { name: "更多" });
+    const heard = await heardByWindow(
+      more,
+      "{Control>},{/Control}",
+      "{Meta>}k{/Meta}",
+      "/",
+      "{ArrowDown}",
+    );
+    expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k", "/"]));
+    expect(heard).not.toContain("ArrowDown");
+    // The button keeps its own keys, and the card is not selected.
+    more.focus();
+    await user.keyboard("{Enter}");
+    expect(onAction).toHaveBeenCalledOnce();
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it("does not select from footer clicks or keys, and disabled prevents selection", async () => {

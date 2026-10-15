@@ -272,9 +272,11 @@ async fn the_generator_makes_copies_and_remembers_what_was_used() {
     assert_eq!(revealed.password.as_deref(), Some(made.password.as_str()));
     assert_eq!(h.core.state().generator.history_count, 1, "the same password once");
     // To a site's rules: Lockra bundles some.
-    let passphrase = GeneratorOptions::Passphrase(PassphraseOptions::default());
+    // Joined by spaces: four words of the EFF list have a hyphen of their own (t-shirt, yo-yo), so a
+    // passphrase joined by "-" does not always split into its words.
+    let passphrase = GeneratorOptions::Passphrase(PassphraseOptions { separator: " ".to_owned(), ..PassphraseOptions::default() });
     let words = h.core.generator_generate(&passphrase, None).unwrap();
-    assert_eq!(words.password.split('-').count(), 6);
+    assert_eq!(words.password.split(' ').count(), 6);
     h.core.generator_copy().unwrap();
     // The history needs proof, newest first.
     assert_eq!(code_err(h.core.generator_history_reveal(None, None).await), ErrorCode::BiometricUnavailable);
