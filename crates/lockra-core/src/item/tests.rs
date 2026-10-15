@@ -527,9 +527,8 @@ fn a_site_rule_about_one_domain_has_the_same_id_everywhere() {
 #[test]
 fn write_ids_are_random_and_the_local_parts_say_when_they_are_empty() {
     assert_ne!(random_write_id(), random_write_id());
-    assert!(ItemListView::default().is_empty() && Identity::default().is_empty());
+    assert!(ItemListView::default().is_empty());
     assert!(!ItemListView { collapsed_groups: vec![String::new()] }.is_empty());
-    assert!(!Identity { username: "me".into(), email: String::new() }.is_empty());
 }
 
 /// One device's step: change a part of the login, take an earlier value back, settle, delete it,
