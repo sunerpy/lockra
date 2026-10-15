@@ -2,6 +2,7 @@ import { type ItemView, itemAccount, itemHost, itemName } from "@lockra/shared";
 import type { KeyboardEvent, MouseEvent, ReactNode, SyntheticEvent } from "react";
 import { cx } from "../cx";
 import { useT } from "../i18n/I18nProvider";
+import { keepKey } from "../keys";
 import { Badge } from "./Badge";
 import { EntryAvatar } from "./EntryAvatar";
 import { Icon } from "./Icon";
@@ -27,12 +28,6 @@ export interface PasswordRowProps {
 }
 
 const stop = (event: SyntheticEvent) => event.stopPropagation();
-
-/** A key pressed on the row's buttons stays with them (the list's arrows do not move the row),
- *  except the app's shortcuts (Ctrl or ⌘ with a key), which the window hears. */
-const keepKey = (event: KeyboardEvent) => {
-  if (!event.ctrlKey && !event.metaKey) event.stopPropagation();
-};
 
 /** One login of the password list (board 01): avatar, title with its star, protection mark and
  *  badges, the user name, the site on the right, and three buttons (copy the user name, copy the

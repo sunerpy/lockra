@@ -2,6 +2,7 @@ import { type CodeView, type EntryView } from "@lockra/shared";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { I18nProvider } from "../i18n/I18nProvider";
+import { heardByWindow } from "../test/keys";
 import { CountdownRing, remaining } from "./CountdownRing";
 import { DropZone } from "./DropZone";
 import { EntryAvatar, autoColor, initial } from "./EntryAvatar";
@@ -157,6 +158,41 @@ describe("EntryAvatar", () => {
 });
 
 describe("EntryRow", () => {
+  it("regression: the app's shortcuts get through its buttons, the list's keys do not", async () => {
+    // 2026-10-15: with the pin beside a row's menu focused, Ctrl+, opened no settings.
+    const user = userEvent.setup();
+    const onCopy = vi.fn();
+    const onNext = vi.fn();
+    const onFavorite = vi.fn();
+    render(
+      <EntryRow
+        entry={entry({ kind: { type: "hotp", counter: 3 } })}
+        code={code({ next_code: null, valid_from_ms: null, valid_until_ms: null })}
+        nowMs={T}
+        onCopy={onCopy}
+        onNext={onNext}
+        onFavorite={onFavorite}
+        menu={<button type="button">menu</button>}
+      />,
+    );
+    for (const name of ["收藏", "menu", "生成下一个"]) {
+      const heard = await heardByWindow(
+        screen.getByRole("button", { name }),
+        "{Control>},{/Control}",
+        "{Meta>}k{/Meta}",
+        "{ArrowDown}",
+      );
+      expect(heard).toEqual(expect.arrayContaining(["Ctrl+,", "Meta+k"]));
+      expect(heard).not.toContain("ArrowDown");
+    }
+    // The buttons keep their own keys, and the row does not copy.
+    screen.getByRole("button", { name: "收藏" }).focus();
+    await user.keyboard("{Enter}");
+    screen.getByRole("button", { name: "生成下一个" }).focus();
+    await user.keyboard(" ");
+    expect([onFavorite, onNext, onCopy].map((f) => f.mock.calls.length)).toEqual([1, 1, 0]);
+  });
+
   it("copies on click, Enter and Space, but not from its own buttons", async () => {
     const onCopy = vi.fn();
     const onNext = vi.fn();

@@ -2,6 +2,7 @@ import { type CodeView, type EntryView, groupCode } from "@lockra/shared";
 import type { KeyboardEvent, SyntheticEvent } from "react";
 import { cx } from "../cx";
 import { useT } from "../i18n/I18nProvider";
+import { keepKey } from "../keys";
 import { Button } from "./Button";
 import { CountdownRing, WARNING_SECONDS, remaining } from "./CountdownRing";
 import { EntryAvatar } from "./EntryAvatar";
@@ -192,7 +193,7 @@ export function RecentCard({
         ) : (
           entry.kind.type === "hotp" &&
           onNext && (
-            <span onClick={stop} onKeyDown={stop}>
+            <span onClick={stop} onKeyDown={keepKey}>
               <Button icon="refresh" onClick={onNext}>
                 {t("codes.hotpNext")}
               </Button>
