@@ -56,12 +56,13 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 16] = [
+pub const COMMANDS: [&str; 17] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
     "import_pick_key_file",
+    "entry_add_image",
     "backup_save",
     "backup_pick_dir",
     "restore_pick",
@@ -252,6 +253,17 @@ async fn import_pick_key_file<R: Runtime>(app: AppHandle<R>, core: State<'_, Cor
     let Some(path) = picked.and_then(to_path) else { return Ok(false) };
     core.import_key_file_from(path).await?;
     Ok(true)
+}
+
+/// The one account the QR code in an image holds (a screenshot of a site's two-factor setup): the
+/// open dialog, then the core reads the image and adds the account at once, for a login's form to
+/// link it. Its id, or `None` when cancelled.
+#[tauri::command]
+async fn entry_add_image<R: Runtime>(app: AppHandle<R>, core: State<'_, Core>) -> Result<Option<Uuid>, CoreError> {
+    let dialog = app.dialog().clone();
+    let picked = on_dialog_thread(move || dialog.file().add_filter("Images", &["png", "jpg", "jpeg", "webp"]).blocking_pick_file()).await?;
+    let Some(path) = picked.and_then(to_path) else { return Ok(None) };
+    core.add_from_image(path).await.map(Some)
 }
 
 /// Save a backup through a save dialog; the file name, or `None` when cancelled.
@@ -473,6 +485,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             codes_unsubscribe,
             import_pick_files,
             import_pick_key_file,
+            entry_add_image,
             backup_save,
             backup_pick_dir,
             restore_pick,

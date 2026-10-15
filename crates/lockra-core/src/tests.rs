@@ -27,6 +27,7 @@ const T0: u64 = 1_790_000_000_000;
 const MASTER: &str = "correct horse battery";
 const SECRET: &str = "JBSWY3DPEHPK3PXP";
 
+mod add_one;
 mod browser;
 mod export_items;
 mod import_logins;

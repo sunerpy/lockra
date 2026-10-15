@@ -45,6 +45,10 @@ export interface Backend {
    *  reads it and keeps the key it brings, never the file or its path (only its name shows in the
    *  preview). `false` when the user cancelled. */
   pickKeyFile(): Promise<boolean>;
+  /** Native file picker (the desktop's) → the one account the QR code in an image holds, added at
+   *  once for a login's form to link (`several_accounts` when it holds more: those go through the
+   *  import). Its id, or `null` when the user cancelled. */
+  addEntryFromImage(): Promise<string | null>;
   /** The phone's camera → import: the QR code it reads goes to the preview in Rust. `false` when
    *  the scan was left without one. `texts` are the camera page's words, in the app's language. */
   scanImport(texts: ScanTexts): Promise<boolean>;

@@ -160,6 +160,12 @@ function DetailCard({ item }: { item: ItemView }) {
                   : t("passwords.menu.favorite"),
                 icon: "star" as const,
               },
+              {
+                kind: "action" as const,
+                id: "move",
+                label: t("passwords.menu.move"),
+                icon: "folder" as const,
+              },
             ]),
       ],
     },
@@ -169,6 +175,7 @@ function DetailCard({ item }: { item: ItemView }) {
     if (id === "reveal") shell.open({ type: "item_reveal", id: item.id });
     else if (id === "favorite")
       void dispatch({ command: "item_update", id: item.id, patch: { favorite: !item.favorite } });
+    else if (id === "move") shell.open({ type: "item_move", id: item.id });
     else shell.open({ type: "item_delete", id: item.id });
   };
   const subtitle = [item.group ?? "", item.tags.join("、")].filter((s) => s !== "").join(" · ");

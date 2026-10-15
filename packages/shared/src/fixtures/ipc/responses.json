@@ -49,6 +49,9 @@
       "code": "import_key_file_invalid"
     },
     {
+      "code": "several_accounts"
+    },
+    {
       "code": "feature_unavailable"
     },
     {

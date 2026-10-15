@@ -348,6 +348,100 @@ describe("Passwords", () => {
     ).toEqual(["GitHub", "Figma", "AWS 控制台", "Cloudflare", "Notion"]);
   });
 
+  it("moves a login to another group from its menu (board 04-g)", async () => {
+    const { user, backend } = renderPasswords();
+    await openPage(user);
+    const move = async () => {
+      fireEvent.contextMenu(row("Notion"), { clientX: 200, clientY: 300 });
+      await user.click(
+        within(screen.getByTestId("password-context")).getByRole("menuitem", {
+          name: "移到分组…",
+        }),
+      );
+      return within(screen.getByRole("dialog", { name: "移到分组" }));
+    };
+    let dialog = await move();
+    const field = dialog.getByRole("combobox", { name: "分组" });
+    expect(field).toHaveValue("工作");
+    await user.clear(field);
+    await user.type(field, "个人");
+    await user.click(dialog.getByRole("button", { name: "移动" }));
+    expect(lastCall(backend, "item_update")).toMatchObject({ patch: { group: "个人" } });
+    expect(await screen.findByText("已把「Notion」移到「个人」")).toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // Out of every group.
+    dialog = await move();
+    await user.clear(dialog.getByRole("combobox", { name: "分组" }));
+    await user.click(dialog.getByRole("button", { name: "移动" }));
+    expect(lastCall(backend, "item_update")).toMatchObject({ patch: { group: "" } });
+    expect(await screen.findByText("已把「Notion」移出分组")).toBeInTheDocument();
+  });
+
+  it("links a code made on the spot: a pasted link, a key typed in, a QR code (board 07-c)", async () => {
+    const { user, backend } = renderPasswords();
+    await openPage(user);
+    await user.click(row("Notion"));
+    await user.click(detail().getByTestId("item-edit"));
+    const form = within(screen.getByRole("dialog", { name: "编辑登录项" }));
+    const create = async (name: string) => {
+      await user.click(
+        form.queryByTestId("item-form-code-link") ?? form.getByRole("button", { name: "更换…" }),
+      );
+      await user.click(
+        within(screen.getByTestId("item-form-code-picker")).getByRole("button", { name }),
+      );
+    };
+    // A link pasted.
+    await create("粘贴 otpauth 链接…");
+    const link = within(screen.getByRole("dialog", { name: "粘贴 otpauth 链接" }));
+    await user.type(
+      link.getByRole("textbox", { name: "otpauth 链接" }),
+      "otpauth://totp/Notion:alex?secret=MFRGGZDFMZTWQ2LK&issuer=Notion",
+    );
+    await user.click(link.getByRole("button", { name: "添加" }));
+    expect(form.getByTestId("item-form-code")).toHaveTextContent("Notion");
+    expect(screen.queryByTestId("item-form-code-picker")).toBeNull();
+    // A key typed in, in its place.
+    await create("手动输入密钥…");
+    const manual = within(screen.getByRole("dialog", { name: "手动添加账号" }));
+    await user.type(manual.getByRole("textbox", { name: "服务名称" }), "Notion 备用");
+    await user.type(manual.getByLabelText("密钥"), "JBSWY3DPEHPK3PXQ");
+    await user.click(manual.getByRole("button", { name: "添加" }));
+    expect(form.getByTestId("item-form-code")).toHaveTextContent("Notion 备用");
+    // A QR code: a screenshot of it on the clipboard.
+    backend.setClipboard("otpauth://totp/Scan:me?secret=GEZDGNBVGY3TQOJR&issuer=Scan");
+    await create("扫描二维码…");
+    let scan = within(screen.getByRole("dialog", { name: "扫描二维码" }));
+    await user.click(scan.getByRole("button", { name: "读取剪贴板" }));
+    expect(form.getByTestId("item-form-code")).toHaveTextContent("Scan");
+    const scanned = (await backend.getState()).entries.find((e) => e.issuer === "Scan");
+    // An image of several accounts: said, nothing linked; cancelled, the picker again.
+    backend.setImagePick("otpauth://totp/A:a?secret=GEZDGNBV\notpauth://totp/B:b?secret=MFRGGZDF");
+    await create("扫描二维码…");
+    scan = within(screen.getByRole("dialog", { name: "扫描二维码" }));
+    await user.click(scan.getByRole("button", { name: "选择图片…" }));
+    expect(scan.getByRole("alert")).toHaveTextContent("这里有不止一个账号");
+    await user.click(scan.getByRole("button", { name: "取消" }));
+    expect(screen.getByTestId("item-form-code-picker")).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByTestId("item-form-code-picker")).toBeNull());
+    await user.click(form.getByTestId("item-form-save"));
+    expect(lastCall(backend, "item_update")).toMatchObject({
+      patch: { totp_entry: scanned?.id },
+    });
+  });
+
+  it("links a code even before there is any account", async () => {
+    const { user } = renderPasswords({ phase: "unlocked", entries: [], items: [] });
+    await openPage(user);
+    await user.keyboard("{Control>}n{/Control}");
+    const form = within(screen.getByRole("dialog", { name: "新建登录项" }));
+    await user.click(form.getByTestId("item-form-code-link"));
+    const picker = within(screen.getByTestId("item-form-code-picker"));
+    expect(picker.getByText("没有匹配的验证码账号")).toBeInTheDocument();
+    expect(picker.getByRole("button", { name: "扫描二维码…" })).toBeInTheDocument();
+  });
+
   it("opens a login's menu with a right click", async () => {
     const { user } = renderPasswords();
     await openPage(user);
