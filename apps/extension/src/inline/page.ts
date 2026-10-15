@@ -265,7 +265,7 @@ export class InlinePage {
     }
     return this.el(
       "div",
-      "overflow-hidden rounded-10 border border-border bg-surface-solid shadow-pop",
+      "overflow-hidden rounded-10 border border-border bg-surface-solid",
       header,
       this.el("div", "h-px bg-border"),
       this.el("div", "p-1", content),
@@ -512,7 +512,7 @@ export class InlinePage {
     );
     return this.el(
       "div",
-      "flex flex-col gap-3.5 overflow-hidden rounded-14 border border-border bg-surface-solid p-4 shadow-pop",
+      "flex flex-col gap-3.5 overflow-hidden rounded-14 border border-border bg-surface-solid p-4",
       title,
       body,
       actions,

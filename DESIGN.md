@@ -232,7 +232,8 @@ tooltip.
 - **Inline menu and prompts**: drawn in an extension frame on any page, so opaque (`surface`, not
   glass) with a 1 px border and `shadow-pop`: the menu 340 px wide (at least the field's), 6 px under
   the field, `rounded-10`, rows of 52 px; the save and update prompts 360 px at the page's top
-  right, `rounded-14`.
+  right, `rounded-14`. The shadow is the frame host's, in the page: the frame would cut it off at
+  its edge.
 
 ### Settings › 浏览器 and the requests that wait for the user
 
