@@ -106,6 +106,27 @@ describe("SettingsDialog", () => {
     expect(field).toHaveAccessibleDescription("未设置");
   });
 
+  it("gives the command to bind only on Linux, whose desktops may keep shortcuts from apps", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      passwords: true,
+      platform: "windows",
+      settings: { locale: "zh-cn", quick_access_shortcut: "CommandOrControl+Shift+Space" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const dialog = await openSettings(user);
+    const row = within(dialog.getByTestId("quick-access"));
+    // Windows and macOS give apps their shortcuts: taken, the user chooses another one.
+    act(() => backend.reportShortcut(false));
+    expect(
+      row.getByText(
+        "无法注册这个快捷键：可能已被其他应用占用，或者桌面环境不允许应用注册全局快捷键",
+      ),
+    ).toBeInTheDocument();
+    expect(row.queryByText("lockra-desktop --palette")).toBeNull();
+  });
+
   it("offers no quick search where password management is not offered", async () => {
     const { user } = renderApp();
     await ready();

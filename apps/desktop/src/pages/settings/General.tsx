@@ -86,8 +86,8 @@ export function General() {
 
 /** 快捷搜索: the global shortcut that brings the command palette up from anywhere (none until one is
  *  chosen; the suggestion is a click away). Where the shell could not register it (another app has
- *  it, or the desktop gives none to apps, as on Wayland) the row says so and gives the command that
- *  does the same, to bind in the desktop's own keyboard settings. */
+ *  it, or the desktop gives none to apps, as on Wayland) the row says so; on Linux it also gives the
+ *  command that does the same, to bind in the desktop's own keyboard settings. */
 function QuickAccessRow() {
   const t = useT();
   const { quick_access: quick, platform } = useUiState();
@@ -102,10 +102,14 @@ function QuickAccessRow() {
           {quick.error !== null && (
             <span className="mt-2 flex flex-col items-start gap-1" data-testid="quick-access-bind">
               <span className="text-danger">{errorText(t, quick.error)}</span>
-              <span>{t("settings.general.quickAccess.bind")}</span>
-              <code className="mono rounded-6 bg-inset px-2 py-0.5 text-[12px] text-fg select-all">
-                lockra-desktop --palette
-              </code>
+              {platform === "linux" && (
+                <>
+                  <span>{t("settings.general.quickAccess.bind")}</span>
+                  <code className="mono rounded-6 bg-inset px-2 py-0.5 text-[12px] text-fg select-all">
+                    lockra-desktop --palette
+                  </code>
+                </>
+              )}
             </span>
           )}
         </>
