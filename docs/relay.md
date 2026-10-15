@@ -83,7 +83,8 @@ the same list. `RUST_LOG` sets the log level (`info` by default).
 The apps warn in Settings › Sync when a device's snapshot on a relay passes three quarters of the
 default `--max-object-bytes` (3 MiB; `lockra_core::RELAY_SNAPSHOT_LIMIT`): the relay does not tell
 its settings, so a relay set to keep more is warned of the same, and one set to keep less may refuse a
-snapshot before any warning.
+snapshot before any warning. A refusal (413) reaches the apps as `SyncError::TooLarge` with the
+snapshot's size: the sync fails with `sync_too_large`, and Settings › Sync shows the size.
 
 With `--trust-proxy`, the client is the last address in `X-Forwarded-For` that is not one of the
 proxies; a request from anywhere else is its own client. A load balancer that appends to the header

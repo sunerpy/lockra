@@ -1349,6 +1349,8 @@ export const zhCN = {
         "{names} 上的 Lockra 版本较旧，看不到密码。更新到 0.10.0 或更高版本后，密码会同步过去。",
       nearLimit:
         "这台设备的同步数据有 {size}，已超过中继单个快照上限（{limit}）的 75%。超过上限后，这台设备的改动将无法再同步。",
+      overLimit:
+        "这台设备的同步数据有 {size}，超过了中继单个快照的上限（{limit}），中继拒绝了写入，这台设备的改动无法同步到其他设备。",
       unreadable: {
         one: "存储里有 {n} 个同步对象无法读取：可能被改动、属于其他同步空间，或来自更新版本的 Lockra。",
         other:
@@ -1454,6 +1456,7 @@ export const zhCN = {
     sync_network: "无法连接存储服务",
     sync_denied: "存储服务拒绝访问，请检查访问密钥或密码",
     sync_storage_failed: "存储服务返回错误，请检查存储桶或文件夹是否存在",
+    sync_too_large: "这台设备的同步数据超过了存储允许的大小",
     sync_space_not_found: "这个存储里没有这个同步空间",
     sync_wrong_credentials: "主密码或恢复密钥不正确",
     sync_key_invalid: "恢复密钥有误，请检查是否输入正确",

@@ -1178,6 +1178,27 @@ async fn the_devices_list_the_version_they_write_with_and_a_small_snapshot_bring
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_snapshot_the_relay_refuses_as_too_large_is_told_with_its_size() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, _) = first_device(&transport, relay()).await;
+    // The relay refuses the next write: past what it keeps of a snapshot (an import of many
+    // logins at once, well under the warning before).
+    transport.store(&relay()).fail_next_put(SyncError::TooLarge(5_000_000), false);
+    desktop.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    advance(SYNC_DEBOUNCE).await;
+    settle().await;
+    let refused = space(&desktop);
+    assert!(matches!(refused.status, SyncStatus::Failed { code: ErrorCode::SyncTooLarge, .. }), "{:?}", refused.status);
+    assert_eq!(refused.snapshot_warning, Some(crate::ui::SnapshotWarningView { bytes: 5_000_000, limit: crate::RELAY_SNAPSHOT_LIMIT }));
+    // Smaller again: written, and the warning goes.
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    let written = space(&desktop);
+    assert!(matches!(written.status, SyncStatus::Synced { .. }), "{:?}", written.status);
+    assert_eq!(written.snapshot_warning, None);
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktops_code() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, relay()).await;

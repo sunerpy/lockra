@@ -289,9 +289,10 @@ the [Privacy](/privacy#the-built-in-relay) page.
 
 A relay keeps at most 4 MiB of each device's sync data (a relay of your own can be set otherwise,
 [Running your own relay](/backup/relay)). When this device's sync data passes 3 MiB, three quarters
-of that, **Settings › Sync** says so with its size; past 4 MiB the relay refuses it, and this
-device's changes stop reaching the others. Many logins with long notes and earlier passwords take
-that much.
+of that, **Settings › Sync** says so with its size. Past 4 MiB the relay refuses it: the sync fails
+with "This device's sync data is larger than the storage accepts", **Settings › Sync** shows the
+size, and this device's changes stop reaching the others until the data is smaller again. Many
+logins with long notes and earlier passwords take that much.
 
 ## When devices sync
 

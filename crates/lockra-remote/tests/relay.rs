@@ -59,8 +59,9 @@ async fn a_relay_keeps_what_the_engine_relies_on() {
     store.delete(&path).await.unwrap();
     assert_eq!(store.get(&path).await.unwrap(), None);
 
-    // Past the relay's own limit, and outside a space: refused as storage failures, not retried.
-    assert!(matches!(store.put(&path, vec![0; 1025], PutCondition::Always).await, Err(SyncError::Storage(_))));
+    // Past the relay's own limit: refused as too large, with the size, not retried. Outside a space:
+    // a storage failure.
+    assert_eq!(store.put(&path, vec![0; 1025], PutCondition::Always).await.err(), Some(SyncError::TooLarge(1025)));
     for bad in ["contract/a.lks".to_owned(), format!("lockra-sync-v1/{space}/devices/sub/x.lks")] {
         assert!(matches!(store.put(&bad, b"x".to_vec(), PutCondition::Always).await, Err(SyncError::Storage(_))), "{bad}");
     }

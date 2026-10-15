@@ -1400,6 +1400,8 @@ export const en: Messages = {
         "The Lockra on {names} is older and cannot see passwords. Once it is updated to 0.10.0 or later, the passwords sync there too.",
       nearLimit:
         "This device's sync data is {size}, past 75% of the most a relay keeps of one snapshot ({limit}). Beyond that, this device's changes no longer sync.",
+      overLimit:
+        "This device's sync data is {size}, more than a relay keeps of one snapshot ({limit}): the relay refused it, and this device's changes no longer reach the others.",
       unreadable: {
         one: "{n} sync object on the storage cannot be read: it was altered, belongs to another space, or comes from a newer Lockra.",
         other:
@@ -1514,6 +1516,7 @@ export const en: Messages = {
     sync_denied: "The storage refused access; check the access key or password",
     sync_storage_failed:
       "The storage answered with an error; check that the bucket or folder exists",
+    sync_too_large: "This device's sync data is larger than the storage accepts",
     sync_space_not_found: "That storage holds no such sync space",
     sync_wrong_credentials: "The master password or the recovery key is wrong",
     sync_key_invalid: "The recovery key is mistyped",

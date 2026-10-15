@@ -2407,6 +2407,11 @@ impl Core {
                     // Locked meanwhile, the space changed, or the vault could not be written (the
                     // status says so already).
                     Err(SyncError::Interrupted) => {}
+                    // Refused as too large: Settings › Sync tells the size beside the failure.
+                    Err(error @ SyncError::TooLarge(bytes)) => {
+                        st.sync.own_bytes = Some(*bytes);
+                        st.sync.status = SyncStatus::Failed { code: sync_error(error).code, at_ms: now };
+                    }
                     Err(error) => st.sync.status = SyncStatus::Failed { code: sync_error(error).code, at_ms: now },
                 }
                 let configured = matches!(&st.phase, PhaseState::Unlocked(session) if session.data.sync().is_some());

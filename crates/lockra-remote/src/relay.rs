@@ -178,6 +178,7 @@ impl RemoteStore for RelayStore {
 
     fn put<'a>(&'a self, path: &'a str, bytes: Vec<u8>, condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
         Box::pin(async move {
+            let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
             let request = self.client.put(self.locate(path, false)?).bearer_auth(self.token.as_str()).body(bytes);
             let request = match &condition {
                 PutCondition::Always => request,
@@ -185,8 +186,11 @@ impl RemoteStore for RelayStore {
                 PutCondition::IfMatch(etag) => request.header(IF_MATCH, etag.as_str()),
             };
             let response = send(request).await?;
-            if !response.status().is_success() {
-                return Err(refused(response.status()));
+            match response.status() {
+                // Past the relay's limit: the size goes with it, for Settings › Sync to tell.
+                StatusCode::PAYLOAD_TOO_LARGE => return Err(SyncError::TooLarge(size)),
+                status if !status.is_success() => return Err(refused(status)),
+                _ => {}
             }
             Ok(etag_of(&response))
         })

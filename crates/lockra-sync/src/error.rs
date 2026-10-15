@@ -16,6 +16,10 @@ pub enum SyncError {
     /// Anything else the storage answered.
     #[error("the storage failed: {0}")]
     Storage(String),
+    /// The storage refused a snapshot as larger than it keeps (a relay's 413), with the snapshot's
+    /// size in bytes.
+    #[error("the storage keeps no snapshot of {0} bytes")]
+    TooLarge(u64),
     /// The folder on this computer the space is kept in is not there: moved, deleted, or its
     /// drive not connected. Nothing is written until it is back.
     #[error("the sync folder is missing")]
