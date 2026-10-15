@@ -138,10 +138,15 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
       {space.snapshot_warning !== null && (
         <div data-testid="sync-near-limit">
           <Banner tone="warn" marker="icon">
-            {t("sync.problems.nearLimit", {
-              size: formatBytes(space.snapshot_warning.bytes),
-              limit: formatBytes(space.snapshot_warning.limit),
-            })}
+            {t(
+              space.snapshot_warning.bytes > space.snapshot_warning.limit
+                ? "sync.problems.overLimit"
+                : "sync.problems.nearLimit",
+              {
+                size: formatBytes(space.snapshot_warning.bytes),
+                limit: formatBytes(space.snapshot_warning.limit),
+              },
+            )}
           </Banner>
         </div>
       )}

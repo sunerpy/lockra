@@ -208,6 +208,26 @@ describe("Settings › Sync", () => {
     ]);
   });
 
+  it("tells a snapshot the relay refused as larger than it keeps, with its size", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace({
+        storage: { kind: "relay", url: "https://relay.example.com" },
+        status: { state: "failed", code: "sync_too_large", at_ms: Date.UTC(2026, 9, 2, 8) },
+        snapshot_warning: { bytes: 4_500_000, limit: 4 * 1024 * 1024 },
+      }),
+      passwords: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openSync(user);
+    const warning = pane.getByTestId("sync-near-limit");
+    expect(warning).toHaveTextContent("4.3 MB");
+    expect(warning).toHaveTextContent("超过了中继单个快照的上限（4.0 MB）");
+    expect(pane.getByTestId("sync-status")).toHaveTextContent("同步数据超过了存储允许的大小");
+  });
+
   it("marks a device whose Lockra keeps no passwords and warns of a snapshot near the relay's limit", async () => {
     // The other device still on 0.9: no version, no passwords.
     const devices = mockSyncSpace().devices.map((d) =>

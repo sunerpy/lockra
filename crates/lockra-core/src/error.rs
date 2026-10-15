@@ -118,6 +118,8 @@ pub enum ErrorCode {
     SyncDenied,
     /// The storage answered with an error (a missing bucket or folder, a full disk).
     SyncStorageFailed,
+    /// The storage refused this device's snapshot as larger than it keeps (a relay's limit).
+    SyncTooLarge,
     /// There is no sync space for this sync key at that storage.
     SyncSpaceNotFound,
     /// The master password or the sync key does not open the space.

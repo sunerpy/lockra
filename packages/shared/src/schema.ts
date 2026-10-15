@@ -422,6 +422,7 @@ export const ERROR_CODES = [
   "sync_network",
   "sync_denied",
   "sync_storage_failed",
+  "sync_too_large",
   "sync_space_not_found",
   "sync_wrong_credentials",
   "sync_key_invalid",

@@ -424,6 +424,7 @@ pub(crate) fn sync_error(error: &SyncError) -> CoreError {
         SyncError::Network(_) => ErrorCode::SyncNetwork,
         SyncError::Denied => ErrorCode::SyncDenied,
         SyncError::Conflict | SyncError::Storage(_) | SyncError::DeviceClash => ErrorCode::SyncStorageFailed,
+        SyncError::TooLarge(_) => ErrorCode::SyncTooLarge,
         SyncError::NotLockra | SyncError::Corrupted | SyncError::Misplaced => ErrorCode::SyncDataCorrupted,
         SyncError::Unsupported(_) => ErrorCode::SyncUnsupported,
         SyncError::WrongCredentials => ErrorCode::SyncWrongCredentials,
@@ -563,6 +564,12 @@ mod tests {
         assert!(size < RELAY_SNAPSHOT_LIMIT, "2000 logins take {size} bytes");
         let relay = StorageConfig::Relay { url: "https://relay.example.com".into() };
         assert_eq!(snapshot_warning(&relay, Some(size)), Some(SnapshotWarningView { bytes: size, limit: RELAY_SNAPSHOT_LIMIT }));
+    }
+
+    #[test]
+    fn a_snapshot_the_storage_refuses_as_too_large_has_a_code_of_its_own() {
+        assert_eq!(sync_error(&SyncError::TooLarge(5_000_000)).code, ErrorCode::SyncTooLarge);
+        assert_eq!(sync_error(&SyncError::Storage("full".into())).code, ErrorCode::SyncStorageFailed);
     }
 
     #[test]
