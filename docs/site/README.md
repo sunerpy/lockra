@@ -7,13 +7,13 @@ deployment) lives in [`sunerpy/firlab`](https://github.com/sunerpy/firlab) under
 site has no domain of its own: firlab builds it with the base `/lockra/` and publishes it inside
 firlab.app.
 
-| Path                                                                     | Published at                                                                    |
-| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| `index.md`, `zh/index.md`                                                | `/lockra/`, `/lockra/zh/` (home pages)                                          |
-| `guide/`, `accounts/`, `transfer/`, `backup/`, `security/`, `reference/` | the user guide                                                                  |
-| `privacy.md`, `roadmap.md`, `developers.md`                              | reference pages                                                                 |
-| `docs/{architecture,formats,security,release}.md`                        | `/lockra/dev/*`, as they are; `/lockra/zh/dev/*` is a generated Chinese pointer |
-| `public/`                                                                | the site's root (`/lockra/lockra-logo.svg`, `/lockra/screens/*.webp`)           |
+| Path                                                                                   | Published at                                                                                            |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `index.md`, `zh/index.md`                                                              | `/lockra/`, `/lockra/zh/` (home pages)                                                                  |
+| `guide/`, `accounts/`, `passwords/`, `transfer/`, `backup/`, `security/`, `reference/` | the user guide (firlab's sync script copies each of these directories: a new one needs its entry there) |
+| `privacy.md`, `roadmap.md`, `developers.md`                                            | reference pages                                                                                         |
+| `docs/{architecture,formats,security,release}.md`                                      | `/lockra/dev/*`, as they are; `/lockra/zh/dev/*` is a generated Chinese pointer                         |
+| `public/`                                                                              | the site's root (`/lockra/lockra-logo.svg`, `/lockra/screens/*.webp`)                                   |
 
 Links inside the pages are written from the site's root without the base (`/guide/install`,
 `/zh/backup/`); VitePress adds `/lockra/`.
@@ -59,11 +59,22 @@ other language, uses a component the site does not register, or uses a word from
 - Use standard, readable written language. Chinese follows the register of Apple's and
   Microsoft's Chinese documentation: 「尚未设置」「无法读取」「仅保存在本机」. No colloquial words
   (还没、没能、免得、搭的、咋、啥、看看、试试、搞定; gonna, stuff, simply), no stacked
-  explanations, no promises in the voice of a person. The sync script rejects these words.
+  explanations, no promises in the voice of a person. The sync script rejects these words, in
+  quoted labels too: describe a label that contains one (「还没有写入连接文件」) instead of quoting
+  it.
 - One word per concept, the word the app uses. Chinese: 保险库, 主密码, 账号, 验证码, 密钥,
   分组, 收藏, 导入, 导出, 二维码, 备份, 自动备份, 在本机记住, 锁定. English: vault, master
   password, account, code, secret, group, pinned (**Pin to top**), import, export, QR code,
   backup, automatic backup, **Remember on this device**, lock.
+- Password management (from 0.10.0) adds these. Chinese: 登录项, 「密码」页, 网站 and 匹配方式,
+  保护级别 (「直接填充」「填充前验证」「不交给扩展」), 密码生成器 and 生成历史, 浏览器扩展, 浏览器集成,
+  配对, 弹窗, 网站访问权限, 网站名单, 托盘, 后台运行 (「关闭窗口后继续运行」). English: login, the
+  Passwords page, sites and matching, protection (**Fill directly**, **Verify first**, **Not for
+  the extension**), password generator and generated passwords, browser extension, browser
+  integration, pair, popup, site access, site lists, tray, running in the background (**Keep
+  running after the window closes**). A login is a favorite (**Favorite**) where an account is
+  pinned, and the Passwords page's filter still reads **Pinned**; in Chinese both are 收藏. An
+  account's secret is 密钥, a login's password 密码.
 - Name a control as the app labels it: in bold in English (**Save backup…**), in 「」 in Chinese
   (「保存备份…」), with `›` between levels (**Settings › Security › Auto-lock**). Read the label
   from `packages/shared/src/i18n/en.ts` and `zh-CN.ts`, not from memory.

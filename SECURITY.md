@@ -1,13 +1,13 @@
 # Security policy
 
-Lockra keeps two-factor secrets, so security reports get priority.
+Lockra keeps two-factor secrets and passwords, so security reports get priority.
 
 ## Reporting a vulnerability
 
 Use GitHub's private vulnerability reporting:
 <https://github.com/sunerpy/lockra/security/advisories/new>. Please do not open a public issue,
-and never include a real secret, otpauth link, QR code or vault file in a report; describe how to
-reproduce the problem with a test account instead.
+and never include a real secret, password, otpauth link, QR code or vault file in a report;
+describe how to reproduce the problem with a test account instead.
 
 You can expect an acknowledgement within a week. Once a fix is released, the advisory is published
 with credit unless you ask otherwise.
@@ -20,7 +20,12 @@ reporting.
 ## Scope
 
 In scope: the vault and backup formats, key handling, the keychain integration, what the
-interface can reach through the shell (files, the clipboard, IPC), import and export parsing, and
-the release pipeline. [docs/security.md](docs/security.md) describes the model and its accepted
+interface can reach through the shell (files, the clipboard, IPC), import and export parsing, the
+browser extension (`apps/extension`) and its channel to the app (pairing, the native-messaging
+host, the local socket or named pipe, and what the app decides to fill), and the release
+pipeline. [docs/security.md](docs/security.md) describes the model and its accepted
 residual risks (for example, Linux cannot exclude a window from screen capture); a report that a
-documented residual risk exists is not a vulnerability, but a way to make one worse is.
+documented residual risk exists is not a vulnerability, but a way to make one worse is. For the
+browser extension, a page that gets a login filled, or the extension's menu clicked, against the
+rules of the "Browser extension" section is a vulnerability; a script on a site a login matches
+reading what is filled there is a documented residual risk.

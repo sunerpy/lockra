@@ -133,9 +133,10 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
   window buttons, with no fill and no rule; each page starts with its own `PageHeader` (title,
   a line of facts, its main actions). There is no shortcut footer: the keys are in the buttons'
   tooltips (锁定 · Ctrl L, 设置 · Ctrl ,, 添加账号 · Ctrl N) and in the command palette.
-- Sidebar: the groups 保险库 (验证码, with a count pill), 迁移 (导入, 导出) and 数据 (备份, and 同步,
-  which opens Settings › 同步), rows of about 40 px (the board draws 44; 40 keeps the foot on a
-  600 px window), the current one raised on the theme's card shadow. Its foot is a status card
+- Sidebar: the groups 保险库 (验证码 and, where the build offers password management, 密码 with the
+  `lock` icon, each with a count pill), 迁移 (导入, 导出) and 数据 (备份, and 同步, which opens
+  Settings › 同步), rows of about 40 px (the board draws 44; 40 keeps the foot on a 600 px window),
+  the current one raised on the theme's card shadow. Its foot is a status card
   (the lamp and 已解锁, the auto-lock, the sync) over three square buttons: 锁定, the theme (each
   click the next one) and 设置. The icon rail keeps the buttons, stacked, and drops the card.
 - **Only the page body scrolls.** Its element carries `min-height: 0` (`min-h-0`), or a long list
@@ -159,10 +160,43 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
   (收藏 keeps its star), and the page opens on it; in 全部 its section heads the list, and with 收藏
   pinned the pinned accounts gather there, out of their groups, in a section that does not fold.
   While reordering it stays first; every other section moves, 未分组 among them.
+- 密码 (boards 01–05 of Penpot 「Lockra 密码管理」): the header as on 验证码 (the facts read N 个登录项
+  · N 个分组 · the sync), the search pill (`min(26rem, 36vw)`, the `/` keycap; absent while there are
+  no logins) and the 「添加登录项」 pill, a menu: 新建登录项… · Ctrl N, 生成密码… · Ctrl G, then
+  从其他应用导入…. The tools: the filters (全部, 收藏, each group, 未分组; shown when there is more
+  than one), the 标签 menu button (`TagFilter`: tags with counts, several at once, a login must
+  carry all), then on the right the sort `Select` (按名称, 最近使用, 最近修改, 最近添加; favourites
+  first in each) and, in 全部 with groups, a ⋯ for 全部折叠 and 全部展开. Under them a grid
+  `minmax(0, 5fr) minmax(0, 3fr)`, 14 px apart: the list in one card (`PasswordRow`, 64 px; sections
+  with folding headings in 全部 only) and the detail pane (`ItemDetail`), sticky 14 px under the
+  title bar, whose card scrolls on its own: the one exception to "only the page body scrolls". A
+  click or ↑ ↓ selects (the pane shows it), Enter copies the password, a right click or the
+  context-menu key opens the row's menu. States: no logins (a card with an `EmptyState`, 导入 and
+  添加登录项, no search), loading (`SkeletonRows`, only after 300 ms), failed (a danger
+  `Banner` with 重试, the last list kept), no match (a compact `EmptyState` offering a login of
+  that name).
+- The detail pane: a 44 px avatar (36 in a pane under 300 px, where 编辑 also becomes a bordered
+  28 px `IconButton`), the title 18 / 600 (16 narrow) with the star, the group · tags in 12.5 px
+  `fg-muted`, 编辑 (`Button outline sm`) and ⋯. Then, as they apply: the `shieldCheck` line of a
+  填充前验证 login, the conflict (`Banner warn bar`: the other version hidden until 显示, 改用这个
+  primary, 保留当前 outline) or the read-only `Banner neutral`, and the `DetailSection`s 登录信息
+  (`FieldRow`s, secrets as dots, the linked code with its ring from the code frames), 网站
+  (`UrlRow`: the address and its matching as a `Badge`), 备注 and 自定义字段 (dots until 显示, hidden
+  again after 120 s), 整理, 填充与保护 and 记录 (`KeyValueRow`s).
 - The phone (board A2): a 30 px title with 已解锁 · N 个账号 and round 添加账号 and 锁定 buttons; the
   search pill; 「最近使用」; the filters, scrolling sideways, then reorder; each row a card of its
-  own (its ⋯ always shown: there is no hover); a floating dock (验证码, the raised 扫码 button,
-  设置) over the list, which lifts the toasts above it (`--toast-bottom`).
+  own (its ⋯ always shown: there is no hover); a floating dock over the list, which lifts the
+  toasts above it (`--toast-bottom`): 验证码, the raised 56 px `primary` button (扫码 on the codes,
+  新建登录项 with `plus` on the logins), 密码 (`lock`, where the build offers password management)
+  and 设置, in 70 px cells, the current one `accent-text`.
+- The phone's logins (boards 20–29): the same header with 已解锁 · N 个登录项 and round 生成密码
+  (`dice`) and 锁定 buttons, the search pill, the filters scrolling sideways with 标签, sections that
+  fold, and each login a `PasswordRow card` (70 px, `rounded-14`): a tap opens the login, its 40 px
+  button copies the password, ⋯ or a long press opens a `BottomSheet` of `ActionRow`s (复制用户名,
+  复制密码, 复制验证码 with the current code, 显示密码, 编辑, 删除…). A login's page follows the
+  detail pane in 40 px touch targets; the password shows on a page of its own; the edit page puts
+  保存 in the bar, has no 外观 and no 自动填充 (one line says the desktop sets them), and asks for
+  the fingerprint, or the master password, through a sheet.
 - Toasts: a pill in `fg` at the bottom centre; a copy names the account
   (「已复制 GitHub 的验证码 · 30 秒后清空剪贴板」).
 
@@ -181,32 +215,42 @@ were the owner's choice on 2026-10-11 (Penpot 「Lockra 界面方向」 › 「0
 
 New for Lockra:
 
-| Primitive       | What it is                                                                                                          |
-| --------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `OtpCode`       | the code in mono, grouped; `masked` shows `••• •••`; `warning` tone in the last 5 s                                 |
-| `CountdownRing` | a ring (20 px, stroke 2.5 by default; 30 / 3.5 in the rows, 26 / 3 on the phone's, 80 / 6 on 「最近使用」), the     |
-|                 | `--meter` stroke shrinking over the window, warning ≤ 5 s, static when reduce-motion                                |
-| `EntryAvatar`   | rounded square (24–44 px, its own corner) with the issuer's first letter on its colour; never a brand logo          |
-| `EntryRow`      | avatar · issuer/account · code · ring · pin and menu, 64 px; the whole row copies on click/Enter; a pinned account  |
-|                 | has a star after its name; with a mouse the pin and the menu show on hover or focus only; just copied,              |
-|                 | 「✓ 已复制」 in the theme's pill replaces the code for 1.6 s; hovered, 「点击复制」 shows beside it (taking no room |
-|                 | until then). `card` makes it a card of its own (the phone, 70 px)                                                   |
-| `RecentCard`    | 「最近使用」: the account copied last, its code large, the seconds in a ring with the next code under it; copies on |
-|                 | click, Enter or Space; HOTP offers its next code. `size="sm"` on the phone                                          |
-| `FilterChips`   | the codes page's filters, a radio group of pills with counts (← → Home End); `scroll` on the phone                  |
-| `PageHeader`    | a desktop page's 26 px title, its line of facts and its actions                                                     |
-| `SidebarStatus` | the sidebar's foot: a card with the lamp and the vault's state; `SidebarButton(s)` the square buttons under it      |
-| `EntryTile`     | the card of 验证码视图 › 卡片: avatar, names, star and menu over a 46 px code, a bar that empties, the next code    |
-|                 | in the last 5 s or the HOTP counter; copied, it says so for 1.6 s (`useFlash`). 300 px columns on the desktop,      |
-|                 | two to a row on the phone (`size="sm"`, 28 px code). Selecting and reordering stay in the list                      |
-| `PasswordField` | input with show/hide and an optional four-step strength meter                                                       |
-| `DropZone`      | dashed `border-strong` area; `accent-soft` fill while a drag hovers                                                 |
-| `QrView`        | white plate (the QR's own quiet zone) inside a dialog, page `n / N`, prev/next                                      |
-| `StepList`      | numbered steps (mono numerals in `inset` circles) for the import sources                                            |
-| `useClock`      | a shared, second-aligned clock in ms for countdowns (`useNow`, also ms, ticks every 30 s for relative times)        |
-| `TileRow`       | a settings list row with a 32 px icon tile (`inset`), the name (14 / 500) and a status line (a 6 px lamp and 12 px  |
-|                 | `fg-muted` words), the actions on the right and an optional note under it; Settings › 浏览器's browsers and paired  |
-|                 | extensions                                                                                                          |
+| Primitive          | What it is                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `OtpCode`          | the code in mono, grouped; `masked` shows `••• •••`; `warning` tone in the last 5 s                                 |
+| `CountdownRing`    | a ring (20 px, stroke 2.5 by default; 30 / 3.5 in the rows, 26 / 3 on the phone's, 80 / 6 on 「最近使用」), the     |
+|                    | `--meter` stroke shrinking over the window, warning ≤ 5 s, static when reduce-motion                                |
+| `EntryAvatar`      | rounded square (24–44 px, its own corner) with the issuer's first letter on its colour; never a brand logo          |
+| `EntryRow`         | avatar · issuer/account · code · ring · pin and menu, 64 px; the whole row copies on click/Enter; a pinned account  |
+|                    | has a star after its name; with a mouse the pin and the menu show on hover or focus only; just copied,              |
+|                    | 「✓ 已复制」 in the theme's pill replaces the code for 1.6 s; hovered, 「点击复制」 shows beside it (taking no room |
+|                    | until then). `card` makes it a card of its own (the phone, 70 px)                                                   |
+| `RecentCard`       | 「最近使用」: the account copied last, its code large, the seconds in a ring with the next code under it; copies on |
+|                    | click, Enter or Space; HOTP offers its next code. `size="sm"` on the phone                                          |
+| `FilterChips`      | the codes page's filters, a radio group of pills with counts (← → Home End); `scroll` on the phone                  |
+| `PageHeader`       | a desktop page's 26 px title, its line of facts and its actions                                                     |
+| `SidebarStatus`    | the sidebar's foot: a card with the lamp and the vault's state; `SidebarButton(s)` the square buttons under it      |
+| `EntryTile`        | the card of 验证码视图 › 卡片: avatar, names, star and menu over a 46 px code, a bar that empties, the next code    |
+|                    | in the last 5 s or the HOTP counter; copied, it says so for 1.6 s (`useFlash`). 300 px columns on the desktop,      |
+|                    | two to a row on the phone (`size="sm"`, 28 px code). Selecting and reordering stay in the list                      |
+| `PasswordField`    | input with show/hide and an optional four-step strength meter                                                       |
+| `DropZone`         | dashed `border-strong` area; `accent-soft` fill while a drag hovers                                                 |
+| `QrView`           | white plate (the QR's own quiet zone) inside a dialog, page `n / N`, prev/next                                      |
+| `StepList`         | numbered steps (mono numerals in `inset` circles) for the import sources                                            |
+| `useClock`         | a shared, second-aligned clock in ms for countdowns (`useNow`, also ms, ticks every 30 s for relative times)        |
+| `PasswordRow`      | a login: 40 px avatar, title 15 / 600 with its star, `shieldCheck` and badges (验证码, 冲突, 只读), the user name   |
+|                    | (12.5 px), the site on the right (hidden in a list under 480 px), and copy user name, copy password and ⋯; 64 px,   |
+|                    | selected on `nav-active` with the card shadow; just copied, the theme's pill says so for 1.6 s. `card` on the phone |
+| `DetailSection`    | a section of a login's details: its heading, then `FieldRow` (label, value, actions), `KeyValueRow`, `UrlRow`       |
+| `TagFilter`        | the tags' menu button: several tags at once, its label the first chosen and `+n`, `×` to clear                      |
+| `TagsInput`        | tags as `accent-soft` pills with a `×`, Enter adds the one typed, the tags in use suggested                         |
+| `ProtectionChoice` | the three protection levels as radio cards, each with its line of help                                              |
+| `Slider`           | the generator's length and word count                                                                               |
+| `ScoreMeter`       | a password's strength: four bars and their name, and the generator's bits                                           |
+| `SkeletonRows`     | loading rows, shown only once 300 ms have passed                                                                    |
+| `TileRow`          | a settings list row with a 32 px icon tile (`inset`), the name (14 / 500) and a status line (a 6 px lamp and 12 px  |
+|                    | `fg-muted` words), the actions on the right and an optional note under it; Settings › 浏览器's browsers and paired  |
+|                    | extensions                                                                                                          |
 
 `ShortcutRecorder` (Settings › 通用 › 快捷搜索) is a global shortcut's field, drawn as an input (32 px):
 the keys as keycaps in the platform's words (⌘ ⇧ on a Mac, Ctrl Shift elsewhere). Focused, it
@@ -218,6 +262,35 @@ Every interactive primitive has `default hover focus-visible active disabled` st
 `loading` (buttons: spinner, label kept) and `error` (inputs: `danger` border and message below).
 Everything a mouse does is reachable by keyboard; icon-only buttons carry an `aria-label` and a
 tooltip.
+
+### A login's dialogs and the generator
+
+Boards 06–12 of Penpot 「Lockra 密码管理」.
+
+- **The form** (新建登录项 / 编辑登录项): a 600 px `Dialog scroll`, its title and buttons fixed and
+  the body between them scrolling, at most `min(720px, 100vh − 48px)` high. Groups under a hairline
+  with a 13 / 600 title: the title beside a 40 px avatar that previews it, 用户名 and 邮箱 side by
+  side, 密码 (`PasswordField` with its strength) with 生成…, 网站 (an `Input` per address, its
+  matching in a menu of two sections, 常用 and 高级), 验证码 (the linked account on `inset`
+  with its code, or 关联验证码… opening a 420 px picker of the accounts), 备注, 自定义字段 (name,
+  文本 or 隐藏, value, page field on `inset`), 整理 (`GroupCombobox`, `TagsInput`, 收藏),
+  外观 (`AccountAppearance`), 保护级别 (`ProtectionChoice`) and 自动填充 (three `Segmented sm`,
+  跟随设置 · 开 · 关, each saying what 跟随设置 means now). Problems: a `Banner danger bar` counting
+  them, each field's reason under it, the focus on the first.
+- **显示密码** (520 px): a `Banner warn`, the password mono 26 / 600 on `inset`, its length and kinds
+  in 11.5 px, the `ScoreMeter`, the Linux note, and a 14 px ring with the seconds before it hides.
+- **生成密码** (520 px): `Segmented` 随机密码 / 口令 (220 px), the result mono 22 / 600 (18 for a
+  passphrase) on `inset` with 重新生成 and 复制, the `ScoreMeter` with its bits, the rule's `info`
+  line or a `Banner danger bar` with 忽略规则, then labelled rows: 长度 (`Slider`, 4–128),
+  the four character groups as toggle chips (on: `accent-soft`, an `accent` ring and a check),
+  避免易混字符, 排除字符; for a passphrase 单词数, 分隔符, 首字母大写, 加一个数字. 生成历史 · n 条 at
+  the bottom left opens the history after the proof: mono 13 / 500 rows with the time and the site,
+  清空历史… in `text-danger`, hidden after 120 s.
+- **验证身份** (440 px): the prompt, the system check's button above the master password, the
+  action's own button.
+- **The command palette**: a login's row carries its actions (`CommandItem.actions`): Enter runs
+  the first (复制密码), Tab and Shift Tab move through them, the current one marked; the footer reads
+  「↑↓ 选择 · ↵ 执行 · Tab 切换操作 · Esc 关闭」.
 
 ### The browser extension
 

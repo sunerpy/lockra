@@ -2,12 +2,12 @@
 layout: home
 title: Lockra — an encrypted two-factor authenticator for Windows, macOS, Linux and Android
 titleTemplate: false
-description: Lockra keeps your two-factor codes in an encrypted file on your computers and your Android phone, the same accounts on every device through end-to-end encrypted sync. Move accounts from and to Google Authenticator and Microsoft Authenticator, and keep encrypted backups in a folder you choose.
+description: Lockra keeps your two-factor codes and your passwords in an encrypted file on your computers and your Android phone, the same on every device through end-to-end encrypted sync. Move accounts from and to Google Authenticator and Microsoft Authenticator, fill logins with the browser extension, and keep encrypted backups in a folder you choose.
 
 hero:
   name: Lockra
   text: Two-factor codes that stay on your devices.
-  tagline: An encrypted authenticator for Windows, macOS, Linux and Android. Keep the same accounts on every device with end-to-end encrypted sync, move them from Google Authenticator or Microsoft Authenticator, and keep encrypted backups where you choose.
+  tagline: An encrypted authenticator for Windows, macOS, Linux and Android, with your passwords in the same vault. Keep the same accounts on every device with end-to-end encrypted sync, move them from Google Authenticator or Microsoft Authenticator, and keep encrypted backups where you choose.
   actions:
     - theme: brand
       text: Download
@@ -26,7 +26,7 @@ home:
     - term: In sync
       text: The same accounts on every device, end-to-end encrypted, through the built-in relay or storage of your own.
     - term: Your accounts
-      text: In one encrypted file on each device. Lockra connects to GitHub for updates and, once you turn on sync, to the relay or storage you chose; to nothing else.
+      text: Codes and passwords in one encrypted file on each device. Lockra connects to GitHub for updates and, once you turn on sync, to the relay or storage you chose; to nothing else.
 
   visual:
     home:
@@ -80,6 +80,28 @@ home:
             body: Time-based (TOTP) and counter-based (HOTP) codes, SHA1, SHA256 or SHA512, 6 to 8 digits, any period.
             status: available
             link: /accounts/add
+      - name: Passwords
+        items:
+          - title: Logins in the same vault
+            body: User names, passwords, sites, notes and fields of your own, with the account whose code goes with each, on the computer and on the phone.
+            status: available
+            link: /passwords/
+          - title: A protection level for each login
+            body: Fill directly, ask for the master password or the system check first, or keep a login away from the browser extension.
+            status: available
+            link: /passwords/#protection-levels
+          - title: A password generator
+            body: Random passwords and passphrases, held to the password rules of known sites, with a history on the device.
+            status: available
+            link: /passwords/#the-password-generator
+          - title: From browsers and password managers
+            body: Import from Chrome, Edge, Firefox, Safari, Bitwarden, 1Password, LastPass and KeePass; export to KeePass or a CSV file.
+            status: available
+            link: /passwords/import-export
+          - title: The browser extension
+            body: Fills logins and their codes in Chrome, Edge and Firefox on Windows, macOS and Linux, and offers to save new passwords. Its store listings are not live yet.
+            status: building
+            link: /passwords/browser
       - name: Moving accounts
         items:
           - title: From Google Authenticator
@@ -169,6 +191,9 @@ home:
       - name: Lockra
         into: A backup file and its password
         out: A backup file
+      - name: Browsers and password managers
+        into: Their password exports, and KeePass databases
+        out: A KeePass database or a CSV file
     caption: Before anything is saved, the preview marks each account as new, already in the vault, sharing a name with a different account, or unsupported, with the reason.
 
   backup:
@@ -245,20 +270,21 @@ home:
       - name: The network
         value: Updates and your sync
         detail: Lockra asks GitHub for the newest version when you check, or at start if you turn on automatic updates; nothing from your accounts goes with it. There is no Lockra account or telemetry, the built-in relay keeps encrypted files only, and fonts and images ship with the app.
+      - name: The browser extension
+        value: Lockra on this computer only
+        detail: It asks Lockra on the same computer, over a connection encrypted between the two, keeps no passwords and sends nothing over the network.
 
   scope:
     title: Deliberately left out
-    intro: Lockra does one thing, on your devices.
+    intro: Lockra keeps your codes and passwords on your devices.
     items:
       - An account, or a server that can read your accounts. Sync needs no account, and the relay or storage holds encrypted files only.
-      - A browser extension or filling in codes. Copy a code and paste it.
-      - Website icons. Accounts show their initial; fetching icons would mean going online.
       - Non-standard codes such as Steam Guard.
 ---
 
 ## Every device, in sync
 
-Lockra runs on Windows, macOS, Linux and Android, and sync keeps the same accounts, groups and pinned accounts on all of them. Each device encrypts what it shares before it leaves; the built-in relay, a relay you run, an S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder keeps only that ciphertext. A phone joins by scanning the computer's QR code, and there is no Lockra account to create.
+Lockra runs on Windows, macOS, Linux and Android, and sync keeps the same accounts, logins, groups and pinned accounts on all of them. Each device encrypts what it shares before it leaves; the built-in relay, a relay you run, an S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder keeps only that ciphertext. A phone joins by scanning the computer's QR code, and there is no Lockra account to create.
 
 <ScreenFigure src="/screens/devices-en-light.webp" dark="/screens/devices-en-dark.webp" width="1440" height="900" alt="Lockra on a computer and on a phone, showing the same accounts with the same codes." />
 
@@ -274,9 +300,9 @@ Lockra runs on Windows, macOS, Linux and Android, and sync keeps the same accoun
 
 Google Authenticator exports its accounts as QR codes that Lockra reads from photos or screenshots, several at once. Microsoft Authenticator has no export; on a rooted Android phone, Lockra reads its database instead. Any other authenticator can hand over otpauth links or QR codes.
 
-Moving the other way, Lockra shows migration codes for Google Authenticator and one code per account for Microsoft Authenticator, with each account's current code beside them so you can check the phone.
+Moving the other way, Lockra shows migration codes for Google Authenticator and one code per account for Microsoft Authenticator, with each account's current code beside them so you can check the phone. Logins come from browsers and password managers through the same preview, and go out to a KeePass database or a CSV file.
 
-[Google Authenticator](/transfer/google) · [Microsoft Authenticator](/transfer/microsoft) · [Other apps](/transfer/other-apps)
+[Google Authenticator](/transfer/google) · [Microsoft Authenticator](/transfer/microsoft) · [Other apps](/transfer/other-apps) · [Logins](/passwords/import-export)
 
 </SplitBlock>
 
@@ -296,7 +322,7 @@ Restoring merges a backup into your accounts through the same preview as an impo
 
 ## Built to keep secrets
 
-The vault is one encrypted file. Without the master password it is unreadable, and changing a single byte of it is detected. Lockra locks itself when idle, clears the codes it copied, and shows a secret only after you enter the master password again (or, on the phone, verify your fingerprint).
+The vault is one encrypted file. Without the master password it is unreadable, and changing a single byte of it is detected. Lockra locks itself when idle, clears the codes and passwords it copied, and shows an account's secret, or the password of a login set to Verify first, only after you enter the master password again (or, on the phone, verify your fingerprint).
 
 [How Lockra protects your accounts](/security/) · [Privacy](/privacy)
 

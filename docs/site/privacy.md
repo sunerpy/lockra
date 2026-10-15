@@ -6,14 +6,16 @@ relay (from version 0.8.1).
 
 ## What Lockra stores
 
-| What                                              | Where                                                | How                                 |
-| ------------------------------------------------- | ---------------------------------------------------- | ----------------------------------- |
-| Your accounts                                     | `vault.lockra` in Lockra's data folder               | encrypted with your master password |
-| Settings (theme, language, timers, backup folder) | `settings.json` in Lockra's settings folder          | plain text, no secrets              |
-| A key for **Remember on this device**, if on      | the system keychain                                  | protected by your sign-in           |
-| Backups                                           | where you save them, and the automatic backup folder | encrypted                           |
-| Sync settings and credentials, if sync is on      | inside `vault.lockra`                                | encrypted with your master password |
-| The sync space, if sync is on                     | the relay, bucket or folder you set up               | encrypted on the device             |
+| What                                                                        | Where                                                                                                                                       | How                                 |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| Your accounts and logins                                                    | `vault.lockra` in Lockra's data folder                                                                                                      | encrypted with your master password |
+| Settings (theme, language, timers, backup folder)                           | `settings.json` in Lockra's settings folder                                                                                                 | plain text, no secrets              |
+| A key for **Remember on this device**, if on                                | the system keychain                                                                                                                         | protected by your sign-in           |
+| Backups                                                                     | where you save them, and the automatic backup folder                                                                                        | encrypted                           |
+| Sync settings and credentials, if sync is on                                | inside `vault.lockra`                                                                                                                       | encrypted with your master password |
+| The sync space, if sync is on                                               | the relay, bucket or folder you set up                                                                                                      | encrypted on the device             |
+| The generator's history, the paired browser extensions and what they may do | inside `vault.lockra`, on this device only                                                                                                  | encrypted with your master password |
+| A connection file for each browser, if browser integration is on            | each browser's folder for native-messaging hosts; on Windows, `%LOCALAPPDATA%\Lockra\browser\` and a registry entry under your user account | plain text, no secrets              |
 
 [Updates, uninstalling and your data](/guide/updates#where-the-files-are) lists the folders for each
 system.
@@ -35,8 +37,23 @@ On a Lockra relay (from version 0.8.1), the devices write and read the same encr
 instead; what the built-in relay receives and keeps is below.
 
 There is no Lockra account, no crash report and no telemetry. Fonts, images and icons ship inside
-the app. Accounts leave the device only when you export them, save a backup to a place that
-synchronises, or sync them, encrypted, through your storage or a relay.
+the app. Accounts and logins leave the device only when you export them, save a backup to a place
+that synchronises, or sync them, encrypted, through your storage or a relay.
+
+## The browser extension
+
+<StatusTag status="available" /> Available from version 0.10.0.
+
+The [browser extension](/passwords/browser) sends nothing over the network and collects nothing.
+It talks only to Lockra on the same computer, through the browser's native messaging, over a
+connection encrypted between the two. In your browser profile it keeps its own key and the pairing
+with Lockra; while you use it, the site's logins as it last listed them (titles and user names, no
+password) stay in the browser's memory until Lockra locks. A login's password reaches it only when
+you fill or copy it.
+
+Lockra keeps a list of what the extensions did, with the time, the browser and the site, in memory
+only: it is cleared as the vault locks. Turning browser integration off removes the connection
+files.
 
 ## The built-in relay
 
@@ -76,9 +93,9 @@ your browser.
 
 ## The clipboard and the screen
 
-Copied codes go to the system clipboard, where other apps can read them until Lockra clears it.
-Secrets and export codes appear on screen only after the master password (or, on the phone, the
-fingerprint); see
+Copied codes and passwords go to the system clipboard, where other apps can read them until Lockra
+clears it. Secrets and export codes appear on screen only after the master password (or, on the
+phone, the fingerprint), and so do the passwords of logins set to **Verify first**; see
 [How Lockra protects your accounts](/security/).
 
 ## Contact

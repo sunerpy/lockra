@@ -2,12 +2,12 @@
 layout: home
 title: Lockra — 适用于 Windows、macOS、Linux 和 Android 的加密两步验证器
 titleTemplate: false
-description: Lockra 把两步验证码保存在电脑和 Android 手机上的加密文件中，经端到端加密同步，每台设备上的账号保持一致。可以在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，并把加密备份写入你选择的文件夹。
+description: Lockra 把两步验证码和密码保存在电脑和 Android 手机上的加密文件中，经端到端加密同步，每台设备上的内容保持一致。可以在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，用浏览器扩展填入登录项，并把加密备份写入你选择的文件夹。
 
 hero:
   name: Lockra
   text: 两步验证码，留在你自己的设备上。
-  tagline: 适用于 Windows、macOS、Linux 和 Android 的加密验证器。端到端加密同步让每台设备上的账号保持一致；可以从 Google 身份验证器或 Microsoft Authenticator 迁入账号，并把加密备份放在你选择的位置。
+  tagline: 适用于 Windows、macOS、Linux 和 Android 的加密验证器，密码也保存在同一个保险库中。端到端加密同步让每台设备上的账号保持一致；可以从 Google 身份验证器或 Microsoft Authenticator 迁入账号，并把加密备份放在你选择的位置。
   actions:
     - theme: brand
       text: 下载
@@ -26,7 +26,7 @@ home:
     - term: 多端同步
       text: 每台设备上的账号保持一致，经内置中继或你自己的存储端到端加密同步。
     - term: 你的账号
-      text: 保存在每台设备的一个加密文件中。Lockra 为更新连接 GitHub，开启同步后还会连接你选择的中继或存储，除此之外不连接任何地方。
+      text: 验证码和密码保存在每台设备的一个加密文件中。Lockra 为更新连接 GitHub，开启同步后还会连接你选择的中继或存储，除此之外不连接任何地方。
 
   visual:
     home:
@@ -80,6 +80,28 @@ home:
             body: 基于时间（TOTP）和基于计数器（HOTP）的验证码，SHA1、SHA256 或 SHA512，6 至 8 位，任意周期。
             status: available
             link: /zh/accounts/add
+      - name: 密码
+        items:
+          - title: 登录项保存在同一个保险库中
+            body: 用户名、密码、网址、备注和自定义字段，以及与每个登录项关联的验证码账号，电脑和手机上都可以使用。
+            status: available
+            link: /zh/passwords/
+          - title: 每个登录项的保护级别
+            body: 直接填充，先用主密码或系统验证确认，或者不交给浏览器扩展。
+            status: available
+            link: /zh/passwords/#保护级别
+          - title: 密码生成器
+            body: 生成随机密码和口令，遵循已知网站的密码规则，并在设备上保留生成历史。
+            status: available
+            link: /zh/passwords/#密码生成器
+          - title: 从浏览器和密码管理器迁入
+            body: 从 Chrome、Edge、Firefox、Safari、Bitwarden、1Password、LastPass 和 KeePass 导入，并可导出为 KeePass 数据库或 CSV 文件。
+            status: available
+            link: /zh/passwords/import-export
+          - title: 浏览器扩展
+            body: 在 Windows、macOS 和 Linux 上的 Chrome、Edge 和 Firefox 中填入登录项及其验证码，并提示保存新密码。商店页面尚未上线。
+            status: building
+            link: /zh/passwords/browser
       - name: 迁移账号
         items:
           - title: 从 Google 身份验证器迁入
@@ -169,6 +191,9 @@ home:
       - name: Lockra
         into: 备份文件及其密码
         out: 备份文件
+      - name: 浏览器和密码管理器
+        into: 它们导出的密码，以及 KeePass 数据库
+        out: KeePass 数据库或 CSV 文件
     caption: 保存之前，预览会逐条标明账号是新增、已在保险库中、与另一个账号同名但密钥不同，还是不支持，并说明原因。
 
   backup:
@@ -245,20 +270,21 @@ home:
       - name: 网络
         value: 更新与你的同步
         detail: 你检查更新时，或开启自动更新后每次启动时，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。Lockra 没有用户账户或遥测，内置中继只保存加密的文件，字体和图片都随应用提供。
+      - name: 浏览器扩展
+        value: 只连接本机的 Lockra
+        detail: 它向同一台电脑上的 Lockra 请求，两者之间的连接经过加密；扩展不保存密码，也不经网络发送任何内容。
 
   scope:
     title: 有意不做的功能
-    intro: Lockra 只做一件事，并把它留在你的设备上。
+    intro: Lockra 把你的验证码和密码留在你的设备上。
     items:
       - 用户账户，或能读取账号的服务器。同步无需注册账户，中继或存储里只有加密的文件。
-      - 浏览器扩展或自动填写验证码。请复制后粘贴。
-      - 网站图标。账号显示首字母；获取图标需要联网。
       - Steam 令牌等非标准验证码。
 ---
 
 ## 多端同步
 
-Lockra 可以在 Windows、macOS、Linux 和 Android 上运行，同步让每台设备上的账号、分组和收藏保持一致。每台设备在共享的内容离开设备之前先完成加密；内置中继、自建中继、S3 兼容存储桶、WebDAV 文件夹，或电脑之间使用的网盘同步文件夹，保存的都只是密文。手机扫描电脑上的二维码即可加入，无需注册任何 Lockra 账号。
+Lockra 可以在 Windows、macOS、Linux 和 Android 上运行，同步让每台设备上的账号、登录项、分组和收藏保持一致。每台设备在共享的内容离开设备之前先完成加密；内置中继、自建中继、S3 兼容存储桶、WebDAV 文件夹，或电脑之间使用的网盘同步文件夹，保存的都只是密文。手机扫描电脑上的二维码即可加入，无需注册任何 Lockra 账号。
 
 <ScreenFigure src="/screens/devices-zh-light.webp" dark="/screens/devices-zh-dark.webp" width="1440" height="900" alt="电脑和手机上的 Lockra，显示相同的账号和相同的验证码。" />
 
@@ -274,9 +300,9 @@ Lockra 可以在 Windows、macOS、Linux 和 Android 上运行，同步让每台
 
 Google 身份验证器以二维码的形式导出账号，Lockra 可以从照片或截图中读取，一次可以选择多张。Microsoft Authenticator 没有导出功能；在已 root 的 Android 手机上，Lockra 改为读取它的数据库。其他验证器可以提供 otpauth 链接或二维码。
 
-反向迁移时，Lockra 显示给 Google 身份验证器的迁移二维码，以及给 Microsoft Authenticator 的每个账号一张二维码，旁边同时显示各账号的当前验证码，方便与手机核对。
+反向迁移时，Lockra 显示给 Google 身份验证器的迁移二维码，以及给 Microsoft Authenticator 的每个账号一张二维码，旁边同时显示各账号的当前验证码，方便与手机核对。登录项可以经同样的预览从浏览器和密码管理器迁入，也可以导出为 KeePass 数据库或 CSV 文件。
 
-[Google 身份验证器](/zh/transfer/google) · [Microsoft Authenticator](/zh/transfer/microsoft) · [其他应用](/zh/transfer/other-apps)
+[Google 身份验证器](/zh/transfer/google) · [Microsoft Authenticator](/zh/transfer/microsoft) · [其他应用](/zh/transfer/other-apps) · [登录项](/zh/passwords/import-export)
 
 </SplitBlock>
 
@@ -296,7 +322,7 @@ Google 身份验证器以二维码的形式导出账号，Lockra 可以从照片
 
 ## 为保密而设计
 
-保险库是一个加密文件。没有主密码就无法读取，哪怕改动其中 1 个字节也会被发现。Lockra 在无操作时自动锁定，清除自己复制的验证码，只有再次输入主密码（或在手机上验证指纹）后才会显示密钥。
+保险库是一个加密文件。没有主密码就无法读取，哪怕改动其中 1 个字节也会被发现。Lockra 在无操作时自动锁定，清除自己复制的验证码和密码；账号的密钥，以及保护级别为「填充前验证」的登录项的密码，只有再次输入主密码（或在手机上验证指纹）后才会显示。
 
 [Lockra 如何保护你的账号](/zh/security/) · [隐私](/zh/privacy)
 

@@ -4,7 +4,7 @@
 
 # Lockra
 
-### 两步验证码保存在你的电脑和手机上，加密，多端同步。
+### 两步验证码和密码保存在你的电脑和手机上，加密，多端同步。
 
 [![CI](https://github.com/sunerpy/lockra/actions/workflows/ci.yml/badge.svg)](https://github.com/sunerpy/lockra/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/sunerpy/lockra)](https://github.com/sunerpy/lockra/releases)
@@ -20,7 +20,8 @@
 
 Lockra 是一个 TOTP/HOTP 验证器，支持 Windows、macOS、Linux 和 Android。账号保存在每台设备的加密文件中，
 Lockra 只为自身的更新以及你开启的设备间端到端加密同步联网。它可以从 Google 身份验证器和 Microsoft Authenticator
-导入账号，也可以导出给它们，并把加密备份写入你选择的文件夹。
+导入账号，也可以导出给它们，并把加密备份写入你选择的文件夹。从 0.10.0 起，Lockra 还在同一个保险库中保存你的
+密码，并提供适用于 Chrome、Edge 和 Firefox 的浏览器扩展来填充它们。
 
 ![电脑和手机上的 Lockra，显示相同的账号和相同的验证码](../site/public/screens/devices-zh-light.webp)
 
@@ -32,7 +33,9 @@ Lockra 只为自身的更新以及你开启的设备间端到端加密同步联�
   经网盘同步文件夹，端到端加密地同步，每台设备上的账号保持一致。内容在离开设备之前就已加密，中继或存储里只有密文。
 - **扫码配对**：手机扫描电脑上的二维码即可加入，也可以粘贴配对链接或邀请码；所有设备都丢失时，可以用恢复密钥
   找回同步空间。
-- **无需账号**：无需注册，没有遥测，也没有能读取验证码的服务器。账号可以从 Google 身份验证器或 Microsoft
+- **密码也在同一个保险库中**：登录项与验证码并列保存，一个主密码、一份备份；提供密码生成器，可以从浏览器和
+  密码管理器导入，浏览器扩展会先填入登录项，再填入它的验证码。
+- **无需账号**：无需注册，没有遥测，也没有能读取验证码或密码的服务器。账号可以从 Google 身份验证器或 Microsoft
   Authenticator 迁入，也可以迁回去。
 
 ## 特性
@@ -44,6 +47,15 @@ Lockra 只为自身的更新以及你开启的设备间端到端加密同步联�
   新增、已存在、同名不同密钥或不支持，并说明原因。
 - **导出**：给 Google 身份验证器的迁移二维码、给 Microsoft Authenticator 的每个账号一张标准二维码，或者明文列表。
   每种方式都要再次输入主密码，二维码旁边显示当前验证码，方便与手机核对。
+- **密码**（0.10.0 起）：登录项包含用户名和邮箱、密码、按注册域、主机或模式匹配的网址、备注、自定义字段、
+  标签、分组和关联的验证码；每个登录项有自己的保护级别（直接填充、填充前验证，或不交给扩展）和密码历史。
+  密码生成器可以按网站的密码规则生成随机密码和口令。登录项可以从 Chrome、Edge、Firefox、Safari、Bitwarden、
+  1Password、LastPass 和 KeePass（KDBX 4）导入，并导出为 KeePass 数据库或明文 CSV 文件。手机上可以查看、复制和
+  编辑登录项（[密码指南](https://firlab.app/lockra/zh/passwords/)）。
+- **浏览器扩展**（Windows、macOS 和 Linux 上的 Chrome、Edge 和 Firefox）：扩展本身不保存密码，而是经端到端
+  加密的本机通道向正在运行的 Lockra 请求，只需核对一次 6 位代码完成配对。可以从弹窗、用 `Ctrl Shift L` 或从
+  输入框旁的菜单填充，在下一页填入关联的验证码，并提示保存和更新密码；每一次填充都由 Lockra 决定，Lockra 可以
+  为此留在托盘中运行。商店页面尚未上线（[扩展指南](https://firlab.app/lockra/zh/passwords/browser)）。
 - **备份**：随时手动备份为加密的 `.lockrabackup` 文件；也可以在每次修改几秒后自动备份到指定文件夹（OneDrive、
   Google Drive 或 iCloud 的同步文件夹均可），只保留最近几份。恢复时可以合并，也可以整体替换。
 - **手机端**：Android 应用（Android 8 及以上，ARM64）与电脑使用同样的保险库：可以用相机扫描二维码，也可以
@@ -117,7 +129,8 @@ RELAY_HOST=relay.example.com docker compose -f deploy/relay/compose.yaml up -d
 ## 快速开始
 
 1. 启动 Lockra，设置主密码。主密码无法找回，请妥善保管。
-2. 在「导入」页导入账号：Google 身份验证器导出二维码的照片、粘贴或从剪贴板读取的链接，或者一个备份。
+2. 在「导入」页导入账号：Google 身份验证器导出二维码的照片、粘贴或从剪贴板读取的链接，或者一个备份。浏览器或
+   密码管理器导出的密码也以同样的方式导入。
 3. 点击账号即可复制验证码。在「备份」页开启自动备份。
 
 [文档](https://firlab.app/lockra/zh/)详细介绍了每一步、在手机与电脑之间迁移账号、备份、安全和常见问题。

@@ -114,4 +114,6 @@ Uninstall Lockra the usual way for your system:
 
 The vault and the settings stay in the folders above, so a later install finds them again; delete
 those folders to remove everything. If you used **Remember on this device**, turn it off before
-uninstalling so the key in the system keychain is deleted too.
+uninstalling so the key in the system keychain is deleted too, and if you turned on **Settings ›
+Browser › Browser integration**, turn that off as well, so the browsers' connection files are
+removed.

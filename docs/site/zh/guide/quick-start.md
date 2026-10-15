@@ -16,7 +16,7 @@ Lockra 首次启动时会要求设置主密码。主密码用于加密全部账�
 - **Microsoft Authenticator**：详见 [Microsoft Authenticator](/zh/transfer/microsoft)；需要已 root 的 Android 手机。
 - **网站的设置页面**：网站显示用于设置验证器的二维码时，截取它，或复制它的 otpauth 链接，然后选择「从剪贴板导入」。
 
-Lockra 会先列出找到的内容，然后才保存。核对列表后选择「导入」。
+Lockra 会先列出找到的内容，然后才保存。核对列表后选择「导入」。浏览器或密码管理器中的密码也以同样的方式导入（[导入与导出登录项](/zh/passwords/import-export)）。
 
 也可以手动添加单个账号：在验证码页选择「添加 › 手动输入…」，或按 `Ctrl N`。
 

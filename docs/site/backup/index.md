@@ -47,3 +47,17 @@ backup's password. Then choose how:
 
 On the welcome screen of a new installation, **Restore a backup** turns a backup into the vault,
 and the backup's password becomes the master password.
+
+## Logins in backups
+
+<StatusTag status="available" /> Available from version 0.10.0.
+
+A backup holds the logins and the browser extension's site lists along with the accounts. It leaves
+out what stays on the device: the generator's history, the paired browser extensions and what they
+may do, and the sync settings.
+
+- **Merge (confirm each)** puts the backup's logins into the import preview as well
+  ([The preview](/passwords/import-export#the-preview)).
+- **Replace the current accounts** replaces the logins too. A backup that holds no logins, such as
+  one made by Lockra 0.9 or earlier, replaces the accounts and leaves the logins as they are.
+- Lockra 0.9 and earlier cannot open a backup that holds logins: restore it with 0.10.0 or later.
