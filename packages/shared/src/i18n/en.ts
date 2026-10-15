@@ -1599,6 +1599,8 @@ export const en: Messages = {
     browserPaused: "“{name}” asked too often and is paused",
     browserUnlockRequested: "{browser} asks Lockra to unlock",
     openPalette: "Quick search opened",
+    openSettings: "Settings opened",
+    openUpdates: "Software update opened",
     imported: "Imported {added}, replaced {replaced}, skipped {skipped}",
     importedLogins: "Imported {added} logins, replaced {replaced}, skipped {skipped}",
     importedBoth:

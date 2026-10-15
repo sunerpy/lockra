@@ -198,6 +198,18 @@
   {
     "type": "notice",
     "notice": {
+      "type": "open_settings"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "open_updates"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
       "type": "clipboard_cleared"
     }
   },

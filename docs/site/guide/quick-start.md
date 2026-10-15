@@ -46,3 +46,17 @@ See [Backups and restore](/backup/).
 
 Lockra locks itself after five idle minutes. `Ctrl L` locks at once; the master password unlocks
 again.
+
+## The tray icon
+
+<StatusTag status="available" /> Available from version 0.10.0.
+
+While Lockra runs on a computer, its padlock sits in the tray: in the notification area on Windows,
+in the menu bar on macOS. Click it to bring the window up; right-click it for **Open Lockra**,
+**Quick search**, **Lock**, **Settings…**, **Check for updates…** and **Quit Lockra**. On Linux a
+click opens that menu. **Check for updates…** opens the update dialog, and checks at once unless an
+update is already under way. **Lock**, **Settings…** and **Check for updates…** are greyed out while
+Lockra is locked.
+
+Closing the window quits Lockra, unless **Settings › Browser › Keep running after the window
+closes** is on: then the window hides and Lockra stays in the tray.

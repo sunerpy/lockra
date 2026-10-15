@@ -113,7 +113,19 @@ function ShellLayout() {
   useEffect(() => {
     blocked.current = busy;
   }, [busy]);
-  const { setPaletteOpen } = shell;
+  const { setPaletteOpen, open: openOverlay, setUpdateOpen } = shell;
+  // The tray's 「设置…」 and 「检查更新…」: Settings never over a dialog (the window then shows what is
+  // open), the update dialog over anything, as the title bar's badge opens it.
+  useEffect(
+    () =>
+      backend.on((event) => {
+        if (event.type !== "notice") return;
+        if (event.notice.type === "open_settings" && !blocked.current)
+          openOverlay({ type: "settings", section: "general" });
+        else if (event.notice.type === "open_updates") setUpdateOpen(true);
+      }),
+    [backend, openOverlay, setUpdateOpen],
+  );
   const endQuick = useCallback(
     (copied: boolean) => void backend.quickAccessDone(copied).catch(() => undefined),
     [backend],

@@ -114,7 +114,7 @@ pub struct ShellOptions {
     pub sync: Option<Arc<dyn SyncTransport>>,
     /// Where the browser channel listens (default: `browser::socket::place` of the app's folders).
     pub browser_socket: Option<PathBuf>,
-    /// Show the tray while Lockra runs in the background (off in the mock-runtime tests).
+    /// Show the tray icon (off in the mock-runtime tests: tray-icon builds a native one).
     pub tray: bool,
     /// Register the quick search's shortcut with the system (off in the mock-runtime tests, which
     /// then report every shortcut unavailable, as a Wayland desktop does).
@@ -384,9 +384,9 @@ async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core, tray: bool) {
                         // A palette the quick search opened went with the lock.
                         quick_access::forget(&app);
                     }
-                    // The tray follows the setting, from Settings or another window's change.
+                    // The tray's menu follows the language, the lock and what the build offers.
                     if tray {
-                        background::sync_tray(&app, state.settings.run_in_background, state.settings.locale, core.quick_access_offered());
+                        background::sync_tray(&app, background::TrayModel::of(state, core.quick_access_offered(), sys_locale::get_locale().as_deref()));
                     }
                     // The quick search's shortcut follows it too.
                     quick_access::sync(&app, state.quick_access.shortcut.as_deref());
@@ -447,8 +447,8 @@ fn watch_focus<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
     });
 }
 
-/// While Lockra runs in the background, closing the window hides it (the tray brings it back);
-/// otherwise the window closes and Lockra quits, as it always has.
+/// While Lockra runs in the background, closing the window hides it (the tray's icon and its 打开
+/// bring it back); otherwise the window closes and Lockra quits, as it always has.
 fn watch_close<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
     let hidden = window.clone();
     window.on_window_event(move |event| {
@@ -533,9 +533,12 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             app.manage(service.clone());
             tauri::async_runtime::spawn(browser::service::resume(core.clone(), service));
             let state = core.state();
-            let settings = state.settings;
+            let run_in_background = state.settings.run_in_background;
+            // The tray, there while Lockra runs (closing the window hides it only while it runs in
+            // the background: `watch_close`).
             if options.tray {
-                background::sync_tray(app.handle(), settings.run_in_background, settings.locale, core.quick_access_offered());
+                app.manage(background::TrayState::default());
+                background::sync_tray(app.handle(), background::TrayModel::of(&state, core.quick_access_offered(), sys_locale::get_locale().as_deref()));
             }
             // The quick search's shortcut, from the start: it works while the vault is locked too
             // (the window comes up with the unlock screen).
@@ -550,7 +553,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 // started with `--palette`, the quick search asks the core for the palette (which
                 // the vault, locked at a start, keeps shut: the unlock screen shows).
                 let start = quick_access::start_reason(&std::env::args_os().collect::<Vec<_>>());
-                if !(start == quick_access::Start::Browser && settings.run_in_background) {
+                if !(start == quick_access::Start::Browser && run_in_background) {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }

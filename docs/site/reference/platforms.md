@@ -55,6 +55,9 @@ asked once after the restart.
   the mark, other clipboard managers may not.
 - **Screenshots** cannot be blocked: Linux offers no way for an app to exclude its window from
   capture. The reveal and export views say so; mind screen sharing while they are open.
+- **The tray icon** goes through AppIndicator, and a click on it opens its menu. GNOME shows tray
+  icons only with an AppIndicator extension installed; without one, nothing shows that Lockra still
+  runs in the background, and starting Lockra again brings its window back.
 
 ## Android
 

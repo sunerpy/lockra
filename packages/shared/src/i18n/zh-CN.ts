@@ -1534,6 +1534,8 @@ export const zhCN = {
     browserPaused: "「{name}」请求过于频繁，已暂停",
     browserUnlockRequested: "{browser} 请求解锁 Lockra",
     openPalette: "已打开快捷搜索",
+    openSettings: "已打开设置",
+    openUpdates: "已打开软件更新",
     imported: "已导入 {added} 个，替换 {replaced} 个，跳过 {skipped} 个",
     importedLogins: "已导入 {added} 个登录项，替换 {replaced} 个，跳过 {skipped} 个",
     importedBoth:

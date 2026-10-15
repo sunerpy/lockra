@@ -3207,6 +3207,7 @@ fn unlocked(st: &State) -> CoreResult<&Session> {
 mod browser;
 mod items;
 mod quick_access;
+mod tray;
 
 pub use items::{GENERATOR_HISTORY_DAYS, GENERATOR_HISTORY_MAX};
 
