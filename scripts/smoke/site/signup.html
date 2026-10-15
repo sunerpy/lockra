@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sign up · signup.test</title>
+  </head>
+  <body>
+    <h1>Create an account</h1>
+    <form id="signup" action="/welcome.html" method="get">
+      <label>User name <input id="username" name="username" autocomplete="username" /></label>
+      <label
+        >Password
+        <input
+          id="password"
+          name="password"
+          type="password"
+          autocomplete="new-password"
+          passwordrules="minlength: 20; required: upper; required: digit; allowed: lower, upper, digit;" />
+      </label>
+      <label
+        >Again <input id="confirm" name="confirm" type="password" autocomplete="new-password"
+      /></label>
+      <button id="submit" type="submit">Sign up</button>
+    </form>
+  </body>
+</html>

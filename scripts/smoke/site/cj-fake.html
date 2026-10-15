@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>A menu of its own · login.test</title>
+  </head>
+  <body>
+    <form id="login" action="/welcome.html" method="get">
+      <input id="username" name="username" autocomplete="username" />
+      <input id="password" name="password" type="password" autocomplete="current-password" />
+    </form>
+    <!-- The page frames the extension's menu page itself, without the token the content script
+         hands its own frame: it must show nothing and fill nothing. -->
+    <iframe id="fake" title="fake" width="340" height="160"></iframe>
+    <script>
+      const params = new URLSearchParams(location.search);
+      document.getElementById("fake").src = params.get("menu") ?? "about:blank";
+    </script>
+  </body>
+</html>
