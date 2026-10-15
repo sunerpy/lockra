@@ -32,8 +32,9 @@ crates/
                    gives it, the host's relay. Every decision on a request is the core's.
 apps/desktop/
   src-tauri/       lockra-desktop: the Tauri shell (commands, keychain, clipboard, dialogs, drops,
-                   screen-capture protection, single instance, the tray; the browser channel's
-                   socket and manifests, and the host mode the browsers start it in).
+                   screen-capture protection, single instance, the tray, the quick search's global
+                   shortcut; the browser channel's socket and manifests, and the host mode the
+                   browsers start it in).
   src/             The React app: shell, pages, dialogs.
 apps/mobile/       The Android app (from 0.7.0).
   src-tauri/       lockra-mobile: the phone's Tauri shell; gen/android is its Gradle project, with
@@ -164,10 +165,11 @@ extension").
   `browser_unavailable` without password management. At each start with the integration on, the
   manifests are written again (the program may have moved with an update).
 - Running in the background (`src-tauri/src/background.rs`): with `run_in_background` on, closing
-  the window hides it and Lockra stays in the tray (open, lock, quit, in the app's language), so the
-  extension can reach it; off, closing the window quits as it always has. Another start brings the
-  window up, except one for the browser; on macOS the Dock's icon does too (`RunEvent::Reopen`).
-  The Linux packages depend on libayatana-appindicator for the tray.
+  the window hides it and Lockra stays in the tray (open, the quick search where it is offered,
+  lock, quit, in the app's language), so the extension can reach it; off, closing the window quits
+  as it always has. Another start brings the window up, except one for the browser (and one with
+  `--palette` brings the palette too, below); on macOS the Dock's icon does too
+  (`RunEvent::Reopen`). The Linux packages depend on libayatana-appindicator for the tray.
 - The interface: Settings › 浏览器 (`apps/desktop/src/pages/settings/Browser.tsx`) turns the
   integration and running in the background on and off, and shows the browsers, the pairings, the
   policy, the site lists and the activity; the requests that wait for the user, a pairing to
@@ -178,6 +180,36 @@ extension").
   for thirty seconds), Noise in TypeScript (`noise/`), the content scripts that find the fields and
   fill them (`content/`), the inline menu in an extension-origin frame (`inline/`), the popup and
   the options page; `protocol/` holds the zod schemas of the messages.
+
+## The quick search
+
+The command palette comes up from any app (`src-tauri/src/quick_access.rs`), to copy a login's user
+name, password or code: by a global shortcut (Settings › 通用 › 快捷搜索, `settings.json`'s
+`quick_access_shortcut`, none until one is chosen, Ctrl/⌘+Shift+Space suggested), by the tray's
+「快捷搜索」, and by `lockra-desktop --palette`, which a running Lockra hears through the
+single-instance check. Each brings the window up and asks the core (`Core::quick_access_open`),
+which sends `Notice::OpenPalette` only while unlocked: locked, the window shows the unlock screen
+and nothing of the vault comes up over another app. The webview opens the palette on the notice,
+unless a dialog is open (the window then shows it as it is).
+
+- The shortcut is registered from Rust only: tauri-plugin-global-shortcut is added the first time
+  one is to be registered, on the main thread, and the webview has no permission for its commands.
+  The shell follows `UiState.quick_access.shortcut` as the state changes (at start too: it works
+  while locked) and reports whether the system took it (`Core::quick_access_registered`); a
+  failure shows as `quick_access.error` = `shortcut_unavailable`, in memory only, cleared as
+  another shortcut is chosen. On Linux only an X11 session lets an app take a global shortcut: a
+  Wayland compositor keeps the keys from apps (XWayland's included), so there the shell registers
+  nothing, reports the shortcut unavailable, and Settings gives `lockra-desktop --palette` to bind
+  in the desktop's own keyboard settings.
+- The shell remembers how the window was (hidden in the tray, minimized). When the palette the quick
+  search opened closes, the webview says whether something was copied from it (the shell command
+  `quick_access_done { copied }`); after a copy the window goes back: hidden again (on macOS the app
+  hides, so the app the user came from has the keys back) or minimized again. Closed without a copy,
+  brought up some other way (the tray's 打开, the Dock, another start, an extension's request), or
+  locked meanwhile, the window stays where it is.
+- Like the rest of password management it needs `Features.passwords`: a release build without it
+  registers nothing, the tray has no 「快捷搜索」 and Settings shows no row; `--palette` then only
+  brings the window up.
 
 ## The phone shell
 

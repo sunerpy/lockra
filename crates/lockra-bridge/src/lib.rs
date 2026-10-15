@@ -527,9 +527,10 @@ pub const COMMANDS: [&str; 73] = [
     "browser_set_policy",
 ];
 
-/// The Tauri commands of the desktop shell: the dispatcher, the code stream, and the actions that
-/// open a native file dialog first.
-pub const SHELL_COMMANDS: [&str; 15] = [
+/// The Tauri commands of the desktop shell: the dispatcher, the code stream, the actions that open a
+/// native file dialog first, the browser integration's switch, and the end of a quick search (the
+/// window goes back where it was).
+pub const SHELL_COMMANDS: [&str; 16] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -545,6 +546,7 @@ pub const SHELL_COMMANDS: [&str; 15] = [
     "browser_enable",
     "browser_disable",
     "browser_status",
+    "quick_access_done",
 ];
 
 /// The Tauri commands of the phone shell: the dispatcher, the code stream, and the actions that

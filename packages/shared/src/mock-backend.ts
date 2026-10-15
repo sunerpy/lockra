@@ -827,8 +827,12 @@ export class MockBackend implements Backend {
   private browser: Pick<BrowserView, "paired" | "pairing" | "confirms" | "policy" | "activity">;
   /** The browsers whose manifests the mock's shell has written. */
   private manifests = new Set<BrowserId>();
+  /** The shell could not register the quick search's shortcut (the core keeps it in memory). */
+  private shortcutError: ErrorCode | null = null;
   /** Every command dispatched, for tests. */
   readonly calls: UiCommand[] = [];
+  /** Every quick search's end the webview told the shell of (`quickAccessDone`), for tests. */
+  readonly quickAccessEnds: boolean[] = [];
 
   constructor(options: MockOptions = {}) {
     this.now = options.now ?? (() => Date.now());
@@ -885,6 +889,7 @@ export class MockBackend implements Backend {
         policy: defaultBrowserPolicy(),
         activity: [],
       },
+      quick_access: { shortcut: null, error: null },
       collapsed_groups: phase === "unlocked" ? [...this.collapsed] : [],
       entry_order: [],
       group_order: [],
@@ -899,6 +904,7 @@ export class MockBackend implements Backend {
     };
     this.lockedEntries = phase === "unlocked" ? [] : entries.map((e) => e.view);
     this.state.browser = this.browserView();
+    this.state.quick_access = this.quickAccessView();
     this.refreshAutoLock();
   }
 
@@ -1140,6 +1146,36 @@ export class MockBackend implements Backend {
   async browserStatus(): Promise<BrowserStatus[]> {
     this.requireBrowserShell();
     return this.browserStatuses();
+  }
+
+  async quickAccessDone(copied: boolean): Promise<void> {
+    this.quickAccessEnds.push(copied);
+  }
+
+  /** The quick search where the core offers it (password management on, the desktop), with what
+   *  the shell reported of its shortcut. */
+  private quickAccessView(): UiState["quick_access"] {
+    if (!this.passwords || this.state.platform === "android")
+      return { shortcut: null, error: null };
+    return { shortcut: this.state.settings.quick_access_shortcut, error: this.shortcutError };
+  }
+
+  /** Test hook: the quick search asked for, as the shell does on its shortcut, the tray's
+   *  「快捷搜索」 or `lockra-desktop --palette`: the palette opens while unlocked. Whether it was
+   *  asked to open. */
+  summonQuickAccess(): boolean {
+    if (!this.passwords || this.state.platform === "android" || this.state.phase !== "unlocked")
+      return false;
+    this.notice({ type: "open_palette" });
+    return true;
+  }
+
+  /** Test hook: the shell registered the chosen shortcut, or could not. */
+  reportShortcut(registered: boolean): void {
+    if (this.state.settings.quick_access_shortcut === null) return;
+    this.shortcutError = registered ? null : "shortcut_unavailable";
+    this.state.quick_access = this.quickAccessView();
+    this.publish();
   }
 
   /** Test hook: what the next camera scans read. */
@@ -1478,10 +1514,15 @@ export class MockBackend implements Backend {
         if (settings.auto_backup.enabled && settings.auto_backup.dir === null)
           throw new LockraError("backup_dir_missing");
         const updateTurnedOn = settings.auto_update && !this.state.settings.auto_update;
+        const shortcut = settings.quick_access_shortcut?.trim() || null;
+        // The shell's report was about the shortcut chosen before.
+        if (shortcut !== this.state.settings.quick_access_shortcut) this.shortcutError = null;
         this.state.settings = {
           ...settings,
           font_size_px: Math.min(18, Math.max(12, settings.font_size_px)),
+          quick_access_shortcut: shortcut,
         };
+        this.state.quick_access = this.quickAccessView();
         this.refreshAutoLock();
         this.publish();
         // Turned on: look and download now, like the core (a busy updater skips it).

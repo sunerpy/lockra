@@ -158,6 +158,9 @@ struct State {
     items_rev: u64,
     /// The browser extensions' sessions and the requests waiting for the user (in memory).
     browser: BrowserRuntime,
+    /// The shell could not register the quick search's shortcut (in memory; cleared as another
+    /// shortcut is chosen).
+    quick_access_error: Option<ErrorCode>,
 }
 
 /// A watch on a space's storage, for that space and storage.
@@ -269,6 +272,7 @@ impl Core {
             storage_watch: None,
             items_rev: 0,
             browser: BrowserRuntime::default(),
+            quick_access_error: None,
         };
         let (events, _) = broadcast::channel(64);
         let shared =
@@ -1549,6 +1553,10 @@ impl Core {
             if !settings.auto_update {
                 st.update.auto_at = None;
             }
+            if settings.quick_access_shortcut != st.settings.quick_access_shortcut {
+                // The shell's report was about the shortcut chosen before.
+                st.quick_access_error = None;
+            }
             st.settings = settings;
             if backup_turned_on {
                 self.schedule_auto_backup(&mut st);
@@ -2724,6 +2732,7 @@ impl Core {
             },
             generator: GeneratorStatus { history_count: items::generator_history_count(st) },
             browser: self.browser_view(st),
+            quick_access: self.quick_access_view(st),
             collapsed_groups,
             entry_order,
             group_order,
@@ -3139,6 +3148,7 @@ fn unlocked(st: &State) -> CoreResult<&Session> {
 
 mod browser;
 mod items;
+mod quick_access;
 
 pub use items::{GENERATOR_HISTORY_DAYS, GENERATOR_HISTORY_MAX};
 

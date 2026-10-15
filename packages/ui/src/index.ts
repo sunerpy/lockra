@@ -35,6 +35,7 @@ export * from "./components/ReorderList";
 export * from "./components/Menu";
 export * from "./components/Popover";
 export * from "./components/Keycap";
+export * from "./components/ShortcutRecorder";
 export * from "./components/Banner";
 export * from "./components/SyncKeyReminder";
 export * from "./components/StatusRow";

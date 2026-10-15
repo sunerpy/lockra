@@ -5,6 +5,7 @@ import {
   errorText,
   isLockraError,
   noticeIsProblem,
+  noticeIsToast,
   noticeText,
 } from "@lockra/shared";
 import type { EntryView } from "@lockra/shared";
@@ -69,7 +70,7 @@ export function useToaster(): Toaster {
 }
 
 /** The core's notices as toasts (inside the i18n tree, so they are translated); a copy names the
- *  account it came from. */
+ *  account it came from. The quick search's request for the palette is not one (`noticeIsToast`). */
 export function NoticeBridge() {
   const { backend, state, items } = useBackend();
   const toaster = useToaster();
@@ -80,7 +81,7 @@ export function NoticeBridge() {
   useEffect(
     () =>
       backend.on((event) => {
-        if (event.type !== "notice") return;
+        if (event.type !== "notice" || !noticeIsToast(event.notice)) return;
         const notice = event.notice;
         if (notice.type === "item_copied") {
           // A login's copy names the login, from the list the page asked for last.

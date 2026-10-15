@@ -32,6 +32,7 @@ mod export_items;
 mod import_logins;
 mod items;
 mod logins;
+mod quick_access;
 mod sync;
 mod update;
 

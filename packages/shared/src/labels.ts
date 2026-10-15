@@ -131,6 +131,8 @@ export function noticeText(t: TFunction, notice: Notice, name?: string): string 
       });
     case "browser_unlock_requested":
       return t("notice.browserUnlockRequested", { browser: browserName(notice.browser) });
+    case "open_palette":
+      return t("notice.openPalette");
     case "imported":
       return importedText(t, notice);
     case "file_unrecognized":
@@ -200,6 +202,12 @@ function syncBroughtText(t: TFunction, notice: Extract<Notice, { type: "sync_bro
 export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.max(0, Math.round(bytes / 1024))} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Whether a notice is told as a toast: every one but the quick search's request for the command
+ *  palette, which the palette itself answers. */
+export function noticeIsToast(notice: Notice): boolean {
+  return notice.type !== "open_palette";
 }
 
 /** Whether a notice is bad news (the toast is drawn in the danger tone). */

@@ -64,6 +64,13 @@ export const zhCN = {
       results: { one: "{n} 条结果", other: "{n} 条结果" },
     },
     banner: { close: "关闭" },
+    shortcut: {
+      none: "未设置",
+      recording: "按下快捷键…",
+      needsModifier: "要同时按住 Ctrl 或 Alt",
+      needsModifierMac: "要同时按住 ⌘、⌃ 或 ⌥",
+      clear: "清除快捷键",
+    },
     sortable: {
       role: "可排序的项",
       handle: "移动「{name}」：拖动，或按上下方向键",
@@ -913,6 +920,13 @@ export const zhCN = {
       autoUpdate: "自动更新",
       autoUpdateHelp:
         "开启后，Lockra 在启动 10 秒后检查更新并在后台下载，重启时完成安装；关闭时，仅在点击「检查更新」时联网。",
+      quickAccess: {
+        label: "快捷搜索",
+        field: "快捷搜索的快捷键",
+        help: "在任何应用里按下快捷键唤出命令菜单，复制用户名、密码或验证码，复制后窗口回到原处。",
+        suggest: "使用 {keys}",
+        bind: "也可以在桌面环境的快捷键设置里，把这条命令绑定到快捷键，效果相同：",
+      },
     },
     appearance: {
       lede: "主题、视图、强调色、密度和字号，修改后立即生效。",
@@ -1436,6 +1450,8 @@ export const zhCN = {
     browser_not_paired: "这个浏览器扩展没有配对，或者配对已经取消",
     browser_pair_expired: "这个请求已经过期，请在浏览器里重新发起",
     browser_manifest_failed: "无法写入或删除浏览器的连接配置（native messaging 清单）",
+    shortcut_unavailable:
+      "无法注册这个快捷键：可能已被其他应用占用，或者桌面环境不允许应用注册全局快捷键",
     feature_unavailable: "当前版本还不支持这项操作：含有密码的备份请用「替换」恢复",
     internal: "出现内部错误",
   },
@@ -1497,6 +1513,7 @@ export const zhCN = {
     browserConfirmRequested: "{browser} 请求填充「{title}」",
     browserPaused: "「{name}」请求过于频繁，已暂停",
     browserUnlockRequested: "{browser} 请求解锁 Lockra",
+    openPalette: "已打开快捷搜索",
     imported: "已导入 {added} 个，替换 {replaced} 个，跳过 {skipped} 个",
     importedLogins: "已导入 {added} 个登录项，替换 {replaced} 个，跳过 {skipped} 个",
     importedBoth:
