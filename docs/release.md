@@ -28,10 +28,14 @@ one workflow run builds, verifies and publishes everything.
      x64, NSIS on Windows arm64), which signs every package for the in-app update;
    - `bundle-android` builds the phone app's APK and AAB for arm64 unsigned, signs them with the
      Android key in a step of its own and checks them against the pinned certificate (below);
-   - `updater` collects every leg, verifies every signature against the public key in
-     `tauri.conf.json`, writes `latest.json` (below) and `SHA256SUMS`, attests the files (SLSA
-     build provenance) and attaches them to the draft. `.github/scripts/test-tauri-release.py`
-     checks every leg and the manifest's keys against the target manifest;
+   - `bundle-relay` builds the relay server's static Linux archives (`docs/relay.md`);
+   - `bundle-extension` builds the browser extension's store packages twice, requiring the same
+     bytes, and its source package (below);
+   - `updater` collects every leg (the Android, relay and extension files checked against their
+     legs' checksums), verifies every signature against the public key in `tauri.conf.json`, writes
+     `latest.json` (below) and `SHA256SUMS`, attests the files (SLSA build provenance) and attaches
+     them to the draft. `.github/scripts/test-tauri-release.py` checks every leg and the manifest's
+     keys against the target manifest;
    - `publish-release` re-verifies every remote asset against `SHA256SUMS` and flips the draft to
      public, marking it latest unless it is a prerelease.
 5. A failed leg leaves the draft unpublished. Rebuild it after a fix of the workflow or an outage
@@ -234,6 +238,51 @@ other.
   upgrade, in a release that carries the lineage; to be designed when needed.
 - **Checking a key:** `keytool -list -v -keystore lockra-release.jks -alias lockra` shows the
   SHA-256 above.
+
+## The browser extension
+
+From the first release after 0.9.1, every release carries the browser extension (`apps/extension`)
+as three files, in `SHA256SUMS` and the attestations, in no updater manifest:
+
+- `lockra-extension_X.Y.Z_chrome.zip`, the package for the Chrome Web Store and for Microsoft Edge
+  Add-ons, which take the same file;
+- `lockra-extension_X.Y.Z_firefox.zip`, the package for addons.mozilla.org (AMO);
+- `lockra-extension_X.Y.Z_source.zip`, the tag's tree (`git archive`) with a `BUILD.md` at its
+  root: the environment the release built in, the commands, and the two packages' SHA-256. AMO
+  asks for the source of an add-on that is bundled and minified; its reviewer rebuilds the add-on
+  from it and compares the files.
+
+`bundle-extension` runs `scripts/package-extension.sh`. It builds the packages twice, as
+`make extension` does (`pnpm --filter @lockra/extension run package`, with the lockfile's tools),
+and stops unless both builds give the same bytes; it checks their manifests (the release's version,
+no development `key` in the Chrome package, the add-on id `lockra@firlab.app` in the Firefox one),
+then writes the source package and the three files' checksums, `evidence/extension.sha256`, which
+the `updater` job checks after downloading them (`.sha256`, not `.json`: `tauri-release.py` reads
+every `evidence/*.json` as a desktop leg's). `make check` and CI's `repo` job run the same script
+with `--check`, so a change that breaks the packaging fails in its pull request, not in a release.
+
+**The stores.** The packages go to the stores by hand (publishing through the stores' APIs is
+planned, P1). Download them from the release and check them:
+
+```bash
+gh release download vX.Y.Z --pattern 'lockra-extension_*' --pattern SHA256SUMS &&
+  sha256sum --check --ignore-missing SHA256SUMS
+```
+
+1. Chrome Web Store (the developer dashboard): the Chrome zip.
+2. Microsoft Edge Add-ons (Partner Center): the same Chrome zip.
+3. AMO (the Developer Hub): the Firefox zip, and the source zip at the step that asks for the
+   source code; the notes to the reviewer point at `BUILD.md`.
+
+A store account can push an update to every browser that has the extension: keep each one, like
+the GitHub account, behind two-factor authentication with a hardware key.
+
+**The ids.** Firefox's is in the manifest, `lockra@firlab.app`, the same in every build. The Chrome
+Web Store and Edge Add-ons assign theirs when the first package is uploaded, as a draft, before any
+review; any build of the Chrome zip will do, `make extension`'s too, and the id stays with the
+store's item. Both go into `crates/lockra-browser/src/ids.rs` (`CHROME_WEB_STORE`, `EDGE_ADDONS`;
+`None` until then): the native-messaging manifests of a release build allow those ids and no other
+Chromium extension (a debug build adds the development id).
 
 ## The install scripts
 

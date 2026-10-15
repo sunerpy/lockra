@@ -3,9 +3,12 @@
 manifest and its real updater configuration: every package of every leg is signed and collected,
 the macOS legs archive the .app for the updater beside their dmg, a leg without a signature or an
 archive fails, and latest.json carries one key per target plus one per installer, so a copy
-installed from the .deb, the .rpm or the .msi updates through its own package. It also checks the
-update settings in tauri.conf.json and that deny.toml's [graph] targets are exactly the shipped
-targets. Run by scripts/verify-all.sh and the CI config job.
+installed from the .deb, the .rpm or the .msi updates through its own package. The legs that ship
+no desktop package (the phone's packages, the relay's archives, the browser extension's zips) lie
+beside them as the updater job downloads them, with their checksums as evidence/*.sha256, and
+reach no key of latest.json. It also checks the update settings in tauri.conf.json and that
+deny.toml's [graph] targets are exactly the shipped targets. Run by scripts/verify-all.sh and the CI
+config job.
 
 Stdlib only and Python 3.9 or later, like tauri-release.py, so it runs wherever `make check` does
 (macOS ships Python 3.9); it needs no jq, GNU tool or TOML library.
@@ -14,6 +17,7 @@ Stdlib only and Python 3.9 or later, like tauri-release.py, so it runs wherever 
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import subprocess
@@ -166,6 +170,22 @@ def main() -> None:
         if len(list(evidence.glob("*.json"))) != len(targets):
             fail("one evidence file per target expected")
 
+        # release.yml's other legs, as its updater job downloads them: their files beside the
+        # desktop packages, their checksums in sha256sum's format as evidence/*.sha256 (a *.json
+        # there would be read as a desktop leg's evidence).
+        others = {
+            "aarch64-linux-android.sha256": [f"Lockra_{VERSION}_android_arm64.apk", f"Lockra_{VERSION}_android_arm64.aab"],
+            "relay-x64.sha256": [f"lockra-relay_{VERSION}_linux_x64.tar.gz"],
+            "relay-arm64.sha256": [f"lockra-relay_{VERSION}_linux_arm64.tar.gz"],
+            "extension.sha256": [f"lockra-extension_{VERSION}_{kind}.zip" for kind in ("chrome", "firefox", "source")],
+        }
+        for sums, names in others.items():
+            for name in names:
+                (out / name).write_text(f"package {name}\n", encoding="utf-8")
+            (evidence / sums).write_text(
+                "".join(f"{hashlib.sha256((out / name).read_bytes()).hexdigest()}  {name}\n" for name in names),
+                encoding="utf-8")
+
         latest = out / "latest.json"
         run = subprocess.run([sys.executable, str(SCRIPT), "updater-json", "--dist", str(out), "--evidence-dir", str(evidence),
                               "--repo", REPO, "--tag", f"v{VERSION}", "--version", VERSION, "--targets-file", str(MANIFEST),
@@ -186,6 +206,10 @@ def main() -> None:
         for key, specific in generic.items():
             if platforms[key] != platforms[specific]:
                 fail(f"latest.json {key} is not its updater bundle {specific}")
+        named = json.dumps(platforms)
+        for name in (name for names in others.values() for name in names):
+            if name in named:
+                fail(f"latest.json names {name}, which no updater installs")
 
         # A leg whose updater bundle has no signature fails, and so does a macOS leg whose bundle
         # step archived no .app or produced no dmg.

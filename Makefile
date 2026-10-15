@@ -63,7 +63,7 @@ android-clippy: frontend-dist-dirs ## clippy -D warnings for aarch64-linux-andro
 	./scripts/clippy-android.sh
 
 .PHONY: extension
-extension: ## The browser extension's Chrome, Edge and Firefox zips, deterministic, in apps/extension/dist
+extension: ## The browser extension's zips, deterministic, in apps/extension/dist: Chrome (and Edge), Firefox
 	$(PNPM) --filter @lockra/extension run package
 
 .PHONY: android-apk

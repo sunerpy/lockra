@@ -49,6 +49,10 @@ class NoSuchElement(Exception):
     pass
 
 
+class StaleElement(Exception):
+    pass
+
+
 def until(what, check, timeout=30.0, step=0.25):
     """Poll `check` until it returns something truthy; fail after `timeout` seconds."""
     deadline = time.monotonic() + timeout
@@ -78,6 +82,8 @@ class Session:
                 payload = json.loads(e.read() or b"{}").get("value", {})
                 if payload.get("error") == "no such element":
                     raise NoSuchElement(path) from None
+                if payload.get("error") == "stale element reference":
+                    raise StaleElement(f"{method} {path}: {payload}") from None
                 raise SystemExit(f"smoke: {method} {path}: {e.code} {payload}") from None
             except (ConnectionResetError, urllib.error.URLError) as e:
                 reset = isinstance(e, ConnectionResetError) or isinstance(getattr(e, "reason", None), ConnectionResetError)
@@ -94,15 +100,25 @@ class Session:
     def s(self, path):
         return f"/session/{self.id}{path}"
 
+    def found(self, path, body):
+        """A find, asked again when WebKitWebDriver trips over a node the page replaced while it
+        looked ("stale element reference" from the find itself: CI on 2026-10-12 and 2026-10-15)."""
+        for _ in range(10):
+            try:
+                return self.call("POST", self.s(path), body)
+            except StaleElement:
+                time.sleep(0.2)
+        sys.exit(f"smoke: POST {path} kept finding a replaced node: {body}")
+
     def find(self, css=None, xpath=None):
         using, value = ("css selector", css) if css is not None else ("xpath", xpath)
         try:
-            return self.call("POST", self.s("/element"), {"using": using, "value": value})[ELEMENT]
+            return self.found("/element", {"using": using, "value": value})[ELEMENT]
         except NoSuchElement:
             return None
 
     def find_all(self, css):
-        return [e[ELEMENT] for e in self.call("POST", self.s("/elements"), {"using": "css selector", "value": css})]
+        return [e[ELEMENT] for e in self.found("/elements", {"using": "css selector", "value": css})]
 
     def wait(self, css=None, xpath=None, timeout=30.0):
         return until(css or xpath, lambda: self.find(css, xpath), timeout)
