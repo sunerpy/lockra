@@ -35,6 +35,7 @@ mod items;
 mod logins;
 mod quick_access;
 mod sync;
+mod tray;
 mod update;
 
 struct Harness {

@@ -1018,6 +1018,8 @@ export const noticeSchema = z.discriminatedUnion("type", [
   /** The quick search was asked for (its shortcut, the tray, `lockra-desktop --palette`): open the
    *  command palette. Only while unlocked; not a toast. */
   z.object({ type: z.literal("open_palette") }),
+  z.object({ type: z.literal("open_settings") }),
+  z.object({ type: z.literal("open_updates") }),
   z.object({
     type: z.literal("imported"),
     added: z.number().int(),

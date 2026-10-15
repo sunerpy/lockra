@@ -359,6 +359,8 @@ fn notices() -> Vec<Notice> {
         Notice::BrowserPaused { pairing: id(42), browser: "edge".into(), label: "Work".into() },
         Notice::BrowserUnlockRequested { browser: "chrome".into() },
         Notice::OpenPalette,
+        Notice::OpenSettings,
+        Notice::OpenUpdates,
         Notice::ClipboardCleared,
         Notice::Imported { added: 3, replaced: 1, skipped: 2, logins: LoginOutcome::default() },
         Notice::Imported { added: 1, replaced: 0, skipped: 0, logins: LoginOutcome { added: 12, replaced: 2, skipped: 3 } },
