@@ -10,8 +10,8 @@
 // Usage: phone_screens.mjs --cdp <host:port> --url <phone dev server> --lang en|zh
 //                          --state <state.json> --out <dir> [--passwords]
 // Writes <out>/<scheme>-<page>.png (scheme light|dark, page codes|add|sync), 1080 x 1920; with
-// --passwords the dev build offers password management (its `?passwords`, the sample logins) and
-// the logins and a login's page come too (logins|login).
+// --passwords the dev build offers password management (its `?passwords`, the desktop's logins
+// from the state file) and the logins and a login's page come too (logins|login).
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -47,6 +47,18 @@ const PATCH = `
 ;(() => {
   const ACCOUNTS = ${JSON.stringify(state.accounts)};
   sampleEntries = () => ACCOUNTS.map((a) => mockEntry(a.issuer, a.account, a.options));
+  // The desktop's logins too, in the shot's language, each code linked by its account's issuer.
+  const LOGINS = ${JSON.stringify(state.logins ?? [])};
+  if (LOGINS.length > 0)
+    sampleItems = (entries = []) =>
+      LOGINS.map((l) => ({
+        view: mockItemView(l.title, {
+          ...l.view,
+          has_password: true,
+          totp_entry: (l.code && entries.find((e) => e.view.issuer === l.code)?.view.id) || null,
+        }),
+        password: l.password,
+      }));
   const sha1 = (bytes) => {
     const size = ((bytes.length + 9 + 63) >> 6) << 6;
     const m = new Uint8Array(size);

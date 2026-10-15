@@ -14,6 +14,8 @@ password manager.
 
 ## The Passwords page
 
+<ScreenFigure src="/screens/passwords-en-light.webp" dark="/screens/passwords-en-dark.webp" width="1440" height="900" alt="The Passwords page: the search field and Add login at the top, the filters, the logins in their groups, and the GitHub login in the pane on the right with its user name, its password as dots and the linked account's code." />
+
 **Passwords** in the sidebar lists your logins. The header counts them and their groups and, with
 sync on, says how it stands; beside it are the search field and **Add login**, which offers **New
 login…** (`Ctrl N`), **Generate a password…** (`Ctrl G`) and **Import from another app…**.
@@ -172,6 +174,8 @@ the list after the master password, Touch ID or Windows Hello, and hides it afte
 device only: it is not synced and not in backups.
 
 ## On the phone
+
+<ScreenFigure src="/screens/phones-passwords-en-light.webp" dark="/screens/phones-passwords-en-dark.webp" width="1440" height="900" alt="Two phone screens: the Passwords page with the logins in cards, and the GitHub login's page with its user name, password and code." />
 
 From version 0.10.0, the bar at the bottom of the phone's screen has **Codes**, the raised button,
 **Passwords** and **Settings**. On the codes page the raised button is **Scan**; on the Passwords

@@ -68,6 +68,10 @@ Firefox that fills them.
   field, fills the linked code on the next page, and offers to save and update passwords; Lockra
   decides every fill, and can keep running in the tray for it. The store listings are not live yet
   ([extension guide](https://firlab.app/lockra/passwords/browser)).
+- **Quick search** (from 0.10.0, on Windows, macOS and Linux): a key combination of your own
+  brings up the command palette over any app, to copy a user name, a password or a code; on
+  Wayland, bind `lockra-desktop --palette` in the desktop's settings instead
+  ([quick search](https://firlab.app/lockra/passwords/#quick-search-from-anywhere)).
 - **Backups**: encrypted `.lockrabackup` files on demand, and automatic ones into a folder (a
   OneDrive, Google Drive or iCloud folder works) a few seconds after each change, keeping the
   newest few. Restore by merging or by replacing.

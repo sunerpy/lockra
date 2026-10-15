@@ -56,6 +56,9 @@ Lockra 只为自身的更新以及你开启的设备间端到端加密同步联�
   加密的本机通道向正在运行的 Lockra 请求，只需核对一次 6 位代码完成配对。可以从弹窗、用 `Ctrl Shift L` 或从
   输入框旁的菜单填充，在下一页填入关联的验证码，并提示保存和更新密码；每一次填充都由 Lockra 决定，Lockra 可以
   为此留在托盘中运行。商店页面尚未上线（[扩展指南](https://firlab.app/lockra/zh/passwords/browser)）。
+- **全局快捷搜索**（0.10.0 起，Windows、macOS 和 Linux）：在任何应用里按下自己设定的组合键唤出命令面板，复制
+  用户名、密码或验证码；在 Wayland 上改为在桌面环境的设置里绑定 `lockra-desktop --palette`
+  （[全局快捷搜索](https://firlab.app/lockra/zh/passwords/#全局快捷搜索)）。
 - **备份**：随时手动备份为加密的 `.lockrabackup` 文件；也可以在每次修改几秒后自动备份到指定文件夹（OneDrive、
   Google Drive 或 iCloud 的同步文件夹均可），只保留最近几份。恢复时可以合并，也可以整体替换。
 - **手机端**：Android 应用（Android 8 及以上，ARM64）与电脑使用同样的保险库：可以用相机扫描二维码，也可以

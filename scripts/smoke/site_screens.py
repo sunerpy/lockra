@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Screenshots for the documentation site (docs/site/public/screens), from the real app in one
-language: the codes page, the import preview of a Google Authenticator export and the backup page,
-at 1440 x 900, as <page>-<lang>-<scheme>.webp: the site's light figure in 澄空 and its dark one in
+language: the codes page, the Passwords page (a login selected, with its code), the import preview
+of a Google Authenticator export and the backup page, at 1440 x 900, as <page>-<lang>-<scheme>.webp: the site's light figure in 澄空 and its dark one in
 澄空 · 夜, Lockra's default theme on a light and on a dark system. The accounts are made up
-(example.com addresses, secrets derived from their names). Run by scripts/capture-site-screens.sh,
+(example.com addresses, secrets and passwords derived from their names). Run by scripts/capture-site-screens.sh,
 which owns Xvfb, the driver and the throwaway folders; the WebDriver session is the smoke test's.
 --state gets the accounts and the moment of each codes shot, for scripts/smoke/phone_screens.mjs to
 show the same accounts and codes on the phone. Every wait is a condition with a deadline.
@@ -35,17 +35,21 @@ COPY = {
     "en": {
         "locale": "en",
         "nav_label": "Main navigation",
-        "nav": {"codes": "Codes", "import": "Import", "backup": "Backup"},
+        "nav": {"codes": "Codes", "passwords": "Passwords", "import": "Import", "backup": "Backup"},
         "work": "Work",
+        "dev": "Dev",
         "bank": ("Bank", "Card ending 1234"),
+        "bank_login": "Bank",
         "vpn": "Legacy VPN",
     },
     "zh": {
         "locale": "zh-cn",
         "nav_label": "主导航",
-        "nav": {"codes": "验证码", "import": "导入", "backup": "备份"},
+        "nav": {"codes": "验证码", "passwords": "密码", "import": "导入", "backup": "备份"},
         "work": "工作",
+        "dev": "开发",
         "bank": ("银行", "尾号 1234"),
+        "bank_login": "网上银行",
         "vpn": "旧版 VPN",
     },
 }
@@ -54,6 +58,11 @@ COPY = {
 def secret(*seed):
     """Ten bytes derived from the account's name: a believable secret that belongs to no one."""
     return hashlib.sha1(":".join(("lockra-site", *seed)).encode()).digest()[:10]
+
+
+def password(*seed):
+    """A strong password derived from the login's name: shown as dots, and no one's."""
+    return "-".join(b32(secret("password", *seed))[i : i + 5] for i in (0, 5, 10))
 
 
 def b32(raw):
@@ -193,6 +202,28 @@ class Capture:
             if entry["issuer"] in ("AWS", "Slack", "Cloudflare"):
                 web.invoke({"command": "entry_update", "id": entry["id"], "patch": {"group": copy["work"]}})
 
+        # The logins of the Passwords page, three with their account's code.
+        code = {e["issuer"]: e["id"] for e in entries}
+        logins = [
+            ("GitHub", {"username": "octocat", "email": "alex@example.com", "url": "https://github.com", "group": copy["work"], "tags": [copy["dev"]], "favorite": True, "totp_entry": code["GitHub"]}),
+            ("Google", {"email": "alex@example.com", "url": "https://accounts.google.com", "favorite": True, "totp_entry": code["Google"]}),
+            ("AWS", {"username": "admin", "email": "admin@example.com", "url": "https://console.aws.amazon.com", "group": copy["work"], "totp_entry": code["AWS"]}),
+            ("Slack", {"email": "alex@example.org", "url": "https://slack.com", "group": copy["work"]}),
+            ("Cloudflare", {"email": "alex@example.com", "url": "https://dash.cloudflare.com", "group": copy["work"], "tags": [copy["dev"]]}),
+            ("Dropbox", {"email": "alex@example.com", "url": "https://www.dropbox.com"}),
+            ("Netflix", {"email": "alex@example.com", "url": "https://www.netflix.com"}),
+            (copy["bank_login"], {"username": "alex", "url": "https://bank.example.com", "protection": "confirm"}),
+        ]
+        # The same logins for the phone (the mock's sampleItems, its account linked by issuer).
+        state["logins"] = []
+        issuers = {v: k for k, v in code.items()}
+        for title, login in logins:
+            urls = [{"url": login.pop("url"), "matching": "domain"}]
+            draft = {"title": title, "password": {"type": "set", "value": password(title)}, "urls": urls, **login}
+            web.invoke({"command": "item_add", "draft": draft})
+            view = {k: v for k, v in login.items() if k != "totp_entry"}
+            state["logins"].append({"title": title, "view": {**view, "urls": urls}, "password": password(title), "code": issuers.get(login.get("totp_entry"))})
+
         # An automatic backup that has run once, into a folder named like a synchronised one.
         self.settings(auto_backup={"enabled": True, "dir": self.args.backup_dir, "keep": 10})
         web.invoke({"command": "backup_auto_now"})
@@ -208,6 +239,18 @@ class Capture:
             state["shots"][f"codes-{scheme}"] = self.shot("codes", scheme)
         with open(self.args.state, "w") as f:
             json.dump(state, f, ensure_ascii=False, indent=1)
+
+        # The Passwords page, GitHub's login in the pane beside the list.
+        self.nav("passwords")
+        rows = until("eight logins", lambda: (lambda r: r if len(r) == 8 else None)(web.find_all('[data-testid="password-row"]')))
+        github = next(r for r in rows if web.text(r).startswith("GitHub"))
+        web.click(github)
+        web.wait('[data-testid="item-detail"]')
+        self.quiet()
+        for scheme, theme in SCHEMES.items():
+            self.theme(theme)
+            until("the middle of a 30-second window", lambda: 5 <= time.time() % 30 <= 15, timeout=40)
+            self.shot("passwords", scheme)
 
         self.nav("backup")
         for scheme, theme in SCHEMES.items():
