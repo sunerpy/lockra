@@ -347,11 +347,19 @@ not made again.
 Every object is framed like the container: `magic (8) | header length (u32 LE) | header (JSON, ≤
 16 KiB) | ciphertext`, the ciphertext authenticated with every byte before it as associated data.
 
-| Object   | Magic      | Header                                       | Ciphertext                                                                               |
-| -------- | ---------- | -------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| keyring  | `LKSKEYR1` | `{format: 1, space_id, kdf, nonce}`          | the space's 32-byte data key                                                             |
-| snapshot | `LKSDEVS1` | `{format: 1, space_id, tag, nonce, keyring}` | `seq`, `written_at_ms`, the device name, the payload; padded to a multiple of 4096 bytes |
+| Object   | Magic      | Header                                       | Ciphertext                                                                                                                     |
+| -------- | ---------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| keyring  | `LKSKEYR1` | `{format: 1, space_id, kdf, nonce}`          | the space's 32-byte data key                                                                                                   |
+| snapshot | `LKSDEVS1` | `{format: 1, space_id, tag, nonce, keyring}` | `seq`, `written_at_ms`, the device name, from 0.10 `app_version` and `reader`, the payload; padded to a multiple of 4096 bytes |
 
+- **What a snapshot says of its device.** Since 0.10 the sealed metadata beside the name carries
+  `app_version` (the writing app's version, at most 32 characters) and `reader` (what of a payload
+  that version reads: 2 since the logins, `Replica::reader`). Absent, they are not written, so a
+  snapshot of 0.9 is the same object as before, and 0.9 ignores them. The others keep them with
+  the device (`seen`, the same way) and Settings › Sync marks a device below reader 2 as one that
+  keeps no passwords. Both count in the digest that decides whether a snapshot is written again
+  (absent, the digest is the one 0.9 kept), so a device writes once after an update and the others
+  learn its version.
 - **One writer per object.** A device writes only its own snapshot. Another device only deletes
   one (removing a device), and a device still in use writes its snapshot again. No object is
   shared: what the space holds is the merge of the snapshots, so no lock and no conditional write

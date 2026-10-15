@@ -206,6 +206,19 @@ pub struct SyncSpaceView {
     /// The sync key was saved or written down (set on the device that made the space once the
     /// user says so); until then Settings › Sync reminds of it.
     pub key_saved: bool,
+    /// This device's snapshot is past three quarters of what a relay keeps of one: Settings ›
+    /// Sync warns. Only on a relay; the other storages keep a snapshot of any size.
+    pub snapshot_warning: Option<SnapshotWarningView>,
+}
+
+/// How large this device's snapshot is beside what the relay keeps of one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SnapshotWarningView {
+    /// Its size on the relay, in bytes.
+    pub bytes: u64,
+    /// The most a relay keeps of a snapshot, in bytes (its default: one that keeps more or less
+    /// does not say).
+    pub limit: u64,
 }
 
 /// A sync storage as the interface shows it: everything but the secret.
@@ -259,6 +272,12 @@ pub struct SyncDeviceView {
     pub written_at_ms: Option<u64>,
     /// This device.
     pub this_device: bool,
+    /// The Lockra version it writes with, as its snapshot says ("0.10.0"); `None` for a version
+    /// before 0.10, which does not say, or until its first snapshot since then is read.
+    pub app_version: Option<String>,
+    /// It keeps the passwords: its Lockra reads the logins of the others' snapshots. 0.9 and
+    /// earlier do not, and lose nothing of them either.
+    pub passwords: bool,
 }
 
 /// Where the sync is.

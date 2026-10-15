@@ -80,6 +80,11 @@ Each flag has an environment variable; a flag wins over the variable, and either
 Sizes are bytes, or a number with `K`, `M` or `G` (binary multiples). `lockra-relay --help` prints
 the same list. `RUST_LOG` sets the log level (`info` by default).
 
+The apps warn in Settings › Sync when a device's snapshot on a relay passes three quarters of the
+default `--max-object-bytes` (3 MiB; `lockra_core::RELAY_SNAPSHOT_LIMIT`): the relay does not tell
+its settings, so a relay set to keep more is warned of the same, and one set to keep less may refuse a
+snapshot before any warning.
+
 With `--trust-proxy`, the client is the last address in `X-Forwarded-For` that is not one of the
 proxies; a request from anywhere else is its own client. A load balancer that appends to the header
 (AWS's does) works as it is; a proxy should replace the header rather than append to it when it is

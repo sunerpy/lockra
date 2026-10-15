@@ -202,7 +202,9 @@ A login's autofill choices are set on the computer, and the phone keeps them as 
 Logins sync in the same space as your accounts, end-to-end encrypted, and the site lists of the
 browser extension sync with them ([Logins in sync](/backup/sync#logins-in-sync)). A device with
 Lockra 0.9 or earlier keeps syncing its accounts but does not receive the logins, and does not
-delete them on the other devices: update it to receive them. A vault that holds logins no longer
+delete them on the other devices: update it to receive them. **Settings › Sync** marks such a
+device **No passwords** in its list of devices and names it above the list, and shows each other
+device's Lockra version once it has synced with 0.10 or later. A vault that holds logins no longer
 opens in Lockra 0.9, and a backup that holds logins does not restore there either
 ([Logins in backups](/backup/#logins-in-backups)).
 

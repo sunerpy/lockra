@@ -1,4 +1,5 @@
 import {
+  MOCK_APP_VERSION,
   MOCK_INVITE_CODE,
   MOCK_PASSWORD,
   MOCK_STORAGE_SECRET,
@@ -281,6 +282,33 @@ describe("sync on the phone", () => {
     await backend.dispatch({ command: "vault_lock" });
     await backend.dispatch({ command: "vault_unlock", password: "the phone's own password" });
     expect((await backend.getState()).phase).toBe("unlocked");
+  });
+
+  it("marks a device whose Lockra keeps no passwords and warns of a snapshot near the relay's limit", async () => {
+    // The other device still on 0.9: no version, no passwords.
+    const devices = mockSyncSpace().devices.map((d) =>
+      d.this_device ? d : { ...d, app_version: null, passwords: false },
+    );
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace({
+        storage: { kind: "relay", url: "https://relay.example.com" },
+        devices,
+        snapshot_warning: { bytes: 3_460_000, limit: 4 * 1024 * 1024 },
+      }),
+      passwords: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const page = within(await openSync(user));
+    expect(page.getByTestId("sync-no-passwords")).toHaveTextContent(
+      "Pixel 8 上的 Lockra 版本较旧，看不到密码",
+    );
+    expect(page.getByTestId("sync-near-limit")).toHaveTextContent("3.3 MB");
+    const [mine, theirs] = page.getAllByTestId("sync-device");
+    expect(mine).toHaveTextContent(`Lockra ${MOCK_APP_VERSION}`);
+    expect(theirs).toHaveTextContent("看不到密码");
   });
 
   it("runs now, renames this phone, changes the storage and removes a device", async () => {

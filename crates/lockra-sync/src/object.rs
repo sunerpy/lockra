@@ -3,8 +3,9 @@
 //! The header holds only what finding the key and checking the object's place need: the format,
 //! the space and the device tag, the nonce, and the device's keyring, which a device joining the
 //! space opens with this device's master password before it has the data key. The sequence
-//! number, the time, the device's name and the replica are inside the ciphertext, padded to a
-//! multiple of [`PAD_TO`] bytes so that the size says little about the number of accounts.
+//! number, the time, the device's name, the version that wrote it and the replica are inside the
+//! ciphertext, padded to a multiple of [`PAD_TO`] bytes so that the size says little about the
+//! number of accounts.
 
 use std::fmt;
 
@@ -23,6 +24,8 @@ const SNAPSHOT_FORMAT: u32 = 1;
 pub const PAD_TO: usize = 4096;
 /// Device names are cut to this many characters.
 const MAX_NAME_CHARS: usize = 64;
+/// App versions are cut to this many characters.
+const MAX_VERSION_CHARS: usize = 32;
 
 /// One device's snapshot of its replica.
 #[derive(Clone, PartialEq, Eq)]
@@ -38,6 +41,11 @@ pub struct Snapshot {
     pub keyring: Vec<u8>,
     /// The replica, as the caller serializes it (its secrets included).
     pub payload: Zeroizing<Vec<u8>>,
+    /// The version of the app that wrote it ("0.10.0"); `None` from versions before it said.
+    pub app_version: Option<String>,
+    /// What of a payload the writing device reads ([`crate::Replica::reader`]); 0 from versions
+    /// before it said.
+    pub reader: u32,
 }
 
 impl fmt::Debug for Snapshot {
@@ -46,6 +54,8 @@ impl fmt::Debug for Snapshot {
             .field("seq", &self.seq)
             .field("written_at_ms", &self.written_at_ms)
             .field("device_name", &self.device_name)
+            .field("app_version", &self.app_version)
+            .field("reader", &self.reader)
             .field("keyring_len", &self.keyring.len())
             .field("payload_len", &self.payload.len())
             .finish()
@@ -55,6 +65,11 @@ impl fmt::Debug for Snapshot {
 /// `name` as a snapshot carries it: cut to [`MAX_NAME_CHARS`] characters.
 pub(crate) fn device_name(name: &str) -> String {
     name.chars().take(MAX_NAME_CHARS).collect()
+}
+
+/// `version` as a snapshot carries it: cut to [`MAX_VERSION_CHARS`] characters.
+pub(crate) fn app_version(version: &str) -> String {
+    version.chars().take(MAX_VERSION_CHARS).collect()
 }
 
 #[derive(Serialize, Deserialize)]
@@ -68,11 +83,21 @@ struct SnapshotHeader {
     keyring: Vec<u8>,
 }
 
+/// The sealed metadata. The fields after `device_name` came with 0.10: absent, they are not
+/// written, so a snapshot of an older version's reads the same; 0.9 ignores them.
 #[derive(Serialize, Deserialize)]
 struct Meta {
     seq: u64,
     written_at_ms: u64,
     device_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    app_version: Option<String>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    reader: u32,
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 /// Encrypt `snapshot` as the object of device `tag` in `keys`' space.
@@ -80,8 +105,14 @@ pub fn seal_snapshot(keys: &SpaceKeys, tag: &str, snapshot: &Snapshot) -> Result
     let header =
         SnapshotHeader { format: SNAPSHOT_FORMAT, space_id: keys.space_id(), tag: tag.to_owned(), nonce: random()?, keyring: snapshot.keyring.clone() };
     let mut object = header_bytes(SNAPSHOT_MAGIC, &header)?;
-    let name = device_name(&snapshot.device_name);
-    let meta = serde_json::to_vec(&Meta { seq: snapshot.seq, written_at_ms: snapshot.written_at_ms, device_name: name }).map_err(|_| SyncError::Corrupted)?;
+    let meta = Meta {
+        seq: snapshot.seq,
+        written_at_ms: snapshot.written_at_ms,
+        device_name: device_name(&snapshot.device_name),
+        app_version: snapshot.app_version.as_deref().map(app_version),
+        reader: snapshot.reader,
+    };
+    let meta = serde_json::to_vec(&meta).map_err(|_| SyncError::Corrupted)?;
     let meta_len = u32::try_from(meta.len()).map_err(|_| SyncError::Corrupted)?;
     let payload_len = u32::try_from(snapshot.payload.len()).map_err(|_| SyncError::Corrupted)?;
     let mut plain = Zeroizing::new(Vec::with_capacity(8 + meta.len() + snapshot.payload.len() + PAD_TO));
@@ -116,6 +147,9 @@ pub fn open_snapshot(keys: &SpaceKeys, expected_tag: &str, bytes: &[u8]) -> Resu
         device_name: meta.device_name,
         keyring: parsed.header.keyring,
         payload: Zeroizing::new(payload.to_vec()),
+        // Another device's word: cut as it would have been written.
+        app_version: meta.app_version.as_deref().map(app_version),
+        reader: meta.reader,
     })
 }
 
@@ -154,7 +188,43 @@ mod tests {
             device_name: "Pixel 8".into(),
             keyring: b"LKSKEYR1 sealed".to_vec(),
             payload: Zeroizing::new(payload.to_vec()),
+            app_version: None,
+            reader: 0,
         }
+    }
+
+    #[test]
+    fn a_snapshot_carries_the_version_that_wrote_it_and_what_it_reads() {
+        let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+        let tag = keys.device_tag(1);
+        let written = Snapshot { app_version: Some("0.10.0".into()), reader: 2, ..snapshot(b"{}") };
+        let object = seal_snapshot(&keys, &tag, &written).unwrap();
+        assert_eq!(open_snapshot(&keys, &tag, &object).unwrap(), written);
+        assert!(!String::from_utf8_lossy(&object).contains("0.10.0"), "inside the ciphertext");
+        // A version is cut like a name.
+        let long = Snapshot { app_version: Some("9".repeat(100)), ..snapshot(b"{}") };
+        let opened = open_snapshot(&keys, &tag, &seal_snapshot(&keys, &tag, &long).unwrap()).unwrap();
+        assert_eq!(opened.app_version.map(|v| v.len()), Some(MAX_VERSION_CHARS));
+    }
+
+    #[test]
+    fn a_snapshot_from_before_versions_opens_and_0_9_reads_the_new_metadata() {
+        // What 0.9 wrote: neither field. Written without them, the metadata stays what it was.
+        let before = serde_json::json!({"seq": 1, "written_at_ms": 2, "device_name": "Pixel"});
+        let read: Meta = serde_json::from_value(before.clone()).unwrap();
+        assert_eq!((read.app_version.as_deref(), read.reader), (None, 0));
+        assert_eq!(serde_json::to_value(&read).unwrap(), before);
+        // 0.9's reader ignores what it does not know.
+        #[derive(Deserialize)]
+        #[allow(dead_code)]
+        struct Meta09 {
+            seq: u64,
+            written_at_ms: u64,
+            device_name: String,
+        }
+        let now = Meta { app_version: Some("0.10.0".into()), reader: 2, ..read };
+        let old: Meta09 = serde_json::from_slice(&serde_json::to_vec(&now).unwrap()).unwrap();
+        assert_eq!((old.seq, old.device_name.as_str()), (1, "Pixel"));
     }
 
     #[test]

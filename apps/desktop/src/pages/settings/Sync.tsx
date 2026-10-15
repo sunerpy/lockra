@@ -2,6 +2,7 @@ import {
   type SyncSpaceView,
   emptyStorageForm,
   errorText,
+  formatBytes,
   relativeTime,
   storageComplete,
   storageConfig,
@@ -164,6 +165,9 @@ function deviceLabel(space: SyncSpaceView, tag: string): string {
 function SyncOn({ space }: { space: SyncSpaceView }) {
   const t = useT();
   const now = useClock();
+  const { features } = useUiState();
+  // Devices whose Lockra predates the passwords, told only where the passwords are.
+  const withoutPasswords = features.passwords ? space.devices.filter((d) => !d.passwords) : [];
   const dispatch = useDispatch();
   const [dialog, setDialog] = useState<"invite" | "key" | "disable" | { remove: string } | null>(
     null,
@@ -221,6 +225,25 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
           </Banner>
         </div>
       )}
+      {withoutPasswords.length > 0 && (
+        <div data-testid="sync-no-passwords">
+          <Banner tone="warn" marker="icon">
+            {t("sync.problems.noPasswords", {
+              names: withoutPasswords.map((d) => d.name).join(", "),
+            })}
+          </Banner>
+        </div>
+      )}
+      {space.snapshot_warning !== null && (
+        <div data-testid="sync-near-limit">
+          <Banner tone="warn" marker="icon">
+            {t("sync.problems.nearLimit", {
+              size: formatBytes(space.snapshot_warning.bytes),
+              limit: formatBytes(space.snapshot_warning.limit),
+            })}
+          </Banner>
+        </div>
+      )}
       {space.unreadable.length > 0 && (
         <div data-testid="sync-unreadable">
           <Banner
@@ -257,6 +280,9 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
                   {device.this_device && (
                     <Badge tone="accent">{t("sync.devices.thisDevice")}</Badge>
                   )}
+                  {features.passwords && !device.passwords && (
+                    <Badge tone="warn">{t("sync.devices.noPasswords")}</Badge>
+                  )}
                 </div>
                 <div className="text-[12px] text-fg-subtle">
                   {device.written_at_ms === null
@@ -264,6 +290,8 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
                     : t("sync.devices.written", {
                         when: relativeTime(t, device.written_at_ms, now),
                       })}
+                  {device.app_version !== null &&
+                    ` · ${t("sync.devices.version", { version: device.app_version })}`}
                 </div>
               </div>
               {!device.this_device && (

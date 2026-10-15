@@ -1337,12 +1337,18 @@ export const zhCN = {
       thisDevice: "此设备",
       written: "{when}写入",
       never: "尚未写入",
+      version: "Lockra {version}",
+      noPasswords: "看不到密码",
       remove: "移除",
       removeTitle: "移除「{name}」？",
       removeBody: "它的同步数据会从存储中删除。这台设备如果仍在使用，下次同步时会重新出现。",
     },
     problems: {
       rolledBack: "{names} 的同步数据比之前读到的旧，已拒绝。存储可能被回滚。",
+      noPasswords:
+        "{names} 上的 Lockra 版本较旧，看不到密码。更新到 0.10.0 或更高版本后，密码会同步过去。",
+      nearLimit:
+        "这台设备的同步数据有 {size}，已超过中继单个快照上限（{limit}）的 75%。超过上限后，这台设备的改动将无法再同步。",
       unreadable: {
         one: "存储里有 {n} 个同步对象无法读取：可能被改动、属于其他同步空间，或来自更新版本的 Lockra。",
         other:

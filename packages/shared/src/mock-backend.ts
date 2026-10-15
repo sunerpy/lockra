@@ -642,6 +642,9 @@ function mockTag(seed: string): string {
   ).join("");
 }
 
+/** The version the mock app reports, and its devices write with. */
+export const MOCK_APP_VERSION = "0.1.0";
+
 /** A space the mock can start with (the showcase and the page tests): S3, two devices. */
 export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpaceView {
   return {
@@ -661,12 +664,16 @@ export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpace
         name: "Desktop",
         written_at_ms: Date.UTC(2026, 9, 2, 8),
         this_device: true,
+        app_version: MOCK_APP_VERSION,
+        passwords: true,
       },
       {
         tag: mockTag("Pixel 8"),
         name: "Pixel 8",
         written_at_ms: Date.UTC(2026, 9, 2, 7),
         this_device: false,
+        app_version: MOCK_APP_VERSION,
+        passwords: true,
       },
     ],
     status: { state: "synced", at_ms: Date.UTC(2026, 9, 2, 8) },
@@ -676,6 +683,7 @@ export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpace
     keyring_pending: false,
     keyring_unsealed: false,
     key_saved: true,
+    snapshot_warning: null,
     ...overrides,
   };
 }
@@ -867,7 +875,7 @@ export class MockBackend implements Backend {
     for (const entry of entries) this.secrets.set(entry.view.id, entry.secret);
     const phase = options.phase ?? (entries.length > 0 ? "unlocked" : "no_vault");
     this.state = {
-      app_version: "0.1.0",
+      app_version: MOCK_APP_VERSION,
       platform: options.platform ?? "linux",
       features: { passwords: options.passwords ?? false },
       phase,
@@ -1861,7 +1869,14 @@ export class MockBackend implements Backend {
       storage: storageView(storage, this.chosenFolder),
       device_name: name,
       devices: [
-        { tag: mockTag(`${name}:${this.now()}`), name, written_at_ms: null, this_device: true },
+        {
+          tag: mockTag(`${name}:${this.now()}`),
+          name,
+          written_at_ms: null,
+          this_device: true,
+          app_version: MOCK_APP_VERSION,
+          passwords: true,
+        },
         ...others,
       ],
       status: { state: "idle" },
@@ -1871,6 +1886,7 @@ export class MockBackend implements Backend {
       keyring_pending: false,
       keyring_unsealed: this.joinedUnsealed,
       key_saved: true,
+      snapshot_warning: null,
     });
   }
 
@@ -1945,7 +1961,14 @@ export class MockBackend implements Backend {
         throw new LockraError("sync_wrong_credentials");
     }
     const others = [
-      { tag: mockTag("Pixel 8"), name: "Pixel 8", written_at_ms: this.now(), this_device: false },
+      {
+        tag: mockTag("Pixel 8"),
+        name: "Pixel 8",
+        written_at_ms: this.now(),
+        this_device: false,
+        app_version: MOCK_APP_VERSION,
+        passwords: true,
+      },
     ];
     if (this.state.phase === "no_vault") {
       // A new device: the vault comes from the space (its password was checked above).

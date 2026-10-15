@@ -139,7 +139,15 @@ mod tests {
         for (device, password) in (1u64..).zip(passwords) {
             let keyring = seal_keyring(&keys, &sync_key, password, KdfCost::FAST_INSECURE).unwrap();
             let tag = keys.device_tag(device);
-            let snapshot = Snapshot { seq: 1, written_at_ms: 1, device_name: format!("Device {device}"), keyring, payload: Zeroizing::new(b"{}".to_vec()) };
+            let snapshot = Snapshot {
+                seq: 1,
+                written_at_ms: 1,
+                device_name: format!("Device {device}"),
+                keyring,
+                payload: Zeroizing::new(b"{}".to_vec()),
+                app_version: None,
+                reader: 0,
+            };
             remote.set_object(&device_path(PREFIX, keys.space_id(), &tag), seal_snapshot(&keys, &tag, &snapshot).unwrap());
         }
         (keys, sync_key)
@@ -209,7 +217,15 @@ mod tests {
         // Garbage that reads as keyrings, under device names, beyond the bound.
         for device in 100..140 {
             let tag = keys.device_tag(device);
-            let snapshot = Snapshot { seq: 1, written_at_ms: 1, device_name: String::new(), keyring: b"LKSKEYR1 junk".to_vec(), payload: Zeroizing::default() };
+            let snapshot = Snapshot {
+                seq: 1,
+                written_at_ms: 1,
+                device_name: String::new(),
+                keyring: b"LKSKEYR1 junk".to_vec(),
+                payload: Zeroizing::default(),
+                app_version: None,
+                reader: 0,
+            };
             let object = seal_snapshot(&SpaceKeys::generate(keys.space_id()).unwrap(), &tag, &snapshot).unwrap();
             remote.set_object(&device_path(PREFIX, keys.space_id(), &tag), object);
         }

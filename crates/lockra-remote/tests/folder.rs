@@ -62,7 +62,7 @@ impl Device {
     }
 
     async fn sync(&mut self, store: &dyn RemoteStore, keys: &SpaceKeys) -> Result<Outcome, SyncError> {
-        let space = Space { prefix: "", keys, device: self.number, device_name: self.name, keyring: b"keyring" };
+        let space = Space { prefix: "", keys, device: self.number, device_name: self.name, keyring: b"keyring", app_version: None };
         step(store, &space, &mut self.state, &mut self.names, 1_000).await
     }
 

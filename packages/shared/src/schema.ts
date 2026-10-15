@@ -569,6 +569,10 @@ export const syncDeviceViewSchema = z.object({
   name: z.string(),
   written_at_ms: msSchema.nullable(),
   this_device: z.boolean(),
+  /** The Lockra version it writes with, as its snapshot says; null before 0.10, which does not say. */
+  app_version: z.string().nullable(),
+  /** Its Lockra keeps the passwords (0.9 and earlier do not). */
+  passwords: z.boolean(),
 });
 export type SyncDeviceView = z.infer<typeof syncDeviceViewSchema>;
 
@@ -594,6 +598,10 @@ export const syncSpaceViewSchema = z.object({
   keyring_unsealed: z.boolean(),
   /** The sync key was saved or written down; until then Settings › Sync reminds of it. */
   key_saved: z.boolean(),
+  /** On a relay: this device's snapshot is past three quarters of what the relay keeps of one. */
+  snapshot_warning: z
+    .object({ bytes: z.number().int().nonnegative(), limit: z.number().int().positive() })
+    .nullable(),
 });
 export type SyncSpaceView = z.infer<typeof syncSpaceViewSchema>;
 

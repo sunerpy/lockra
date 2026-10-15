@@ -112,6 +112,14 @@ describe("IPC fixtures", () => {
     const unlocked = uiStateSchema.parse(ipcFixtures.state.unlocked).sync.space;
     expect(unlocked?.devices.map((d) => d.this_device)).toEqual([true, false]);
     expect(uiStateSchema.parse(ipcFixtures.state.locked).sync.space).toBeNull();
+    // A relay space warns of a snapshot near its limit; a phone still on 0.9 keeps no passwords.
+    const relay = spaces.find((s) => s.storage.kind === "relay");
+    expect(relay?.snapshot_warning).toEqual({ bytes: 3_460_000, limit: 4 * 1024 * 1024 });
+    expect(relay?.devices.map((d) => [d.name, d.app_version, d.passwords])).toEqual([
+      ["Desktop", "0.10.0", true],
+      ["Pixel 8", null, false],
+    ]);
+    expect(spaces.filter((s) => s.snapshot_warning !== null)).toHaveLength(1);
     // The storage's secret never comes back.
     expect(JSON.stringify(ipcFixtures.sync)).not.toMatch(/secret_access_key|"password"/);
   });
