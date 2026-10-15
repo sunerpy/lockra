@@ -39,6 +39,16 @@ Mac 版改为使用 Lockra 固定的签名证书，应用内更新在安装新�
 - **截屏**无法阻止：Linux 没有提供让应用把窗口排除在截取之外的方法。显示密钥和导出的页面会说明这一点；这些页面打开期间，请注意屏幕共享。
 - **托盘图标**通过 AppIndicator 显示，点击图标会打开它的菜单。GNOME 只有在安装了 AppIndicator 扩展后才会显示托盘图标；没有安装时，看不到 Lockra 仍在后台运行，再次启动 Lockra 即可让窗口重新出现。
 
+## 浏览器扩展
+
+<StatusTag status="available" /> 自 0.10.0 版起提供。
+
+- **仅限电脑**：[浏览器扩展](/zh/passwords/browser)配合 Windows、macOS 和 Linux 上的 Lockra 使用。Android 应用没有浏览器扩展。
+- **浏览器**：Chrome 和 Microsoft Edge 133 及以上，以及 Firefox 140 及以上。Lockra 也会为 Chromium 和 Brave 写入连接文件。不支持 Safari。
+- **Snap 与 Flatpak**：以 Snap 或 Flatpak 形式安装的浏览器无法连接 Lockra；Ubuntu 默认以 Snap 形式安装 Firefox。请改为通过 deb 或 rpm 安装包，或浏览器官方提供的安装程序安装浏览器。
+- **连接文件**：保存在各浏览器存放 native messaging 主机文件的目录中，例如 Linux 上的 `~/.config/google-chrome/NativeMessagingHosts/` 和 macOS 上的 `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`；在 Windows 上保存在 `%LOCALAPPDATA%\Lockra\browser\`，并在 `HKEY_CURRENT_USER` 下写入注册表项。开启浏览器集成后，Lockra 每次启动都会重新写入这些文件，因此移动 AppImage 之后，请从新的位置启动它一次。
+- **托盘**：在 Linux 上，Lockra 的图标显示在桌面环境显示 AppIndicator 图标的位置。KDE Plasma 会显示这类图标；GNOME 需要安装 AppIndicator 扩展才会显示。`.deb` 和 `.rpm` 安装包会自动安装图标所需的库。
+
 ## Android
 
 <StatusTag status="available" /> 自 0.7.0 版起提供。
@@ -47,7 +57,7 @@ Mac 版改为使用 Lockra 固定的签名证书，应用内更新在安装新�
 - **解锁**：使用主密码，或「设置 › 安全 › 使用指纹解锁」，后者把保险库的密钥保存在手机的安全硬件中。手机上没有不经指纹验证的「在本机记住」。之后录入新的指纹会使这个密钥失效，在重新开启这项设置之前需要使用主密码解锁。
 - **离开应用**（切换到其他应用、回到主屏幕或关闭屏幕）时，保险库会立即锁定。
 - **截屏**：Lockra 的界面始终无法被截屏或录屏，最近任务中也只显示空白卡片。
-- **剪贴板**：复制的验证码会被标记为敏感内容，输入法的剪贴板历史和粘贴预览不会显示它。
+- **剪贴板**：复制的验证码和密码会被标记为敏感内容，输入法的剪贴板历史和粘贴预览不会显示它们。
 - **备份**：保存和恢复都通过系统的文件选择器，手机上没有自动备份。Android 自带的备份和设备迁移不包含 Lockra，因此请保留 Lockra 备份。
 - **更新**：从发布页的 APK 安装时，「设置 › 关于 › 检查更新」，有新版本时会打开该版本的发布页；从 Google Play 安装时由 Google Play 更新，「在 Google Play 中打开」会打开 Lockra 在 Google Play 中的页面。
 

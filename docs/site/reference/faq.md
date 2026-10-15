@@ -53,8 +53,41 @@ before.
 
 ## Where are my accounts stored?
 
-In one encrypted file on each device. See [Privacy](/privacy) and
+In one encrypted file on each device, with your logins. See [Privacy](/privacy) and
 [Updates, uninstalling and your data](/guide/updates#where-the-files-are).
+
+## The browser extension says Lockra is not running
+
+The extension needs Lockra running on the same computer. Choose **Start Lockra** in its popup, and
+turn on **Settings › Browser › Keep running after the window closes**, so that closing Lockra's
+window leaves it in the tray ([Running in the background](/passwords/browser#running-in-the-background)).
+
+## The browser extension cannot find Lockra
+
+The popup says "Lockra not found" when the browser has no connection file for Lockra: turn on
+**Settings › Browser › Browser integration**. For a browser installed after that, choose **Write**
+in its row under **Browsers**. A browser installed as a Snap or a Flatpak cannot reach Lockra
+([Platform notes](/reference/platforms#browser-extension)).
+
+## The fill shortcut does nothing
+
+Check the shortcut on the browser's own page: `chrome://extensions/shortcuts` in Chrome,
+`edge://extensions/shortcuts` in Edge, **Manage Extension Shortcuts** in Firefox's add-ons manager.
+A browser may leave `Ctrl Shift L` unassigned, for example when another extension uses it. Lockra
+fills only a login whose site matches the page; when none does, the popup opens and says so.
+
+## Should I turn on filling as pages load?
+
+It is off by default for a reason. A login matched by its domain is offered on every subdomain of
+the site, and with filling as pages load, a malicious script on any of them can read the password
+without a click from you. Lockra then fills only under the conditions in
+[Filling as pages load](/passwords/browser#filling-as-pages-load). Leave it off unless you trust
+every page of the sites you keep logins for; the shortcut fills with one key instead.
+
+## Can the phone fill in passwords?
+
+No. On the phone, open a login and copy its password, then paste it; the browser extension works on
+computers only. Filling on Android is planned ([Roadmap](/roadmap#more-for-passwords)).
 
 ## Is there an iPhone app?
 

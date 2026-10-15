@@ -35,8 +35,9 @@ materials.
 On the phone, the page starts with a large title and "Unlocked · N accounts", with round **Add
 account** and **Lock** buttons beside it; then the search field, the **Recently used** card, the
 filters, which scroll sideways (with **Reorder** after them), and the accounts, each in a card of its
-own. The bar at the bottom of the screen has **Codes**, **Scan** and **Settings**: **Scan** opens the
-camera on a QR code at once.
+own. The bar at the bottom of the screen has **Codes**, **Scan**, **Passwords** and **Settings**:
+**Scan** opens the camera on a QR code at once, and **Passwords** opens your logins
+([On the phone](/passwords/#on-the-phone)).
 
 ## Reading a code
 

@@ -26,6 +26,14 @@ backup**, enter the backup's password, and the accounts appear in the preview. T
 into the vault account by account; [Backups and restore](/backup/#restoring-a-backup) describes the
 other ways to restore.
 
+## Logins from browsers and password managers
+
+<StatusTag status="available" /> Available from version 0.10.0.
+
+The password exports of Chrome, Edge, Firefox, Safari, Bitwarden, 1Password and LastPass, and
+KeePass databases, go through the same preview. The codes they carry become accounts on the codes
+page, each linked to its login ([Importing and exporting logins](/passwords/import-export)).
+
 ## Exporting a list
 
 **Export › otpauth list file** writes the chosen accounts to a text file, one link per line, which
@@ -33,3 +41,5 @@ most authenticators can import. The file is **not encrypted**: anyone who reads 
 codes. Lockra asks for the master password (or, on a phone with fingerprint unlock on, the
 fingerprint) and a confirmation, and the file should be deleted once
 it has been imported elsewhere. For keeping accounts safe, use a [backup](/backup/) instead.
+Logins export to a KeePass database or a CSV file
+([Exporting](/passwords/import-export#exporting)).

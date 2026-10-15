@@ -4,7 +4,8 @@ language and scheme (docs/site/README.md, "Screenshots"):
 
 - devices-<lang>-<scheme>.webp: the desktop codes page and the phone codes page, the same accounts
   and codes on both (scripts/smoke/phone_screens.mjs runs the phone at the desktop shot's moment);
-- phones-<lang>-<scheme>.webp: the phone's codes, add-an-account and sync pages side by side.
+- phones-<lang>-<scheme>.webp: the phone's codes, add-an-account and sync pages side by side;
+- phones-passwords-<lang>-<scheme>.webp: the phone's logins and a login's page.
 
 1440 x 900, WebP quality 85, like the other figures. The screenshots keep their pixels: each is
 scaled, given rounded corners, a hairline and a shadow, on a blurred copy of itself. No device or
@@ -69,7 +70,7 @@ def main():
     args = parser.parse_args()
     for scheme in ("light", "dark"):
         desktop = Image.open(os.path.join(args.desktop, f"codes-{args.lang}-{scheme}.webp")).convert("RGB")
-        phones = {page: Image.open(os.path.join(args.phone, f"{scheme}-{page}.png")).convert("RGB") for page in ("codes", "add", "sync")}
+        phones = {page: Image.open(os.path.join(args.phone, f"{scheme}-{page}.png")).convert("RGB") for page in ("codes", "add", "sync", "logins", "login")}
         for shot in phones.values():
             if shot.size != (1080, 1920):
                 raise SystemExit(f"compose-screens: a phone screenshot is {shot.size}, expected (1080, 1920)")
@@ -84,6 +85,12 @@ def main():
         for i, page in enumerate(("codes", "add", "sync")):
             place(canvas, phones[page], (45 + i * 470, 85, 410, 729), 34, scheme)
         save(canvas, os.path.join(args.out, f"phones-{args.lang}-{scheme}.webp"))
+
+        # The two passwords pages, centred as two of the three above would be.
+        canvas = backdrop(phones["logins"], scheme)
+        for i, page in enumerate(("logins", "login")):
+            place(canvas, phones[page], (280 + i * 470, 85, 410, 729), 34, scheme)
+        save(canvas, os.path.join(args.out, f"phones-passwords-{args.lang}-{scheme}.webp"))
 
 
 if __name__ == "__main__":

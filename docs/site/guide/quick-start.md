@@ -23,7 +23,9 @@ Open **Import** in the sidebar and choose the source:
 - **A website's setup page**: when a site shows a QR code to set up an authenticator, take a
   screenshot of it, or copy its otpauth link, and choose **Import from the clipboard**.
 
-Lockra lists what it found before saving anything. Check the list and choose **Import**.
+Lockra lists what it found before saving anything. Check the list and choose **Import**. Passwords
+from a browser or a password manager come in the same way
+([Importing and exporting logins](/passwords/import-export)).
 
 You can also add one account by hand: **Add › Enter manually** on the codes page, or `Ctrl N`.
 

@@ -126,6 +126,58 @@ so, so mind screen sharing.
 
 **Settings › Security › Hide codes** shows dots instead of codes until you point at an account.
 
+A login's password follows the login's protection level ([Logins](#logins)).
+
+## Logins
+
+<StatusTag status="available" /> Available from version 0.10.0.
+
+Logins are encrypted in the vault with the accounts, under the same master password. Their
+passwords, notes, hidden fields and earlier passwords are shown only when you ask, and hide again
+after two minutes; meanwhile Windows and macOS keep the window out of screenshots and screen
+recordings. Each login's protection level decides what showing and copying ask for:
+
+- **Fill directly** asks for nothing: the password of such a login is as easy to show in Lockra as
+  it is to fill.
+- **Verify first** asks for the master password, or Touch ID, Windows Hello or the fingerprint where
+  Lockra unlocks with it, before a secret shows, is copied or is filled.
+- **Not for the extension** keeps the login away from the browser extension altogether.
+
+Copied passwords are handled as copied codes: kept out of clipboard history where the system
+allows, and cleared after the time in **Settings › Security › Clear clipboard**. The generator's
+history opens only after the master password, Touch ID or Windows Hello, and stays on the device
+([Generated passwords](/passwords/#generated-passwords)).
+
+## The browser extension
+
+<StatusTag status="available" /> Available from version 0.10.0.
+
+The [browser extension](/passwords/browser) is trusted with no more than it needs:
+
+- **One computer.** It reaches Lockra on the same computer only, through the browser's native
+  messaging, over a connection encrypted end to end between the two: a program that gets in
+  between can break the connection, not read it.
+- **Pairing.** Lockra and the extension show the same six-digit code only when they are connected
+  to each other directly. Compare it before you approve, with the master password, Touch ID or
+  Windows Hello; a request lasts two minutes.
+- **Locked means nothing.** While Lockra is locked, the extension gets nothing, and locking ends
+  every connection.
+- **Lockra decides.** It offers only the logins that match the address the browser reports for the
+  form, never what the page claims; fills nothing in a frame of another site unless you let it ask
+  first; asks before an `https://` login goes into an `http://` page; and waits for your proof for a
+  login set to **Verify first**.
+- **Limits.** An extension that asks too often is paused until you resume it in **Settings ›
+  Browser**.
+- **Its permissions stay in the vault.** What the extensions may do is kept in the vault, so editing
+  a settings file cannot widen it, and every change that lets them do more asks for the master
+  password, Touch ID or Windows Hello. Filling as pages load is off until you turn it on.
+- **Clicks in the page.** Lockra's menu and prompts in a page take a click only once they have been
+  visible, uncovered and still for at least 300 milliseconds, so a page cannot trick you into
+  clicking them.
+
+With **Keep running after the window closes** on, the vault stays unlocked behind the closed
+window until it locks by itself or you lock it from the tray.
+
 ## Sync
 
 Sync (from version 0.4.0) is off until you set it up, on storage of your own or a Lockra relay. Everything a device writes there is
@@ -162,6 +214,14 @@ unavailable; the devices keep every account either way
   password.
 - With **Remember on this device** on, the vault is as safe as your account on the computer.
 - A forgotten master password cannot be recovered, by anyone.
+- A login set to **Fill directly** shows its password to anyone at your unlocked computer.
+- Malware running as your user can copy the browser extension's key out of the browser's profile
+  and act as the paired extension, within its limits and the logins' protection levels.
+- A malicious script on a site a login matches, any subdomain of its domain included, can read what
+  the extension fills there; with filling as pages load, it needs no click from you.
+- Passwords the extension fills pass through the browser's memory, which Lockra cannot wipe.
+- Some Linux desktops show no tray icon: there, nothing shows that Lockra still runs, unlocked, in
+  the background.
 - With sync on, someone who photographs an invitation, gets a relay space's pairing link, or gets
   an invitation's text and its code, joins the space; a pairing link works until you start a new
   sync space. Someone who has both the storage's contents and the recovery key can try master passwords

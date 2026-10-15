@@ -242,21 +242,26 @@ other.
 ## The browser extension
 
 From the first release after 0.9.1, every release carries the browser extension (`apps/extension`)
-as three files, in `SHA256SUMS` and the attestations, in no updater manifest:
+as four files, in `SHA256SUMS` and the attestations, in no updater manifest:
 
-- `lockra-extension_X.Y.Z_chrome.zip`, the package for the Chrome Web Store and for Microsoft Edge
-  Add-ons, which take the same file;
+- `lockra-extension_X.Y.Z_chromium-store.zip`, the package for Microsoft Edge Add-ons and for the
+  Chrome Web Store, which take the same file;
+- `lockra-extension_X.Y.Z_chromium-unpacked.zip`, the self-install package: the same extension with
+  Edge Add-ons' public key in its manifest, which Chrome, Edge and Brave load unpacked under Edge
+  Add-ons' id. Edge Add-ons refuses a package whose manifest has a key ("the manifest should not
+  contain a key field"), hence two packages;
 - `lockra-extension_X.Y.Z_firefox.zip`, the package for addons.mozilla.org (AMO);
 - `lockra-extension_X.Y.Z_source.zip`, the tag's tree (`git archive`) with a `BUILD.md` at its
-  root: the environment the release built in, the commands, and the two packages' SHA-256. AMO
+  root: the environment the release built in, the commands, and the three packages' SHA-256. AMO
   asks for the source of an add-on that is bundled and minified; its reviewer rebuilds the add-on
   from it and compares the files.
 
 `bundle-extension` runs `scripts/package-extension.sh`. It builds the packages twice, as
 `make extension` does (`pnpm --filter @lockra/extension run package`, with the lockfile's tools),
 and stops unless both builds give the same bytes; it checks their manifests (the release's version,
-no development `key` in the Chrome package, the add-on id `lockra@firlab.app` in the Firefox one),
-then writes the source package and the three files' checksums, `evidence/extension.sha256`, which
+no `key` in the store package, Edge Add-ons' key in the self-install one, the add-on id
+`lockra@firlab.app` in the Firefox one), then writes the source package and the four files'
+checksums, `evidence/extension.sha256`, which
 the `updater` job checks after downloading them (`.sha256`, not `.json`: `tauri-release.py` reads
 every `evidence/*.json` as a desktop leg's). `make check` and CI's `repo` job run the same script
 with `--check`, so a change that breaks the packaging fails in its pull request, not in a release.
@@ -269,20 +274,26 @@ gh release download vX.Y.Z --pattern 'lockra-extension_*' --pattern SHA256SUMS &
   sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-1. Chrome Web Store (the developer dashboard): the Chrome zip.
-2. Microsoft Edge Add-ons (Partner Center): the same Chrome zip.
+1. Microsoft Edge Add-ons (Partner Center): the store zip. The item is a draft since 2026-10-15,
+   with 0.9.1's package: replace the package with the release's and submit it once the listing is
+   filled in.
+2. Chrome Web Store (the developer dashboard): not used for now; Chrome users install the
+   self-install package. A listing needs the store's developer registration, which has a one-time
+   fee, and its id would go into `CHROME_WEB_STORE`.
 3. AMO (the Developer Hub): the Firefox zip, and the source zip at the step that asks for the
    source code; the notes to the reviewer point at `BUILD.md`.
 
 A store account can push an update to every browser that has the extension: keep each one, like
 the GitHub account, behind two-factor authentication with a hardware key.
 
-**The ids.** Firefox's is in the manifest, `lockra@firlab.app`, the same in every build. The Chrome
-Web Store and Edge Add-ons assign theirs when the first package is uploaded, as a draft, before any
-review; any build of the Chrome zip will do, `make extension`'s too, and the id stays with the
-store's item. Both go into `crates/lockra-browser/src/ids.rs` (`CHROME_WEB_STORE`, `EDGE_ADDONS`;
-`None` until then): the native-messaging manifests of a release build allow those ids and no other
-Chromium extension (a debug build adds the development id).
+**The ids.** Firefox's is in the manifest, `lockra@firlab.app`, the same in every build. A Chromium
+store assigns its id when the first package is uploaded, as a draft, before any review, and the id
+stays with the store's item. Edge Add-ons gave `flgfdomeabdfbebfjonaocddjcamgblk` (Partner Center,
+the extension's overview: the CRX ID and the public key it comes from); that key is
+`apps/extension/manifest/unpacked.json`, so the self-install package has the same id wherever it
+is loaded unpacked. The ids are in `crates/lockra-browser/src/ids.rs` (`EDGE_ADDONS`,
+`CHROME_WEB_STORE`, `None` while unlisted): the native-messaging manifests of a release build allow
+those ids and no other Chromium extension (a debug build adds the development id).
 
 ## The install scripts
 

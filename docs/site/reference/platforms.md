@@ -59,6 +59,27 @@ asked once after the restart.
   icons only with an AppIndicator extension installed; without one, nothing shows that Lockra still
   runs in the background, and starting Lockra again brings its window back.
 
+## Browser extension
+
+<StatusTag status="available" /> Available from version 0.10.0.
+
+- **Computers only**: the [browser extension](/passwords/browser) works with Lockra on Windows,
+  macOS and Linux. The Android app has none.
+- **Browsers**: Chrome and Microsoft Edge 133 or later, and Firefox 140 or later. Lockra also writes
+  its connection file for Chromium and Brave. Safari is not supported.
+- **Snap and Flatpak**: a browser installed as a Snap or a Flatpak cannot reach Lockra; Ubuntu
+  installs Firefox as a Snap by default. Install the browser from a deb or rpm package, or from its
+  maker's download, instead.
+- **The connection files**: each browser's folder for native-messaging hosts, such as
+  `~/.config/google-chrome/NativeMessagingHosts/` on Linux and
+  `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/` on macOS; on Windows,
+  `%LOCALAPPDATA%\Lockra\browser\`, with registry entries under `HKEY_CURRENT_USER`. Lockra writes
+  them again each time it starts with browser integration on, so after moving an AppImage, start it
+  once from its new place.
+- **The tray**: on Linux, Lockra's icon appears where the desktop shows AppIndicator icons. KDE
+  Plasma shows them; GNOME shows none unless an AppIndicator extension is installed. The `.deb` and
+  `.rpm` packages bring the library the icon needs.
+
 ## Android
 
 <StatusTag status="available" /> Available from version 0.7.0.
@@ -72,8 +93,8 @@ asked once after the restart.
   once.
 - **Screenshots** and screen recordings of Lockra are always blocked, and the recent apps show a
   blank card.
-- **Clipboard**: copied codes are marked sensitive, so the keyboard's clipboard history and the
-  paste preview leave them out.
+- **Clipboard**: copied codes and passwords are marked sensitive, so the keyboard's clipboard
+  history and the paste preview leave them out.
 - **Backups** are saved and restored where the system's file picker says; there are no automatic
   backups. Android's own backup and device transfer leave Lockra out, so keep a Lockra backup.
 - **Updates**: installed from the APK on the release page, **Settings › About › Check for

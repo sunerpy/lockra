@@ -311,6 +311,38 @@ account on every device, unless the account was changed after the deletion. The 
 apart on two devices (its QR code scanned on both) shows twice: delete one, and the deletion syncs.
 The order of recently used accounts stays on each device.
 
+## Logins in sync
+
+<StatusTag status="available" /> Available from version 0.10.0.
+
+Logins sync in the same space as the accounts, encrypted the same way, and so do the browser
+extension's site lists. A login merges part by part: its user name, its email address, its password
+and each custom field on their own, and its other details (the title, the sites, the notes, the
+tags, the group and its settings) together. A new note on one device and a new password on another,
+made at the same time, both remain; two changes of the other details at once, such as the notes on
+one device and the sites on another, keep the later one. A run that changes logins says so, for
+example "Synced from Pixel 8: 2 logins changed".
+
+When two devices change the same password before either has synced, every device uses the later
+one, and the login shows a **Conflict** badge and **The password has two versions**. In its detail
+pane, **Show** shows the other version; **Use this one** takes it and **Keep the current one** keeps
+the one in use, and the choice syncs to the other devices. The other version also stays in the
+password history while the history keeps it (the last 20 values).
+
+A deletion removes the login on every device. If another device changed the login after the
+deletion, before it synced, the login comes back on every device with that change alone.
+
+The generator's history, the paired browser extensions and what they may do, the folded groups of
+the Passwords page and its sort order stay on each device.
+
+### Devices with Lockra 0.9 or earlier
+
+A device with Lockra 0.9 or earlier keeps syncing its accounts in a space that holds logins. It
+does not receive the logins, and it does not delete them on the other devices. Once it is updated to
+0.10.0 or later, its next sync brings every login, those of devices that have changed nothing since
+included. Lockra 0.9 refuses a vault that holds logins and leaves the file as it is: open it with
+0.10.0 or later.
+
 ## Devices
 
 **Devices** lists every device of the space and when it last wrote. To remove a lost or retired
@@ -327,8 +359,8 @@ the other devices go on. You can join again later with an invitation or the reco
 
 ## What the storage can see
 
-- **Only encrypted files.** The accounts, their secrets, the device names and the times are
-  encrypted on the device with XChaCha20-Poly1305 before they are written. Each device writes one
+- **Only encrypted files.** The accounts, the logins, their secrets, the device names and the times
+  are encrypted on the device with XChaCha20-Poly1305 before they are written. Each device writes one
   file, padded to steps of 4 KiB, so its size says little about the number of accounts. The file
   names show only how many devices there are.
 - **From the storage, two secrets open the space.** On each device, the key that encrypts the

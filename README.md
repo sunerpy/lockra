@@ -4,7 +4,7 @@
 
 # Lockra
 
-### Two-factor codes on your computers and your phone, encrypted and in sync.
+### Two-factor codes and passwords on your computers and your phone, encrypted and in sync.
 
 [![CI](https://github.com/sunerpy/lockra/actions/workflows/ci.yml/badge.svg)](https://github.com/sunerpy/lockra/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/sunerpy/lockra)](https://github.com/sunerpy/lockra/releases)
@@ -22,6 +22,8 @@ Lockra is a TOTP/HOTP authenticator for Windows, macOS, Linux and Android. Your 
 an encrypted file on each of your devices, and Lockra goes online only for its updates and, once you
 turn it on, for end-to-end encrypted sync between them. It imports from Google Authenticator and
 Microsoft Authenticator, exports back to them, and keeps encrypted backups in a folder you choose.
+From 0.10.0 it keeps your passwords in the same vault, with a browser extension for Chrome, Edge and
+Firefox that fills them.
 
 ![Lockra on a computer and on a phone, showing the same accounts with the same codes](./docs/site/public/screens/devices-en-light.webp)
 
@@ -35,8 +37,11 @@ Microsoft Authenticator, exports back to them, and keeps encrypted backups in a 
   storage holds ciphertext only.
 - **Pairing by QR code**: a phone joins by scanning the computer's QR code, or by pasting its
   pairing link or invitation; a recovery key brings the space back if every device is lost.
-- **No account**: no sign-up, no telemetry and no server that can read your codes. Move your
-  accounts in from Google Authenticator or Microsoft Authenticator, and back out again.
+- **Passwords in the same vault**: logins beside the codes, one master password and one backup for
+  both, a password generator, imports from browsers and password managers, and a browser extension
+  that fills a login and then its code.
+- **No account**: no sign-up, no telemetry and no server that can read your codes or passwords.
+  Move your accounts in from Google Authenticator or Microsoft Authenticator, and back out again.
 
 ## Features
 
@@ -50,6 +55,23 @@ Microsoft Authenticator, exports back to them, and keeps encrypted backups in a 
 - **Export**: migration QR codes for Google Authenticator, one standard code per account for
   Microsoft Authenticator, or a plain list. Each asks for the master password again and shows the
   current codes beside the QR code so you can check the phone.
+- **Passwords** (from 0.10.0): logins with a user name and an email address, a password, sites
+  matched by domain, host or a pattern, notes, custom fields, tags, groups and a linked code; a
+  protection level per login (fill directly, verify first, or not for the extension) and a
+  password history. A generator makes random passwords and passphrases to sites' password rules.
+  Logins import from Chrome, Edge, Firefox, Safari, Bitwarden, 1Password, LastPass and KeePass
+  (KDBX 4), and export to KeePass or a plain CSV file. The phone shows, copies and edits them
+  ([passwords guide](https://firlab.app/lockra/passwords/)).
+- **Browser extension** (Chrome, Edge and Firefox, on Windows, macOS and Linux): it keeps no
+  passwords and asks the running Lockra over an end-to-end encrypted local channel, paired once by
+  comparing a six-digit code. It fills from its popup, with `Ctrl Shift L` or from a menu by the
+  field, fills the linked code on the next page, and offers to save and update passwords; Lockra
+  decides every fill, and can keep running in the tray for it. The store listings are not live yet
+  ([extension guide](https://firlab.app/lockra/passwords/browser)).
+- **Quick search** (from 0.10.0, on Windows, macOS and Linux): a key combination of your own
+  brings up the command palette over any app, to copy a user name, a password or a code; on
+  Wayland, bind `lockra-desktop --palette` in the desktop's settings instead
+  ([quick search](https://firlab.app/lockra/passwords/#quick-search-from-anywhere)).
 - **Backups**: encrypted `.lockrabackup` files on demand, and automatic ones into a folder (a
   OneDrive, Google Drive or iCloud folder works) a few seconds after each change, keeping the
   newest few. Restore by merging or by replacing.
@@ -138,7 +160,8 @@ which it keeps only a hash. It sees when devices sync and from which addresses
 
 1. Start Lockra and choose a master password. It cannot be recovered, so keep it somewhere safe.
 2. Bring your accounts in on the Import page: photos of Google Authenticator's export codes, links
-   pasted or read from the clipboard, or a backup.
+   pasted or read from the clipboard, or a backup. Passwords come from a browser's or a password
+   manager's export the same way.
 3. Click an account to copy its code. Turn on automatic backups on the Backup page.
 
 The [documentation](https://firlab.app/lockra/) covers each step, moving accounts from and to

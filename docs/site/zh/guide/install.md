@@ -1,6 +1,6 @@
 # 安装
 
-本页介绍如何在 Windows、macOS、Linux 和 Android 上下载并安装 Lockra，以及如何确认下载的文件未被篡改。
+本页介绍如何在 Windows、macOS、Linux 和 Android 上下载并安装 Lockra、如何确认下载的文件未被篡改，以及浏览器扩展从哪里获取。
 
 ## 一键安装
 
@@ -80,6 +80,10 @@ AppImage 无需安装：添加可执行权限后直接运行。Lockra 需要 Web
 自 0.7.0 版起，每个版本还会附带 `Lockra_<version>_android_arm64.apk`，适用于 Android 8 及以上的 ARM64 手机。在手机上从[发布页](https://github.com/sunerpy/lockra/releases)下载并打开它；首次安装时，Android 会询问是否允许打开它的浏览器或文件管理器安装应用。发布页上更新版本的 APK 可以直接覆盖安装，保险库会保留。
 
 与其他下载一样，可以用 `SHA256SUMS` 和 `gh attestation verify Lockra_*_android_arm64.apk --repo sunerpy/lockra` 校验 APK。APK 使用 Lockra 的 Android 密钥签名：使用 Android SDK 的构建工具运行 `apksigner verify --print-certs Lockra_*_android_arm64.apk`，可以看到证书的 SHA-256：`5ac2ccffe00d12e80d13dbfc23425cd3b89eec77cd5d21adda4fdac1cf4dcc28`。Android 不会用其他密钥签名的 APK 更新已安装的应用。
+
+## 浏览器扩展
+
+适用于 Chrome、Edge 和 Firefox 的扩展，从同一台电脑上运行的 Lockra（0.10.0 或更高版本）取得登录项并填入网页。Chrome、Edge 和 Brave 以解压方式加载发布页上的 `lockra-extension_<版本>_chromium-unpacked.zip`；Microsoft Edge 加载项和 Firefox 附加组件的页面尚未上线。安装扩展后，请在 Lockra 中开启「设置 › 浏览器 › 浏览器集成」，再将两者配对（[浏览器扩展](/zh/passwords/browser)）。
 
 ## 后续步骤
 

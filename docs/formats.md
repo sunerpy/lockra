@@ -551,8 +551,9 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
 folder, hex>`, created as the first instance and refusing remote clients.
 - **The manifests** (`dev.lockra.browser`, `"type": "stdio"`, the program's path: the AppImage when
   Lockra runs from one): Chrome, Chromium, Edge and Brave's allow `chrome-extension://<id>/` for
-  the Chrome Web Store's and Edge Add-ons' ids (Edge installs from the Chrome Web Store too) and, in
-  a debug build, the development id; Firefox's allows `lockra@firlab.app`. Linux:
+  Edge Add-ons' id (the self-install package's too), the Chrome Web Store's once the extension is
+  listed there (Edge installs from the Chrome Web Store too) and, in a debug build, the development
+  id; Firefox's allows `lockra@firlab.app`. Linux:
   `~/.config/{google-chrome, chromium, microsoft-edge, BraveSoftware/Brave-Browser}/NativeMessagingHosts/`
   and `~/.mozilla/native-messaging-hosts/`; macOS: the same browsers' folders under
   `~/Library/Application Support/` (`Mozilla/NativeMessagingHosts/` for Firefox); Windows: the

@@ -48,8 +48,10 @@ fn the_manifests_allow_the_extensions_and_point_at_the_program() {
     assert_eq!(chrome["path"], "/opt/Lockra/lockra-desktop");
     assert_eq!(chrome["allowed_origins"], serde_json::json!(ids::chromium_origins(true)));
     assert!(chrome.get("allowed_extensions").is_none());
-    // A release allows the stores' ids alone, never the development one.
+    // A release allows the stores' ids alone, never the development one: Edge Add-ons', which the
+    // self-install package has too.
     let release = serde_json::to_value(manifest(Browser::Edge, program, false)).unwrap();
+    assert_eq!(release["allowed_origins"], serde_json::json!(["chrome-extension://flgfdomeabdfbebfjonaocddjcamgblk/"]));
     assert!(!release["allowed_origins"].as_array().unwrap().iter().any(|o| o.as_str().unwrap().contains(ids::CHROMIUM_DEV)));
     let firefox = serde_json::to_value(manifest(Browser::Firefox, program, false)).unwrap();
     assert_eq!(firefox["allowed_extensions"], serde_json::json!(["lockra@firlab.app"]));

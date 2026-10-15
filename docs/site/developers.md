@@ -14,8 +14,11 @@ License 2.0. It is a Rust core in a Tauri 2 shell with a React interface:
 | `crates/lockra-transfer`         | Google's migration codes, Microsoft's database, otpauth lists, QR codes |
 | `crates/lockra-core`             | the application: vault session, import, export, backups, settings       |
 | `crates/lockra-bridge`           | the contract between the interface and the core                         |
+| `crates/lockra-autofill`         | matching sites, password rules, the password generator and strength     |
+| `crates/lockra-browser`          | the browser extension's encrypted channel to the app                    |
 | `apps/desktop`                   | the Tauri shell and the React app                                       |
 | `apps/mobile`                    | the Android app, in progress: its Tauri shell and React app             |
+| `apps/extension`                 | the browser extension for Chrome, Edge and Firefox                      |
 | `packages/ui`, `packages/shared` | the design system; the contract, translations and test backend          |
 
 ## Building

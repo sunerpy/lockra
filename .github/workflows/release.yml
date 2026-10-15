@@ -608,10 +608,11 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # The browser extension (apps/extension) for the stores, which get it by hand (docs/release.md,
-  # "The browser extension"): lockra-extension_<version>_chrome.zip for the Chrome Web Store and
-  # Edge Add-ons, _firefox.zip for addons.mozilla.org, and _source.zip, the tag's tree with
-  # BUILD.md, which AMO asks for because the add-on is bundled and minified.
+  # The browser extension (apps/extension) for the stores, which get it by hand, and for loading
+  # unpacked (docs/release.md, "The browser extension"): lockra-extension_<version>_chromium-store.zip
+  # for Edge Add-ons and the Chrome Web Store, _chromium-unpacked.zip with Edge Add-ons' public key
+  # for Chrome, Edge and Brave, _firefox.zip for addons.mozilla.org, and _source.zip, the tag's tree
+  # with BUILD.md, which AMO asks for because the add-on is bundled and minified.
   # scripts/package-extension.sh builds the packages twice and requires the same bytes, checks
   # their manifests and writes the checksums apart (evidence/*.json is the desktop legs' format); CI
   # runs it with --check. Like the relay's archives, the files go into SHA256SUMS and the

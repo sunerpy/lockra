@@ -2,10 +2,10 @@
 # Screenshots for the documentation site: the real app (a debug build serving the release web
 # bundle, with the in-memory keychain of debug builds) under Xvfb, once per language, each time in
 # fresh throwaway folders. scripts/smoke/site_screens.py drives it over WebDriver with made-up
-# accounts and writes <page>-<lang>-<light|dark>.webp. Then the phone app's dev build, in a Chrome
-# reached over the DevTools protocol, shows the same accounts (scripts/smoke/phone_screens.mjs),
-# and scripts/smoke/compose_screens.py puts the two together: devices-<lang>-<scheme>.webp and
-# phones-<lang>-<scheme>.webp. Look at every image before committing it (docs/site/README.md,
+# accounts and logins and writes <page>-<lang>-<light|dark>.webp. Then the phone app's dev build, in
+# a Chrome reached over the DevTools protocol, shows the same accounts and logins
+# (scripts/smoke/phone_screens.mjs), and scripts/smoke/compose_screens.py puts the two together:
+# devices-<lang>-<scheme>.webp, phones-<lang>-<scheme>.webp and phones-passwords-<lang>-<scheme>.webp. Look at every image before committing it (docs/site/README.md,
 # "Screenshots").
 #
 # LOCKRA_CDP          the Chrome's DevTools endpoint, host:port (required; Chrome started with
@@ -138,8 +138,9 @@ for lang in en zh; do
   kill "$driver_pid" 2>/dev/null || true
   wait "$driver_pid" 2>/dev/null || true
   driver_pid=""
+  # --passwords: the phone as a release shows it (the Passwords tab, its logins), as the desktop.
   node scripts/smoke/phone_screens.mjs --cdp "$cdp" --url "$phone_url" --lang "$lang" \
-    --state "$work/$lang.json" --out "$work/$lang-phone"
+    --state "$work/$lang.json" --out "$work/$lang-phone" --passwords
   python3 scripts/smoke/compose_screens.py --lang "$lang" --desktop "$out" --phone "$work/$lang-phone" --out "$out"
 done
 echo "site-screens: done; look at every image in $out before committing"

@@ -76,8 +76,8 @@ at once both keep their change; a hidden value a write replaces stays in a short
 which a conflict is derived. The webview's view of a login holds no secret (`logins.rs`); one comes
 back only in `item_reveal` and the generator's answers. Their commands, the generator's and the
 site rules' (`session/items.rs`) answer `feature_unavailable` while the build does not offer
-password management (`Features.passwords`: on in a debug build, off in a release until it ships),
-and the vault still keeps and syncs what other devices wrote. The browser extension's part is
+password management (`Features.passwords`, on in every build since 0.10.0), and the vault still
+keeps and syncs what other devices wrote. The browser extension's part is
 `browser.rs` and `session/browser.rs`: what the vault keeps of it (the app's static key, the paired
 extensions, the policy) and every decision on a paired extension's request (the match for the
 frame, frames of other sites, the HTTP downgrade, the protection level, the rate limits).
@@ -217,9 +217,9 @@ unless a dialog is open (the window then shows it as it is).
   hides, so the app the user came from has the keys back) or minimized again. Closed without a copy,
   brought up some other way (the tray's 打开, the Dock, another start, an extension's request), or
   locked meanwhile, the window stays where it is.
-- Like the rest of password management it needs `Features.passwords`: a release build without it
-  registers nothing, the tray has no 「快捷搜索」 and Settings shows no row; `--palette` then only
-  brings the window up.
+- Like the rest of password management it needs `Features.passwords`: a build without it registers
+  nothing, the tray has no 「快捷搜索」 and Settings shows no row; `--palette` then only brings the
+  window up.
 
 ## The phone shell
 

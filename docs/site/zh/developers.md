@@ -13,8 +13,11 @@
 | `crates/lockra-transfer`         | Google 迁移二维码、Microsoft 数据库、otpauth 列表、二维码 |
 | `crates/lockra-core`             | 应用核心：保险库会话、导入、导出、备份、设置              |
 | `crates/lockra-bridge`           | 界面与核心之间的契约                                      |
+| `crates/lockra-autofill`         | 网址匹配、密码规则、密码生成器与强度评估                  |
+| `crates/lockra-browser`          | 浏览器扩展与应用之间的加密通道                            |
 | `apps/desktop`                   | Tauri 外壳与 React 应用                                   |
 | `apps/mobile`                    | 开发中的 Android 应用：Tauri 外壳与 React 应用            |
+| `apps/extension`                 | 适用于 Chrome、Edge 和 Firefox 的浏览器扩展               |
 | `packages/ui`、`packages/shared` | 设计系统；契约、翻译和测试用后端                          |
 
 ## 构建

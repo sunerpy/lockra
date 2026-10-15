@@ -1,7 +1,7 @@
 # Install
 
-This page explains how to download and install Lockra on Windows, macOS, Linux and Android, and
-how to check that a download is genuine.
+This page explains how to download and install Lockra on Windows, macOS, Linux and Android, how
+to check that a download is genuine, and where the browser extension comes from.
 
 ## Install with one command
 
@@ -107,6 +107,14 @@ Lockra's Android key: with the Android SDK's build tools,
 `apksigner verify --print-certs Lockra_*_android_arm64.apk` shows the certificate's SHA-256,
 `5ac2ccffe00d12e80d13dbfc23425cd3b89eec77cd5d21adda4fdac1cf4dcc28`. Android refuses to update the app with an APK signed by any other
 key.
+
+## The browser extension
+
+The extension for Chrome, Edge and Firefox fills logins from Lockra 0.10.0 or later running on the
+same computer. Chrome, Edge and Brave load it unpacked from the release's
+`lockra-extension_<version>_chromium-unpacked.zip`; the Microsoft Edge Add-ons and Firefox Add-ons
+listings are not live yet. Once it is installed, turn on **Settings › Browser › Browser
+integration** in Lockra and pair the two ([The browser extension](/passwords/browser)).
 
 ## Next steps
 

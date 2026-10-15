@@ -191,8 +191,7 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
 
 ## Browser extension
 
-Password management's browser extension (behind the `passwords` switch until it ships) is a thin
-client: it keeps no vault and caches no secret, and every decision is the core's.
+Password management's browser extension (since 0.10.0) is a thin client: it keeps no vault and caches no secret, and every decision is the core's.
 
 - **The channel.** The extension reaches the running app through native messaging, a host process
   that only passes frames between its stdio and the app's local socket. Both are treated as
@@ -206,8 +205,11 @@ client: it keeps no vault and caches no secret, and every decision is the core's
   backup) and stays in the app's memory, never in the webview.
 - **The host and the socket.** The native-messaging manifests are written only for the browsers
   the user picks and removed when the integration is turned off; they allow Lockra's extensions
-  alone: the stores' ids and Firefox's add-on id, and only in a debug build the development id
-  (anyone can load an unpacked extension under it). The host reads nothing it passes on: it says
+  alone: Edge Add-ons' id, which the release's self-install package has too (it carries that
+  item's public key), the Chrome Web Store's once the extension is listed there, and Firefox's
+  add-on id; only a debug build adds the development id. An id proves nothing about an extension
+  loaded unpacked, which may carry any public key, a store item's too: whatever loads under an
+  allowed id still has to pair, approved in Lockra. The host reads nothing it passes on: it says
   by itself only that Lockra is not running, and starts Lockra when the extension asks (started
   for the browser, a Lockra running in the background stays in the tray). On Linux and macOS the
   socket's folder is the user's alone (theirs, not a link, 0700): the app makes it so before it

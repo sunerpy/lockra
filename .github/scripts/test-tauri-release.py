@@ -177,7 +177,7 @@ def main() -> None:
             "aarch64-linux-android.sha256": [f"Lockra_{VERSION}_android_arm64.apk", f"Lockra_{VERSION}_android_arm64.aab"],
             "relay-x64.sha256": [f"lockra-relay_{VERSION}_linux_x64.tar.gz"],
             "relay-arm64.sha256": [f"lockra-relay_{VERSION}_linux_arm64.tar.gz"],
-            "extension.sha256": [f"lockra-extension_{VERSION}_{kind}.zip" for kind in ("chrome", "firefox", "source")],
+            "extension.sha256": [f"lockra-extension_{VERSION}_{kind}.zip" for kind in ("chromium-store", "chromium-unpacked", "firefox", "source")],
         }
         for sums, names in others.items():
             for name in names:

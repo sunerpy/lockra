@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # The browser extension's release files, made from the checked-out commit (release.yml's
 # bundle-extension job; docs/release.md, "The browser extension"):
-#   lockra-extension_<version>_chrome.zip   the package for the Chrome Web Store and Edge Add-ons
-#   lockra-extension_<version>_firefox.zip  the package for addons.mozilla.org (AMO)
-#   lockra-extension_<version>_source.zip   the commit's tree (git archive) with BUILD.md at its
-#                                           root: AMO asks for the source of a bundled, minified
-#                                           add-on and the commands that rebuild it
+#   lockra-extension_<version>_chromium-store.zip     the package for Edge Add-ons and the Chrome
+#                                                     Web Store
+#   lockra-extension_<version>_chromium-unpacked.zip  the self-install package for Chrome, Edge and
+#                                                     Brave (loaded unpacked; Edge Add-ons' id)
+#   lockra-extension_<version>_firefox.zip            the package for addons.mozilla.org (AMO)
+#   lockra-extension_<version>_source.zip             the commit's tree (git archive) with BUILD.md
+#                                                     at its root: AMO asks for the source of a
+#                                                     bundled, minified add-on and the commands
+#                                                     that rebuild it
 # and their SHA-256 in sha256sum's format, the names relative to DIST. The packages are what
 # `make extension` builds (pnpm --filter @lockra/extension run package), built twice: both builds
-# must give the same bytes, and exactly these two zips. Their manifests must carry the root
-# package.json's version, the Chrome package no `key` (that is the development build) and the
-# Firefox package the add-on id of apps/extension/manifest/firefox.json.
+# must give the same bytes, and exactly these three zips. Their manifests must carry the root
+# package.json's version; the store package no `key` (Edge Add-ons refuses one), the self-install
+# package the key of apps/extension/manifest/unpacked.json, and the Firefox package the add-on id
+# of apps/extension/manifest/firefox.json.
 #
 # Usage: scripts/package-extension.sh [--version X.Y.Z] DIST CHECKSUMS
 #          from a clean tree (the source zip is the commit, so the packages must be built from it)
@@ -74,7 +79,8 @@ package() {
     fail "$dist is not empty"
   fi
   mkdir -p -- "$dist" "$(dirname "$checksums")"
-  local chrome="lockra-extension_${version}_chrome.zip"
+  local store="lockra-extension_${version}_chromium-store.zip"
+  local unpacked="lockra-extension_${version}_chromium-unpacked.zip"
   local firefox="lockra-extension_${version}_firefox.zip"
   local source="lockra-extension_${version}_source.zip"
 
@@ -86,17 +92,17 @@ package() {
       found+=("${path##*/}")
     fi
   done
-  if [ "${found[*]-}" != "$chrome $firefox" ]; then
-    fail "the build wrote ${found[*]:-no zip}, the release ships $chrome and $firefox: change apps/extension/scripts/build.mjs and this script together"
+  if [ "${found[*]-}" != "$store $unpacked $firefox" ]; then
+    fail "the build wrote ${found[*]:-no zip}, the release ships $store, $unpacked and $firefox: change apps/extension/scripts/build.mjs and this script together"
   fi
   local first second
-  first=$(cd "$built" && sha256sum -- "$chrome" "$firefox")
+  first=$(cd "$built" && sha256sum -- "$store" "$unpacked" "$firefox")
   pnpm --filter @lockra/extension run package
-  second=$(cd "$built" && sha256sum -- "$chrome" "$firefox")
+  second=$(cd "$built" && sha256sum -- "$store" "$unpacked" "$firefox")
   if [ "$first" != "$second" ]; then
     fail "two builds of the same tree gave different packages, so a reviewer could not rebuild them:"$'\n'"$first"$'\n'"$second"
   fi
-  cp -- "$built/$chrome" "$built/$firefox" "$dist/"
+  cp -- "$built/$store" "$built/$unpacked" "$built/$firefox" "$dist/"
 
   # BUILD.md, for the reviewer who rebuilds the packages from the source zip: the environment
   # these were built in, the commands, the bytes that came out.
@@ -141,8 +147,10 @@ From the folder this file is in, with access to the npm registry:
 The second command (what `make extension` runs) builds the extension into `apps/extension/dist/`:
 
 - `firefox/` and `lockra-extension_{version}_firefox.zip`: the add-on for addons.mozilla.org;
-- `chromium/` and `lockra-extension_{version}_chrome.zip`: the extension for the Chrome Web Store
-  and Microsoft Edge Add-ons;
+- `chromium/` and `lockra-extension_{version}_chromium-store.zip`: the extension for Microsoft Edge
+  Add-ons and the Chrome Web Store;
+- `chromium-unpacked/` and `lockra-extension_{version}_chromium-unpacked.zip`: the same with Edge
+  Add-ons' public key, for loading unpacked in Chrome, Edge and Brave;
 - `chromium-dev/`: the same with a development key, for loading unpacked; never published.
 
 The zips are deterministic (entries sorted, fixed times, no extra fields). The release's are:
@@ -153,14 +161,15 @@ PY
   TZ=UTC git archive --format=zip --prefix="lockra-${version}/" --add-file="$work/BUILD.md" \
     -o "$dist/$source" HEAD
 
-  python3 -I - "$dist" "$version" apps/extension/manifest/firefox.json <<'PY'
+  python3 -I - "$dist" "$version" apps/extension/manifest/firefox.json apps/extension/manifest/unpacked.json <<'PY'
 import json
 import sys
 import zipfile
 from pathlib import Path
 
-dist, version, firefox_manifest = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
-chrome, firefox, source = (f"lockra-extension_{version}_{kind}.zip" for kind in ("chrome", "firefox", "source"))
+dist, version, firefox_manifest, unpacked_manifest = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3]), Path(sys.argv[4])
+kinds = ("chromium-store", "chromium-unpacked", "firefox", "source")
+store, unpacked, firefox, source = (f"lockra-extension_{version}_{kind}.zip" for kind in kinds)
 problems = []
 
 
@@ -175,21 +184,25 @@ def opened(name):
     return archive
 
 
-def manifest(name):
+def manifest(name, key=None):
     with opened(name) as archive:
         data = json.loads(archive.read("manifest.json"))
     if data.get("version") != version:
         problems.append(f"{name}: the manifest says version {data.get('version')!r}, not {version}")
-    if "key" in data:
-        problems.append(f"{name}: the manifest has a key, so it is the development build")
+    if data.get("key") != key:
+        problems.append(f"{name}: the manifest's key is not {'the one of ' + str(unpacked_manifest) if key else 'absent'}")
     return data
 
 
 found = sorted(path.name for path in dist.iterdir())
-if found != sorted([chrome, firefox, source]):
-    problems.append(f"{dist} holds {found}, not {chrome}, {firefox} and {source}")
-if "browser_specific_settings" in manifest(chrome):
-    problems.append(f"{chrome}: the manifest is Firefox's")
+if found != sorted([store, unpacked, firefox, source]):
+    problems.append(f"{dist} holds {found}, not {store}, {unpacked}, {firefox} and {source}")
+# The store package without a key (Edge Add-ons refuses one, the stores assign the ids); the
+# self-install package with Edge Add-ons' public key, so that it has the store's id.
+self_install_key = json.loads(unpacked_manifest.read_text(encoding="utf-8"))["key"]
+for name, key in ((store, None), (unpacked, self_install_key)):
+    if "browser_specific_settings" in manifest(name, key):
+        problems.append(f"{name}: the manifest is Firefox's")
 gecko_id = json.loads(firefox_manifest.read_text(encoding="utf-8"))["browser_specific_settings"]["gecko"]["id"]
 packed_id = manifest(firefox).get("browser_specific_settings", {}).get("gecko", {}).get("id")
 if packed_id != gecko_id:
@@ -210,7 +223,7 @@ for problem in problems:
     print(f"package-extension: {problem}", file=sys.stderr)
 sys.exit(1 if problems else 0)
 PY
-  (cd "$dist" && sha256sum -- "$chrome" "$firefox" "$source") >"$checksums"
+  (cd "$dist" && sha256sum -- "$store" "$unpacked" "$firefox" "$source") >"$checksums"
   cat -- "$checksums"
 }
 
@@ -221,4 +234,4 @@ fi
 # As the updater job downloads them: bundle/dist and bundle/evidence.
 package "$work/bundle/dist" "$work/bundle/evidence/extension.sha256" 1
 (cd "$work/bundle/dist" && sha256sum --check --strict ../evidence/extension.sha256)
-echo "package-extension: ok (the release's three files, the packages the same in two builds)"
+echo "package-extension: ok (the release's four files, the packages the same in two builds)"

@@ -288,7 +288,7 @@ fn state(phase: Phase) -> UiState {
     UiState {
         app_version: "0.1.0".into(),
         platform: Platform::Linux,
-        // A release build before password management ships, while locked; a debug build otherwise.
+        // A build without password management while locked, one with it otherwise: both shapes.
         features: Features { passwords: phase != Phase::Locked },
         phase,
         data_dir: "/home/user/.local/share/dev.lockra.desktop".into(),
