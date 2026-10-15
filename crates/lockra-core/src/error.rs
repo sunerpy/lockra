@@ -61,6 +61,9 @@ pub enum ErrorCode {
     /// The key file chosen for a KeePass database is not one, or does not open it with the
     /// password given.
     ImportKeyFileInvalid,
+    /// Several accounts where one is added at once (a login's form links it: board 07-c): a QR
+    /// code or a link of several goes through the import instead.
+    SeveralAccounts,
     /// The clipboard holds neither an image with a QR code nor text with a URI.
     ClipboardEmpty,
     /// The clipboard could not be read or written.

@@ -197,6 +197,9 @@ export interface MockRelease {
 export const MOCK_PASSWORD = "correct horse battery";
 /** The key file `pickKeyFile` chooses. */
 export const MOCK_KEY_FILE = "Passwords.keyx";
+/** What the image the mock's `addEntryFromImage` picks holds: a site's two-factor setup code. */
+export const MOCK_IMAGE_PICK =
+  "otpauth://totp/Example:me%40example.com?secret=GEZDGNBVGY3TQOJQ&issuer=Example";
 /** The storage secret the mock accepts (any other is refused, like wrong credentials). */
 export const MOCK_STORAGE_SECRET = "storage secret";
 /** The folder the mock's dialog chooses unless told otherwise. */
@@ -797,6 +800,9 @@ export class MockBackend implements Backend {
   private exports = new Map<string, MockExport>();
   private restoreEntries: MockEntry[] | null = null;
   private clipboard: string | undefined;
+  /** What the image `addEntryFromImage`'s dialog picks holds (its QR code's text); `null`: the
+   *  dialog is cancelled. */
+  private imagePick: string | null = MOCK_IMAGE_PICK;
   private scan: MockScan;
   /** What the sync folder dialog chooses, and what it chose last. */
   private folderPick: string | null;
@@ -990,6 +996,39 @@ export class MockBackend implements Backend {
     this.batches = [{ id: 412_337, size: 2, received: [0], missing: [1] }];
     this.publishImport();
     return true;
+  }
+
+  async addEntryFromImage(): Promise<string | null> {
+    this.requireUnlocked();
+    if (this.imagePick === null) return null;
+    return this.addOne(this.imagePick);
+  }
+
+  /** Test hook: what the image `addEntryFromImage` picks holds, or `null` to cancel its dialog. */
+  setImagePick(text: string | null): void {
+    this.imagePick = text;
+  }
+
+  /** The one account `text` holds (its `otpauth` links), added at once; several are
+   *  `several_accounts` (the core's `add_one`). */
+  private addOne(text: string): string {
+    const links = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.toLowerCase().startsWith("otpauth://"));
+    if (links.length > 1) throw new LockraError("several_accounts");
+    const parsed = links[0] === undefined ? undefined : parseOtpauth(links[0]);
+    if (!parsed) throw new LockraError("import_empty");
+    return this.addEntry(
+      parsed.issuer,
+      parsed.account,
+      parsed.secret,
+      parsed.kind,
+      "sha1",
+      parsed.digits,
+      "uri",
+      null,
+    );
   }
 
   async pickKeyFile(): Promise<boolean> {
@@ -1419,6 +1458,11 @@ export class MockBackend implements Backend {
         if (!this.clipboard?.toLowerCase().includes("otpauth"))
           throw new LockraError("clipboard_empty");
         return this.importText(this.clipboard, { type: "clipboard" });
+      case "entry_add_clipboard":
+        this.requireUnlocked();
+        if (!this.clipboard?.toLowerCase().includes("otpauth"))
+          throw new LockraError("clipboard_empty");
+        return { id: this.addOne(this.clipboard) };
       case "import_backup_password":
         this.requireUnlocked();
         if (this.awaiting === null) throw new LockraError("no_import");

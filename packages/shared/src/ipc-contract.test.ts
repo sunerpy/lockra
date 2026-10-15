@@ -184,6 +184,7 @@ describe("IPC fixtures", () => {
         app_state: ipcFixtures.state.locked,
         entry_add_uri: ipcFixtures.responses.entry_added,
         entry_add_manual: ipcFixtures.responses.entry_added,
+        entry_add_clipboard: ipcFixtures.responses.entry_added,
         entry_reveal: ipcFixtures.responses.revealed,
         import_commit: ipcFixtures.responses.import_outcome,
         export_start: ipcFixtures.responses.export_started,

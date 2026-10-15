@@ -81,6 +81,9 @@ pub enum UiCommand {
         /// The fields.
         draft: EntryDraft,
     },
+    /// Add the one account the clipboard holds (a QR code's image, or an `otpauth` link), at once:
+    /// a login's form links it.
+    EntryAddClipboard,
     /// Rename, regroup, pin.
     EntryUpdate {
         /// Which.
@@ -451,7 +454,7 @@ pub enum UiCommand {
 
 /// Every [`UiCommand`] name, in declaration order; the TypeScript schema and the fixtures name
 /// exactly this set (checked by the contract test).
-pub const COMMANDS: [&str; 73] = [
+pub const COMMANDS: [&str; 74] = [
     "app_state",
     "vault_create",
     "vault_unlock",
@@ -465,6 +468,7 @@ pub const COMMANDS: [&str; 73] = [
     "device_biometric_disable",
     "entry_add_uri",
     "entry_add_manual",
+    "entry_add_clipboard",
     "entry_update",
     "entry_delete",
     "entries_set_group",
@@ -528,14 +532,16 @@ pub const COMMANDS: [&str; 73] = [
 ];
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, the actions that open a
-/// native file dialog first, the browser integration's switch, and the end of a quick search (the
-/// window goes back where it was).
-pub const SHELL_COMMANDS: [&str; 16] = [
+/// native file dialog first (`entry_add_image` among them: the one account an image's QR code
+/// holds, for a login's form to link), the browser integration's switch, and the end of a quick
+/// search (the window goes back where it was).
+pub const SHELL_COMMANDS: [&str; 17] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
     "import_pick_files",
     "import_pick_key_file",
+    "entry_add_image",
     "backup_save",
     "backup_pick_dir",
     "restore_pick",
@@ -607,6 +613,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::DeviceBiometricDisable { password } => unit(core.disable_device_biometric(password).await)?,
         UiCommand::EntryAddUri { uri } => json!({ "id": core.add_uri(&uri)? }),
         UiCommand::EntryAddManual { draft } => json!({ "id": core.add_manual(draft)? }),
+        UiCommand::EntryAddClipboard => json!({ "id": core.add_from_clipboard().await? }),
         UiCommand::EntryUpdate { id, patch } => unit(core.update_entry(id, patch))?,
         UiCommand::EntryDelete { id } => unit(core.delete_entry(id))?,
         UiCommand::EntriesSetGroup { ids, group } => unit(core.set_entries_group(&ids, &group))?,

@@ -395,6 +395,7 @@ fn commands() -> Vec<Value> {
             "issuer": "Mail", "account": "me@example.com", "secret": "GEZD GNBV GY3T QOJQ",
             "kind": {"type": "totp", "period": 30}, "algorithm": "sha256", "digits": 8, "group": "Work"
         }}),
+        json!({"command": "entry_add_clipboard"}),
         json!({"command": "entry_update", "id": entry_id, "patch": {"issuer": "GitHub Enterprise", "favorite": true, "group": ""}}),
         json!({"command": "entry_delete", "id": entry_id}),
         json!({"command": "entries_set_group", "ids": [entry_id], "group": "Work"}),
@@ -717,6 +718,7 @@ fn response_fixtures() {
         ErrorCode::SyncWrongCredentials.into(),
         ErrorCode::SyncInviteNeedsStorage.into(),
         ErrorCode::ImportKeyFileInvalid.into(),
+        ErrorCode::SeveralAccounts.into(),
         ErrorCode::FeatureUnavailable.into(),
         ErrorCode::ItemNotFound.into(),
         ErrorCode::ItemInvalid.into(),
@@ -1058,6 +1060,7 @@ async fn dispatch_answers_and_leaks_nothing() {
     ok(run(json!({"command": "entry_hotp_next", "id": bank})).await, &mut Vec::new());
     ok(run(json!({"command": "entry_delete", "id": bank})).await, &mut Vec::new());
     assert_eq!(run(json!({"command": "import_clipboard"})).await.unwrap_err().code, ErrorCode::ClipboardEmpty);
+    assert_eq!(run(json!({"command": "entry_add_clipboard"})).await.unwrap_err().code, ErrorCode::ClipboardEmpty);
     assert_eq!(run(json!({"command": "import_backup_password", "password": "x"})).await.unwrap_err().code, ErrorCode::NoImport);
     assert_eq!(run(json!({"command": "import_key_file_clear"})).await.unwrap_err().code, ErrorCode::NoImport);
     ok(run(json!({"command": "item_delete", "ids": [item_id]})).await, &mut Vec::new());
