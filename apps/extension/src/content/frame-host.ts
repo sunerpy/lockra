@@ -19,6 +19,11 @@ export const PROMPT_WIDTH = 360;
 const GAP = 6;
 const EDGE = 8;
 
+/** The cards' `shadow-pop` and corners in 澄空 and 澄空 · 夜, from tokens.css through the build
+ *  (scripts/frame-look.mjs), drawn by the host in the page: inside the frame the shadow would end
+ *  at the frame's edge. */
+const LOOK = LOCKRA_FRAME_LOOK;
+
 export interface HostOptions {
   doc: Document;
   /** The inline frame's page: `runtime.getURL("inline.html")` (a dynamic URL in Chromium). */
@@ -179,6 +184,13 @@ export class FrameHost {
   }
 
   private style(left: number, top: number, width: number, height: number): void {
+    const win = this.options.doc.defaultView;
+    const dark =
+      typeof win?.matchMedia === "function" &&
+      win.matchMedia("(prefers-color-scheme: dark)").matches;
+    const look = LOOK[dark ? "dark" : "light"];
+    // No height yet: a shadow around nothing would show as a line.
+    const shadow = height > 0 ? look.shadow : "none";
     const css = [
       "all: initial",
       "position: fixed",
@@ -191,6 +203,8 @@ export class FrameHost {
       "margin: 0",
       "padding: 0",
       "border: 0",
+      `border-radius: ${look[this.kind]}px`,
+      `box-shadow: ${shadow}`,
       "display: block",
       "overflow: visible",
       "background: transparent",

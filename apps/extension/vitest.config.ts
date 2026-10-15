@@ -1,9 +1,13 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
+import { readFrameLook } from "./scripts/frame-look.mjs";
 
 export default defineConfig({
   plugins: [react()],
-  define: { LOCKRA_TARGET: JSON.stringify("chromium") },
+  define: {
+    LOCKRA_TARGET: JSON.stringify("chromium"),
+    LOCKRA_FRAME_LOOK: JSON.stringify(readFrameLook()),
+  },
   test: {
     // The DOM parts (content script, frames, popup, options) run on jsdom; the channel's tests
     // (noise, protocol, background) say `@vitest-environment node` for Node's WebCrypto.
