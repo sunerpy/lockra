@@ -1,8 +1,8 @@
 //! Lockra desktop shell: Tauri commands → `lockra-bridge` → `lockra-core`.
 //!
 //! The shell owns wiring only: the keychain, clipboard, updater and sync storage adapters, the
-//! native file dialogs, the code stream channel, the event forwarding, drag and drop, and
-//! screen-capture protection. Every
+//! native file dialogs, the code stream channel, the event forwarding, drag and drop,
+//! screen-capture protection, the tray and the quick search's global shortcut. Every
 //! command is `async` (a sync command runs on the main thread and would freeze the webview while
 //! Argon2 works). Everything but [`run`] is generic over the Tauri runtime, so `tests/ipc.rs`
 //! drives the real command layer on `tauri::test::MockRuntime` without a window.
@@ -22,6 +22,7 @@ pub mod logging;
 #[cfg(target_os = "macos")]
 pub mod macos_keychain;
 pub mod per_build;
+pub mod quick_access;
 pub mod sync;
 pub mod updater;
 
@@ -55,7 +56,7 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 15] = [
+pub const COMMANDS: [&str; 16] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -71,6 +72,7 @@ pub const COMMANDS: [&str; 15] = [
     "browser_enable",
     "browser_disable",
     "browser_status",
+    "quick_access_done",
 ];
 
 /// `true` only when a debug build was explicitly asked for the in-memory keychain.
@@ -113,6 +115,9 @@ pub struct ShellOptions {
     pub browser_socket: Option<PathBuf>,
     /// Show the tray while Lockra runs in the background (off in the mock-runtime tests).
     pub tray: bool,
+    /// Register the quick search's shortcut with the system (off in the mock-runtime tests, which
+    /// then report every shortcut unavailable, as a Wayland desktop does).
+    pub global_shortcuts: bool,
 }
 
 impl Default for ShellOptions {
@@ -129,6 +134,7 @@ impl Default for ShellOptions {
             sync: None,
             browser_socket: None,
             tray: true,
+            global_shortcuts: true,
         }
     }
 }
@@ -363,11 +369,15 @@ async fn forward_events<R: Runtime>(app: AppHandle<R>, core: Core, tray: bool) {
                 if let UiEvent::State { state } = &event {
                     if state.phase != Phase::Unlocked {
                         protect(&app, false);
+                        // A palette the quick search opened went with the lock.
+                        quick_access::forget(&app);
                     }
                     // The tray follows the setting, from Settings or another window's change.
                     if tray {
-                        background::sync_tray(&app, state.settings.run_in_background, state.settings.locale);
+                        background::sync_tray(&app, state.settings.run_in_background, state.settings.locale, core.quick_access_offered());
                     }
+                    // The quick search's shortcut follows it too.
+                    quick_access::sync(&app, state.quick_access.shortcut.as_deref());
                 }
                 if let UiEvent::Notice { notice } = &event
                     && background::brings_window_up(notice)
@@ -442,12 +452,14 @@ fn watch_close<R: Runtime>(window: &WebviewWindow<R>, core: Core) {
 /// The app with every command, the core and its wiring; `run` adds the real context.
 pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) -> tauri::Builder<R> {
     let builder = if options.single_instance {
-        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+        builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| match quick_access::start_reason(&args) {
+            // `lockra-desktop --palette` (bound in the desktop where apps get no global shortcut):
+            // the window with the command palette.
+            quick_access::Start::Palette => quick_access::summon(app),
             // Started again for the browser (the host's `start_app`): Lockra runs already, and
-            // the window stays as it is; any other start brings it up.
-            if !args.iter().any(|a| a == browser::FROM_BROWSER) {
-                background::show_main(app);
-            }
+            // the window stays as it is.
+            quick_access::Start::Browser => {}
+            quick_access::Start::Window => background::show_main(app),
         }))
     } else {
         builder
@@ -470,7 +482,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             sync_pick_folder,
             browser::service::browser_enable,
             browser::service::browser_disable,
-            browser::service::browser_status
+            browser::service::browser_status,
+            quick_access::quick_access_done
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {
@@ -502,24 +515,34 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());
+            app.manage(quick_access::QuickAccess::new(options.global_shortcuts));
             let service = browser::service::BrowserService::new(socket);
             app.manage(service.clone());
             tauri::async_runtime::spawn(browser::service::resume(core.clone(), service));
-            let settings = core.state().settings;
+            let state = core.state();
+            let settings = state.settings;
             if options.tray {
-                background::sync_tray(app.handle(), settings.run_in_background, settings.locale);
+                background::sync_tray(app.handle(), settings.run_in_background, settings.locale, core.quick_access_offered());
             }
+            // The quick search's shortcut, from the start: it works while the vault is locked too
+            // (the window comes up with the unlock screen).
+            quick_access::sync(app.handle(), state.quick_access.shortcut.as_deref());
             tauri::async_runtime::spawn(forward_events(app.handle().clone(), core.clone(), options.tray));
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 watch_focus(&window, core.clone());
                 watch_close(&window, core.clone());
                 watch_drops(&window, core);
                 // Declared invisible so it never flashes white before the theme is applied. Started
-                // for the browser while Lockra runs in the background, it stays in the tray.
-                let from_browser = std::env::args().any(|a| a == browser::FROM_BROWSER);
-                if !(from_browser && settings.run_in_background) {
+                // for the browser while Lockra runs in the background, it stays in the tray;
+                // started with `--palette`, the quick search asks the core for the palette (which
+                // the vault, locked at a start, keeps shut: the unlock screen shows).
+                let start = quick_access::start_reason(&std::env::args_os().collect::<Vec<_>>());
+                if !(start == quick_access::Start::Browser && settings.run_in_background) {
                     let _ = window.show();
                     let _ = window.set_focus();
+                }
+                if start == quick_access::Start::Palette {
+                    quick_access::summon(app.handle());
                 }
             }
             Ok(())

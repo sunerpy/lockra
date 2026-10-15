@@ -146,6 +146,9 @@ export const settingsSchema = z.object({
    *  browsers' manifests); `settings_set` leaves it as it is. */
   browser_integration: z.boolean(),
   run_in_background: z.boolean(),
+  /** The quick search's global shortcut, an accelerator (`CommandOrControl+Shift+Space`); `null`
+   *  registers none. */
+  quick_access_shortcut: z.string().nullable(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -173,6 +176,7 @@ export function defaultSettings(): Settings {
     item_sort: "name",
     browser_integration: false,
     run_in_background: false,
+    quick_access_shortcut: null,
   };
 }
 
@@ -437,6 +441,7 @@ export const ERROR_CODES = [
   "browser_not_paired",
   "browser_pair_expired",
   "browser_manifest_failed",
+  "shortcut_unavailable",
   "feature_unavailable",
   "internal",
 ] as const;
@@ -898,6 +903,15 @@ export const browserViewSchema = z.object({
 });
 export type BrowserView = z.infer<typeof browserViewSchema>;
 
+/** The quick search (lockra-core `QuickAccessView`): the global shortcut the desktop shell
+ *  registers (`null`: none chosen, or no quick search in this build or on this platform), and why
+ *  it could not (`shortcut_unavailable`, in memory only). */
+export const quickAccessViewSchema = z.object({
+  shortcut: z.string().nullable(),
+  error: errorCodeSchema.nullable(),
+});
+export type QuickAccessView = z.infer<typeof quickAccessViewSchema>;
+
 /** What this build offers of what is still being finished (lockra-core `Features`): a release
  *  build turns password management on once it ships; the interface hides what is off. */
 export const featuresSchema = z.object({
@@ -926,6 +940,8 @@ export const uiStateSchema = z.object({
   generator: z.object({ history_count: z.number().int().nonnegative() }),
   /** The browser extension. */
   browser: browserViewSchema,
+  /** The quick search's global shortcut, as the desktop shell registers it. */
+  quick_access: quickAccessViewSchema,
   /** The groups folded in the code list ("" for the accounts in no group); empty unless unlocked. */
   collapsed_groups: z.array(z.string()),
   /** The accounts in the order they were dragged into (`manual` order); this device's. */
@@ -998,6 +1014,9 @@ export const noticeSchema = z.discriminatedUnion("type", [
   }),
   /** An extension asks Lockra to unlock. */
   z.object({ type: z.literal("browser_unlock_requested"), browser: z.string() }),
+  /** The quick search was asked for (its shortcut, the tray, `lockra-desktop --palette`): open the
+   *  command palette. Only while unlocked; not a toast. */
+  z.object({ type: z.literal("open_palette") }),
   z.object({
     type: z.literal("imported"),
     added: z.number().int(),
@@ -1496,6 +1515,7 @@ export const SHELL_COMMAND_NAMES = [
   "browser_enable",
   "browser_disable",
   "browser_status",
+  "quick_access_done",
 ] as const;
 
 /** The phone shell's own Tauri commands (lockra-bridge `PHONE_COMMANDS`). */

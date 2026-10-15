@@ -121,6 +121,28 @@ describe("ToasterProvider", () => {
     );
   });
 
+  it("tells nothing of the quick search's request for the palette: the palette is the answer", async () => {
+    const backend = new MockBackend({
+      entries: [mockEntry("GitHub", "octocat")],
+      phase: "unlocked",
+    });
+    renderHook(() => null, {
+      wrapper: function Wrapper({ children }: { children: ReactNode }) {
+        return (
+          <Providers backend={backend}>
+            <NoticeBridge />
+            {children}
+          </Providers>
+        );
+      },
+    });
+    await act(async () => {});
+    act(() => backend.emitNotice({ type: "open_palette" }));
+    expect([...screen.queryAllByRole("alert"), ...screen.queryAllByRole("status")]).toHaveLength(0);
+    act(() => backend.emitNotice({ type: "auto_locked" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("已自动锁定");
+  });
+
   it("is required by its hook", () => {
     expect(() => renderHook(() => useToaster())).toThrow("useToaster outside <ToasterProvider>");
   });

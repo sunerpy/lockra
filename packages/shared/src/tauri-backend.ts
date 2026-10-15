@@ -185,6 +185,10 @@ export class TauriBackend implements Backend {
     return z.array(browserStatusSchema).parse(await this.call("browser_status"));
   }
 
+  async quickAccessDone(copied: boolean): Promise<void> {
+    await this.call("quick_access_done", { copied });
+  }
+
   async pickRestoreFile(): Promise<boolean> {
     return z.boolean().parse(await this.call("restore_pick"));
   }

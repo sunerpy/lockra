@@ -1,6 +1,7 @@
 // The command palette's items: every account (Enter copies its code), every login (Enter copies
 // its password, Tab moves to its other actions), the pages, and the actions of the unlocked app. A
-// development build adds the component showcase.
+// development build adds the component showcase. Each copy hands its outcome to `onCopy` (the quick
+// search sends the window back after one).
 import { entryLabel, itemAccount, itemName } from "@lockra/shared";
 import {
   type CommandAction,
@@ -25,7 +26,9 @@ const PAGE_ICONS = {
   backup: "archive",
 } as const satisfies Record<PageId, IconName>;
 
-export function useCommands(): CommandItem[] {
+/** The palette's items; `onCopy` hears of each copy run from them, with whether it went to the
+ *  clipboard. */
+export function useCommands(onCopy?: (copied: Promise<boolean>) => void): CommandItem[] {
   const t = useT();
   const state = useUiState();
   const shell = useShell();
@@ -37,6 +40,10 @@ export function useCommands(): CommandItem[] {
   const { entries } = state;
   const passwords = state.features.passwords;
   return useMemo(() => {
+    const copy = (work: Promise<boolean>) => {
+      if (onCopy) onCopy(work);
+      else void work;
+    };
     const accounts = t("palette.group.accounts");
     const pages = t("palette.group.pages");
     const actions = t("palette.group.actions");
@@ -46,7 +53,10 @@ export function useCommands(): CommandItem[] {
       label: entryLabel(entry.issuer, entry.account),
       icon: "copy",
       hint: t("palette.copyCode"),
-      run: () => void dispatch({ command: "entry_copy", id: entry.id }),
+      run: () =>
+        copy(
+          dispatch({ command: "entry_copy", id: entry.id }).then((answer) => answer !== undefined),
+        ),
     }));
     if (passwords) {
       const group = t("palette.group.logins");
@@ -58,7 +68,7 @@ export function useCommands(): CommandItem[] {
                 {
                   id: "password",
                   label: t("palette.login.copyPassword"),
-                  run: () => void login.copy(item, { type: "password" }),
+                  run: () => copy(login.copy(item, { type: "password" })),
                 },
               ]
             : []),
@@ -69,9 +79,9 @@ export function useCommands(): CommandItem[] {
                   id: "username",
                   label: t("palette.login.copyUsername"),
                   run: () =>
-                    void login.copy(item, {
-                      type: account === item.username ? "username" : "email",
-                    }),
+                    copy(
+                      login.copy(item, { type: account === item.username ? "username" : "email" }),
+                    ),
                 },
               ]),
           ...(item.totp_entry === null
@@ -80,7 +90,7 @@ export function useCommands(): CommandItem[] {
                 {
                   id: "code",
                   label: t("palette.login.copyCode"),
-                  run: () => void login.copy(item, { type: "totp" }),
+                  run: () => copy(login.copy(item, { type: "totp" })),
                 },
               ]),
           ...(item.has_password
@@ -183,5 +193,5 @@ export function useCommands(): CommandItem[] {
       });
     }
     return items;
-  }, [t, entries, passwords, logins, login, shell, dispatch, guarded, backend]);
+  }, [t, entries, passwords, logins, login, shell, dispatch, guarded, backend, onCopy]);
 }

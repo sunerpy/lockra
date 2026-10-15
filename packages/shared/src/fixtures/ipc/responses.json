@@ -73,6 +73,9 @@
       "code": "browser_pair_expired"
     },
     {
+      "code": "shortcut_unavailable"
+    },
+    {
       "code": "internal"
     }
   ],

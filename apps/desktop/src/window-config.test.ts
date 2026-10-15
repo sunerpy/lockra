@@ -100,4 +100,9 @@ describe("the webview's permissions", () => {
     for (const permission of capability.permissions)
       expect(permission).not.toMatch(/^(fs|dialog|shell|opener|http|clipboard)/);
   });
+
+  it("security: the global shortcut is the shell's alone (registered from Rust, never the webview)", () => {
+    for (const permission of capability.permissions)
+      expect(permission).not.toMatch(/^global-shortcut/);
+  });
 });

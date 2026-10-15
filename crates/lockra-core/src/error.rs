@@ -161,6 +161,10 @@ pub enum ErrorCode {
     /// The browsers' native-messaging manifests (on Windows, their registry keys) could not be
     /// written or removed.
     BrowserManifestFailed,
+    /// The quick search's global shortcut could not be registered: another app has it, it is not
+    /// a shortcut, or the desktop gives none to apps (Wayland), where `lockra-desktop --palette`
+    /// bound in the desktop's own settings does the same.
+    ShortcutUnavailable,
     /// This build does not offer it yet: password management before it ships, or a backup with
     /// logins merged before the preview can show them (a restore that replaces still takes them).
     FeatureUnavailable,

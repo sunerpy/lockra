@@ -14,7 +14,10 @@ accounts reordered by a handle; the newer themes (澄空, 墨白 and their night
 card and a row just copied, and Settings › 外观's grid of eight themes; the passwords page (a debug
 build offers password management) with logins whose password, copied from the list by Rust, is on
 the X clipboard; the browser integration turned on, the real binary in host mode reaching the
-running app through its socket, Settings › 浏览器, and turned off.
+running app through its socket, Settings › 浏览器, and turned off; the quick search's shortcut chosen
+and taken from X, pressed to bring the command palette up, a copy from it putting the window back in
+the tray, `lockra-desktop --palette` started again opening the palette in the running app, and a
+shortcut the shell cannot take shown with that command in Settings › 通用.
 Every wait is a condition with a deadline; nothing sleeps for a fixed time to "let it finish".
 """
 
@@ -335,6 +338,83 @@ class Smoke:
         if any(s["manifest"] for s in statuses) or os.path.exists(manifest_path):
             sys.exit(f"smoke: the manifests stayed: {statuses}")
 
+    def visible(self):
+        found = subprocess.run(["xdotool", "search", "--onlyvisible", "--name", "^Lockra$"], env=self.env, capture_output=True, text=True)
+        return bool(found.stdout.split())
+
+    def quick_search(self):
+        """The quick search (a debug build offers password management): its shortcut chosen and
+        taken from X by the shell, a press from X brings the command palette up; hidden in the tray
+        (running in the background), the window comes up with the palette and a copy from it puts
+        the code on the clipboard and the window back in the tray; `lockra-desktop --palette`
+        started again reaches the running app (the single-instance check, on the run's own session
+        bus) and opens the palette there; a shortcut the shell cannot take is shown in Settings ›
+        通用 with the command to bind instead."""
+        web = self.web
+        palette = "[role='dialog'][aria-label='命令菜单']"
+        quick = lambda: web.invoke({"command": "app_state"})["quick_access"]
+        self.settings(quick_access_shortcut="Control+Shift+Space")
+        until("the shortcut taken from X", lambda: quick() == {"shortcut": "Control+Shift+Space", "error": None})
+        self.focus()
+        self.x("key", "ctrl+shift+space")
+        web.wait(palette)
+        self.x("key", "Escape")
+        web.gone(palette)
+        # Settings › 通用 shows it as keycaps.
+        self.resize(1280, 800)
+        self.focus()
+        self.x("key", "ctrl+comma")
+        web.wait('[data-testid="quick-access"]')
+        self.shot("settings-general-1280-light")
+        self.x("key", "Escape")
+        web.gone('[data-testid="settings-content"]')
+        # Hidden in the tray, the shortcut brings the window up with the palette; the account's
+        # code copied from it, the window goes back.
+        self.settings(run_in_background=True)
+        web.click(web.wait(xpath="//header//button[@aria-label='关闭']"))
+        until("the window hidden in the tray", lambda: not self.visible())
+        self.x("key", "ctrl+shift+space")
+        until("the window brought up", self.visible)
+        web.wait(palette)
+        self.focus()
+        self.x("type", "--delay", "15", ISSUER)
+        self.x("key", "Return")
+        until("the window back in the tray", lambda: not self.visible())
+        copied = until("the code on the clipboard", lambda: (lambda c: c if c.isdigit() else None)(self.clipboard().strip()))
+        if len(copied) != 6:
+            sys.exit(f"smoke: the quick search copied {copied!r}")
+        print("smoke: the shortcut brought the palette up from the tray, and the copy sent the window back")
+        # Up again, closed without a copy: the window stays.
+        self.x("key", "ctrl+shift+space")
+        until("the window brought up", self.visible)
+        web.wait(palette)
+        self.focus()
+        self.x("key", "Escape")
+        web.gone(palette)
+        if not self.visible():
+            sys.exit("smoke: the window went back without a copy")
+        # Where apps get no global shortcuts, the desktop runs `lockra-desktop --palette`: started
+        # again, it hands the palette to the running app and ends.
+        second = subprocess.run([self.args.app, "--palette"], env=self.env, capture_output=True, timeout=60)
+        if second.returncode != 0:
+            sys.exit(f"smoke: lockra-desktop --palette ended with {second.returncode}: {second.stderr.decode(errors='replace')[-2000:]}")
+        web.wait(palette)
+        self.focus()
+        self.x("key", "Escape")
+        web.gone(palette)
+        print("smoke: lockra-desktop --palette opened the palette in the running app")
+        # A shortcut the shell cannot take: Settings says so, with the command to bind.
+        self.settings(quick_access_shortcut="Control+Alt+NoSuchKey")
+        until("the shortcut refused", lambda: quick()["error"] == "shortcut_unavailable")
+        self.focus()
+        self.x("key", "ctrl+comma")
+        web.wait('[data-testid="quick-access-bind"]')
+        self.shot("settings-general-quick-error-1280-light")
+        self.x("key", "Escape")
+        web.gone('[data-testid="settings-content"]')
+        self.settings(quick_access_shortcut=None, run_in_background=False)
+        until("no shortcut", lambda: quick() == {"shortcut": None, "error": None})
+
     def settings(self, **patch):
         state = self.web.invoke({"command": "app_state"})
         self.web.invoke({"command": "settings_set", "settings": {**state["settings"], **patch}})
@@ -474,6 +554,7 @@ class Smoke:
         until("the login's password on the clipboard", lambda: self.clipboard() == LOGIN_PASSWORD)
         print("smoke: a login's password, copied from the list, is on the X clipboard")
         self.browser_channel()
+        self.quick_search()
         self.nav("验证码")
         self.page("codes")
         for width, height in SIZES:

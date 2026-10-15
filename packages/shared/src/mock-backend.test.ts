@@ -1348,6 +1348,73 @@ describe("MockBackend", () => {
     );
   });
 
+  it("opens the quick search's palette only while unlocked, and keeps its shortcut as the core does", async () => {
+    const backend = new MockBackend({ phase: "unlocked", passwords: true });
+    const { notices } = recorder(backend);
+    const palettes = () => notices().filter((n) => n.type === "open_palette");
+    expect((await backend.getState()).quick_access).toEqual({ shortcut: null, error: null });
+    // As the shell asks for it: its shortcut, the tray, `lockra-desktop --palette`.
+    expect(backend.summonQuickAccess()).toBe(true);
+    expect(palettes()).toEqual([{ type: "open_palette" }]);
+    const choose = async (quick_access_shortcut: string | null) => {
+      const { settings } = await backend.getState();
+      await backend.dispatch({
+        command: "settings_set",
+        settings: { ...settings, quick_access_shortcut },
+      });
+    };
+    await choose("Control+Alt+KeyK");
+    expect((await backend.getState()).quick_access).toEqual({
+      shortcut: "Control+Alt+KeyK",
+      error: null,
+    });
+    // The shell could not take it; another choice starts clean, and none clears it.
+    backend.reportShortcut(false);
+    expect((await backend.getState()).quick_access.error).toBe("shortcut_unavailable");
+    backend.reportShortcut(true);
+    expect((await backend.getState()).quick_access.error).toBeNull();
+    backend.reportShortcut(false);
+    await choose("Control+Alt+KeyL");
+    expect((await backend.getState()).quick_access).toEqual({
+      shortcut: "Control+Alt+KeyL",
+      error: null,
+    });
+    await choose(null);
+    backend.reportShortcut(false);
+    expect((await backend.getState()).quick_access).toEqual({ shortcut: null, error: null });
+    // Locked: the window shows the unlock screen, and no palette opens.
+    await backend.dispatch({ command: "vault_lock" });
+    expect(backend.summonQuickAccess()).toBe(false);
+    expect(palettes()).toHaveLength(1);
+    // The palette closes: the shell hears whether something was copied from it.
+    await backend.quickAccessDone(true);
+    await backend.quickAccessDone(false);
+    expect(backend.quickAccessEnds).toEqual([true, false]);
+  });
+
+  it("offers no quick search on the phone or without password management", async () => {
+    for (const backend of [
+      new MockBackend({ phase: "unlocked", settings: { quick_access_shortcut: "Alt+KeyK" } }),
+      new MockBackend({ phase: "unlocked", passwords: true, platform: "android" }),
+    ]) {
+      const { settings } = await backend.getState();
+      await backend.dispatch({
+        command: "settings_set",
+        settings: { ...settings, quick_access_shortcut: "Alt+KeyK" },
+      });
+      expect((await backend.getState()).settings.quick_access_shortcut).toBe("Alt+KeyK");
+      expect((await backend.getState()).quick_access).toEqual({ shortcut: null, error: null });
+      expect(backend.summonQuickAccess()).toBe(false);
+      backend.reportShortcut(false);
+      expect((await backend.getState()).quick_access.error).toBeNull();
+    }
+    const chosen = new MockBackend({
+      passwords: true,
+      settings: { quick_access_shortcut: "Alt+KeyK" },
+    });
+    expect((await chosen.getState()).quick_access.shortcut).toBe("Alt+KeyK");
+  });
+
   it("stand-in codes are stable and padded", () => {
     expect(fakeCode("A", 1, 6)).toBe(fakeCode("A", 1, 6));
     expect(fakeCode("A", 1, 8)).toMatch(/^\d{8}$/);

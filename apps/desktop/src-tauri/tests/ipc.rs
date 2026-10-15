@@ -1,6 +1,7 @@
 //! The shell's command layer on Tauri's mock runtime: the commands it registers are the ones the
 //! bridge names, a core command runs through `lockra_dispatch` with the core's typed errors, the
-//! webview cannot name a file path, and the code stream subscribes through a channel.
+//! webview cannot name a file path nor reach a plugin's commands, the code stream subscribes
+//! through a channel, and the quick search opens the palette and ends through the shell.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
@@ -10,8 +11,8 @@ use lockra_bridge::SHELL_COMMANDS;
 use lockra_core::KdfCost;
 use lockra_core::fakes::{FakeClipboard, FakeTransport, FakeUpdater};
 use lockra_core::ports::{MemorySecretStore, SyncTransport, Updater};
-use lockra_core::ui::{BiometricKind, InstallMethod};
-use lockra_desktop_lib::{COMMANDS, ShellOptions, build_app, dev_biometric_requested, dev_memory_store_requested};
+use lockra_core::ui::{BiometricKind, InstallMethod, Notice, UiEvent};
+use lockra_desktop_lib::{COMMANDS, ShellOptions, build_app, dev_biometric_requested, dev_memory_store_requested, quick_access};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets};
@@ -49,9 +50,12 @@ fn shell_on(updater: Option<Arc<dyn Updater>>, sync: Option<Arc<dyn SyncTranspor
         updater,
         plugin_updates: false,
         sync,
-        // A socket of the test's own (never the user's running Lockra's), and no tray.
+        // A socket of the test's own (never the user's running Lockra's), no tray, and no global
+        // shortcut taken from the desktop the tests run on (the shell then reports every one
+        // unavailable, as on Wayland).
         browser_socket: Some(dir.path().join("run").join("browser.sock")),
         tray: false,
+        global_shortcuts: false,
     };
     let mut app = build_app(mock_builder(), options).build(mock_context(noop_assets())).unwrap();
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
@@ -194,6 +198,62 @@ fn security_the_webview_cannot_name_a_file_path() {
     // Neither a shell command of that name nor the dialog plugin's own commands are reachable.
     assert!(shell.invoke("import_files", json!({ "paths": ["/etc/passwd"] })).is_err());
     assert!(shell.invoke("plugin:dialog|open", json!({})).is_err());
+}
+
+#[test]
+fn security_the_webview_cannot_reach_the_global_shortcut_plugin() {
+    let shell = shell();
+    // In, as the shell adds it once a shortcut is to be registered: its commands stay the shell's.
+    quick_access::load_plugin(shell.app.handle()).unwrap();
+    let channel = concat!("__", "CHANNEL__:9");
+    for (command, body) in [
+        ("plugin:global-shortcut|register", json!({ "shortcuts": ["Alt+K"], "handler": channel })),
+        ("plugin:global-shortcut|unregister_all", json!({})),
+        ("plugin:global-shortcut|is_registered", json!({ "shortcut": "Alt+K" })),
+    ] {
+        let error = shell.invoke(command, body).unwrap_err();
+        assert!(error.as_str().is_some_and(|e| e.contains("not allowed")), "{command}: {error}");
+    }
+}
+
+/// The notices the core sent since the last look.
+fn palettes(events: &mut tokio::sync::broadcast::Receiver<UiEvent>) -> usize {
+    std::iter::from_fn(|| events.try_recv().ok()).filter(|e| matches!(e, UiEvent::Notice { notice: Notice::OpenPalette })).count()
+}
+
+#[test]
+fn the_quick_search_brings_the_palette_up_while_unlocked_and_ends_through_the_shell() {
+    let shell = shell();
+    let mut events = shell.core().subscribe();
+    // No vault yet: the window comes up, and no palette.
+    quick_access::summon(shell.app.handle());
+    assert_eq!(palettes(&mut events), 0);
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    quick_access::summon(shell.app.handle());
+    assert_eq!(palettes(&mut events), 1);
+    // The palette closed, after a copy or not: the shell answers nothing, and wants to be told.
+    assert_eq!(shell.invoke("quick_access_done", json!({ "copied": true })).unwrap(), Value::Null);
+    assert_eq!(shell.invoke("quick_access_done", json!({ "copied": false })).unwrap(), Value::Null);
+    assert!(shell.invoke("quick_access_done", json!({})).is_err());
+    // Locked: the unlock screen alone.
+    shell.dispatch(json!({ "command": "vault_lock" })).unwrap();
+    quick_access::summon(shell.app.handle());
+    assert_eq!(palettes(&mut events), 0);
+}
+
+#[test]
+fn a_shortcut_the_desktop_does_not_give_is_reported_to_settings() {
+    let shell = shell();
+    shell.dispatch(json!({ "command": "vault_create", "password": PASSWORD })).unwrap();
+    let mut settings = shell.state()["settings"].clone();
+    settings["quick_access_shortcut"] = json!("CommandOrControl+Shift+Space");
+    shell.dispatch(json!({ "command": "settings_set", "settings": settings })).unwrap();
+    // The shell follows the state: it cannot register here, and says so.
+    until("the shell's report", || shell.state()["quick_access"]["error"] == "shortcut_unavailable");
+    assert_eq!(shell.state()["quick_access"]["shortcut"], "CommandOrControl+Shift+Space");
+    settings["quick_access_shortcut"] = Value::Null;
+    shell.dispatch(json!({ "command": "settings_set", "settings": settings })).unwrap();
+    until("no shortcut", || shell.state()["quick_access"] == json!({ "shortcut": null, "error": null }));
 }
 
 #[test]

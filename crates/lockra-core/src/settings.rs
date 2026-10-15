@@ -211,6 +211,11 @@ pub struct Settings {
     /// Closing the window leaves Lockra running in the tray (the browser extension and the quick
     /// search need it running); off, closing the window quits, as before.
     pub run_in_background: bool,
+    /// The global shortcut that brings the quick search up from anywhere, as an accelerator
+    /// (`CommandOrControl+Shift+Space`); none, the default, registers nothing. The desktop shell
+    /// registers it where password management is offered and reports whether it could
+    /// (`UiState.quick_access`).
+    pub quick_access_shortcut: Option<String>,
 }
 
 /// Font size bounds of Settings › Appearance.
@@ -248,6 +253,7 @@ impl Default for Settings {
             item_sort: ItemSort::default(),
             browser_integration: false,
             run_in_background: false,
+            quick_access_shortcut: None,
         }
     }
 }
@@ -266,6 +272,7 @@ impl Settings {
         if self.auto_backup.dir.as_ref().is_some_and(|d| d.trim().is_empty()) {
             self.auto_backup.dir = None;
         }
+        self.quick_access_shortcut = self.quick_access_shortcut.map(|s| s.trim().to_owned()).filter(|s| !s.is_empty());
         self
     }
 }
@@ -444,6 +451,28 @@ mod tests {
         store.save(&Settings { biometric_offer: false, ..Settings::default() }).unwrap();
         assert!(!load());
         assert!(fs::read_to_string(&path).unwrap().contains(r#""biometric_offer": false"#));
+    }
+
+    #[test]
+    fn the_quick_search_shortcut_is_off_until_chosen_and_kept_as_written() {
+        assert_eq!(Settings::default().quick_access_shortcut, None);
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let store = SettingsStore::new(dir.path());
+        // A file from before the setting: no shortcut.
+        fs::write(&path, r#"{"schema":2,"theme":"dark"}"#).unwrap();
+        assert_eq!(store.load().quick_access_shortcut, None);
+        store.save(&Settings { quick_access_shortcut: Some("CommandOrControl+Shift+Space".into()), ..Settings::default() }).unwrap();
+        assert!(fs::read_to_string(&path).unwrap().contains(r#""quick_access_shortcut": "CommandOrControl+Shift+Space""#));
+        assert_eq!(store.load().quick_access_shortcut.as_deref(), Some("CommandOrControl+Shift+Space"));
+        // Blank is none; a value that is not text keeps the default, and the rest of the file stays.
+        fs::write(&path, r#"{"schema":2,"quick_access_shortcut":"   "}"#).unwrap();
+        assert_eq!(store.load().quick_access_shortcut, None);
+        fs::write(&path, r#"{"schema":2,"quick_access_shortcut":42,"theme":"dark"}"#).unwrap();
+        let loaded = store.load();
+        assert_eq!((loaded.quick_access_shortcut, loaded.theme), (None, ThemeId::Dark));
+        let padded = Settings { quick_access_shortcut: Some(" Alt+K ".into()), ..Settings::default() }.normalized();
+        assert_eq!(padded.quick_access_shortcut.as_deref(), Some("Alt+K"));
     }
 
     #[test]

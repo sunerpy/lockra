@@ -45,6 +45,10 @@
         },
         "activity": []
       },
+      "quick_access": {
+        "shortcut": null,
+        "error": null
+      },
       "collapsed_groups": [],
       "entry_order": [],
       "group_order": [],
@@ -83,7 +87,8 @@
         },
         "item_sort": "name",
         "browser_integration": false,
-        "run_in_background": false
+        "run_in_background": false,
+        "quick_access_shortcut": null
       },
       "import": null,
       "backup": {
@@ -182,6 +187,12 @@
     "notice": {
       "type": "browser_unlock_requested",
       "browser": "chrome"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "open_palette"
     }
   },
   {

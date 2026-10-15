@@ -71,6 +71,10 @@ export interface Backend {
   browserDisable(): Promise<BrowserStatus[]>;
   /** Every browser's status: its profiles here, Lockra's manifest in place. */
   browserStatus(): Promise<BrowserStatus[]>;
+  /** The command palette the quick search opened (`open_palette`) is closed (the desktop's):
+   *  after a copy from it (`copied`), the window goes back where it was, hidden again if the quick
+   *  search had brought it up. */
+  quickAccessDone(copied: boolean): Promise<void>;
   /** Native file picker → a backup opened for restoring. `false` when cancelled. */
   pickRestoreFile(): Promise<boolean>;
   /** Native save dialog → a plain otpauth list. The file name, or `null` when cancelled. */
