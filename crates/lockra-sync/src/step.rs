@@ -17,7 +17,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::keys::is_tag;
-use crate::object::device_name;
+use crate::object::{app_version, device_name};
 use crate::{MAX_OBJECT_BYTES, ObjectMeta, PutCondition, RemoteStore, Snapshot, SpaceKeys, SyncError, open_snapshot, seal_snapshot};
 
 const ROOT: &str = "lockra-sync-v1";
@@ -94,6 +94,13 @@ pub struct Seen {
     pub name: String,
     /// When the device wrote it, Unix milliseconds.
     pub written_at_ms: u64,
+    /// The version of the app that wrote it; `None` from versions before it said, and in a state
+    /// saved before then (not written, so that such a state is written back as it was).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_version: Option<String>,
+    /// What of a payload that device reads ([`Replica::reader`]); 0 the same way.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub reader: u32,
 }
 
 /// The data a space keeps in step.
@@ -126,6 +133,8 @@ pub struct Space<'a> {
     /// This device's keyring ([`crate::seal_keyring`] under its master password), carried in its
     /// snapshots.
     pub keyring: &'a [u8],
+    /// The app's version, carried in its snapshots for the other devices to show.
+    pub app_version: Option<&'a str>,
 }
 
 /// A device of the space, as a run found it.
@@ -139,6 +148,10 @@ pub struct DeviceView {
     pub written_at_ms: Option<u64>,
     /// This device.
     pub this_device: bool,
+    /// The version of the app it writes with, as its snapshot says (this device: its own).
+    pub app_version: Option<String>,
+    /// What of a payload it reads, as its snapshot says (this device: its replica's).
+    pub reader: u32,
 }
 
 /// What a run did.
@@ -157,6 +170,9 @@ pub struct Outcome {
     pub unreadable: Vec<String>,
     /// The devices listed now, this one first.
     pub devices: Vec<DeviceView>,
+    /// How large this device's snapshot is on the storage, in bytes: as written by this run, or
+    /// as the listing gave it; `None` when there is none.
+    pub own_bytes: Option<u64>,
 }
 
 /// Keeps a run's progress before it writes: called with the state naming the write
@@ -256,7 +272,17 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
                 continue;
             }
         }
-        state.seen.insert(tag, Seen { seq: snapshot.seq, etag: etag.or(meta.etag), name: snapshot.device_name, written_at_ms: snapshot.written_at_ms });
+        state.seen.insert(
+            tag,
+            Seen {
+                seq: snapshot.seq,
+                etag: etag.or(meta.etag),
+                name: snapshot.device_name,
+                written_at_ms: snapshot.written_at_ms,
+                app_version: snapshot.app_version,
+                reader: snapshot.reader,
+            },
+        );
     }
     // A device whose snapshot is gone (removed) is no longer one of the space's.
     state.seen.retain(|tag, _| others.contains(tag));
@@ -306,14 +332,19 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
     }
 
     let name = device_name(space.device_name);
+    let version = space.app_version.map(app_version);
     let payload = replica.payload();
-    let payload_digest = digest(&name, space.keyring, &payload);
+    let payload_digest = digest(&name, space.keyring, version.as_deref(), reader, &payload);
+    // Its size on the storage as listed, unless this run writes it.
+    outcome.own_bytes = own_meta.as_ref().map(|meta| meta.size);
     if state.written_digest.as_deref() != Some(payload_digest.as_str()) {
         // Never a number another write had: one whose answer never came may still have landed,
         // and another device may have read it.
         let seq = state.own_seq.max(state.pending.as_ref().map_or(0, |p| p.seq)) + 1;
-        let snapshot = Snapshot { seq, written_at_ms: now_ms, device_name: name.clone(), keyring: space.keyring.to_vec(), payload };
+        let snapshot =
+            Snapshot { seq, written_at_ms: now_ms, device_name: name.clone(), keyring: space.keyring.to_vec(), payload, app_version: version.clone(), reader };
         let object = seal_snapshot(keys, &own_tag, &snapshot)?;
+        let object_bytes = u64::try_from(object.len()).unwrap_or(u64::MAX);
         state.pending = Some(PendingWrite { seq, digest: payload_digest.clone() });
         persist(state, replica)?;
         let condition = match (&own_meta, &state.own_etag) {
@@ -332,13 +363,21 @@ pub async fn step_with<R: Replica + Send + ?Sized>(
         state.own_written_at_ms = Some(now_ms);
         state.pending = None;
         outcome.wrote = true;
+        outcome.own_bytes = Some(object_bytes);
     }
 
     state.reader = reader;
-    outcome.devices.push(DeviceView { tag: own_tag, name, written_at_ms: state.own_written_at_ms, this_device: true });
+    outcome.devices.push(DeviceView { tag: own_tag, name, written_at_ms: state.own_written_at_ms, this_device: true, app_version: version, reader });
     for tag in others {
         if let Some(seen) = state.seen.get(&tag) {
-            outcome.devices.push(DeviceView { name: seen.name.clone(), written_at_ms: Some(seen.written_at_ms), tag, this_device: false });
+            outcome.devices.push(DeviceView {
+                name: seen.name.clone(),
+                written_at_ms: Some(seen.written_at_ms),
+                tag,
+                this_device: false,
+                app_version: seen.app_version.clone(),
+                reader: seen.reader,
+            });
         }
     }
     Ok(outcome)
@@ -355,19 +394,28 @@ pub async fn remove_device(remote: &dyn RemoteStore, space: &Space<'_>, state: &
     Ok(())
 }
 
-/// What tells two writes of this device apart: its name, its keyring and its payload.
-fn digest(name: &str, keyring: &[u8], payload: &[u8]) -> String {
+/// What tells two writes of this device apart: its name, its keyring, the version that wrote it,
+/// what that version reads and its payload. Without a version or a reader (as before they were
+/// written) it is the digest those versions kept, so a state saved then still knows its own
+/// snapshot; the payload, a JSON object, never starts the way a length does.
+fn digest(name: &str, keyring: &[u8], app_version: Option<&str>, reader: u32, payload: &[u8]) -> String {
     let mut hash = Sha256::new();
     for part in [name.as_bytes(), keyring] {
         hash.update(u64::try_from(part.len()).unwrap_or(u64::MAX).to_le_bytes());
         hash.update(part);
+    }
+    if app_version.is_some() || reader != 0 {
+        let version = app_version.unwrap_or_default().as_bytes();
+        hash.update(u64::try_from(version.len()).unwrap_or(u64::MAX).to_le_bytes());
+        hash.update(version);
+        hash.update(reader.to_le_bytes());
     }
     hash.update(payload);
     HEXLOWER.encode(&hash.finalize())
 }
 
 fn snapshot_digest(snapshot: &Snapshot) -> String {
-    digest(&snapshot.device_name, &snapshot.keyring, &snapshot.payload)
+    digest(&snapshot.device_name, &snapshot.keyring, snapshot.app_version.as_deref(), snapshot.reader, &snapshot.payload)
 }
 
 #[cfg(test)]
@@ -454,6 +502,8 @@ mod tests {
     struct Device {
         number: u64,
         name: &'static str,
+        /// The app's version it writes with; `None` as before versions said.
+        version: Option<&'static str>,
         keyring: Vec<u8>,
         state: SyncState,
         doc: Doc,
@@ -461,15 +511,15 @@ mod tests {
 
     impl Device {
         fn new(number: u64, name: &'static str) -> Self {
-            Self { number, name, keyring: format!("keyring of device {number}").into_bytes(), state: SyncState::default(), doc: Doc::default() }
+            Self { number, name, version: None, keyring: format!("keyring of device {number}").into_bytes(), state: SyncState::default(), doc: Doc::default() }
         }
 
         fn space<'a>(&'a self, keys: &'a SpaceKeys) -> Space<'a> {
-            Space { prefix: PREFIX, keys, device: self.number, device_name: self.name, keyring: &self.keyring }
+            Space { prefix: PREFIX, keys, device: self.number, device_name: self.name, keyring: &self.keyring, app_version: self.version }
         }
 
         async fn sync(&mut self, remote: &dyn RemoteStore, keys: &SpaceKeys, now_ms: u64) -> Result<Outcome, SyncError> {
-            let space = Space { prefix: PREFIX, keys, device: self.number, device_name: self.name, keyring: &self.keyring };
+            let space = Space { prefix: PREFIX, keys, device: self.number, device_name: self.name, keyring: &self.keyring, app_version: self.version };
             step(remote, &space, &mut self.state, &mut self.doc, now_ms).await
         }
 
@@ -602,7 +652,15 @@ mod tests {
 
     fn keys_and_object() -> Vec<u8> {
         let other = keys();
-        let snapshot = Snapshot { seq: 1, written_at_ms: 1, device_name: "x".into(), keyring: Vec::new(), payload: Zeroizing::new(b"{}".to_vec()) };
+        let snapshot = Snapshot {
+            seq: 1,
+            written_at_ms: 1,
+            device_name: "x".into(),
+            keyring: Vec::new(),
+            payload: Zeroizing::new(b"{}".to_vec()),
+            app_version: None,
+            reader: 0,
+        };
         seal_snapshot(&other, &other.device_tag(4), &snapshot).unwrap()
     }
 
@@ -629,7 +687,8 @@ mod tests {
             original.doc.put(1, "GitHub", 10, 1);
             original.sync(&remote, &keys, 100).await.unwrap();
             // A copy of the vault, local part included, on another computer.
-            let mut copy = Device { number: 1, name: "Copy", keyring: original.keyring.clone(), state: original.state.clone(), doc: original.doc.clone() };
+            let mut copy =
+                Device { number: 1, name: "Copy", version: None, keyring: original.keyring.clone(), state: original.state.clone(), doc: original.doc.clone() };
             copy.doc.put(2, "Mail", 20, 1);
             copy.sync(&remote, &keys, 150).await.unwrap();
             original.doc.put(3, "Bank", 30, 1);
@@ -672,7 +731,15 @@ mod tests {
         let remote = MemoryRemote::new(true);
         let keys = keys();
         let tag = keys.device_tag(9);
-        let snapshot = Snapshot { seq: 1, written_at_ms: 1, device_name: "Future".into(), keyring: Vec::new(), payload: Zeroizing::new(b"not json".to_vec()) };
+        let snapshot = Snapshot {
+            seq: 1,
+            written_at_ms: 1,
+            device_name: "Future".into(),
+            keyring: Vec::new(),
+            payload: Zeroizing::new(b"not json".to_vec()),
+            app_version: None,
+            reader: 0,
+        };
         let object = seal_snapshot(&keys, &tag, &snapshot).unwrap();
         remote.set_object(&device_path(PREFIX, keys.space_id(), &tag), object);
         let mut laptop = Device::new(1, "Laptop");
@@ -852,7 +919,15 @@ mod tests {
         let object = seal_snapshot(
             &keys,
             &tag,
-            &Snapshot { seq, written_at_ms: 120, device_name: "Laptop".into(), keyring: laptop.keyring.clone(), payload: copy.payload() },
+            &Snapshot {
+                seq,
+                written_at_ms: 120,
+                device_name: "Laptop".into(),
+                keyring: laptop.keyring.clone(),
+                payload: copy.payload(),
+                app_version: None,
+                reader: 0,
+            },
         )
         .unwrap();
         remote.set_object(&laptop.path(&keys), object);
@@ -909,7 +984,7 @@ mod tests {
         let mut laptop = Device::new(1, "Laptop");
         laptop.doc.put(1, "GitHub", 10, 1);
         let keyring = laptop.keyring.clone();
-        let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop", keyring: &keyring };
+        let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop", keyring: &keyring, app_version: None };
         let mut kept: Vec<(SyncState, Doc)> = Vec::new();
         let mut keep = |state: &SyncState, doc: &Doc| {
             kept.push((state.clone(), doc.clone()));
@@ -943,7 +1018,7 @@ mod tests {
             // vault holds is what the run kept before writing.
             laptop.doc.put(2, "Mail", 20, 1);
             let keyring = laptop.keyring.clone();
-            let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop", keyring: &keyring };
+            let space = Space { prefix: PREFIX, keys: &keys, device: 1, device_name: "Laptop", keyring: &keyring, app_version: None };
             let mut kept: Option<SyncState> = None;
             let mut keep = |state: &SyncState, _: &Doc| {
                 kept = Some(state.clone());
@@ -974,6 +1049,99 @@ mod tests {
         laptop.name = "A very long device name that goes on and on beyond the sixty-four characters";
         assert!(laptop.sync(&remote, &keys, 400).await.unwrap().wrote);
         assert!(!laptop.sync(&remote, &keys, 500).await.unwrap().wrote);
+    }
+
+    #[tokio::test]
+    async fn the_devices_list_with_the_version_that_wrote_them_and_what_they_read() {
+        let remote = MemoryRemote::new(true);
+        let keys = keys();
+        let mut laptop = Device::new(1, "Laptop");
+        laptop.version = Some("0.10.0");
+        laptop.doc.reads_notes = true;
+        laptop.sync(&remote, &keys, 100).await.unwrap();
+        // A snapshot as a version before versions said wrote it: neither field.
+        let old_tag = keys.device_tag(3);
+        let old = Snapshot {
+            seq: 1,
+            written_at_ms: 150,
+            device_name: "Old phone".into(),
+            keyring: b"keyring".to_vec(),
+            payload: Doc::default().payload(),
+            app_version: None,
+            reader: 0,
+        };
+        remote.set_object(&device_path(PREFIX, keys.space_id(), &old_tag), seal_snapshot(&keys, &old_tag, &old).unwrap());
+        let mut phone = Device::new(2, "Phone");
+        phone.version = Some("0.10.1");
+        let outcome = phone.sync(&remote, &keys, 200).await.unwrap();
+        let mut listed: Vec<_> = outcome.devices.iter().map(|d| (d.name.as_str(), d.app_version.clone(), d.reader, d.this_device)).collect();
+        listed.sort();
+        assert_eq!(
+            listed,
+            [
+                ("Laptop", Some("0.10.0".to_owned()), 2, false),
+                ("Old phone", None, 0, false),
+                // A replica that does not say reads 1.
+                ("Phone", Some("0.10.1".to_owned()), 1, true),
+            ]
+        );
+        // Kept with what the device remembers of the others.
+        let seen = &phone.state.seen[&keys.device_tag(1)];
+        assert_eq!((seen.app_version.as_deref(), seen.reader), (Some("0.10.0"), 2));
+        // A state from before versions has neither, and is written back as it was.
+        let before = serde_json::json!({"seq": 1, "etag": null, "name": "Laptop", "written_at_ms": 100});
+        let seen: Seen = serde_json::from_value(before.clone()).unwrap();
+        assert_eq!((seen.app_version.as_deref(), seen.reader), (None, 0));
+        assert_eq!(serde_json::to_value(&seen).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn a_new_version_is_written_even_when_nothing_else_changed() {
+        let remote = MemoryRemote::new(true);
+        let keys = keys();
+        let mut laptop = Device::new(1, "Laptop");
+        laptop.sync(&remote, &keys, 100).await.unwrap();
+        laptop.version = Some("0.10.0");
+        assert!(laptop.sync(&remote, &keys, 200).await.unwrap().wrote, "the others learn the version");
+        assert!(!laptop.sync(&remote, &keys, 300).await.unwrap().wrote);
+        assert_eq!(laptop.stored(&remote, &keys).app_version.as_deref(), Some("0.10.0"));
+        // A version that reads more of a payload: written too.
+        laptop.doc.reads_notes = true;
+        assert!(laptop.sync(&remote, &keys, 400).await.unwrap().wrote);
+        assert_eq!(laptop.stored(&remote, &keys).reader, 2);
+        assert!(!laptop.sync(&remote, &keys, 500).await.unwrap().wrote);
+    }
+
+    #[test]
+    fn a_snapshot_without_a_version_keeps_the_digest_it_had() {
+        // The digest before versions: the name, the keyring, the payload. A state saved then still
+        // knows its own snapshot (no clash), and writes once with the version.
+        let mut hash = Sha256::new();
+        for part in [b"Laptop".as_slice(), b"keyring"] {
+            hash.update(u64::try_from(part.len()).unwrap().to_le_bytes());
+            hash.update(part);
+        }
+        hash.update(b"{}");
+        let before = HEXLOWER.encode(&hash.finalize());
+        assert_eq!(digest("Laptop", b"keyring", None, 0, b"{}"), before);
+        assert_ne!(digest("Laptop", b"keyring", Some("0.10.0"), 2, b"{}"), before);
+        assert_ne!(digest("Laptop", b"keyring", Some("0.10.0"), 2, b"{}"), digest("Laptop", b"keyring", Some("0.10.0"), 1, b"{}"));
+    }
+
+    #[tokio::test]
+    async fn a_run_tells_how_large_this_devices_snapshot_is() {
+        let remote = MemoryRemote::new(true);
+        let keys = keys();
+        let mut laptop = Device::new(1, "Laptop");
+        laptop.doc.put(1, "GitHub", 10, 1);
+        let wrote = laptop.sync(&remote, &keys, 100).await.unwrap();
+        let size = u64::try_from(remote.object(&laptop.path(&keys)).unwrap().len()).unwrap();
+        assert!(wrote.wrote);
+        assert_eq!(wrote.own_bytes, Some(size));
+        // A quiet run: the size the listing gives.
+        let quiet = laptop.sync(&remote, &keys, 200).await.unwrap();
+        assert!(!quiet.wrote);
+        assert_eq!(quiet.own_bytes, Some(size));
     }
 
     #[tokio::test]

@@ -1,4 +1,5 @@
 import {
+  MOCK_APP_VERSION,
   MOCK_INVITE_CODE,
   MOCK_OLD_INVITE,
   MOCK_PASSWORD,
@@ -207,6 +208,35 @@ describe("Settings › Sync", () => {
     ]);
   });
 
+  it("marks a device whose Lockra keeps no passwords and warns of a snapshot near the relay's limit", async () => {
+    // The other device still on 0.9: no version, no passwords.
+    const devices = mockSyncSpace().devices.map((d) =>
+      d.this_device ? d : { ...d, app_version: null, passwords: false },
+    );
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace({
+        storage: { kind: "relay", url: "https://relay.example.com" },
+        devices,
+        snapshot_warning: { bytes: 3_460_000, limit: 4 * 1024 * 1024 },
+      }),
+      passwords: true,
+      settings: { locale: "zh-cn" },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openSync(user);
+    expect(pane.getByTestId("sync-no-passwords")).toHaveTextContent(
+      "Pixel 8 上的 Lockra 版本较旧，看不到密码",
+    );
+    expect(pane.getByTestId("sync-near-limit")).toHaveTextContent("3.3 MB");
+    expect(pane.getByTestId("sync-near-limit")).toHaveTextContent("4.0 MB");
+    const [mine, theirs] = pane.getAllByTestId("sync-device");
+    expect(mine).toHaveTextContent(`Lockra ${MOCK_APP_VERSION}`);
+    expect(theirs).toHaveTextContent("看不到密码");
+    expect(theirs).not.toHaveTextContent("Lockra 0.");
+  });
+
   it("runs, renames, moves the storage, removes a device, invites and turns off", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
@@ -225,6 +255,9 @@ describe("Settings › Sync", () => {
         "这台设备的新主密码将在下次同步时写入同步空间",
       );
       expect(pane.getByTestId("sync-unreadable")).toHaveTextContent("1 个同步对象无法读取");
+      // Every device on 0.10, a snapshot far from any limit: neither note.
+      expect(pane.queryByTestId("sync-no-passwords")).toBeNull();
+      expect(pane.queryByTestId("sync-near-limit")).toBeNull();
       act(() => backend.simulateSync({ state: "failed", code: "sync_network", at_ms: Date.now() }));
       expect(pane.getByTestId("sync-status")).toHaveTextContent("同步失败：无法连接存储服务");
       await user.click(pane.getByTestId("sync-now"));

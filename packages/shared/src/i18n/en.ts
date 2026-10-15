@@ -1386,6 +1386,8 @@ export const en: Messages = {
       thisDevice: "This device",
       written: "Wrote {when}",
       never: "Not written yet",
+      version: "Lockra {version}",
+      noPasswords: "No passwords",
       remove: "Remove",
       removeTitle: "Remove “{name}”?",
       removeBody:
@@ -1394,6 +1396,10 @@ export const en: Messages = {
     problems: {
       rolledBack:
         "The sync data of {names} is older than before and was refused. The storage may have been rolled back.",
+      noPasswords:
+        "The Lockra on {names} is older and cannot see passwords. Once it is updated to 0.10.0 or later, the passwords sync there too.",
+      nearLimit:
+        "This device's sync data is {size}, past 75% of the most a relay keeps of one snapshot ({limit}). Beyond that, this device's changes no longer sync.",
       unreadable: {
         one: "{n} sync object on the storage cannot be read: it was altered, belongs to another space, or comes from a newer Lockra.",
         other:

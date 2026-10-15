@@ -287,6 +287,12 @@ a run fails with "The storage answered with an error"; when it asks a device to 
 "The storage could not be reached"; the next run tries again. What the built-in relay keeps is on
 the [Privacy](/privacy#the-built-in-relay) page.
 
+A relay keeps at most 4 MiB of each device's sync data (a relay of your own can be set otherwise,
+[Running your own relay](/backup/relay)). When this device's sync data passes 3 MiB, three quarters
+of that, **Settings › Sync** says so with its size; past 4 MiB the relay refuses it, and this
+device's changes stop reaching the others. Many logins with long notes and earlier passwords take
+that much.
+
 ## When devices sync
 
 While the vault is unlocked, a device syncs when you unlock it, three seconds after a change, at

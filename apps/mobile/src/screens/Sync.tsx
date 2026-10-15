@@ -4,6 +4,7 @@
 import {
   type SyncSpaceView,
   errorText,
+  formatBytes,
   relativeTime,
   storageSummary,
   syncStatusLine,
@@ -76,6 +77,9 @@ function deviceLabel(space: SyncSpaceView, tag: string): string {
 
 function SyncOn({ space }: { space: SyncSpaceView }) {
   const t = useT();
+  const { features } = useUiState();
+  // Devices whose Lockra predates the passwords, told only where the passwords are.
+  const withoutPasswords = features.passwords ? space.devices.filter((d) => !d.passwords) : [];
   const nav = useNav();
   const now = useNow();
   const dispatch = useDispatch();
@@ -118,6 +122,25 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
           <Banner tone="warn" marker="icon">
             {t("sync.problems.rolledBack", {
               names: space.rolled_back.map((tag) => deviceLabel(space, tag)).join(", "),
+            })}
+          </Banner>
+        </div>
+      )}
+      {withoutPasswords.length > 0 && (
+        <div data-testid="sync-no-passwords">
+          <Banner tone="warn" marker="icon">
+            {t("sync.problems.noPasswords", {
+              names: withoutPasswords.map((d) => d.name).join(", "),
+            })}
+          </Banner>
+        </div>
+      )}
+      {space.snapshot_warning !== null && (
+        <div data-testid="sync-near-limit">
+          <Banner tone="warn" marker="icon">
+            {t("sync.problems.nearLimit", {
+              size: formatBytes(space.snapshot_warning.bytes),
+              limit: formatBytes(space.snapshot_warning.limit),
             })}
           </Banner>
         </div>
@@ -192,6 +215,9 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
               <span className="flex items-center gap-2 text-[15px] text-fg">
                 <span className="truncate">{device.name}</span>
                 {device.this_device && <Badge tone="accent">{t("sync.devices.thisDevice")}</Badge>}
+                {features.passwords && !device.passwords && (
+                  <Badge tone="warn">{t("sync.devices.noPasswords")}</Badge>
+                )}
               </span>
               <span className="text-[13px] text-fg-muted">
                 {device.written_at_ms === null
@@ -199,6 +225,8 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
                   : t("sync.devices.written", {
                       when: relativeTime(t, device.written_at_ms, now),
                     })}
+                {device.app_version !== null &&
+                  ` · ${t("sync.devices.version", { version: device.app_version })}`}
               </span>
             </div>
             {!device.this_device && (

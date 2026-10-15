@@ -1160,6 +1160,24 @@ async fn the_folder_is_watched_only_while_its_space_is_open_here() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn the_devices_list_the_version_they_write_with_and_a_small_snapshot_brings_no_warning() {
+    for storage in [relay(), webdav()] {
+        let transport = Arc::new(FakeTransport::default());
+        let (desktop, sync_key) = first_device(&transport, storage.clone()).await;
+        let phone = device(&transport);
+        phone.core.sync_join(manual(storage.clone(), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
+        settle().await;
+        desktop.core.sync_now().unwrap();
+        settle().await;
+        let listed: Vec<_> = space(&desktop).devices.into_iter().map(|d| (d.name, d.app_version, d.passwords)).collect();
+        // The harness's version, carried in each snapshot.
+        let version = Some("0.1.0-test".to_owned());
+        assert_eq!(listed, [("Desktop".to_owned(), version.clone(), true), ("Phone".to_owned(), version, true)]);
+        assert_eq!(space(&desktop).snapshot_warning, None, "a few accounts are far from a relay's limit");
+    }
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktops_code() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, sync_key) = first_device(&transport, relay()).await;

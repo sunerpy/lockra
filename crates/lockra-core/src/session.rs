@@ -36,7 +36,7 @@ use crate::ports::{BiometricError, Biometrics, Clipboard, Clock, CodeSink, Keych
 use crate::settings::{Settings, SettingsStore, SortOrder};
 use crate::sync::{
     Brought, SYNC_DEBOUNCE, SYNC_FOCUS_MIN, SYNC_FOLDER_SETTLE, SYNC_INTERVAL, SYNC_INTERVAL_FOLDER, SYNC_INTERVAL_FOLDER_FOREGROUND, SYNC_INTERVAL_FOREGROUND,
-    SyncLocal, Working, config_error, device_name, storage_view, sync_error,
+    SyncLocal, Working, config_error, device_name, snapshot_warning, storage_view, sync_error,
 };
 use crate::ui::{
     AwaitingKind, BackupFailure, BackupView, BiometricKind, BiometricView, CodeView, CodesFrame, DeviceUnlockView, ExportPage, ExportStarted, ExportTarget,
@@ -186,6 +186,8 @@ struct SyncRuntime {
     /// The last run's refused rollbacks and unreadable snapshots (device tags).
     rolled_back: Vec<String>,
     unreadable: Vec<String>,
+    /// How large this device's snapshot was at the last run, in bytes.
+    own_bytes: Option<u64>,
     /// The storage, opened once per space and storage settings.
     remote: Option<(Uuid, StorageConfig, Arc<dyn RemoteStore>)>,
 }
@@ -1804,7 +1806,14 @@ impl Core {
         let mut space = SyncLocal::new(storage, &keys, &sync_key, device_name(&device, self.shared.config.platform), &keyring);
         // Settings › Sync reminds of the key until it is saved.
         space.key_saved = false;
-        let first = Space { prefix: space.storage.prefix(), keys: &keys, device: number, device_name: &space.device_name, keyring: &keyring };
+        let first = Space {
+            prefix: space.storage.prefix(),
+            keys: &keys,
+            device: number,
+            device_name: &space.device_name,
+            keyring: &keyring,
+            app_version: Some(&self.shared.config.app_version),
+        };
         step(&*remote, &first, &mut space.state, &mut working, self.now_ms()).await.map_err(|e| sync_error(&e))?;
         space.keyring_written = true;
         space.last_sync_ms = Some(self.now_ms());
@@ -2228,7 +2237,7 @@ impl Core {
             (sync.storage.clone(), sync.keys().map_err(|e| sync_error(&e))?, sync.access().map_err(|e| sync_error(&e))?, session.data.device())
         };
         let remote = self.space_storage(keys.space_id(), &storage, &access).map_err(|e| sync_error(&e))?;
-        let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: "", keyring: &[] };
+        let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: "", keyring: &[], app_version: None };
         match remove_device(&*remote, &space, &mut SyncState::default(), tag).await {
             Ok(()) => {}
             // This device, or not a device's name: nothing the interface offers.
@@ -2384,6 +2393,7 @@ impl Core {
                         st.sync.status = SyncStatus::Synced { at_ms: now };
                         st.sync.rolled_back.clone_from(&outcome.rolled_back);
                         st.sync.unreadable.clone_from(&outcome.unreadable);
+                        st.sync.own_bytes = outcome.own_bytes;
                     }
                     // Another device writes under this one's name: a copied vault, or this vault's
                     // own state put back. This device becomes a new one of the space, once.
@@ -2500,7 +2510,14 @@ impl Core {
     async fn sync_into(&self, brought: &mut Brought) -> Result<SyncOutcome, SyncError> {
         let SyncJob { space_id, remote, storage, keys, device, device_name, keyring, mut state, mut working, .. } = self.sync_job()?;
         let remote = remote.ok_or(SyncError::Interrupted)?;
-        let space = Space { prefix: storage.prefix(), keys: &keys, device, device_name: &device_name, keyring: &keyring };
+        let space = Space {
+            prefix: storage.prefix(),
+            keys: &keys,
+            device,
+            device_name: &device_name,
+            keyring: &keyring,
+            app_version: Some(&self.shared.config.app_version),
+        };
         let outcome = {
             let mut persist = |state: &SyncState, working: &Working| {
                 *brought += self.sync_keep(space_id, &storage, state, working, None)?;
@@ -2801,7 +2818,7 @@ impl Core {
             restore: st.restore.as_ref().map(|r| r.view.clone()),
             auto_lock_at_ms,
             update: UpdateView { method: self.shared.ports.updater.method(), status: st.update.status.clone() },
-            sync: sync_view(st),
+            sync: sync_view(st, &self.shared.config.app_version),
         }
     }
 
@@ -3176,14 +3193,14 @@ fn schedule_sync(st: &mut State) {
     }
 }
 
-fn sync_view(st: &State) -> SyncView {
+fn sync_view(st: &State, app_version: &str) -> SyncView {
     let PhaseState::Unlocked(session) = &st.phase else { return SyncView { space: None } };
     let space = session.data.sync().map(|sync| {
         let own_tag = sync.keys().map(|keys| keys.device_tag(session.data.device())).unwrap_or_default();
         SyncSpaceView {
             storage: storage_view(&sync.storage),
             device_name: sync.device_name.clone(),
-            devices: sync.devices(own_tag),
+            devices: sync.devices(own_tag, app_version),
             status: st.sync.status.clone(),
             last_sync_ms: sync.last_sync_ms,
             rolled_back: st.sync.rolled_back.clone(),
@@ -3191,6 +3208,7 @@ fn sync_view(st: &State) -> SyncView {
             keyring_pending: sync.keyring_pending(),
             keyring_unsealed: sync.keyring_unsealed,
             key_saved: sync.key_saved,
+            snapshot_warning: snapshot_warning(&sync.storage, st.sync.own_bytes),
         }
     });
     SyncView { space }

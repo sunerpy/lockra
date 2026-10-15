@@ -16,7 +16,7 @@ use zeroize::Zeroizing;
 use crate::entry::{Entry, clean_name};
 use crate::error::{CoreError, ErrorCode};
 use crate::item::{SiteRule, VaultItem};
-use crate::ui::{Notice, Platform, StorageView, SyncDeviceView};
+use crate::ui::{Notice, Platform, SnapshotWarningView, StorageView, SyncDeviceView};
 
 /// Delay between the last change and the sync run it causes.
 pub const SYNC_DEBOUNCE: Duration = Duration::from_secs(3);
@@ -43,6 +43,11 @@ const PAYLOAD_FORMAT: u32 = 1;
 /// What this version reads of a payload ([`Replica::reader`]): 0.9 read the accounts (1), this one
 /// the logins and the site rules as well (2).
 const PAYLOAD_READER: u32 = 2;
+/// From this reader on, a device keeps the logins: one below (0.9 says none, 0) does not.
+const LOGINS_READER: u32 = 2;
+/// The most a relay keeps of a snapshot, header and padding included: its default
+/// (`--max-object-bytes`, docs/relay.md). A relay set to keep more or less does not say so.
+pub const RELAY_SNAPSHOT_LIMIT: u64 = 4 * 1024 * 1024;
 
 /// This device's sync space, in the vault's local part.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,19 +148,42 @@ impl SyncLocal {
         self.state.own_seq > 0 && !self.keyring_written
     }
 
-    /// The devices as the last runs found them, this one (`own_tag`) first, the others by name.
-    pub fn devices(&self, own_tag: String) -> Vec<SyncDeviceView> {
+    /// The devices as the last runs found them, this one (`own_tag`, writing with `app_version`)
+    /// first, the others by name.
+    pub fn devices(&self, own_tag: String, app_version: &str) -> Vec<SyncDeviceView> {
         let mut others: Vec<SyncDeviceView> = self
             .state
             .seen
             .iter()
-            .map(|(tag, seen)| SyncDeviceView { tag: tag.clone(), name: seen.name.clone(), written_at_ms: Some(seen.written_at_ms), this_device: false })
+            .map(|(tag, seen)| SyncDeviceView {
+                tag: tag.clone(),
+                name: seen.name.clone(),
+                written_at_ms: Some(seen.written_at_ms),
+                this_device: false,
+                app_version: seen.app_version.clone(),
+                passwords: seen.reader >= LOGINS_READER,
+            })
             .collect();
         others.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.tag.cmp(&b.tag)));
-        let mut devices = vec![SyncDeviceView { tag: own_tag, name: self.device_name.clone(), written_at_ms: self.state.own_written_at_ms, this_device: true }];
+        let mut devices = vec![SyncDeviceView {
+            tag: own_tag,
+            name: self.device_name.clone(),
+            written_at_ms: self.state.own_written_at_ms,
+            this_device: true,
+            app_version: Some(app_version.to_owned()),
+            passwords: true,
+        }];
         devices.extend(others);
         devices
     }
+}
+
+/// What Settings › Sync says of this device's snapshot of `bytes` on `storage`: only a relay keeps
+/// a snapshot of at most [`RELAY_SNAPSHOT_LIMIT`], and the warning starts past three quarters of
+/// it, before a write is refused.
+pub fn snapshot_warning(storage: &StorageConfig, bytes: Option<u64>) -> Option<SnapshotWarningView> {
+    let bytes = bytes?;
+    (storage.is_relay() && bytes.saturating_mul(4) > RELAY_SNAPSHOT_LIMIT * 3).then_some(SnapshotWarningView { bytes, limit: RELAY_SNAPSHOT_LIMIT })
 }
 
 /// [`SyncLocal::keyring`] as the vault keeps it: Base64 of a keyring, never empty.
@@ -512,16 +540,68 @@ mod tests {
     }
 
     #[test]
-    fn two_thousand_logins_fit_a_relays_snapshot() {
+    fn two_thousand_logins_fit_a_relays_snapshot_and_settings_warn_of_them() {
         let mut clock = lockra_sync::Clock::new(7);
         let items: Vec<VaultItem> = (0..2000).map(|n| typical_login(n, &mut clock)).collect();
         assert_eq!(items[0].history.len(), 3);
         let working = Working { items, ..Working::default() };
-        let size = working.payload().len();
         // A relay keeps snapshots of at most 4 MiB (docs/relay.md), header and padding included.
         // These logins are on the heavy side (notes, two sites and three earlier passwords each):
-        // 3.5 MiB measured on 2026-10-14, past the 75 % at which Settings › Sync is to warn.
-        assert!(size < 4 * 1024 * 1024 - 64 * 1024, "2000 logins take {size} bytes");
+        // 3.5 MiB measured on 2026-10-14, past the 75 % at which Settings › Sync warns.
+        let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+        let tag = keys.device_tag(1);
+        let snapshot = lockra_sync::Snapshot {
+            seq: 1,
+            written_at_ms: 1,
+            device_name: "Desktop".into(),
+            keyring: vec![0; 600],
+            payload: working.payload(),
+            app_version: Some("0.10.0".into()),
+            reader: PAYLOAD_READER,
+        };
+        let size = u64::try_from(lockra_sync::seal_snapshot(&keys, &tag, &snapshot).unwrap().len()).unwrap();
+        assert!(size < RELAY_SNAPSHOT_LIMIT, "2000 logins take {size} bytes");
+        let relay = StorageConfig::Relay { url: "https://relay.example.com".into() };
+        assert_eq!(snapshot_warning(&relay, Some(size)), Some(SnapshotWarningView { bytes: size, limit: RELAY_SNAPSHOT_LIMIT }));
+    }
+
+    #[test]
+    fn only_a_relay_space_warns_and_only_past_three_quarters_of_its_limit() {
+        let relay = StorageConfig::Relay { url: "https://relay.example.com".into() };
+        let three_quarters = RELAY_SNAPSHOT_LIMIT / 4 * 3;
+        assert_eq!(snapshot_warning(&relay, Some(three_quarters)), None);
+        assert_eq!(snapshot_warning(&relay, Some(three_quarters + 1)), Some(SnapshotWarningView { bytes: three_quarters + 1, limit: RELAY_SNAPSHOT_LIMIT }));
+        assert_eq!(snapshot_warning(&relay, None), None, "no snapshot yet");
+        // The other storages keep a snapshot of any size.
+        let folder = StorageConfig::Folder { path: "/home/me/Drive/Lockra".into() };
+        assert_eq!(snapshot_warning(&folder, Some(RELAY_SNAPSHOT_LIMIT)), None);
+    }
+
+    #[test]
+    fn the_devices_say_the_version_they_write_with_and_whether_they_keep_passwords() {
+        let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
+        let storage = StorageConfig::Relay { url: "https://relay.example.com".into() };
+        let mut local = SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Desktop".into(), b"keyring");
+        let seen = |name: &str, app_version: Option<&str>, reader| lockra_sync::Seen {
+            seq: 1,
+            etag: None,
+            name: name.into(),
+            written_at_ms: 5,
+            app_version: app_version.map(str::to_owned),
+            reader,
+        };
+        local.state.seen.insert(keys.device_tag(2), seen("Phone", Some("0.10.0"), 2));
+        // 0.9 says neither: it reads the accounts alone.
+        local.state.seen.insert(keys.device_tag(3), seen("Old laptop", None, 0));
+        let listed: Vec<_> = local.devices(keys.device_tag(1), "0.10.1").into_iter().map(|d| (d.name, d.app_version, d.passwords, d.this_device)).collect();
+        assert_eq!(
+            listed,
+            [
+                ("Desktop".to_owned(), Some("0.10.1".to_owned()), true, true),
+                ("Old laptop".to_owned(), None, false, false),
+                ("Phone".to_owned(), Some("0.10.0".to_owned()), true, false),
+            ]
+        );
     }
 
     /// What 0.9.1 reads of a snapshot's payload, frozen: the accounts and their deletions.
@@ -563,7 +643,7 @@ mod tests {
             items: vec![typical_login(1, &mut clock)],
             ..Working::default()
         };
-        let desktop_space = Space { prefix: "", keys: &keys, device: 1, device_name: "Desktop", keyring: b"keyring" };
+        let desktop_space = Space { prefix: "", keys: &keys, device: 1, device_name: "Desktop", keyring: b"keyring", app_version: Some("0.10.0") };
         let mut desktop_state = lockra_sync::SyncState::default();
         step(&remote, &desktop_space, &mut desktop_state, &mut desktop, 100).await.unwrap();
         // The phone on 0.9 takes it in: its accounts only, its state as 0.9 saves it.
@@ -577,7 +657,7 @@ mod tests {
                 Ok(merge(&mut self.0, &mut self.1, &theirs.entries, &theirs.tombstones))
             }
         }
-        let phone_space = Space { prefix: "", keys: &keys, device: 2, device_name: "Phone", keyring: b"keyring" };
+        let phone_space = Space { prefix: "", keys: &keys, device: 2, device_name: "Phone", keyring: b"keyring", app_version: None };
         let mut old = Phone09(Vec::new(), Vec::new());
         let mut state = lockra_sync::SyncState::default();
         step(&remote, &phone_space, &mut state, &mut old, 200).await.unwrap();

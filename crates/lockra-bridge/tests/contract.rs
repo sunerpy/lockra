@@ -16,8 +16,8 @@ use lockra_core::settings::{AccentId, AutoBackup, CodesView, DefaultUnlock, Dens
 use lockra_core::ui::{
     AwaitingKind, AwaitingView, BackupFailure, BackupView, BiometricKind, BiometricView, CandidateAction, CandidateStatus, CandidateView, CodeView, CodesFrame,
     ConflictReason, CopiedPart, DeviceUnlockView, Excluded, ExportPage, ExportStarted, ExportTarget, Features, GeneratorStatus, GoogleBatchView, ImportSource,
-    ImportView, InstallMethod, LockView, LoginCandidateView, Notice, Phase, Platform, QuickAccessView, RestoreView, Revealed, SharedInvite, StorageView,
-    SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
+    ImportView, InstallMethod, LockView, LoginCandidateView, Notice, Phase, Platform, QuickAccessView, RestoreView, Revealed, SharedInvite,
+    SnapshotWarningView, StorageView, SyncDeviceView, SyncInvite, SyncKeyView, SyncSpaceView, SyncStatus, SyncView, UiEvent, UiState, UpdateStatus, UpdateView,
 };
 use lockra_core::{
     AccountColor, ActivityEvent, ActivityView, AutofillChoice, BrowserPolicy, BrowserView, ConfirmAction, ConfirmReason, ConfirmView, ConflictView, Core,
@@ -197,8 +197,22 @@ fn sync_space(status: SyncStatus) -> SyncSpaceView {
         },
         device_name: "Desktop".into(),
         devices: vec![
-            SyncDeviceView { tag: DESKTOP_TAG.into(), name: "Desktop".into(), written_at_ms: Some(T0 - 60_000), this_device: true },
-            SyncDeviceView { tag: PHONE_TAG.into(), name: "Pixel 8".into(), written_at_ms: Some(T0 - 3_600_000), this_device: false },
+            SyncDeviceView {
+                tag: DESKTOP_TAG.into(),
+                name: "Desktop".into(),
+                written_at_ms: Some(T0 - 60_000),
+                this_device: true,
+                app_version: Some("0.10.0".into()),
+                passwords: true,
+            },
+            SyncDeviceView {
+                tag: PHONE_TAG.into(),
+                name: "Pixel 8".into(),
+                written_at_ms: Some(T0 - 3_600_000),
+                this_device: false,
+                app_version: Some("0.10.0".into()),
+                passwords: true,
+            },
         ],
         status,
         last_sync_ms: Some(T0 - 60_000),
@@ -207,6 +221,7 @@ fn sync_space(status: SyncStatus) -> SyncSpaceView {
         keyring_pending: false,
         keyring_unsealed: true,
         key_saved: false,
+        snapshot_warning: None,
     }
 }
 
@@ -685,6 +700,10 @@ fn sync_fixtures() {
     views.push(SyncView { space: Some(folder) });
     let mut relay = sync_space(SyncStatus::Synced { at_ms: T0 });
     relay.storage = StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() };
+    // A snapshot past three quarters of the relay's limit, and a phone still on 0.9.
+    relay.snapshot_warning = Some(SnapshotWarningView { bytes: 3_460_000, limit: 4 * 1024 * 1024 });
+    relay.devices[1].app_version = None;
+    relay.devices[1].passwords = false;
     views.push(SyncView { space: Some(relay) });
     views.push(SyncView { space: None });
     check("sync.json", &views);

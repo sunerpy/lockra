@@ -227,7 +227,14 @@ describe("labels", () => {
   });
 
   it("sums a sync space up in one line for the status cards", () => {
-    const device = { tag: "t", name: "Pixel", written_at_ms: null, this_device: false };
+    const device = {
+      tag: "t",
+      name: "Pixel",
+      written_at_ms: null,
+      this_device: false,
+      app_version: null,
+      passwords: true,
+    };
     const space = {
       storage: { kind: "relay" as const, url: "https://relay.example" },
       device_name: "本机",
@@ -239,6 +246,7 @@ describe("labels", () => {
       keyring_pending: false,
       keyring_unsealed: false,
       key_saved: true,
+      snapshot_warning: null,
     };
     expect(syncSummary(zh, null)).toBe("未开启同步");
     expect(syncSummary(zh, space)).toBe("已同步 · 3 台设备");
