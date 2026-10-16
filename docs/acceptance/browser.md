@@ -11,7 +11,8 @@ its prompt are left to the unit tests and to the matrix below. Each browser goes
 - pairing: the popup's code is the app's, and it is approved in the app with the master password;
 - the inline menu: focusing the field opens it, then ↓ and Enter fill the login;
 - the linked code on the next page, in one field and in six one-digit fields;
-- the shortcut (a real X key) on a sign-in that spans two pages;
+- the shortcut (a real X key) on a sign-in that spans two pages: it fills the user name on the
+  first, the second gets the password by itself, and nothing submits it;
 - the policy's limits: an HTTPS login on an HTTP page waits for consent, and a frame of another
   site gets nothing (the app records `cross_origin`);
 - pages that try to hijack a click:

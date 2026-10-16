@@ -76,6 +76,22 @@ Check the shortcut on the browser's own page: `chrome://extensions/shortcuts` in
 A browser may leave `Ctrl Shift L` unassigned, for example when another extension uses it. Lockra
 fills only a login whose site matches the page; when none does, the popup opens and says so.
 
+## The browser's own password list opens under the field too
+
+The browser keeps passwords of its own and lists them, with a key, under the same field as Lockra's
+menu. On the extension's settings page, **Let Lockra take over the browser's passwords** stops the
+browser offering to save new ones; the passwords it already keeps stay listed until you delete them
+in its password manager, so import them into Lockra first. To keep the two lists apart, turn off
+**Open Lockra's menu when a field is clicked**: Lockra's menu then opens from its mark at the end of
+the field ([The browser's own password manager](/passwords/browser#the-browser-s-own-password-manager)).
+
+## Submit after filling did not submit the form
+
+Lockra submits a form once its password is in, or, for a login with a linked code, once the code is.
+A page that asks for the user name alone is left for you to choose **Next**, and so is the password
+page of a sign-in that asks for the code on the next page. A form whose submit button stays disabled
+is not submitted either ([Filling a sign-in form](/passwords/browser#filling-a-sign-in-form)).
+
 ## Should I turn on filling as pages load?
 
 It is off by default for a reason. A login matched by its domain is offered on every subdomain of

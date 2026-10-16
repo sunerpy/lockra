@@ -2,8 +2,8 @@
 
 Lockra is a desktop TOTP/HOTP authenticator: a Rust core in a Tauri 2 shell, with a React
 webview for the interface; an Android app on the same core ships from 0.7.0 (below, "The phone
-shell"). Password management (logins, the generator, the browser extension) is being built: a
-debug build offers it, a release build not yet (below, "The core"). Read this first; `docs/formats.md` has the file formats,
+shell"). Password management (logins, the generator, the browser extension) is in every build
+from 0.10.0 (below, "The core"). Read this first; `docs/formats.md` has the file formats,
 `docs/security.md` the security model and `DESIGN.md` the design system.
 
 ## Layout
