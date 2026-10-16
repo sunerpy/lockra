@@ -13,8 +13,9 @@ restarts. During the download the dialog shows the progress, the speed and the t
 settings are kept. Before updating, make sure a recent backup exists: **Backup › Save backup**.
 
 To look for a new version yourself, choose **Check for updates** in **Settings › General**, or in
-**Settings › About**. Lockra 0.2.0 has these controls in **Settings › About** only: **Check for
-updates**, then **Download and install**.
+**Settings › About**; from version 0.10.0, **Check for updates…** in the tray icon's menu does the
+same ([The tray icon](/guide/quick-start#the-tray-icon)). Lockra 0.2.0 has these controls in
+**Settings › About** only: **Check for updates**, then **Download and install**.
 
 How the update installs depends on how Lockra was installed:
 
