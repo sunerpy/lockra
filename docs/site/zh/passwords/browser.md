@@ -6,6 +6,8 @@
 
 扩展本身不保存任何密码。它向同一台电脑上的 Lockra 请求，两者之间的连接经过加密，并且只在 Lockra 运行且已解锁时才能请求；是否可以填充某个网页、填充哪个登录项，都由 Lockra 决定。扩展随 Lockra 一起锁定和解锁，从不要求输入主密码。
 
+<ScreenVideo src="/screens/tour-zh.mp4" poster="/screens/tour-zh-light.webp" width="1280" height="800" label="一分钟的 Lockra 录屏：用生成的密码在网站上注册，添加它的两步验证码，登录时自动填入登录项和验证码，然后是命令面板、密码生成器和主题。" caption="用生成的密码注册、添加验证码，再分几页登录、两者都自动填入：扩展与真实的应用，网站是虚构的演示站点。" />
+
 ## 准备工作
 
 - Windows、macOS 或 Linux 上的 Lockra 0.10.0 或更高版本，与浏览器在同一台电脑上运行。

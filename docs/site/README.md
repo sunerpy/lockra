@@ -98,6 +98,7 @@ Pages may use these components and no others:
 | ----------------------------------------------------------------------------------- | --------------------------------------------------------- |
 | `<StatusTag status="available \| building \| planned" />`                           | release state, shown as text                              |
 | `<ScreenFigure src dark? width height alt caption? />`                              | a screenshot; `dark` is the same screen in the dark theme |
+| `<ScreenVideo src poster width height label caption? />`                            | a recording (below): muted, it plays while on screen      |
 | `<Badge>`                                                                           | VitePress's own badge                                     |
 | `HomeIndex`, `HomeSteps`, `SplitBlock`, `HomePlatforms`, `HomePrivacy`, `HomeScope` | the home pages only; they render the `home:` frontmatter  |
 
@@ -165,3 +166,25 @@ reader in dark mode.
 
 Look at every image before committing it, and capture again when the interface's text or layout
 changes.
+
+## Recordings
+
+`tour-<lang>.mp4` is a one-minute tour, the same in both languages, each in its own language
+(interface, demo site, subtitles): signing up with a generated password, adding the site's
+two-step code, signing in page by page with the login and the code filled in, then the command
+palette, the generator and the themes. 1280 × 800, 25 fps, H.264 with the index at the front, no
+sound, about 3.3 MB; `tour-<lang>-light.webp` is its title card, the poster shown until it plays.
+`<ScreenVideo>` plays it muted while it is on screen, loads nothing before, and only shows the
+poster and the controls to a reader who asked for less motion.
+
+It was recorded outside the repository, as Voltip's tutorial is: the real app (built as for `make
+site-screens`) and the real extension in Chrome for Testing under Xvfb, driven by real X input on a
+made-up site (`acme.example`, which checks the codes for real), then cut from the input's log. The
+pointer, the highlight boxes and the flash of the QR code's screenshot were drawn in the edit.
+Record it again when one of those flows changes.
+
+The READMEs show the 960 × 600 GIF of the same tour as a GitHub attachment
+(`github.com/user-attachments/assets/…`), which keeps it out of the repository. An attachment
+uploaded in a comment box but never posted answers 404 to everyone else, even in a public
+repository: it becomes public once posted text, such as a pull request's description, names its
+address.

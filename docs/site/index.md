@@ -286,6 +286,12 @@ home:
       - Non-standard codes such as Steam Guard.
 ---
 
+## Lockra in a minute
+
+Signing up on a site with a password Lockra makes to its rules, turning on its two-step verification, and signing in page by page with the login and the code filled in; then the command palette (`Ctrl K`), the generator (`Ctrl G`) and the themes. Recorded with the real app and its browser extension, on a made-up site.
+
+<ScreenVideo src="/screens/tour-en.mp4" poster="/screens/tour-en-light.webp" width="1280" height="800" label="A one-minute recording of Lockra: signing up on a site with a generated password, adding its two-step code, signing in with the login and the code filled in, then the command palette, the generator and the themes." />
+
 ## Passwords, filled in the browser
 
 From version 0.10.0, Lockra keeps your logins beside the codes, in the same vault and the same backup, on the computer and on the phone. The browser extension for Chrome, Edge and Firefox fills a login and then its code, page by page when a sign-in asks for them one at a time, offers to save and update passwords, and makes a password to the site's rules on a sign-up form. It keeps no passwords itself: it asks Lockra on the same computer, over a connection encrypted between the two, and Lockra decides every fill. Logins come in from browsers and password managers, and go out to KeePass or a CSV file.
