@@ -46,6 +46,7 @@ In every row:
 4. The next page's code, the save prompt, and locking Lockra locking the extension.
 5. Lockra not running: the popup's 启动 Lockra starts it, in the tray while it runs in the background.
 6. The AppImage: the manifest points at the AppImage itself, which mounts again for every connection. Record how long a connection takes.
+7. A password the browser keeps for the test site: a click into the field opens the browser's list under it and Lockra's menu above it. In Firefox, after 让 Lockra 接管浏览器的密码功能, Firefox fills and lists nothing and the menu opens under the field; with 避开浏览器自己的密码列表 off, the menu opens under the field in every browser.
 
 ## Results
 

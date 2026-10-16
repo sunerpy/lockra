@@ -20,6 +20,7 @@ import {
   type InlineAction,
   type InlineView,
   type MenuItem,
+  type MenuSide,
   PORT_INLINE,
   PORT_OPTIONS,
   PORT_POPUP,
@@ -38,7 +39,8 @@ import { type InlineFrame, InlineFrames } from "./inline-frames";
 import { chooseFrame, probe } from "./shortcut";
 import { type Submission, TabMemory } from "./tabs";
 import { contentMessage, inlineMessage, popupMessage } from "./validate";
-import { menuOnFocus } from "../shared/prefs";
+import { browserListsPasswords } from "../popup/browser-features";
+import { avoidBrowserList, menuOnFocus } from "../shared/prefs";
 
 export interface ControllerDeps {
   api: BrowserApi;
@@ -219,7 +221,7 @@ export class Controller {
       generated: null,
       trigger: "inline_menu",
     });
-    return { token: opened.token };
+    return { token: opened.token, side: await this.menuSide() };
   }
 
   /** The menu opens now: the user clicked the field's mark, or it opens as a field gets the focus
@@ -228,6 +230,13 @@ export class Controller {
     message: Extract<ContentMessage, { kind: "content.focus" }>,
   ): Promise<boolean> {
     return message.explicit === true || (await menuOnFocus(this.api.storage.local));
+  }
+
+  /** Where the menu opens: above the field where the browser may list its own passwords under it,
+   *  as Chrome and Firefox do (the options page's choice, on by default), below it otherwise. */
+  private async menuSide(): Promise<MenuSide> {
+    if (!(await avoidBrowserList(this.api.storage.local))) return "below";
+    return (await browserListsPasswords(this.api)) ? "above" : "below";
   }
 
   private async query(frame: TrustedFrame): Promise<QueryAnswer | null> {
@@ -274,7 +283,7 @@ export class Controller {
       },
       trigger: "inline_menu",
     });
-    return { token: opened.token };
+    return { token: opened.token, side: await this.menuSide() };
   }
 
   private async generate(
@@ -873,7 +882,10 @@ export class Controller {
         generated: null,
         trigger: "shortcut",
       });
-      await this.send(frame, { kind: "menu.open", token: opened.token }).catch(() => undefined);
+      const side = await this.menuSide();
+      await this.send(frame, { kind: "menu.open", token: opened.token, side }).catch(
+        () => undefined,
+      );
       return;
     }
     const filled = await this.connection.request({

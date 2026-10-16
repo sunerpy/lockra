@@ -1,7 +1,12 @@
 // The browser's own password saving and its address and card autofill, taken over for Lockra and
 // given back through the optional `privacy` permission, on the fake browser's settings.
 import { FakeBrowser } from "../test/fake-browser";
-import { passwordManagerUrl, readFeatures, setFeature } from "./browser-features";
+import {
+  browserListsPasswords,
+  passwordManagerUrl,
+  readFeatures,
+  setFeature,
+} from "./browser-features";
 
 const CHROME =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/141.0.0.0 Safari/537.36";
@@ -77,8 +82,29 @@ describe("the browser's own password features", () => {
     expect(declined.services.passwordSavingEnabled.holder).toBe("user");
   });
 
-  it("opens the browser's own password manager where an extension may", () => {
-    expect(passwordManagerUrl(CHROME, "chromium")).toBe("chrome://password-manager/passwords");
+  it("says whether the browser lists the passwords it keeps under a field: Chromium whatever its saving, Firefox until its saving is off", async () => {
+    // Measured 2026-10-16: Chrome 155 with its offer to save off still filled and listed what it
+    // keeps; Firefox 158 with `signon.rememberSignons` off did neither.
+    const browser = new FakeBrowser();
+    expect(await browserListsPasswords(browser, "chromium")).toBe(true);
+    await setFeature(browser, "passwords", true, "chromium");
+    expect(await browserListsPasswords(browser, "chromium")).toBe(true);
+    await setFeature(browser, "passwords", false, "chromium");
+    // Firefox: unknown without the permission, so it may.
+    expect(await browserListsPasswords(browser, "firefox")).toBe(true);
+    await setFeature(browser, "passwords", true, "firefox");
+    expect(await browserListsPasswords(browser, "firefox")).toBe(false);
+    await setFeature(browser, "passwords", false, "firefox");
+    expect(await browserListsPasswords(browser, "firefox")).toBe(true);
+    // The user's own value counts the same as Lockra's.
+    const own = new FakeBrowser();
+    own.privacyGranted = true;
+    own.services.passwordSavingEnabled.value = false;
+    expect(await browserListsPasswords(own, "firefox")).toBe(false);
+  });
+
+  it("opens the browser's own password manager where an extension may: Chrome's settings, with the export and the deletion", () => {
+    expect(passwordManagerUrl(CHROME, "chromium")).toBe("chrome://password-manager/settings");
     expect(passwordManagerUrl(EDGE, "chromium")).toBe("edge://wallet/passwords");
     expect(passwordManagerUrl(CHROME, "firefox")).toBeNull();
   });

@@ -109,11 +109,13 @@ Shortcuts**).
 
 ### From the menu by the field
 
-With [site access](#site-access), Lockra's menu opens under a sign-in field when you click into it:
-the site's logins, chosen with the arrow keys and Enter, or a click; Esc closes it. Lockra's mark at
-the end of the field opens it again. When the menu gets in the way of the browser's own list, turn
-off **Open Lockra's menu when a field is clicked** on the extension's settings page: the menu then
-opens only from that mark ([The browser's own password manager](#the-browser-s-own-password-manager)).
+With [site access](#site-access), Lockra's menu opens at a sign-in field when you click into it: the
+site's logins, chosen with the arrow keys and Enter, or a click; Esc closes it. Lockra's mark at the
+end of the field opens it again. Where the browser may list the passwords it keeps under the
+field, Lockra's menu opens above the field instead, or under it when there is no room above
+([The browser's own password manager](#the-browser-s-own-password-manager)). While the browser's
+list is open, the arrow keys and Esc go to it: Esc closes it, and the arrow keys then move in
+Lockra's menu.
 
 Whichever way you fill, only the visible fields of the form you are in are filled, and the custom
 fields of the login that name a page field. A form is submitted after filling only with **Submit
@@ -195,23 +197,29 @@ it back. **Settings › Browser** in Lockra notes a paired extension that has no
 
 ## The browser's own password manager
 
-The browser keeps passwords of its own, and its list of them, with a key, can open under the same
-field as Lockra's menu. The extension's settings page (the gear in the popup) has, under **The
-browser's own features**:
+The browser keeps passwords of its own, and its list of them, with a key, opens under the field when
+you click into it, where Lockra's menu would open. The extension's settings page (the gear in the
+popup) has, under **The browser's own features**:
 
 - **Let Lockra take over the browser's passwords** turns off the browser's offer to save
   passwords, so that only Lockra offers to save and update them. The first time, the browser asks
   for the permission to change privacy-related settings; turning the switch off gives the browser
-  its own setting back, and the permission with it.
-- The passwords the browser already keeps stay as they are: it goes on listing them under the field
-  until you delete them there. Import them into Lockra first (the browser exports them as a CSV
-  file, [Importing and exporting](/passwords/import-export)), check them, then delete them in the
-  browser's password manager; in Chrome and Edge, **Open the browser's password manager** goes
-  there.
+  its own setting back, and the permission with it. In Firefox it also stops Firefox filling and
+  listing the passwords it keeps; they stay in its password manager.
+- In Chrome and Edge, the passwords the browser already keeps stay as they are: it goes on filling
+  them and listing them under the field, whatever its offer to save says, until you delete them
+  there. Export them in the browser's password settings first (a CSV file), import them into
+  Lockra ([Importing and exporting](/passwords/import-export)), check them, then delete them in the
+  browser; **Open the browser's password manager** goes there. In Chrome, deleting all its data at
+  once deletes your passkeys too, and with sync on, the passwords in your Google Account.
 - **Also turn off address and payment autofill** (Chrome and Edge) stops the browser suggesting
   addresses and cards in forms. Lockra fills neither, so leave it off if you want the browser to.
+- **Keep clear of the browser's own password list**, on by default: Lockra's menu opens above the
+  field and the browser's list under it; with no room above, the menu opens under the field. In
+  Firefox, once Lockra has taken over its passwords, Firefox lists none and the menu opens under the
+  field. Turn it off once the browser keeps no passwords, to have the menu under the field.
 - **Open Lockra's menu when a field is clicked**, on by default: off, the menu opens only from
-  Lockra's mark at the end of the field, clear of the browser's list.
+  Lockra's mark at the end of the field.
 
 When a policy of the browser, or another password manager's extension, holds these settings, the
 page says the switch is not in effect. Firefox lets an extension turn off the saving of passwords

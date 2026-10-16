@@ -185,16 +185,24 @@ export const extensionZhCN = {
     takePasswords: "让 Lockra 接管浏览器的密码功能",
     takePasswordsHelp:
       "关闭浏览器的「提示保存密码」，改由 Lockra 提示保存和更新。需要「更改隐私相关设置」的权限，关掉这个开关时一并收回。",
+    takePasswordsHelpFirefox:
+      "关闭 Firefox 自己保存密码的功能，Firefox 随之不再填入它保存的密码，改由 Lockra 提示保存和更新。需要修改隐私设置的权限，关掉这个开关时一并收回。",
     lockedHelp: "未生效：浏览器的策略或其他扩展控制着这项设置。",
     savedPasswordsNote:
-      "浏览器里已经保存的密码不受这个开关影响，仍会以带钥匙图标的下拉框出现在输入框下方。要让它消失：先把浏览器导出的密码导入 Lockra（Lockra 的「导入」，选择浏览器导出的 CSV 文件），核对无误后，再到浏览器的密码管理中删除它们。",
+      "浏览器里已经保存的密码不受这个开关影响，仍会以带钥匙图标的下拉框出现在输入框下方。要让它消失：先在浏览器的密码设置中导出密码，在 Lockra 的「导入」中选择导出的 CSV 文件，核对无误后，再到浏览器里删除这些密码。在 Chrome 中一次删除全部数据时，通行密钥也会一并删除；开启了同步时，Google 账号中的密码也会删除。",
+    savedPasswordsNoteFirefox:
+      "开启后，Firefox 不再填入，也不再在输入框下方列出它保存的密码；这些密码仍留在 Firefox 的密码管理中，关掉这个开关即恢复。",
     openPasswordManager: "打开浏览器的密码管理",
     takeForms: "同时关闭地址和付款方式的自动填充",
     takeFormsHelp:
       "浏览器不再在表单中提示地址和银行卡。Lockra 不填写这些内容，需要浏览器帮你填写时请保持关闭。",
+    avoidBrowserList: "避开浏览器自己的密码列表",
+    avoidBrowserListHelp:
+      "Lockra 的菜单开在输入框上方，浏览器自己的密码列表在下方；上方放不下时仍在下方。浏览器里不再保存密码后，可以关闭这个开关，让菜单回到下方。",
+    avoidBrowserListHelpFirefox:
+      "Firefox 仍会列出它保存的密码时，Lockra 的菜单开在输入框上方，上方放不下时仍在下方。接管浏览器的密码功能后，Firefox 不再列出密码，菜单留在下方。",
     menuOnFocus: "点击输入框时打开 Lockra 菜单",
-    menuOnFocusHelp:
-      "关闭后，只在点击输入框末端的 Lockra 标志时打开，不会与浏览器自己的下拉框重叠。",
+    menuOnFocusHelp: "关闭后，只在点击输入框末端的 Lockra 标志时打开。",
     about: "关于",
     keepsNothing: "扩展不保存登录项",
     keepsNothingHelp:

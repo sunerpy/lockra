@@ -67,12 +67,19 @@ export interface StartAnswer {
   nextStep?: boolean;
 }
 
+/** Where the inline menu opens against its field: above it where the browser may list its own
+ *  saved passwords under the field (Chromium and Firefox put that list below, above only when
+ *  there is no room), below it otherwise. Either way the other side when only it has room. */
+export type MenuSide = "above" | "below";
+
 export interface FocusAnswer {
   /** The inline frame's token, when there is a menu to show. */
   token: string | null;
   /** There is one, but it opens only from the field's mark (the options page's choice): show the
    *  mark alone. */
   mark?: true;
+  /** Where it opens; below when absent. */
+  side?: MenuSide;
 }
 
 // ---- background → content script ------------------------------------------------------------
@@ -92,8 +99,8 @@ export type BackgroundMessage =
   | { kind: "fill"; values: FillValues }
   /** The code of a second step; `submit`: send its form once the code is in (the app's word). */
   | { kind: "fill.otp"; code: string; submit?: boolean }
-  /** Show the inline frame `token` under the focused field (the shortcut's confirmations). */
-  | { kind: "menu.open"; token: string }
+  /** Show the inline frame `token` at the focused field (the shortcut's confirmations). */
+  | { kind: "menu.open"; token: string; side?: MenuSide }
   /** Show the save or update prompt `token` at the top right. */
   | { kind: "prompt.open"; token: string }
   | { kind: "frame.resize"; token: string; height: number }
