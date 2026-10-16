@@ -10,9 +10,9 @@
 # Apple's password-manager-resources (https://github.com/apple/password-manager-resources),
 # Copyright 2020 - 2026 Apple Inc., MIT licence (password-manager-resources/LICENSE.md):
 # the shared-credentials list (equivalent domains) and the per-site password rules.
-password-manager-resources/LICENSE.md 3c3ec19af02df4372c1da21197c99f40a2bc5ef1b0cb972a095aacb292d872b1 https://raw.githubusercontent.com/apple/password-manager-resources/4fba5d1baf34dff9b2ff4186d1fcc7ad8bb00af9/LICENSE.md
-password-manager-resources/password-rules.json d3dc3b25cd879b13af37d3c6bb8e5cc028c2c4a5076fb093a7b3bf0137263531 https://raw.githubusercontent.com/apple/password-manager-resources/4fba5d1baf34dff9b2ff4186d1fcc7ad8bb00af9/quirks/password-rules.json
-password-manager-resources/shared-credentials.json 8b4befcbb91544f4fbfd80ef11809f1ab2135f8a3fdf687339475dca31fa49b9 https://raw.githubusercontent.com/apple/password-manager-resources/4fba5d1baf34dff9b2ff4186d1fcc7ad8bb00af9/quirks/shared-credentials.json
+password-manager-resources/LICENSE.md 3c3ec19af02df4372c1da21197c99f40a2bc5ef1b0cb972a095aacb292d872b1 https://raw.githubusercontent.com/apple/password-manager-resources/91dff9aaa4d37a7e80aac3024150643d7d153392/LICENSE.md
+password-manager-resources/password-rules.json d3dc3b25cd879b13af37d3c6bb8e5cc028c2c4a5076fb093a7b3bf0137263531 https://raw.githubusercontent.com/apple/password-manager-resources/91dff9aaa4d37a7e80aac3024150643d7d153392/quirks/password-rules.json
+password-manager-resources/shared-credentials.json 3f8a51778736ede50abc51af8af3937c4488bba41af54de00cdd1a8ff1756bdb https://raw.githubusercontent.com/apple/password-manager-resources/91dff9aaa4d37a7e80aac3024150643d7d153392/quirks/shared-credentials.json
 
 # The EFF's large wordlist for passphrases (https://www.eff.org/dice), by the Electronic Frontier
 # Foundation, Creative Commons Attribution 3.0 United States
