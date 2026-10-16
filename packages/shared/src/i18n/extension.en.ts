@@ -192,16 +192,24 @@ export const extensionEn: typeof extensionZhCN = {
     takePasswords: "Let Lockra take over the browser's passwords",
     takePasswordsHelp:
       "Turns off the browser's offer to save passwords; Lockra offers to save and update them instead. It needs the permission to change privacy-related settings, given back when this is turned off.",
+    takePasswordsHelpFirefox:
+      "Turns off Firefox's own password saving, and with it Firefox's filling of the passwords it keeps; Lockra offers to save and update them instead. It needs the permission to change privacy settings, given back when this is turned off.",
     lockedHelp: "Not in effect: a policy of the browser or another extension holds this setting.",
     savedPasswordsNote:
-      "Passwords the browser already keeps are not affected: its drop-down with a key still shows them under the field. To make it go, import them into Lockra (Lockra's Import, with the CSV file the browser exports), check them, then delete them in the browser's password manager.",
+      "Passwords the browser already keeps are not affected: its drop-down with a key still shows them under the field. To make it go, export them in the browser's password settings, open the CSV file with Lockra's Import, check them, then delete them in the browser. Deleting all its data at once in Chrome deletes your passkeys too, and with sync on, the passwords in your Google Account.",
+    savedPasswordsNoteFirefox:
+      "Once on, Firefox neither fills nor lists the passwords it keeps under the field; they stay in Firefox's password manager, and come back when this is turned off.",
     openPasswordManager: "Open the browser's password manager",
     takeForms: "Also turn off address and payment autofill",
     takeFormsHelp:
       "The browser no longer suggests addresses and cards in forms. Lockra does not fill these: leave this off if you want the browser to.",
+    avoidBrowserList: "Keep clear of the browser's own password list",
+    avoidBrowserListHelp:
+      "Lockra's menu opens above the field, the browser's own list of passwords below it; when there is no room above, below. Once the browser keeps no passwords, turn this off to have the menu below the field.",
+    avoidBrowserListHelpFirefox:
+      "While Firefox still lists the passwords it keeps, Lockra's menu opens above the field, or below when there is no room above. Once Lockra takes over the browser's passwords, Firefox lists none and the menu stays below.",
     menuOnFocus: "Open Lockra's menu when a field is clicked",
-    menuOnFocusHelp:
-      "When off, it opens only from the Lockra mark at the end of the field, clear of the browser's own drop-down.",
+    menuOnFocusHelp: "When off, it opens only from the Lockra mark at the end of the field.",
     about: "About",
     keepsNothing: "The extension keeps no logins",
     keepsNothingHelp:

@@ -9,6 +9,7 @@ import type {
   ContentMessage,
   FillValues,
   FocusKind,
+  MenuSide,
   StartAnswer,
 } from "../shared/messages";
 import type { Measurer } from "./clickjack";
@@ -90,6 +91,14 @@ function isStart(value: unknown): value is StartAnswer {
 /** The background's word that the menu waits for the field's mark. */
 function markOnly(value: unknown): boolean {
   return typeof value === "object" && value !== null && "mark" in value && value.mark === true;
+}
+
+/** Where the background says the menu opens: above the field where the browser may list its own
+ *  passwords under it. */
+function sideOf(value: unknown): MenuSide {
+  return typeof value === "object" && value !== null && "side" in value && value.side === "above"
+    ? "above"
+    : "below";
 }
 
 function tokenOf(value: unknown): string | null {
@@ -258,7 +267,7 @@ export class ContentAgent {
     const token = tokenOf(answer);
     if (scan.kind === "otp" || deepActive(this.options.doc) !== field) return;
     if (token) {
-      this.openMenu(token, field, false);
+      this.openMenu(token, field, false, sideOf(answer));
       return;
     }
     // The menu opens only from the field's mark (the options page's choice): the mark alone.
@@ -289,7 +298,12 @@ export class ContentAgent {
     };
   }
 
-  private openMenu(token: string, anchor: HTMLInputElement, engaged: boolean): void {
+  private openMenu(
+    token: string,
+    anchor: HTMLInputElement,
+    engaged: boolean,
+    side: MenuSide,
+  ): void {
     this.closeMenu();
     const host = new FrameHost({
       doc: this.options.doc,
@@ -303,7 +317,7 @@ export class ContentAgent {
     this.menu = host;
     this.anchor = anchor;
     this.engaged = engaged;
-    host.show({ anchor });
+    host.show({ anchor, side });
     this.icon.show(anchor);
   }
 
@@ -414,7 +428,7 @@ export class ContentAgent {
       case "menu.open": {
         const active = deepActive(this.options.doc);
         if (active instanceof HTMLInputElement && isFillable(active))
-          this.openMenu(message.token, active, true);
+          this.openMenu(message.token, active, true, sideOf(message));
         return Promise.resolve(null);
       }
       case "prompt.open":

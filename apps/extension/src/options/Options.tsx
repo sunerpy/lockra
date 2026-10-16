@@ -1,5 +1,6 @@
 // The extension's options page (board 35): the connection to Lockra, the shortcuts, site access, the
-// browser's own password features and how the menu opens, and what the extension keeps (nothing).
+// browser's own password features and how and where the menu opens, and what the extension keeps
+// (nothing).
 // The policy is Lockra's (Settings › Browser), not set here.
 import { Badge, Button, Card, Keycaps, Logo, StatusRow, Toggle } from "@lockra/ui";
 import { type ReactNode, useEffect, useState } from "react";
@@ -26,11 +27,15 @@ export function Options({ client, locale }: { client: PageClient; locale: string
   const [copied, setCopied] = useState(false);
   const [features, setFeatures] = useState<BrowserFeatures | null>(null);
   const [onFocus, setOnFocus] = useState(true);
+  const [avoid, setAvoid] = useState(true);
   useEffect(() => {
     void client.shortcuts().then(setShortcuts);
     void client.browserFeatures().then(setFeatures);
     void client.menuOnFocus().then(setOnFocus);
+    void client.avoidBrowserList().then(setAvoid);
   }, [client]);
+  // Firefox's saving off stops its filling and its list too; Chromium's does neither.
+  const firefox = client.target === "firefox";
 
   const paired =
     state !== null &&
@@ -140,7 +145,10 @@ export function Options({ client, locale }: { client: PageClient; locale: string
             <>
               <StatusRow
                 label={t("options.takePasswords")}
-                help={featureHelp(features.passwords, t("options.takePasswordsHelp"))}>
+                help={featureHelp(
+                  features.passwords,
+                  t(firefox ? "options.takePasswordsHelpFirefox" : "options.takePasswordsHelp"),
+                )}>
                 <Toggle
                   checked={features.passwords === "lockra"}
                   disabled={features.passwords === "locked"}
@@ -148,7 +156,9 @@ export function Options({ client, locale }: { client: PageClient; locale: string
                   ariaLabel={t("options.takePasswords")}
                 />
               </StatusRow>
-              <p className="pb-2 text-[12px] text-fg-subtle">{t("options.savedPasswordsNote")}</p>
+              <p className="pb-2 text-[12px] text-fg-subtle">
+                {t(firefox ? "options.savedPasswordsNoteFirefox" : "options.savedPasswordsNote")}
+              </p>
               {client.openPasswordManager ? (
                 <div className="pb-2">
                   <Button size="sm" onClick={client.openPasswordManager}>
@@ -170,6 +180,20 @@ export function Options({ client, locale }: { client: PageClient; locale: string
               )}
             </>
           ) : null}
+          <StatusRow
+            label={t("options.avoidBrowserList")}
+            help={t(
+              firefox ? "options.avoidBrowserListHelpFirefox" : "options.avoidBrowserListHelp",
+            )}>
+            <Toggle
+              checked={avoid}
+              onChange={(on) => {
+                setAvoid(on);
+                void client.setAvoidBrowserList(on);
+              }}
+              ariaLabel={t("options.avoidBrowserList")}
+            />
+          </StatusRow>
           <StatusRow label={t("options.menuOnFocus")} help={t("options.menuOnFocusHelp")}>
             <Toggle
               checked={onFocus}

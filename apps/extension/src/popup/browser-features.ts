@@ -1,8 +1,9 @@
 // The browser's own password saving and its address and card autofill, which compete with the
 // extension in the same fields: who holds them, and taking them over for Lockra or giving them back
 // (options page). Both go through the optional `privacy` permission, asked for in the click and
-// removed once nothing is held. The browser's list of passwords it already keeps is none of
-// these: it shows them in its own drop-down until the user deletes them there.
+// removed once nothing is held. The browser's list of passwords it already keeps under a field is
+// another matter: Chromium shows it whatever its saving says, until the user deletes them there;
+// Firefox stops it with its saving. Where it may show, the menu opens above the field (background).
 import { type BrowserApi, type BrowserSetting, TARGET } from "../browser/api";
 
 export const PRIVACY = { permissions: ["privacy"] };
@@ -81,10 +82,25 @@ export async function setFeature(
   return readFeatures(api, target);
 }
 
-/** The page of the browser's own password manager, where an extension may open one (Chromium). */
+/** Whether the browser may list the passwords it keeps under a sign-in field. Chromium fills and
+ *  lists them whatever its offer to save says (measured, Chrome 155); Firefox's saving
+ *  (`signon.rememberSignons`) off stops its filling and its list too (measured, Firefox 158), the
+ *  user's own value or Lockra's. Without the permission Lockra cannot tell: it may. */
+export async function browserListsPasswords(
+  api: BrowserApi,
+  target: Target = TARGET,
+): Promise<boolean> {
+  if (target === "chromium") return true;
+  if (!(await api.permissions.contains(PRIVACY).catch(() => false))) return true;
+  const saving = await api.privacy?.services.passwordSavingEnabled.get({}).catch(() => null);
+  return saving?.value !== false;
+}
+
+/** The page of the browser's own password manager, where an extension may open one (Chromium):
+ *  Chrome's settings, which export the passwords and delete them all; Edge's list of them. */
 export function passwordManagerUrl(userAgent: string, target: Target = TARGET): string | null {
   if (target !== "chromium") return null;
   return /\bEdg\//.test(userAgent)
     ? "edge://wallet/passwords"
-    : "chrome://password-manager/passwords";
+    : "chrome://password-manager/settings";
 }

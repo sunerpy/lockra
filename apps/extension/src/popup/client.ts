@@ -1,10 +1,15 @@
 // What the popup and the options page need of the browser: a port to the background, the site
 // access request (made in the click, as both browsers require), the options page, the shortcuts,
-// the browser's own password features and how the inline menu opens.
+// the browser's own password features and how and where the inline menu opens.
 import { type BrowserApi, TARGET } from "../browser/api";
 import { ALL_SITES } from "../background/access";
 import { FILL_COMMAND, type PopupEvent, type PopupRequest } from "../shared/messages";
-import { menuOnFocus, setMenuOnFocus } from "../shared/prefs";
+import {
+  avoidBrowserList,
+  menuOnFocus,
+  setAvoidBrowserList,
+  setMenuOnFocus,
+} from "../shared/prefs";
 import {
   type BrowserFeatures,
   type Feature,
@@ -39,6 +44,10 @@ export interface PageClient {
   /** The inline menu opens as a sign-in field gets the focus, or only from the field's mark. */
   menuOnFocus: () => Promise<boolean>;
   setMenuOnFocus: (on: boolean) => Promise<void>;
+  /** The inline menu opens above the field where the browser may list its own passwords under it,
+   *  or below the field. */
+  avoidBrowserList: () => Promise<boolean>;
+  setAvoidBrowserList: (on: boolean) => Promise<void>;
   target: "chromium" | "firefox";
 }
 
@@ -92,6 +101,8 @@ export function browserClient(api: BrowserApi, portName: string, win: Window): P
     })(),
     menuOnFocus: () => menuOnFocus(api.storage.local),
     setMenuOnFocus: (on) => setMenuOnFocus(api.storage.local, on),
+    avoidBrowserList: () => avoidBrowserList(api.storage.local),
+    setAvoidBrowserList: (on) => setAvoidBrowserList(api.storage.local, on),
     target: TARGET,
   };
 }

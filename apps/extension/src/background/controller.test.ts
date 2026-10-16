@@ -10,7 +10,7 @@ import { generateKeyPair, type KeyPair } from "../noise/crypto";
 import { Connection, type Keys, type PairingRecord } from "./connection";
 import { Controller } from "./controller";
 import type { BackgroundMessage, InlineView, PopupEvent, PopupState } from "../shared/messages";
-import { MENU_ON_FOCUS } from "../shared/prefs";
+import { AVOID_BROWSER_LIST, MENU_ON_FOCUS } from "../shared/prefs";
 
 class MemoryKeys implements Keys {
   pair: KeyPair | null = null;
@@ -285,6 +285,19 @@ describe("the inline menu", () => {
       token: string | null;
     };
     expect(typeof focused.token).toBe("string");
+  });
+
+  it("opens the menu above the field, clear of the browser's own list of passwords, unless the options page says otherwise", async () => {
+    // 2026-10-16, the user: Chrome lists the passwords it keeps under the field, whatever its
+    // offer to save says, right where the menu opened.
+    const { browser } = await setup();
+    expect(await browser.fromContent({ kind: "content.focus", form: "login" })).toMatchObject({
+      side: "above",
+    });
+    await browser.storage.local.set({ [AVOID_BROWSER_LIST]: false });
+    expect(await browser.fromContent({ kind: "content.focus", form: "login" })).toMatchObject({
+      side: "below",
+    });
   });
 
   it("shows nothing to a frame without the token, or one that is not under the page's frame", async () => {
@@ -728,6 +741,8 @@ describe("the shortcut", () => {
     browser.commands.onCommand.emit("fill-login", browser.openTabs[0]);
     await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "menu.open")).toBe(true));
     const open = contentGot.find((m) => m.kind === "menu.open") as { token: string };
+    // Where the menu opens on a click, clear of the browser's own list.
+    expect(open).toMatchObject({ side: "above" });
     const frame = inlineFrame(context, open.token);
     await vi.waitFor(() => expect(lastView(frame)?.view).toBe("confirm"));
     expect(app.requests.some((r) => r.op === "fill")).toBe(false);

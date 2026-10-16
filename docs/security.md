@@ -241,8 +241,8 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   `settings.json` only says whether Lockra listens.
 - **The extension's side** (`apps/extension`). Its static key is a WebCrypto X25519 key made with
   a private half that cannot be exported, kept in IndexedDB; the pairing (its id and the app's public
-  key) and whether its menu opens as a field gets the focus are all `storage.local` holds besides
-  (no login, no site); session keys live in the background's memory only, and
+  key) and how its menu opens (as a field gets the focus, above the field) are all `storage.local`
+  holds besides (no login, no site); session keys live in the background's memory only, and
   the popup's last list of the site's logins (no secret) in `storage.session`, emptied as Lockra
   locks. A fill the user did not ask for at that moment happens only as the next step of one they
   did, decided by the app: the code of the login filled on the same site within five minutes
@@ -252,7 +252,9 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   and never after a fill as the page loads). Its one optional API permission, `privacy`, is asked
   for only when the user turns on "Let Lockra take over the browser's passwords" on its options
   page; it switches the browser's password saving (and, if chosen, its address and card autofill)
-  off, and turning the switch off clears those settings and removes the permission. The content
+  off, and turning the switch off clears those settings and removes the permission. While it is
+  granted, the background also reads the password saving in Firefox, whose list of saved passwords
+  goes with it, to open the menu below the field rather than above. The content
   script runs in its isolated world, listens to no `window` message and reports
   no address; the menu and the save prompt are extension frames in a closed shadow root in the top
   layer, shown nothing without the token the background handed out (where the browser lists the frame, it must also sit under the page's; Chromium's webNavigation leaves the extension's own frames out, so there the token alone binds it), and a click in them counts only

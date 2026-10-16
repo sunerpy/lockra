@@ -48,6 +48,8 @@ async function setup(initial: PopupState, extra: Partial<PageClient> = {}) {
     openPasswordManager: vi.fn(),
     menuOnFocus: async () => true,
     setMenuOnFocus: vi.fn(async () => undefined),
+    avoidBrowserList: async () => true,
+    setAvoidBrowserList: vi.fn(async () => undefined),
     target: "chromium",
     ...extra,
   };
@@ -109,6 +111,7 @@ describe("the options page", () => {
     expect(take).toHaveAttribute("aria-checked", "true");
     // What the switch cannot do: the passwords the browser keeps, and where they are deleted.
     expect(screen.getByText(/浏览器里已经保存的密码不受这个开关影响/)).toBeInTheDocument();
+    expect(screen.getByText(/通行密钥也会一并删除/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "打开浏览器的密码管理" }));
     expect(client.openPasswordManager).toHaveBeenCalled();
     // The address and card autofill: a choice of its own.
@@ -130,6 +133,24 @@ describe("the options page", () => {
     expect(screen.getByText("未生效：浏览器的策略或其他扩展控制着这项设置。")).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "同时关闭地址和付款方式的自动填充" })).toBeNull();
     expect(screen.queryByRole("button", { name: "打开浏览器的密码管理" })).toBeNull();
+    // Firefox's saving off stops its filling and its list as well (measured, Firefox 158).
+    expect(screen.getByText(/Firefox 不再填入，也不再在输入框下方列出/)).toBeInTheDocument();
+    expect(screen.queryByText(/浏览器里已经保存的密码不受这个开关影响/)).toBeNull();
+    expect(screen.getByText(/接管浏览器的密码功能后，Firefox 不再列出密码/)).toBeInTheDocument();
+  });
+
+  it("opens the menu above the field, clear of the browser's own list, or under it", async () => {
+    // 2026-10-16, the user: Lockra's menu and the browser's list of the passwords it keeps
+    // opened in the same place, under the field.
+    const { client } = await setup(state());
+    const avoid = screen.getByRole("switch", { name: "避开浏览器自己的密码列表" });
+    expect(avoid).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText(/Lockra 的菜单开在输入框上方/)).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(avoid);
+    });
+    expect(client.setAvoidBrowserList).toHaveBeenCalledWith(false);
+    expect(avoid).toHaveAttribute("aria-checked", "false");
   });
 
   it("opens the menu on a field's focus, or only from its mark", async () => {

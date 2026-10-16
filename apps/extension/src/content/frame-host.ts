@@ -13,6 +13,7 @@ import {
   rectOf,
   sameRect,
 } from "./clickjack";
+import type { MenuSide } from "../shared/messages";
 
 export const MENU_WIDTH = 340;
 export const PROMPT_WIDTH = 360;
@@ -36,7 +37,7 @@ export interface HostOptions {
   measurer?: Measurer;
 }
 
-type Place = { anchor: HTMLElement } | "corner";
+type Place = { anchor: HTMLElement; side?: MenuSide } | "corner";
 
 export class FrameHost {
   readonly host: HTMLDivElement;
@@ -77,7 +78,8 @@ export class FrameHost {
     });
   }
 
-  /** Show it under `anchor` (a menu) or at the top right (a prompt). */
+  /** Show it at `anchor` (a menu, below it unless `side` says above) or at the top right (a
+   *  prompt). */
   show(place: Place): void {
     this.place = place;
     this.options.doc.documentElement.append(this.host);
@@ -115,10 +117,20 @@ export class FrameHost {
       const anchor = this.place.anchor.getBoundingClientRect();
       width = Math.min(Math.max(MENU_WIDTH, Math.round(anchor.width)), viewportWidth - 2 * EDGE);
       left = Math.min(Math.max(EDGE, anchor.left), viewportWidth - width - EDGE);
-      top = anchor.bottom + GAP;
-      // No room below: above the field.
-      if (top + this.height > viewportHeight - EDGE && anchor.top - GAP - this.height >= EDGE)
-        top = anchor.top - GAP - this.height;
+      const below = anchor.bottom + GAP;
+      const above = anchor.top - GAP - this.height;
+      const roomBelow = below + this.height <= viewportHeight - EDGE;
+      const roomAbove = above >= EDGE;
+      // The side asked for, the other one when only it has room; with room on neither, below,
+      // where the menu's first rows stay on screen.
+      top =
+        this.place.side === "above"
+          ? roomAbove
+            ? above
+            : below
+          : roomBelow || !roomAbove
+            ? below
+            : above;
     }
     this.style(Math.round(left), Math.round(top), Math.round(width), Math.round(this.height));
     const rect = rectOf(this.host);

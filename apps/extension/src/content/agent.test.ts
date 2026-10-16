@@ -171,6 +171,29 @@ describe("the inline menu", () => {
     agent.stop();
   });
 
+  it("opens above the field where the background says the browser lists its own passwords under it, the shortcut's confirmation too", async () => {
+    document.body.innerHTML = LOGIN;
+    const { agent, deliver } = setup({}, null, () => ({ token: "c".repeat(32), side: "above" }));
+    await agent.start();
+    const user = input("user");
+    user.getBoundingClientRect = () => {
+      const rect = { x: 100, y: 300, left: 100, top: 300, width: 360, height: 36 };
+      return { ...rect, right: 460, bottom: 336, toJSON: () => rect };
+    };
+    const top = () =>
+      /(?:^|; )top: ([^;]+) !important/.exec(hosts()[0]?.getAttribute("style") ?? "")?.[1];
+    user.focus();
+    await vi.waitFor(() => expect(hosts()).toHaveLength(1));
+    await deliver({ kind: "frame.resize", token: "c".repeat(32), height: 100 });
+    expect(top()).toBe("194px");
+    await deliver({ kind: "frame.close", token: "c".repeat(32) });
+    expect(hosts()).toHaveLength(0);
+    await deliver({ kind: "menu.open", token: "d".repeat(32), side: "above" });
+    expect(hosts()).toHaveLength(1);
+    expect(top()).toBe("294px");
+    agent.stop();
+  });
+
   it("stays while the focus is in its frame, and goes when the focus goes elsewhere", async () => {
     document.body.innerHTML = LOGIN;
     const { agent, sent } = setup();

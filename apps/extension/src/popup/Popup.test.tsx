@@ -78,6 +78,8 @@ function setup(initial: PopupState | null = state(), extra: Partial<PageClient> 
     openPasswordManager: null,
     menuOnFocus: async () => true,
     setMenuOnFocus: async () => undefined,
+    avoidBrowserList: async () => true,
+    setAvoidBrowserList: async () => undefined,
     target: "chromium",
     ...extra,
   };
