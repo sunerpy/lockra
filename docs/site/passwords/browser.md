@@ -177,9 +177,13 @@ With site access, the extension notices a form you submit:
   changes the login's password, and the old one goes into its history.
 - A sign-in in two steps, the user name first and the password on the next page, is put together:
   the extension keeps the user name in memory for five minutes.
-- On a sign-up form, the menu by the password field offers **Use a generated password**, made to
-  the site's password rules when the page or Lockra knows them. **Use** fills the password fields
-  and adds the login to Lockra at once.
+- On a sign-up form, or one that sets a new password, the menu by the password field offers **Use
+  a generated password**, made to the site's password rules when the page or Lockra knows them.
+  **Use** fills every new-password field, the confirmation too, and adds the login to Lockra at
+  once. The form's other fields offer the same password, for five minutes after its last menu;
+  **Another one** makes a new one. Using it again adds no second login: a password made after the first use
+  changes that login's. **Copy password** puts it on the clipboard through Lockra, which clears
+  it after the time set in **Settings › Security › Clear clipboard**.
 
 Nothing is offered on a site of the **Never offer to save** list, or for a login that is saved
 already.

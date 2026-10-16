@@ -314,6 +314,7 @@ impl Conn {
             Op::Save(save) => core.browser_save(session, save).map(|item_id| Answer::Saved { item_id }),
             Op::Update(update) => core.browser_update(session, update).map(|()| Answer::Done {}),
             Op::Generate(generate) => core.browser_generate(session, generate).map(Answer::Generated),
+            Op::CopyGenerated(copy) => core.browser_copy_generated(session, copy).map(|()| Answer::Done {}),
             Op::SiteRule(rule) => core.browser_site_rule(session, rule).map(|()| Answer::Done {}),
             Op::Search(search) => core.browser_search(session, search).map(|items| Answer::Found { items }),
             // These may wait for the user in Lockra: they answer when done.

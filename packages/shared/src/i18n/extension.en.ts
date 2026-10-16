@@ -131,6 +131,8 @@ export const extensionEn: typeof extensionZhCN = {
     signupRules: "Made to this site's password rules · {n} characters",
     signupRandom: "Random · {n} characters",
     regenerate: "Another one",
+    copyPassword: "Copy password",
+    copied: "Copied",
     signupNote: "Fills the password fields and adds “{site} · {username}” to Lockra.",
     signupNoteNoUser: "Fills the password fields and adds “{site}” to Lockra.",
     signupFooter: "↵ use · Esc close",

@@ -134,7 +134,15 @@ export interface MenuItem {
 
 export type InlineView =
   | { view: "list"; site: string; items: MenuItem[]; active: number }
-  | { view: "signup"; site: string; password: string; username: string; rules: boolean }
+  | {
+      view: "signup";
+      site: string;
+      password: string;
+      username: string;
+      rules: boolean;
+      /** Lockra put the password on the clipboard. */
+      copied?: boolean;
+    }
   | { view: "confirm"; item: MenuItem }
   | { view: "http"; site: string; item: MenuItem }
   | { view: "waiting"; item: MenuItem }
@@ -149,6 +157,8 @@ export type InlineAction =
   | { type: "allow_http" }
   | { type: "use" }
   | { type: "regenerate" }
+  /** The sign-up menu's password on the clipboard, through Lockra. */
+  | { type: "copy" }
   | { type: "save"; title: string; username: string; group: string }
   | { type: "update" }
   | { type: "dismiss" }

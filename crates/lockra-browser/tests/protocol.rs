@@ -11,9 +11,9 @@ use data_encoding::HEXLOWER;
 use lockra_browser::noise::{PAIRING_CODE_INFO, PAIRING_PATTERN, PROLOGUE, Responder, SESSION_PATTERN, pairing_code};
 use lockra_browser::protocol::{Answer, AppPlain, AppState, ClientPlain, Envelope, Kind, Op, Outgoing, Push, Request, Response};
 use lockra_core::{
-    BrowserPolicy, ClientInfo, CopyRequest, FillAnswer, FillField, FillRequest, FrameFacts, GenerateAnswer, GenerateRequest, GenerateSave, ItemSummary,
-    OtpAnswer, OtpRequest, Protection, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SaveAction, SaveAdvice, SaveRequest, SearchRequest, SiteRuleKind,
-    SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
+    BrowserPolicy, ClientInfo, CopyGeneratedRequest, CopyRequest, FillAnswer, FillField, FillRequest, FrameFacts, GenerateAnswer, GenerateRequest,
+    GenerateSave, ItemSummary, OtpAnswer, OtpRequest, Protection, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SaveAction, SaveAdvice, SaveRequest,
+    SearchRequest, SiteRuleKind, SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -119,6 +119,7 @@ fn requests() -> Vec<(&'static str, Request)> {
                 }),
             ),
         ),
+        ("copy_generated", r(14, Op::CopyGenerated(CopyGeneratedRequest { facts: facts(), password: Zeroizing::new("q7vx2mz9kd4w8p1r6t3y".into()) }))),
         ("site_rule", r(11, Op::SiteRule(SiteRuleRequest { kind: Some(SiteRuleKind::NeverSave), facts: facts() }))),
         ("search", r(12, Op::Search(SearchRequest { text: "exam".into(), top_url: "https://www.example.com/".into() }))),
     ]

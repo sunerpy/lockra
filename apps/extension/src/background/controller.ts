@@ -63,6 +63,21 @@ function menuItem(item: ItemSummary): MenuItem {
   return { title: item.title, username: item.username || item.email, downgrade: item.downgrade };
 }
 
+/** A sign-up form in the tab's memory: its frame, its document (its address where the browser
+ *  gives no document id) and the page's rules. */
+function formKey(
+  frame: TrustedFrame,
+  rules: { rules: string | null; minlength: number | null; maxlength: number | null },
+): string {
+  return JSON.stringify([
+    frame.frameId,
+    frame.documentId ?? frame.facts.frame_url,
+    rules.rules,
+    rules.minlength,
+    rules.maxlength,
+  ]);
+}
+
 function hostOf(url: string): string {
   try {
     return new URL(url).host;
@@ -257,9 +272,17 @@ export class Controller {
     signup: Extract<ContentMessage, { kind: "content.focus" }>["signup"],
   ): Promise<FocusAnswer> {
     const rules = signup ?? { rules: null, minlength: null, maxlength: null, username: "" };
-    const made = await this.generate(frame, rules);
-    if (!made) return { token: null };
-    const username = rules.username.trim() !== "" ? rules.username : made.username;
+    // One password for the form: the confirm field's menu offers the one the first field's did.
+    const form = formKey(frame, rules);
+    let password = this.memory.generatedFor(frame.tabId, form)?.password ?? null;
+    let username = rules.username;
+    if (password === null) {
+      const made = await this.generate(frame, rules);
+      if (!made) return { token: null };
+      password = made.password;
+      if (rules.username.trim() === "") username = made.username;
+      this.memory.rememberGenerated(frame.tabId, { form, password, saved: null });
+    }
     const opened = this.frames.open({
       kind: "menu",
       frame,
@@ -267,7 +290,7 @@ export class Controller {
       view: {
         view: "signup",
         site: hostOf(frame.facts.frame_url),
-        password: made.password,
+        password,
         username,
         rules: rules.rules !== null,
       },
@@ -275,7 +298,7 @@ export class Controller {
       policy: this.policy,
       item: null,
       generated: {
-        password: made.password,
+        password,
         username,
         rules: rules.rules,
         minlength: rules.minlength,
@@ -656,9 +679,15 @@ export class Controller {
         const made = await this.generate(frame.frame, generated);
         if (!made) return;
         frame.generated = { ...generated, password: made.password };
-        this.show(frame, { ...frame.view, password: made.password });
+        // The form's next menus offer the new one; a login already saved from it stays its own.
+        const form = formKey(frame.frame, generated);
+        const saved = this.memory.generatedFor(frame.frame.tabId, form)?.saved ?? null;
+        this.memory.rememberGenerated(frame.frame.tabId, { form, password: made.password, saved });
+        this.show(frame, { ...frame.view, password: made.password, copied: false });
         return;
       }
+      case "copy":
+        return this.copyGenerated(frame);
       case "save":
       case "update":
       case "dismiss":
@@ -716,7 +745,9 @@ export class Controller {
     await this.close(frame);
   }
 
-  /** A sign-up form's generated password: saved at once as a new login, then filled. */
+  /** A sign-up form's generated password: saved at once as a new login, then filled into every
+   *  new-password field. The form's login is saved once: used again it is filled only, and a
+   *  password generated after it changes that login's. */
   private async useGenerated(frame: InlineFrame): Promise<void> {
     const generated = frame.generated;
     if (!generated) return;
@@ -725,19 +756,42 @@ export class Controller {
       await this.close(frame);
       return;
     }
-    const saved = await this.connection.request({
-      op: "save",
-      ...facts.facts,
-      title: "",
-      username: generated.username,
+    const tabId = frame.frame.tabId;
+    const form = formKey(frame.frame, generated);
+    const before = this.memory.generatedFor(tabId, form)?.saved ?? null;
+    let itemId: string;
+    if (before && before.password === generated.password) {
+      itemId = before.itemId;
+    } else if (before) {
+      const updated = await this.connection.request({
+        op: "update",
+        item_id: before.itemId,
+        ...facts.facts,
+        password: generated.password,
+      });
+      if (!updated.ok) return this.notice(frame, updated.error);
+      itemId = before.itemId;
+    } else {
+      const saved = await this.connection.request({
+        op: "save",
+        ...facts.facts,
+        title: "",
+        username: generated.username,
+        password: generated.password,
+        group: null,
+      });
+      if (!saved.ok) return this.notice(frame, saved.error);
+      itemId = saved.value.item_id;
+    }
+    this.memory.rememberGenerated(tabId, {
+      form,
       password: generated.password,
-      group: null,
+      saved: { itemId, password: generated.password },
     });
-    if (!saved.ok) return this.notice(frame, saved.error);
     await this.deliver(
       facts,
       {
-        item_id: saved.value.item_id,
+        item_id: itemId,
         username: generated.username,
         password: generated.password,
         fields: [],
@@ -747,6 +801,26 @@ export class Controller {
       { newPassword: true },
     );
     await this.close(frame);
+  }
+
+  /** The sign-up menu's password on the clipboard: Lockra copies it (only one it made for this
+   *  site) and clears it as it clears a login's. */
+  private async copyGenerated(frame: InlineFrame): Promise<void> {
+    const generated = frame.generated;
+    if (!generated || frame.view.view !== "signup") return;
+    const facts = await this.refreshed(frame);
+    if (!facts) {
+      await this.close(frame);
+      return;
+    }
+    const outcome = await this.connection.request({
+      op: "copy_generated",
+      ...facts.facts,
+      password: generated.password,
+    });
+    if (!outcome.ok) return this.notice(frame, outcome.error);
+    if (frame.view.view === "signup" && frame.view.password === generated.password)
+      this.show(frame, { ...frame.view, copied: true });
   }
 
   private async answerPrompt(

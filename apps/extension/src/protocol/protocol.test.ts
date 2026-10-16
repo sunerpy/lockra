@@ -195,6 +195,11 @@ describe("requests", () => {
         maxlength: 64,
         save: { username: null, title: "Example" },
       }),
+      copy_generated: request(14, {
+        op: "copy_generated",
+        ...facts,
+        password: "q7vx2mz9kd4w8p1r6t3y",
+      }),
       site_rule: request(11, { op: "site_rule", kind: "never_save", ...facts }),
       search: request(12, { op: "search", text: "exam", top_url: "https://www.example.com/" }),
     };

@@ -519,8 +519,11 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   last five minutes, for a later step; `submit` in the answer says whether to send its form, absent
   before 0.10: not sent), `copy` (a part on the clipboard, written by the app),
   `save`, `update`, `generate` (a password to the page's `passwordrules`, `minlength` and
-  `maxlength` or the bundled rules, saved at once as a new login when asked), `site_rule` (never
-  save or never fill the frame's site) and `search`. Each names its frame with `frame_url`,
+  `maxlength` or the bundled rules, saved at once as a new login when asked), `copy_generated`
+  (from 0.10.1: the sign-up menu's `password` on the clipboard, written by the app as a login's
+  is, and only a password of the generator's history made for the frame's site, else
+  `not_found`), `site_rule` (never save or never fill the frame's site) and `search`. Each names
+  its frame with `frame_url`,
   `top_url` and `frame_chain` (the ancestors, nearest first), which the extension's background
   script takes from the browser, never from the page. A request this version cannot read gets
   `invalid` when its number can be read. `fill` and `copy` may wait for the user (a login of the
