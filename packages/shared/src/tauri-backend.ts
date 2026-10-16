@@ -28,6 +28,7 @@ import {
   type UiState,
   RESULT_SCHEMAS,
   UI_EVENT_NAME,
+  type CodesFrame,
   codesFrameSchema,
   coreErrorSchema,
   hasResult,
@@ -55,10 +56,19 @@ export const defaultTransport: TauriTransport = {
 
 const fileNameSchema = z.string().nullable();
 
+/** The core's code stream, which it keeps one of per window: every subscriber of the backend
+ *  shares it, and it stops once the last one leaves. */
+interface CodeStream {
+  listeners: Set<FrameListener>;
+  /** The last frame, for a subscriber that joins between two. */
+  last: CodesFrame | null;
+  /** `codes_subscribe`, done: the core streams. */
+  started: Promise<void>;
+}
+
 export class TauriBackend implements Backend {
   private readonly transport: TauriTransport;
-  /** Counts code subscriptions; only the latest may stop the core's stream. */
-  private codesGeneration = 0;
+  private codes: CodeStream | null = null;
 
   constructor(transport: TauriTransport = defaultTransport) {
     this.transport = transport;
@@ -99,25 +109,46 @@ export class TauriBackend implements Backend {
   }
 
   async subscribeCodes(onFrame: FrameListener): Promise<Unsubscribe> {
-    const generation = ++this.codesGeneration;
-    const channel = this.transport.channel();
+    // A second `codes_subscribe` would replace the first subscriber's stream, and a
+    // `codes_unsubscribe` would stop everyone's (the detail pane under the edit dialog, StrictMode's
+    // second effect): the subscribers share one stream instead.
+    const stream = this.codes ?? this.startCodes();
+    await stream.started;
+    stream.listeners.add(onFrame);
+    if (stream.last) onFrame(stream.last);
     let open = true;
+    return () => {
+      if (!open) return;
+      open = false;
+      stream.listeners.delete(onFrame);
+      if (stream.listeners.size > 0 || this.codes !== stream) return;
+      this.codes = null;
+      void this.call("codes_unsubscribe").catch(() => undefined);
+    };
+  }
+
+  private startCodes(): CodeStream {
+    const channel = this.transport.channel();
+    const stream: CodeStream = { listeners: new Set(), last: null, started: Promise.resolve() };
     // Tauri's `Channel` is not an EventTarget: `onmessage` is its only delivery hook.
     // oxlint-disable-next-line unicorn/prefer-add-event-listener
     channel.onmessage = (raw) => {
-      if (!open) return;
+      if (this.codes !== stream) return;
       const parsed = codesFrameSchema.safeParse(raw);
-      if (parsed.success) onFrame(parsed.data);
-      else console.error("lockra: a code frame does not match the contract", parsed.error.issues);
+      if (!parsed.success) {
+        console.error("lockra: a code frame does not match the contract", parsed.error.issues);
+        return;
+      }
+      stream.last = parsed.data;
+      for (const listener of stream.listeners) listener(parsed.data);
     };
-    await this.call("codes_subscribe", { onFrame: channel });
-    return () => {
-      open = false;
-      // The core keeps one stream and a newer subscription has already replaced this one: stopping
-      // now would stop that one (StrictMode subscribes twice; a page switch can too).
-      if (generation === this.codesGeneration)
-        void this.call("codes_unsubscribe").catch(() => undefined);
-    };
+    stream.started = this.call("codes_subscribe", { onFrame: channel }).then(() => undefined);
+    // A failed start leaves no stream: the next subscriber asks again.
+    stream.started.catch(() => {
+      if (this.codes === stream) this.codes = null;
+    });
+    this.codes = stream;
+    return stream;
   }
 
   async pickImportFiles(kind: ImportPickKind = "any"): Promise<boolean> {
