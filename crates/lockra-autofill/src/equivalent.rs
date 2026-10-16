@@ -164,6 +164,10 @@ mod tests {
         // {"from": ["discordapp.com"], "to": ["discord.com"], "fromDomainsAreObsoleted": true}
         assert!(bundled("discordapp.com", "discord.com"));
         assert!(!bundled("discord.com", "discordapp.com"));
+        // {"from": ["prog-8.com"], "to": ["progate.com"], "fromDomainsAreObsoleted": true}: a shared
+        // group until upstream's 91dff9a.
+        assert!(bundled("prog-8.com", "progate.com"));
+        assert!(!bundled("progate.com", "prog-8.com"));
     }
 
     #[test]
@@ -211,9 +215,9 @@ mod tests {
     #[test]
     fn the_bundled_list_follows_its_schema() {
         let entries = bundled_entries(crate::data::SHARED_CREDENTIALS).unwrap();
-        // 112 entries at the pinned commit: 56 shared groups and 56 one-way ones.
+        // 112 entries at the pinned commit: 55 shared groups and 57 one-way ones.
         assert_eq!(entries.len(), 112);
-        assert_eq!(entries.iter().filter(|entry| matches!(entry, Entry::Shared(_))).count(), 56);
+        assert_eq!(entries.iter().filter(|entry| matches!(entry, Entry::Shared(_))).count(), 55);
         for entry in &entries {
             let lists: Vec<&Vec<String>> = match entry {
                 Entry::Shared(shared) => vec![&shared.shared],
