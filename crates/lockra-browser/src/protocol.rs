@@ -5,8 +5,8 @@
 
 use data_encoding::BASE64;
 use lockra_core::{
-    ClientInfo, CopyRequest, FillAnswer, FillRequest, GenerateAnswer, GenerateRequest, ItemSummary, OtpAnswer, OtpRequest, QueryAnswer, QueryRequest, Refusal,
-    SaveRequest, SearchRequest, SiteRuleRequest, StatusAnswer, UpdateRequest,
+    ClientInfo, CopyGeneratedRequest, CopyRequest, FillAnswer, FillRequest, GenerateAnswer, GenerateRequest, ItemSummary, OtpAnswer, OtpRequest, QueryAnswer,
+    QueryRequest, Refusal, SaveRequest, SearchRequest, SiteRuleRequest, StatusAnswer, UpdateRequest,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -172,6 +172,8 @@ pub enum Op {
     Update(UpdateRequest),
     /// A password for a sign-up form.
     Generate(GenerateRequest),
+    /// The sign-up form's generated password on the clipboard.
+    CopyGenerated(CopyGeneratedRequest),
     /// "Not on this site."
     SiteRule(SiteRuleRequest),
     /// The popup's search.

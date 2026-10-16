@@ -48,6 +48,7 @@ const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("allow_http") }),
   z.object({ type: z.literal("use") }),
   z.object({ type: z.literal("regenerate") }),
+  z.object({ type: z.literal("copy") }),
   z.object({ type: z.literal("save"), title: text, username: text, group: text }),
   z.object({ type: z.literal("update") }),
   z.object({ type: z.literal("dismiss") }),

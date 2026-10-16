@@ -228,7 +228,10 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   user set that rule to ask, and then Lockra asks; an `https` login on an `http` page only once the
   user agreed in the page; a `no_extension` login never; a `confirm` login only after the master
   password or the biometric check in Lockra (and copying its password from the popup the same); a
-  linked code for a second step only on the site just filled, for five minutes.
+  linked code for a second step only on the site just filled, for five minutes. The sign-up menu's
+  copy (`copy_generated`) puts on the clipboard only a password of the generator's history made
+  for the frame's site, with the hints and the clearing a login's password gets, so the extension
+  cannot have the app write anything else there.
 - **Filling as a page loads** is off unless the user turns it on (a warning, then the master
   password or the biometric check), and then only in the page itself (no frame), on `https` or
   where the login was saved for `http`, with exactly one match, for a `fill` login whose own

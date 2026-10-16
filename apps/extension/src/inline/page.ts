@@ -321,13 +321,19 @@ export class InlinePage {
     const refresh = this.iconButton("refresh", t("inline.regenerate"), (event) =>
       this.act({ type: "regenerate" }, event),
     );
+    // Lockra copies it and clears the clipboard later, as it does a login's password.
+    const copy = this.iconButton(
+      view.copied ? "check" : "copy",
+      t(view.copied ? "inline.copied" : "inline.copyPassword"),
+      (event) => this.act({ type: "copy" }, event),
+    );
     const note = view.username
       ? t("inline.signupNote", { site: view.site, username: view.username })
       : t("inline.signupNoteNoUser", { site: view.site });
     return this.el(
       "div",
       "flex flex-col gap-1",
-      this.el("div", "flex items-center gap-1", use, refresh),
+      this.el("div", "flex items-center gap-1", use, copy, refresh),
       this.el(
         "p",
         "flex items-start gap-2 px-3 py-1.5 text-[11.5px] leading-snug text-fg-muted",

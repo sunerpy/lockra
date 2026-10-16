@@ -125,6 +125,8 @@ export const extensionZhCN = {
     signupRules: "按本站的密码规则生成 · {n} 位",
     signupRandom: "随机生成 · {n} 位",
     regenerate: "换一个",
+    copyPassword: "复制密码",
+    copied: "已复制",
     signupNote: "填好密码框，并在 Lockra 里新建「{site} · {username}」。",
     signupNoteNoUser: "填好密码框，并在 Lockra 里新建「{site}」。",
     signupFooter: "↵ 使用 · Esc 关闭",

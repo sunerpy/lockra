@@ -138,6 +138,16 @@
       },
       "req": 7
     },
+    "copy_generated": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "op": "copy_generated",
+      "password": "q7vx2mz9kd4w8p1r6t3y",
+      "req": 14,
+      "top_url": "https://www.example.com/"
+    },
     "fill": {
       "allow_http": false,
       "frame_chain": [

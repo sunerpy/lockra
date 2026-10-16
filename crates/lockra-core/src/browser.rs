@@ -669,6 +669,17 @@ pub struct CopyRequest {
     pub part: CopyPart,
 }
 
+/// A request to put a password the app generated for a sign-up form on the clipboard (the sign-up
+/// menu's copy).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CopyGeneratedRequest {
+    /// Where the menu is: the password must have been made for this site.
+    #[serde(flatten)]
+    pub facts: FrameFacts,
+    /// The password the menu shows.
+    pub password: Zeroizing<String>,
+}
+
 /// A request to save what a form submitted, as a new login.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SaveRequest {

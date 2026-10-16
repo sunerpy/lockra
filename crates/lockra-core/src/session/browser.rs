@@ -15,11 +15,11 @@ use super::items::{copy_part_text, remember_generated};
 use super::{Core, PhaseState, Session, State, current_code, touch_items};
 use crate::browser::BrowserPolicy;
 use crate::browser::{
-    Activity, ActivityEvent, BrowserView, CONFIRM_TTL, ClientInfo, ConfirmAction, ConfirmReason, ConfirmView, CopyRequest, FillAnswer, FillField, FillRequest,
-    FrameRule, GenerateAnswer, GenerateRequest, ItemSummary, MAX_FRAME_CHAIN, MAX_PENDING_PAIRS, OtpAnswer, OtpRequest, PAIR_TTL, PairOutcome, PairedExtension,
-    PairedView, PendingConfirm, PendingPair, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SEARCH_MAX, SaveAction, SaveAdvice, SaveRequest, SearchRequest,
-    SessionId, SessionState, SiteRuleRequest, StaticKey, StatusAnswer, Trigger, UNLOCK_REQUEST_EVERY, UpdateRequest, choose, cross_origin, listed, matches,
-    offered, page, site_of,
+    Activity, ActivityEvent, BrowserView, CONFIRM_TTL, ClientInfo, ConfirmAction, ConfirmReason, ConfirmView, CopyGeneratedRequest, CopyRequest, FillAnswer,
+    FillField, FillRequest, FrameRule, GenerateAnswer, GenerateRequest, ItemSummary, MAX_FRAME_CHAIN, MAX_PENDING_PAIRS, OtpAnswer, OtpRequest, PAIR_TTL,
+    PairOutcome, PairedExtension, PairedView, PendingConfirm, PendingPair, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SEARCH_MAX, SaveAction,
+    SaveAdvice, SaveRequest, SearchRequest, SessionId, SessionState, SiteRuleRequest, StaticKey, StatusAnswer, Trigger, UNLOCK_REQUEST_EVERY, UpdateRequest,
+    choose, cross_origin, listed, matches, offered, page, site_of,
 };
 use crate::error::{CoreResult, ErrorCode};
 use crate::item::{Matching, Protection, Purpose, SiteRuleKind, Tri, VaultItem};
@@ -662,6 +662,33 @@ impl Core {
             }
         };
         Ok(GenerateAnswer { password, username, item_id })
+    }
+
+    /// Put a password the app generated for the frame's site on the clipboard (the sign-up menu's
+    /// copy), cleared as a login's is: only one in the generator's history for that site, so the
+    /// extension cannot have the app copy anything else. Its making is in the activity already.
+    pub fn browser_copy_generated(&self, session: SessionId, request: CopyGeneratedRequest) -> Result<(), Refusal> {
+        let frame = Frame::of(&request.facts)?;
+        let site = site_of(&frame.frame);
+        let clear_after = {
+            let mut guard = self.lock();
+            let st = &mut *guard;
+            let (vault, _) = active(st, session, false)?;
+            let made_here = vault
+                .data
+                .local
+                .as_ref()
+                .is_some_and(|local| local.generator_history.iter().any(|g| g.site.as_deref() == Some(site.as_str()) && g.password == request.password));
+            if !made_here {
+                return Err(Refusal::NotFound);
+            }
+            if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.query(Instant::now())) {
+                return Err(self.pause(st, session, &site));
+            }
+            self.copy_secret(st, &request.password)?
+        };
+        self.notice(Notice::ItemCopied { item_id: None, part: CopiedPart::Password, clear_after_s: clear_after });
+        Ok(())
     }
 
     /// "Not on this site": a never-save or never-fill rule for the frame's site.

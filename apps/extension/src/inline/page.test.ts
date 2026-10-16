@@ -122,6 +122,18 @@ describe("the inline frame", () => {
     expect(posted.at(-1)).toMatchObject({ kind: "action", action: { type: "use" } });
     click(button("换一个"));
     expect(posted.at(-1)).toMatchObject({ action: { type: "regenerate" } });
+    // The copy, through Lockra; then it says so.
+    click(button("复制密码"));
+    expect(posted.at(-1)).toMatchObject({ kind: "action", action: { type: "copy" } });
+    show({
+      view: "signup",
+      site: "github.com",
+      password: "Vq7#mL2!xR9wTz4@pK8s",
+      username: "new-user",
+      rules: true,
+      copied: true,
+    });
+    expect(button("已复制")).toBeTruthy();
     show({ view: "signup", site: "github.com", password: "abc", username: "", rules: false });
     expect(root().textContent).toContain("随机生成 · 3 位");
     expect(root().textContent).toContain("填好密码框，并在 Lockra 里新建「github.com」。");

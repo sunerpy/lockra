@@ -6,9 +6,9 @@ use std::time::Duration;
 
 use super::*;
 use crate::browser::{
-    ActivityEvent, BrowserPolicy, ClientInfo, ConfirmReason, CopyRequest, FILLS_PER_MINUTE, FillRequest, FrameFacts, FrameRule, GenerateRequest, GenerateSave,
-    OtpRequest, QUERIES_PER_MINUTE, QueryPurpose, QueryRequest, Refusal, SITES_PER_TEN_MINUTES, SaveAction, SaveRequest, SearchRequest, SessionId,
-    SiteRuleRequest, Trigger, UpdateRequest,
+    ActivityEvent, BrowserPolicy, ClientInfo, ConfirmReason, CopyGeneratedRequest, CopyRequest, FILLS_PER_MINUTE, FillRequest, FrameFacts, FrameRule,
+    GenerateRequest, GenerateSave, OtpRequest, QUERIES_PER_MINUTE, QueryPurpose, QueryRequest, Refusal, SITES_PER_TEN_MINUTES, SaveAction, SaveRequest,
+    SearchRequest, SessionId, SiteRuleRequest, Trigger, UpdateRequest,
 };
 use crate::item::{Matching, Protection, SiteRuleKind, Tri};
 use crate::logins::{CopyPart, ItemDraft, ItemPatch, RevealParts, SecretChange, UrlDraft};
@@ -597,6 +597,25 @@ async fn a_sign_up_form_gets_a_password_to_its_rules_saved_at_once() {
     // Without saving: the password only.
     let plain = h.core.browser_generate(session, GenerateRequest { facts: facts("https://new.example/"), ..GenerateRequest::default() }).unwrap();
     assert!(plain.item_id.is_none() && plain.password.chars().count() >= 20);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_sign_up_menu_copies_the_password_lockra_made_for_its_site_and_nothing_else() {
+    // 2026-10-16, the user: the menu should copy the password it shows. The app puts it on the
+    // clipboard as it does a login's, cleared after the setting's time.
+    let mut h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let made = h.core.browser_generate(session, GenerateRequest { facts: facts("https://new.example/signup"), ..GenerateRequest::default() }).unwrap();
+    let _ = h.notices();
+    let copy = |url: &str, password: &str| CopyGeneratedRequest { facts: facts(url), password: pw(password) };
+    h.core.browser_copy_generated(session, copy("https://new.example/signup", made.password.as_str())).unwrap();
+    assert_eq!(h.clipboard.current().as_deref(), Some(made.password.as_str()));
+    assert!(h.notices().contains(&Notice::ItemCopied { item_id: None, part: crate::ui::CopiedPart::Password, clear_after_s: Some(30) }));
+    // Another site's page, or a password Lockra did not make: the app copies nothing.
+    h.clipboard.put_text("unchanged");
+    assert_eq!(h.core.browser_copy_generated(session, copy("https://other.example/", made.password.as_str())), Err(Refusal::NotFound));
+    assert_eq!(h.core.browser_copy_generated(session, copy("https://new.example/", "typed-by-the-page")), Err(Refusal::NotFound));
+    assert_eq!(h.clipboard.current().as_deref(), Some("unchanged"));
 }
 
 #[tokio::test(start_paused = true)]

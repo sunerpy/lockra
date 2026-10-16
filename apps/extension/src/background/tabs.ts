@@ -1,8 +1,9 @@
 // What the background remembers per tab, in memory only and for minutes: the user name of a
 // sign-in's first step, the login just filled (for the code of a second step), a login whose step
 // took the user name alone (its password comes next), a submitted form waiting for the user's
-// answer to the save prompt, and the shortcut's round of accounts. The background forgets it all
-// when the tab closes, as Lockra locks, and when it restarts.
+// answer to the save prompt, a sign-up form's generated password, and the shortcut's round of
+// accounts. The background forgets it all when the tab closes, as Lockra locks, and when it
+// restarts.
 import type { ItemSummary } from "../protocol/schemas";
 import type { TrustedFrame } from "./frames";
 import type { Clock } from "./clock";
@@ -26,6 +27,17 @@ export interface Submission {
   site: string;
 }
 
+/** A sign-up form's generated password: every menu of the form offers it, until the user asks for
+ *  another or five minutes pass without a menu of the form. */
+export interface Generated {
+  /** The form: its frame, its document and the page's rules. */
+  form: string;
+  password: string;
+  /** The login the form's password was saved as, and with which password: using the same one
+   *  again saves nothing, a newer one updates that login. */
+  saved: { itemId: string; password: string } | null;
+}
+
 interface Kept<T> {
   value: T;
   at: number;
@@ -36,6 +48,7 @@ export class TabMemory {
   private readonly fills = new Map<number, Kept<string>>();
   private readonly steps = new Map<number, Kept<string>>();
   private readonly submissions = new Map<number, Kept<Submission>>();
+  private readonly generated = new Map<number, Kept<Generated>>();
   private readonly cycles = new Map<
     number,
     Kept<{ frameId: number; items: string[]; index: number }>
@@ -103,6 +116,19 @@ export class TabMemory {
     this.submissions.delete(tabId);
   }
 
+  rememberGenerated(tabId: number, generated: Generated): void {
+    this.generated.set(tabId, { value: generated, at: this.clock.now() });
+  }
+
+  /** The password generated for `form` in this tab, if a menu of the form showed it within five
+   *  minutes; each look counts as one. */
+  generatedFor(tabId: number, form: string): Generated | null {
+    const kept = this.fresh(this.generated, tabId);
+    if (!kept || kept.form !== form) return null;
+    this.rememberGenerated(tabId, kept);
+    return kept;
+  }
+
   /** The shortcut's account for this frame: the first of `ids` on a new round, the one after the
    *  last within ten seconds (the same frame, the same matches). */
   cycle(tabId: number, frameId: number, ids: readonly string[]): string | null {
@@ -122,6 +148,7 @@ export class TabMemory {
     this.fills.delete(tabId);
     this.steps.delete(tabId);
     this.submissions.delete(tabId);
+    this.generated.delete(tabId);
     this.cycles.delete(tabId);
   }
 
@@ -130,6 +157,7 @@ export class TabMemory {
     this.fills.clear();
     this.steps.clear();
     this.submissions.clear();
+    this.generated.clear();
     this.cycles.clear();
   }
 }

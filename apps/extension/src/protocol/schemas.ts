@@ -143,6 +143,8 @@ export const opSchema = z.discriminatedUnion("op", [
     maxlength: count.nullable(),
     save: z.object({ username: nullableString, title: z.string() }).nullable(),
   }),
+  /** The sign-up menu's copy: the app copies only a password it generated for this site. */
+  z.object({ op: z.literal("copy_generated"), ...facts, password: z.string() }),
   z.object({ op: z.literal("site_rule"), kind: z.enum(["never_save", "never_fill"]), ...facts }),
   z.object({ op: z.literal("search"), text: z.string(), top_url: z.string() }),
 ]);
@@ -269,6 +271,7 @@ export const ANSWER_SCHEMAS = {
   save: savedSchema,
   update: doneSchema,
   generate: generateAnswerSchema,
+  copy_generated: doneSchema,
   site_rule: doneSchema,
   search: foundSchema,
 } as const satisfies Record<OpName, z.ZodType>;

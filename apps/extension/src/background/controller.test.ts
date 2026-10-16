@@ -466,6 +466,105 @@ describe("the inline menu", () => {
   });
 });
 
+describe("a sign-up form's generated password", () => {
+  async function signupMenu(context: Context, username = "new-user"): Promise<FakePortEnd> {
+    const answer = (await context.browser.fromContent({
+      kind: "content.focus",
+      form: "signup",
+      signup: { rules: "minlength: 20;", minlength: 8, maxlength: 64, username },
+    })) as { token: string };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("signup"));
+    return frame;
+  }
+
+  it("is the same in every menu of the form, the confirm field's too, and a new one only on request", async () => {
+    // 2026-10-16, the user: the confirm field's menu offered another password than the first's.
+    const context = await setup();
+    const { app } = context;
+    let made = 0;
+    app.handlers.generate = () => ({
+      password: `Generated-${++made}`,
+      username: "",
+      item_id: null,
+    });
+    const first = await signupMenu(context);
+    expect(lastView(first)).toMatchObject({ password: "Generated-1" });
+    first.send({ kind: "action", action: { type: "close" }, point: null, trusted: true });
+    const confirm = await signupMenu(context);
+    expect(lastView(confirm)).toMatchObject({ password: "Generated-1", username: "new-user" });
+    expect(app.requests.filter((r) => r.op === "generate")).toHaveLength(1);
+    // The refresh makes a new one, which the form's next menu offers.
+    confirm.send({ kind: "action", action: { type: "regenerate" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(lastView(confirm)).toMatchObject({ password: "Generated-2" }));
+    confirm.send({ kind: "action", action: { type: "close" }, point: null, trusted: true });
+    expect(lastView(await signupMenu(context))).toMatchObject({ password: "Generated-2" });
+    // Five minutes later the form gets a new one.
+    context.clock.advance(5 * 60_000);
+    expect(lastView(await signupMenu(context))).toMatchObject({ password: "Generated-3" });
+  });
+
+  it("saves one login however often it is used, and fills every new-password field each time", async () => {
+    const context = await setup();
+    const { app, contentGot } = context;
+    let made = 0;
+    app.handlers.generate = () => ({
+      password: `Generated-${++made}`,
+      username: "",
+      item_id: null,
+    });
+    app.handlers.save = () => ({ item_id: ITEM2 });
+    app.handlers.update = () => ({});
+    const fills = () => contentGot.filter((m) => m.kind === "fill");
+    const first = await signupMenu(context);
+    first.send({ kind: "action", action: { type: "use" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(fills()).toHaveLength(1));
+    const again = await signupMenu(context);
+    again.send({ kind: "action", action: { type: "use" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(fills()).toHaveLength(2));
+    expect(app.requests.filter((r) => r.op === "save")).toHaveLength(1);
+    expect(fills()[1]).toMatchObject({
+      values: { password: "Generated-1", newPassword: true },
+    });
+    // Another one after that changes the saved login's password: still no second login.
+    const third = await signupMenu(context);
+    expect(lastView(third)).toMatchObject({ password: "Generated-1" });
+    third.send({ kind: "action", action: { type: "regenerate" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(lastView(third)).toMatchObject({ password: "Generated-2" }));
+    third.send({ kind: "action", action: { type: "use" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(fills()).toHaveLength(3));
+    expect(app.requests.filter((r) => r.op === "save")).toHaveLength(1);
+    expect(app.requests.findLast((r) => r.op === "update")).toMatchObject({
+      item_id: ITEM2,
+      password: "Generated-2",
+    });
+    expect(fills()[2]).toMatchObject({ values: { password: "Generated-2", newPassword: true } });
+  });
+
+  it("copies the password the menu shows through Lockra, which clears the clipboard later", async () => {
+    // 2026-10-16, the user: the menu should copy it as well.
+    const context = await setup();
+    const { app } = context;
+    app.handlers.generate = () => ({ password: "Generated-1", username: "", item_id: null });
+    app.handlers.copy_generated = () => ({});
+    const frame = await signupMenu(context);
+    frame.send({
+      kind: "action",
+      action: { type: "copy" },
+      point: { x: 300, y: 30 },
+      trusted: true,
+    });
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ copied: true }));
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "copy_generated",
+      frame_url: "https://www.example.com/login",
+      password: "Generated-1",
+    });
+    // The menu stays: the password can still be used.
+    expect(lastView(frame)).toMatchObject({ view: "signup", password: "Generated-1" });
+  });
+});
+
 describe("saving what a form submitted", () => {
   it("asks to save a new login at the top right, with the user name of the step before", async () => {
     const context = await setup();
