@@ -161,7 +161,7 @@ unicode-segmentation = "=1.13.3"
 uuid = { version = "=1.26.1", features = ["v4", "serde"] }
 zeroize = { version = "=1.9.0", features = ["derive", "serde"] }
 # 1Password's 1PUX export: reading deflated entries only (flate2's Rust backend, above).
-zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "=9.0.3", default-features = false, features = ["deflate-flate2"] }
 # Password strength (crates/lockra-autofill); without `builder`, which only adds derive_builder.
 zxcvbn = { version = "=3.1.1", default-features = false }
 
