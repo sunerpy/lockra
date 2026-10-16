@@ -138,6 +138,8 @@ export class Controller {
         if (frame) await this.fillOtp(frame);
         return null;
       }
+      case "content.next_step":
+        return this.nextStep(sender);
       case "content.page_load":
         return this.pageLoad(sender);
       case "content.submitted":
@@ -171,6 +173,7 @@ export class Controller {
       pageLoad:
         isTop && this.policy?.on_page_load === true && this.connection.view.session === "open",
       prompt: null,
+      nextStep: this.memory.step(tabId) !== null,
     };
     const submission = isTop ? this.memory.submission(tabId) : null;
     if (submission) {
@@ -296,7 +299,30 @@ export class Controller {
     if (!itemId) return;
     const outcome = await this.connection.request({ op: "otp", item_id: itemId, ...frame.facts });
     if (!outcome.ok) return;
-    await this.send(frame, { kind: "fill.otp", code: outcome.value.code });
+    await this.send(frame, {
+      kind: "fill.otp",
+      code: outcome.value.code,
+      submit: outcome.value.submit,
+    });
+  }
+
+  /** The next step of a sign-in the user started: the password of the login whose user name the
+   *  step before took, filled once (the app checks the same, and that it is moments later on the
+   *  same site). */
+  private async nextStep(sender: MessageSender): Promise<null> {
+    const frame = await this.frameOf(sender);
+    if (!frame) return null;
+    const itemId = this.memory.takeStep(frame.tabId);
+    if (!itemId) return null;
+    const outcome = await this.connection.request({
+      op: "fill",
+      item_id: itemId,
+      ...frame.facts,
+      trigger: "next_step",
+      allow_http: false,
+    });
+    if (outcome.ok) await this.deliver(frame, outcome.value, { continues: false });
+    return null;
   }
 
   private async pageLoad(sender: MessageSender): Promise<null> {
@@ -315,7 +341,7 @@ export class Controller {
       trigger: "page_load",
       allow_http: false,
     });
-    if (outcome.ok) await this.deliver(frame, outcome.value);
+    if (outcome.ok) await this.deliver(frame, outcome.value, { continues: false });
     return null;
   }
 
@@ -431,10 +457,14 @@ export class Controller {
     return this.api.tabs.sendMessage(frame.tabId, message, options);
   }
 
+  /** Send a fill to its frame. A fill the user asked for that put the user name in alone (the
+   *  first step of a sign-in in two) leaves its password waiting for the next step; one that put
+   *  the password in ends it. `continues: false`: a fill as the page loads, or the next step's own,
+   *  starts no next step. */
   private async deliver(
     frame: TrustedFrame,
     answer: FillAnswer,
-    newPassword = false,
+    options: { newPassword?: boolean; continues?: boolean } = {},
   ): Promise<void> {
     const values = {
       username: answer.username,
@@ -443,11 +473,15 @@ export class Controller {
       otp: answer.otp,
       submit: answer.submit,
     };
-    await this.send(frame, {
+    const result = await this.send(frame, {
       kind: "fill",
-      values: newPassword ? { ...values, newPassword } : values,
+      values: options.newPassword ? { ...values, newPassword: true } : values,
     }).catch(() => undefined);
     this.memory.rememberFill(frame.tabId, answer.item_id);
+    const put = filledParts(result);
+    if (put.password) this.memory.dropStep(frame.tabId);
+    else if (put.filled > 0 && options.continues !== false && !options.newPassword)
+      this.memory.rememberStep(frame.tabId, answer.item_id);
   }
 
   // ---- the inline frames ---------------------------------------------------------------------
@@ -701,7 +735,7 @@ export class Controller {
         otp: null,
         submit: false,
       },
-      true,
+      { newPassword: true },
     );
     await this.close(frame);
   }
@@ -1158,4 +1192,12 @@ function isSnapshot(value: unknown): value is { url: string; site: SiteView } {
     typeof value.site === "object" &&
     value.site !== null
   );
+}
+
+/** What a content script says a fill put in; nothing when it says something else. */
+function filledParts(answer: unknown): { filled: number; password: boolean } {
+  if (typeof answer !== "object" || answer === null) return { filled: 0, password: false };
+  const filled = "filled" in answer && typeof answer.filled === "number" ? answer.filled : 0;
+  const password = "password" in answer && answer.password === true;
+  return { filled, password };
 }

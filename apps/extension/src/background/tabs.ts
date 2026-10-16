@@ -1,7 +1,8 @@
 // What the background remembers per tab, in memory only and for minutes: the user name of a
-// sign-in's first step, the login just filled (for the code of a second step), a submitted form
-// waiting for the user's answer to the save prompt, and the shortcut's round of accounts. The
-// background forgets it all when the tab closes, as Lockra locks, and when it restarts.
+// sign-in's first step, the login just filled (for the code of a second step), a login whose step
+// took the user name alone (its password comes next), a submitted form waiting for the user's
+// answer to the save prompt, and the shortcut's round of accounts. The background forgets it all
+// when the tab closes, as Lockra locks, and when it restarts.
 import type { ItemSummary } from "../protocol/schemas";
 import type { TrustedFrame } from "./frames";
 import type { Clock } from "./clock";
@@ -10,6 +11,8 @@ import type { Clock } from "./clock";
 export const KEEP_MS = 5 * 60_000;
 /** Pressing the shortcut again within this moves to the next account. */
 export const CYCLE_MS = 10_000;
+/** How long the password of a step that took the user name alone is waited for. */
+export const STEP_MS = 2 * 60_000;
 
 export interface Submission {
   username: string;
@@ -31,6 +34,7 @@ interface Kept<T> {
 export class TabMemory {
   private readonly usernames = new Map<number, Kept<string>>();
   private readonly fills = new Map<number, Kept<string>>();
+  private readonly steps = new Map<number, Kept<string>>();
   private readonly submissions = new Map<number, Kept<Submission>>();
   private readonly cycles = new Map<
     number,
@@ -66,6 +70,27 @@ export class TabMemory {
     return this.fresh(this.fills, tabId);
   }
 
+  /** A step filled `itemId`'s user name alone in this tab: its password comes next. */
+  rememberStep(tabId: number, itemId: string): void {
+    this.steps.set(tabId, { value: itemId, at: this.clock.now() });
+  }
+
+  /** The login whose password the next step of this tab's sign-in takes, if one waits. */
+  step(tabId: number): string | null {
+    return this.fresh(this.steps, tabId, STEP_MS);
+  }
+
+  /** The waiting step's login, taken: a step is filled once. */
+  takeStep(tabId: number): string | null {
+    const item = this.step(tabId);
+    this.steps.delete(tabId);
+    return item;
+  }
+
+  dropStep(tabId: number): void {
+    this.steps.delete(tabId);
+  }
+
   rememberSubmission(tabId: number, submission: Submission): void {
     this.submissions.set(tabId, { value: submission, at: this.clock.now() });
   }
@@ -95,6 +120,7 @@ export class TabMemory {
   forget(tabId: number): void {
     this.usernames.delete(tabId);
     this.fills.delete(tabId);
+    this.steps.delete(tabId);
     this.submissions.delete(tabId);
     this.cycles.delete(tabId);
   }
@@ -102,6 +128,7 @@ export class TabMemory {
   clear(): void {
     this.usernames.clear();
     this.fills.clear();
+    this.steps.clear();
     this.submissions.clear();
     this.cycles.clear();
   }

@@ -513,8 +513,11 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   `{"req", "ok": true, "result"}` or `{"req", "ok": false, "error": "<refusal>"}`. The ops are
   `status`, `query` (the logins of the best match for a frame, without secrets; with
   `"purpose": "save"` and the submitted user name and password, whether to offer saving or
-  updating), `fill` (one login's secrets), `otp` (the code of a login filled on this site in the
-  last five minutes, for a second step), `copy` (a part on the clipboard, written by the app),
+  updating), `fill` (one login's secrets; `trigger` says what asked: `shortcut`, `popup`,
+  `inline_menu`, `page_load`, or `next_step`, the page asking for the password within two minutes
+  of a fill the user asked for, once), `otp` (the code of a login filled on this site in the
+  last five minutes, for a later step; `submit` in the answer says whether to send its form, absent
+  before 0.10: not sent), `copy` (a part on the clipboard, written by the app),
   `save`, `update`, `generate` (a password to the page's `passwordrules`, `minlength` and
   `maxlength` or the bundled rules, saved at once as a new login when asked), `site_rule` (never
   save or never fill the frame's site) and `search`. Each names its frame with `frame_url`,

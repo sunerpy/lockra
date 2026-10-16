@@ -38,6 +38,16 @@ const USER_HINT =
 const OTP_HINT =
   /one.?time|otp|totp|2fa|mfa|two.?factor|verif|security.?code|auth.?code|passcode|code|验证码|校验码|动态码|安全码/i;
 const NOT_USER = /search|captcha|coupon|promo|otp|code|verif/i;
+/** The authenticator's own words: such a field takes its code, whatever is beside it. */
+const AUTHENTICATOR_HINT =
+  /totp|authenticator|google.?auth|身份验证器|验证器应用|动态口令|令牌|mfa|2fa|two.?factor/i;
+/** An image check's words, and a code the site sends by text message or mail. */
+const CAPTCHA_HINT = /captcha|kaptcha|图形|图片|图像|看不清|换一张|人机/i;
+const SENT_HINT = /sms|短信|手机验证码|text.?message|邮箱|邮件|e-?mail/i;
+/** An image check's picture, by its address or its names. */
+const CAPTCHA_IMAGE = /captcha|kaptcha|verif|vcode|validate|checkcode|piccode|imgcode|验证码/i;
+/** A control beside the field that sends a code. */
+const SEND_CODE = /获取|发送|重新发送|重发|send|resend|get.?code/i;
 
 function typeOf(input: HTMLInputElement): string {
   return (input.getAttribute("type") ?? "").toLowerCase();
@@ -80,6 +90,10 @@ function lengthOf(input: HTMLInputElement, attribute: "minlength" | "maxlength")
 /** A single field that takes a whole one-time code. */
 function looksOtp(input: HTMLInputElement): boolean {
   if (!isFillable(input) || isPassword(input)) return false;
+  return codeField(input) && !anotherCode(input);
+}
+
+function codeField(input: HTMLInputElement): boolean {
   if (autocomplete(input) === "one-time-code") return true;
   if (!["", "text", "tel", "number"].includes(typeOf(input))) return false;
   if (!OTP_HINT.test(hints(input))) return false;
@@ -88,6 +102,43 @@ function looksOtp(input: HTMLInputElement): boolean {
     (max !== null && max >= 4 && max <= 8) ||
     input.getAttribute("inputmode")?.toLowerCase() === "numeric"
   );
+}
+
+/** A code field that is not the authenticator's: an image check, or a code the site sends by text
+ *  message or mail. Its own words say so, or what is beside it: the check's picture (an image of
+ *  the check's, a canvas), a button that sends a code. A field that names the authenticator is
+ *  its, whatever is beside it. */
+function anotherCode(input: HTMLInputElement): boolean {
+  const own = hints(input);
+  if (AUTHENTICATOR_HINT.test(own)) return false;
+  if (CAPTCHA_HINT.test(own) || SENT_HINT.test(own)) return true;
+  const around = neighbourhood(input);
+  if (!around) return false;
+  if (around.querySelector("canvas")) return true;
+  const picture = Array.from(around.querySelectorAll("img")).some((img) =>
+    CAPTCHA_IMAGE.test(
+      [img.getAttribute("src"), img.alt, img.title, img.id, img.getAttribute("class")].join(" "),
+    ),
+  );
+  if (picture) return true;
+  return Array.from(
+    around.querySelectorAll('button, a, [role="button"], input[type="button" i]'),
+  ).some((control) =>
+    SEND_CODE.test(
+      `${control.textContent ?? ""} ${control.getAttribute("value") ?? ""} ${control.getAttribute("aria-label") ?? ""}`,
+    ),
+  );
+}
+
+/** The box a field sits in with its neighbours: its parent, or the one above when the parent holds
+ *  the field alone; never a whole form or the page. */
+function neighbourhood(input: HTMLInputElement): Element | null {
+  let box = input.parentElement;
+  if (box && box.children.length === 1) box = box.parentElement;
+  const doc = input.ownerDocument;
+  if (!box || box instanceof HTMLFormElement || box === doc.body || box === doc.documentElement)
+    return null;
+  return box;
 }
 
 function isBox(input: HTMLInputElement, view: View): boolean {

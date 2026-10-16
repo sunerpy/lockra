@@ -1103,7 +1103,7 @@ export const en: Messages = {
         copyOtpHelp: "Put the code on the clipboard as well.",
         autoSubmit: "Submit after filling",
         autoSubmitHelp:
-          "Submit the form once a password is filled; a step that asks for the user name alone (the first page of a two-step sign-in) is not submitted.",
+          "Submit the form once the password is filled, or the code when the login has a linked one. A step that asks for the user name alone is not submitted.",
         confirmFill: "Confirm before filling",
         confirmFillHelp: "Confirm in the page each time before filling.",
         frames: "Sign-in forms in frames of other sites",

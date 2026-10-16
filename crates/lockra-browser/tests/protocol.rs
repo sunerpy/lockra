@@ -89,6 +89,7 @@ fn requests() -> Vec<(&'static str, Request)> {
         ),
         ("fill", r(4, Op::Fill(FillRequest { item_id: Some(id(1)), facts: facts(), trigger: Trigger::InlineMenu, allow_http: false }))),
         ("fill_likeliest", r(5, Op::Fill(FillRequest { item_id: None, facts: facts(), trigger: Trigger::Shortcut, allow_http: true }))),
+        ("fill_next_step", r(13, Op::Fill(FillRequest { item_id: Some(id(1)), facts: facts(), trigger: Trigger::NextStep, allow_http: false }))),
         ("otp", r(6, Op::Otp(OtpRequest { item_id: id(1), facts: facts() }))),
         ("copy", r(7, Op::Copy(CopyRequest { item_id: id(1), part: lockra_core::CopyPart::Password }))),
         (
@@ -212,7 +213,7 @@ fn protocol_messages() {
                 otp: Some("123456".into()),
                 submit: false,
             })),
-            "otp": ok(6, Answer::Otp(OtpAnswer { code: "654321".into(), copied: true })),
+            "otp": ok(6, Answer::Otp(OtpAnswer { code: "654321".into(), copied: true, submit: true })),
             "saved": ok(8, Answer::Saved { item_id: id(2) }),
             "generated": ok(10, Answer::Generated(GenerateAnswer { password: Zeroizing::new("q7vx2mz9kd4w8p1r6t3y".into()), username: "alice".into(), item_id: Some(id(3)) })),
             "found": ok(12, Answer::Found { items: vec![summary()] }),

@@ -244,10 +244,16 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   key) and whether its menu opens as a field gets the focus are all `storage.local` holds besides
   (no login, no site); session keys live in the background's memory only, and
   the popup's last list of the site's logins (no secret) in `storage.session`, emptied as Lockra
-  locks. Its one optional API permission, `privacy`, is asked for only when the user turns on
-  "Let Lockra take over the browser's passwords" on its options page; it switches the browser's
-  password saving (and, if chosen, its address and card autofill) off, and turning the switch off
-  clears those settings and removes the permission. The content script runs in its isolated world, listens to no `window` message and reports
+  locks. A fill the user did not ask for at that moment happens only as the next step of one they
+  did, decided by the app: the code of the login filled on the same site within five minutes
+  (`otp`), and, after a fill that put the user name in alone, that login's password once on a page
+  of the same site within two minutes (`fill` with `"trigger": "next_step"`, named, never for a
+  login of the `confirm` level, never in a frame of another site or over a downgrade to `http`,
+  and never after a fill as the page loads). Its one optional API permission, `privacy`, is asked
+  for only when the user turns on "Let Lockra take over the browser's passwords" on its options
+  page; it switches the browser's password saving (and, if chosen, its address and card autofill)
+  off, and turning the switch off clears those settings and removes the permission. The content
+  script runs in its isolated world, listens to no `window` message and reports
   no address; the menu and the save prompt are extension frames in a closed shadow root in the top
   layer, shown nothing without the token the background handed out (where the browser lists the frame, it must also sit under the page's; Chromium's webNavigation leaves the extension's own frames out, so there the token alone binds it), and a click in them counts only
   when the frame has shown unmoved for 300 ms, is on top at the click, has no see-through, filtered,

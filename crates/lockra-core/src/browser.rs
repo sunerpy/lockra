@@ -40,6 +40,9 @@ pub const QUERIES_PER_MINUTE: usize = 120;
 pub const SITES_PER_TEN_MINUTES: usize = 20;
 /// How long after a fill the linked code is given for the same site (a sign-in in two steps).
 pub const OTP_FOLLOW_UP: Duration = Duration::from_secs(5 * 60);
+/// How long after a fill the user asked for its sign-in's next step may get the password, once: a
+/// first step that took the user name alone, then the page that asks for the password.
+pub const NEXT_STEP_FOR: Duration = Duration::from_secs(2 * 60);
 /// The most results a search returns.
 pub const SEARCH_MAX: usize = 50;
 /// The longest URL a request may carry (characters).
@@ -491,6 +494,10 @@ pub enum Trigger {
     InlineMenu,
     /// The page loaded (only where the policy and the login allow it).
     PageLoad,
+    /// The next step of a sign-in the user started moments before on this site: the page that
+    /// asks for the password after the one that took the user name. Named, filled once, never for
+    /// a login that asks first and never where the user would be asked.
+    NextStep,
 }
 
 /// What a query is for.
@@ -648,6 +655,9 @@ pub struct OtpAnswer {
     pub code: String,
     /// It went to the clipboard too.
     pub copied: bool,
+    /// Submit the code's form once filled (the login's choice, or the policy's).
+    #[serde(default)]
+    pub submit: bool,
 }
 
 /// A request to put a part of a login on the clipboard (the popup's search).
@@ -850,11 +860,14 @@ pub(crate) struct SessionState {
     pub sites: VecDeque<(Instant, String)>,
     /// The logins it filled, with the site and when: a second step may get their codes.
     pub filled: Vec<(Uuid, String, Instant)>,
+    /// The fills the user asked for, with the site and when: their next step may get the
+    /// password, once.
+    pub steps: Vec<(Uuid, String, Instant)>,
 }
 
 impl SessionState {
     pub(crate) fn new(pairing: Uuid, client: ClientInfo) -> Self {
-        Self { pairing, client, queries: VecDeque::new(), secrets: VecDeque::new(), sites: VecDeque::new(), filled: Vec::new() }
+        Self { pairing, client, queries: VecDeque::new(), secrets: VecDeque::new(), sites: VecDeque::new(), filled: Vec::new(), steps: Vec::new() }
     }
 
     /// Count a query at `now`; false once over the limit.
@@ -886,6 +899,19 @@ impl SessionState {
     /// `item` was filled on `site` in the last [`OTP_FOLLOW_UP`].
     pub(crate) fn filled_lately(&self, item: Uuid, site: &str, now: Instant) -> bool {
         self.filled.iter().any(|(id, s, at)| *id == item && s == site && now.duration_since(*at) < OTP_FOLLOW_UP)
+    }
+
+    /// The user asked for `item` on `site` at `now`: its next step may come.
+    pub(crate) fn stepped(&mut self, item: Uuid, site: &str, now: Instant) {
+        self.steps.retain(|(id, s, at)| !(*id == item && s == site) && now.duration_since(*at) < NEXT_STEP_FOR);
+        self.steps.push((item, site.to_owned(), now));
+    }
+
+    /// The next step of a fill of `item` on `site` in the last [`NEXT_STEP_FOR`], taken: once.
+    pub(crate) fn take_step(&mut self, item: Uuid, site: &str, now: Instant) -> bool {
+        let before = self.steps.len();
+        self.steps.retain(|(id, s, at)| !(*id == item && s == site && now.duration_since(*at) < NEXT_STEP_FOR));
+        self.steps.len() < before
     }
 }
 

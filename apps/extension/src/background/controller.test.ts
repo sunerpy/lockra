@@ -118,14 +118,17 @@ async function setup() {
   });
   const contentGot: BackgroundMessage[] = [];
   let verify = { ok: true };
+  /** What the page's content script answers a fill: what went in. */
+  const filled = { value: { filled: 2, password: true, code: false } };
   browser.content.set("1:0", (message) => {
     contentGot.push(message as BackgroundMessage);
     const m = message as BackgroundMessage;
     if (m.kind === "frame.verify") return verify;
-    if (m.kind === "fill") return { filled: 2 };
+    if (m.kind === "fill") return filled.value;
     return undefined;
   });
   return {
+    filled,
     app,
     browser,
     clock,
@@ -572,6 +575,61 @@ describe("saving what a form submitted", () => {
   });
 });
 
+/** Choose the first login from the inline menu of frame 0, and wait for its fill. */
+async function fillFromMenu(context: Context): Promise<void> {
+  const { browser, contentGot } = context;
+  const fills = contentGot.filter((m) => m.kind === "fill").length;
+  const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+    token: string;
+  };
+  const frame = inlineFrame(context, answer.token);
+  await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+  frame.send({ kind: "action", action: { type: "choose", index: 0 }, point: null, trusted: true });
+  await vi.waitFor(() =>
+    expect(contentGot.filter((m) => m.kind === "fill").length).toBe(fills + 1),
+  );
+}
+
+describe("the next step of a sign-in", () => {
+  it("fills the password of the login whose user name a step took, once, on the next page", async () => {
+    const context = await setup();
+    const { browser, app, contentGot, filled } = context;
+    filled.value = { filled: 1, password: false, code: false };
+    await fillFromMenu(context);
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      nextStep: true,
+    });
+    filled.value = { filled: 1, password: true, code: false };
+    const fills = () => app.requests.filter((r) => r.op === "fill");
+    const before = fills().length;
+    await browser.fromContent({ kind: "content.next_step" });
+    await vi.waitFor(() => expect(fills()).toHaveLength(before + 1));
+    expect(fills().at(-1)).toMatchObject({ op: "fill", item_id: ITEM, trigger: "next_step" });
+    expect(contentGot.filter((m) => m.kind === "fill")).toHaveLength(2);
+    // Once: nothing more is waited for or asked.
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      nextStep: false,
+    });
+    await browser.fromContent({ kind: "content.next_step" });
+    expect(fills()).toHaveLength(before + 1);
+  });
+
+  it("is not waited for after a fill that put the password in, nor past two minutes", async () => {
+    const context = await setup();
+    const { browser, filled } = context;
+    await fillFromMenu(context);
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      nextStep: false,
+    });
+    filled.value = { filled: 1, password: false, code: false };
+    await fillFromMenu(context);
+    context.clock.advance(2 * 60_000);
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      nextStep: false,
+    });
+  });
+});
+
 describe("the code of a second step", () => {
   it("is filled on the next page of the tab where a login was just filled", async () => {
     const context = await setup();
@@ -598,10 +656,21 @@ describe("the code of a second step", () => {
     await browser.fromContent({ kind: "content.otp" });
     await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill.otp")).toBe(true));
     expect(app.requests.at(-1)).toMatchObject({ op: "otp", item_id: ITEM });
+    // An app that does not say whether to send the code's form: not sent.
     expect(contentGot.find((m) => m.kind === "fill.otp")).toEqual({
       kind: "fill.otp",
       code: "654321",
+      submit: false,
     });
+    app.handlers.otp = () => ({ code: "123456", copied: false, submit: true });
+    await browser.fromContent({ kind: "content.otp" });
+    await vi.waitFor(() =>
+      expect(contentGot.findLast((m) => m.kind === "fill.otp")).toEqual({
+        kind: "fill.otp",
+        code: "123456",
+        submit: true,
+      }),
+    );
     // Five minutes on, nothing is asked any more.
     context.clock.advance(5 * 60_000);
     expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({

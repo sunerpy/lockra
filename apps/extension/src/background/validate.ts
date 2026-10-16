@@ -24,6 +24,7 @@ const contentSchema = z.discriminatedUnion("kind", [
       .optional(),
   }),
   z.object({ kind: z.literal("content.otp") }),
+  z.object({ kind: z.literal("content.next_step") }),
   z.object({ kind: z.literal("content.page_load") }),
   z.object({
     kind: z.literal("content.submitted"),

@@ -13,8 +13,16 @@ import type {
 } from "../shared/messages";
 import type { Measurer } from "./clickjack";
 import { FieldIcon } from "./field-icon";
-import { type FormScan, type View, findLoginForms, findOtp, isFillable, scanField } from "./fields";
-import { fillForm, fillOtp } from "./fill";
+import {
+  type FormScan,
+  type View,
+  findLoginForms,
+  findOtp,
+  formOf,
+  isFillable,
+  scanField,
+} from "./fields";
+import { type FillResult, fillForm, fillOtp, submitForm } from "./fill";
 import { FrameHost } from "./frame-host";
 import { SubmitWatcher } from "./submit";
 
@@ -38,6 +46,8 @@ export interface AgentOptions {
 
 const OBSERVE_EVERY_MS = 500;
 const OTP_FOR_MS = 5 * 60_000;
+/** How long the password of a step that gave the user name alone is waited for. */
+const STEP_FOR_MS = 2 * 60_000;
 
 type MenuKey = "ArrowDown" | "ArrowUp" | "Enter" | "Escape";
 
@@ -112,6 +122,7 @@ export class ContentAgent {
   private lastObserved = 0;
   private observeTimer: ReturnType<typeof setTimeout> | undefined;
   private otpUntil = 0;
+  private stepUntil = 0;
   /** The page set `open` (a dialog) since the last look: what it opened may cover the menu. */
   private opened = false;
   private readonly trusted: (event: Event) => boolean;
@@ -190,6 +201,10 @@ export class ContentAgent {
     if (answer.otp) {
       this.otpUntil = this.options.now() + OTP_FOR_MS;
       this.lookForOtp();
+    }
+    if (answer.nextStep) {
+      this.stepUntil = this.options.now() + STEP_FOR_MS;
+      this.lookForStep();
     }
     if (answer.pageLoad && findLoginForms(doc, this.options.view).length > 0)
       await this.send({ kind: "content.page_load" });
@@ -391,9 +406,9 @@ export class ContentAgent {
     if (!isBackgroundMessage(message)) return undefined;
     switch (message.kind) {
       case "fill":
-        return Promise.resolve({ filled: this.fill(message.values) });
+        return Promise.resolve(this.fill(message.values));
       case "fill.otp": {
-        this.fillCode(message.code);
+        this.fillCode(message.code, message.submit === true);
         return Promise.resolve(null);
       }
       case "menu.open": {
@@ -432,24 +447,34 @@ export class ContentAgent {
     return null;
   }
 
-  /** Fill the form the menu sits on, else the focused field's, else the page's sign-in form. */
-  private fill(values: FillValues): number {
+  /** Fill the form the menu sits on, else the focused field's, else the page's sign-in form; then
+   *  watch this page for what comes next: the password of a step that took the user name alone,
+   *  and the code of a login that has one (a sign-in that changes the page without loading
+   *  another; the background tells the next page). */
+  private fill(values: FillValues): FillResult {
     const view = this.options.view;
     const active = deepActive(this.options.doc);
     const field =
       this.anchor ?? (active instanceof HTMLInputElement && isFillable(active) ? active : null);
     const scan = field ? scanField(field, view) : findLoginForms(this.options.doc, view)[0];
-    if (!scan) return 0;
-    return fillForm(scan, values, view);
+    if (!scan) return { filled: 0, password: false, code: false };
+    const result = fillForm(scan, values, view);
+    const now = this.options.now();
+    if (result.password) this.stepUntil = 0;
+    else if (result.filled > 0 && !values.newPassword) this.stepUntil = now + STEP_FOR_MS;
+    if (values.otp !== null && !result.code) this.otpUntil = now + OTP_FOR_MS;
+    this.watch();
+    return result;
   }
 
-  private fillCode(code: string): void {
+  private fillCode(code: string, submit: boolean): void {
     const view = this.options.view;
     const active = deepActive(this.options.doc);
     const focused =
       active instanceof HTMLInputElement && isFillable(active) ? scanField(active, view) : null;
     const fields = focused?.kind === "otp" ? focused.otp : findOtp(this.options.doc, view);
-    if (fields) fillOtp(fields, code);
+    const first = fields?.[0];
+    if (fields && first && fillOtp(fields, code) && submit) void submitForm(formOf(first), view);
     this.otpUntil = 0;
   }
 
@@ -466,9 +491,21 @@ export class ContentAgent {
     }
   }
 
+  /** The next step of a sign-in: a form with a password shows (asked for once). */
+  private lookForStep(): void {
+    if (this.options.now() >= this.stepUntil) {
+      this.stepUntil = 0;
+      return;
+    }
+    if (findLoginForms(this.options.doc, this.options.view).length > 0) {
+      this.stepUntil = 0;
+      void this.send({ kind: "content.next_step" });
+    }
+  }
+
   /** What the observer still has to watch for. */
   private get watching(): boolean {
-    return this.watcher.watching || this.otpUntil > 0 || this.menu !== null;
+    return this.watcher.watching || this.otpUntil > 0 || this.stepUntil > 0 || this.menu !== null;
   }
 
   /** Observe the page while there is something to watch, at most every 500 ms. */
@@ -498,6 +535,7 @@ export class ContentAgent {
   private tick(): void {
     this.watcher.check();
     if (this.otpUntil > 0) this.lookForOtp();
+    if (this.stepUntil > 0) this.lookForStep();
     if (this.menu && this.anchor && !this.anchor.isConnected) this.closeMenu();
     // A dialog the page opened (`open` set) may cover the menu. Nothing else does (popovers and full
     // screen have their own events), and raising it for nothing costs it Chrome's visibility check:
