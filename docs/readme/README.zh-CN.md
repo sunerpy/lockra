@@ -10,7 +10,7 @@
 [![Release](https://img.shields.io/github/v/release/sunerpy/lockra)](https://github.com/sunerpy/lockra/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](../../LICENSE)
 
-[亮点](#亮点) · [特性](#特性) · [截图](#截图) · [安装](#安装) · [快速开始](#快速开始) · [文档](https://firlab.app/lockra/zh/) · [开发](#开发)
+[亮点](#亮点) · [演示](#演示) · [特性](#特性) · [截图](#截图) · [安装](#安装) · [快速开始](#快速开始) · [文档](https://firlab.app/lockra/zh/) · [开发](#开发)
 
 [English](../../README.md) · [**简体中文**](./README.zh-CN.md)
 
@@ -42,6 +42,14 @@ Lockra 是一个两步验证器，也是密码管理器，支持 Windows、macOS
   找回同步空间。
 - **无需账号**：无需注册，没有遥测，也没有能读取验证码或密码的服务器。账号可以从 Google 身份验证器或 Microsoft
   Authenticator 迁入，也可以迁回去。
+
+## 演示
+
+在网站上用 Lockra 按规则生成的密码注册，开启这个网站的两步验证，再分几页登录，登录项和验证码自动填入；然后是
+命令面板、密码生成器和主题。录制时使用的是真实的应用和浏览器扩展，网站是虚构的演示站点；更清晰的版本在
+[网站](https://firlab.app/lockra/zh/)上播放。
+
+<img width="960" height="600" alt="一分钟的 Lockra 录屏：用生成的密码在网站上注册，添加它的两步验证码，登录时自动填入登录项和验证码，然后是命令面板、密码生成器和主题" src="https://github.com/user-attachments/assets/4b3eeea0-588d-4896-a807-ff2f734cff45" />
 
 ## 特性
 

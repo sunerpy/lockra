@@ -10,7 +10,7 @@
 [![Release](https://img.shields.io/github/v/release/sunerpy/lockra)](https://github.com/sunerpy/lockra/releases)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-[Highlights](#highlights) · [Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Quick start](#quick-start) · [Documentation](https://firlab.app/lockra/) · [Development](#development)
+[Highlights](#highlights) · [Demo](#demo) · [Features](#features) · [Screenshots](#screenshots) · [Install](#install) · [Quick start](#quick-start) · [Documentation](https://firlab.app/lockra/) · [Development](#development)
 
 [**English**](./README.md) · [简体中文](./docs/readme/README.zh-CN.md)
 
@@ -50,6 +50,15 @@ passwords and the extension are new in 0.10.0.
   pairing link or invitation; a recovery key brings the space back if every device is lost.
 - **No account**: no sign-up, no telemetry and no server that can read your codes or passwords.
   Move your accounts in from Google Authenticator or Microsoft Authenticator, and back out again.
+
+## Demo
+
+Signing up on a site with a password Lockra makes to its rules, turning on its two-step
+verification, and signing in page by page with the login and the code filled in; then the command
+palette, the generator and the themes. Recorded with the real app and its browser extension, on a
+made-up site; a sharper version plays on the [website](https://firlab.app/lockra/).
+
+<img width="960" height="600" alt="A one-minute recording of Lockra: signing up on a site with a generated password, adding its two-step code, signing in with the login and the code filled in, then the command palette, the generator and the themes" src="https://github.com/user-attachments/assets/17733da1-c45a-4d01-adfe-29a017da41dc" />
 
 ## Features
 

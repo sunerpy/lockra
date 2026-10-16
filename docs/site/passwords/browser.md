@@ -13,6 +13,8 @@ encrypted between the two, and only while Lockra runs and is unlocked; Lockra de
 may be filled, and with which login. The extension locks and unlocks with Lockra and never asks for
 the master password.
 
+<ScreenVideo src="/screens/tour-en.mp4" poster="/screens/tour-en-light.webp" width="1280" height="800" label="A one-minute recording of Lockra: signing up on a site with a generated password, adding its two-step code, signing in with the login and the code filled in, then the command palette, the generator and the themes." caption="Signing up with a generated password, adding the code, and signing in page by page with both filled in: the extension with the real app, on a made-up site." />
+
 ## What you need
 
 - Lockra 0.10.0 or later on Windows, macOS or Linux, running on the same computer as the browser.
