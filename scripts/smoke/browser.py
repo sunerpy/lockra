@@ -8,7 +8,8 @@ the extension, with site access granted up front (a copy whose manifest asks for
 outright: the request flow and its prompt are the unit tests' and the manual matrix's). Then:
 pairing, the code compared on both sides and approved in the app; filling from the inline menu with
 the keyboard; the linked code on the next page, in one field and in six; the extension's shortcut
-on a sign-in in two pages (a real X key, which no WebDriver key reaches); the policy's limits (an
+on a sign-in in two pages (a real X key, which no WebDriver key reaches), the password page filled
+by itself as the fill's next step; the policy's limits (an
 HTTP page for an HTTPS login, a frame of another site); the pages that try to hijack a click (made
 transparent under the menu, covered by an element and by a popover opened after it, a frame of the
 menu's page of their own); two thousand fields; a sign-up form's generated password; the save and
@@ -419,7 +420,9 @@ class Smoke:
             sys.exit(f"smoke: the code filled is {value}, not the login's")
 
     def shortcut_two_steps(self):
-        """The extension's shortcut on a sign-in in two pages: the user name, then the password."""
+        """The extension's shortcut on a sign-in in two pages: the user name on the first; the next
+        page asks for the password and gets it by itself, the next step of the fill the user asked
+        for (not sent: the login has a code, and the policy sends nothing anyway)."""
         self.web.go(self.url("login.test", "two-step.html"))
         self.web.click(self.web.wait("#username"))
         if self.web.menu_open():
@@ -427,12 +430,10 @@ class Smoke:
         self.x_key("ctrl+shift+l")
         until("the shortcut to fill the user name", lambda: self.web.values("#username") == [LOGIN_USER], 30)
         self.web.click(self.web.wait("#next"))
-        self.web.click(self.web.wait("#password"))
-        if self.web.menu_open():
-            self.web.keys(ESCAPE)
-        self.x_key("ctrl+shift+l")
-        until("the shortcut to fill the password on the next page", lambda: self.web.values("#password") == [LOGIN_PASSWORD], 30)
-        print("smoke: the shortcut filled a sign-in in two pages")
+        until("the next step to fill the password by itself", lambda: self.web.values("#password") == [LOGIN_PASSWORD], 30)
+        if "two-step-password" not in self.web.run("return location.pathname"):
+            sys.exit("smoke: the password page was sent, with nothing that sends it")
+        print("smoke: the shortcut filled a sign-in's first page, and its next page got the password by itself")
 
     def http_page(self):
         """An HTTPS login on an HTTP page: the menu warns, and nothing goes in without consent."""

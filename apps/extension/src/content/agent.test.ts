@@ -356,11 +356,12 @@ describe("what the background sends", () => {
     const { agent, deliver } = setup({}, null);
     await agent.start();
     const values = { username: "alice", password: "s3cret", fields: [], otp: null, submit: false };
-    expect(await deliver({ kind: "fill", values })).toEqual({ filled: 2 });
+    const both = { filled: 2, password: true, code: false };
+    expect(await deliver({ kind: "fill", values })).toEqual(both);
     expect([input("user").value, input("pass").value]).toEqual(["alice", "s3cret"]);
     input("user").value = "";
     input("pass").focus();
-    expect(await deliver({ kind: "fill", values })).toEqual({ filled: 2 });
+    expect(await deliver({ kind: "fill", values })).toEqual(both);
     expect(input("user").value).toBe("alice");
     agent.stop();
   });
@@ -433,6 +434,70 @@ describe("the page's own work", () => {
     await vi.waitFor(() => expect(sent.some((m) => m.kind === "content.otp")).toBe(true), {
       timeout: 2_000,
     });
+    agent.stop();
+  });
+
+  it("watches the same page for the next step: the password after the user name, the code after the password", async () => {
+    // A sign-in that changes the page without loading another (2026-10-16).
+    document.body.innerHTML = `<form id="step"><input id="email" type="email" autocomplete="username"><button>Next</button></form>`;
+    const { agent, sent, deliver } = setup({}, null);
+    await agent.start();
+    const values = {
+      username: "me@example.com",
+      password: "s3cret",
+      fields: [],
+      otp: "123456",
+      submit: false,
+    };
+    input("email").focus();
+    expect(await deliver({ kind: "fill", values })).toEqual({
+      filled: 1,
+      password: false,
+      code: false,
+    });
+    // The page goes on: a password field takes the user name's place.
+    document.body.innerHTML = `<form id="step"><input id="pass" type="password"><button>Sign in</button></form>`;
+    await vi.waitFor(() => expect(sent.some((m) => m.kind === "content.next_step")).toBe(true), {
+      timeout: 2_000,
+    });
+    expect(sent.filter((m) => m.kind === "content.next_step")).toHaveLength(1);
+    input("pass").focus();
+    expect(await deliver({ kind: "fill", values })).toEqual({
+      filled: 1,
+      password: true,
+      code: false,
+    });
+    // Then the code's field comes: asked for once it shows.
+    document.body.innerHTML = `<form id="step"><input id="code" autocomplete="one-time-code"><button>Verify</button></form>`;
+    await vi.waitFor(() => expect(sent.some((m) => m.kind === "content.otp")).toBe(true), {
+      timeout: 2_000,
+    });
+    agent.stop();
+  });
+
+  it("looks for the password of a step the background says is next, and sends the code's step when told", async () => {
+    document.body.innerHTML = `<form id="f"><input id="pass" type="password"><button id="go">Sign in</button></form>`;
+    const next = setup({ nextStep: true });
+    await next.agent.start();
+    await vi.waitFor(
+      () => expect(next.sent.some((m) => m.kind === "content.next_step")).toBe(true),
+      { timeout: 2_000 },
+    );
+    next.agent.stop();
+    // The code's step, sent once its code is in when the app says so.
+    document.body.innerHTML = `<form id="f"><input id="code" autocomplete="one-time-code"><button id="verify">Verify</button></form>`;
+    const { agent, deliver } = setup();
+    await agent.start();
+    const verified = vi.fn((event: Event) => event.preventDefault());
+    document.getElementById("verify")?.addEventListener("click", verified);
+    await deliver({ kind: "fill.otp", code: "654321", submit: true });
+    expect(input("code").value).toBe("654321");
+    await vi.waitFor(() => expect(verified).toHaveBeenCalledTimes(1));
+    // Not told: filled, not sent.
+    input("code").value = "";
+    await deliver({ kind: "fill.otp", code: "111111", submit: false });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(verified).toHaveBeenCalledTimes(1);
     agent.stop();
   });
 

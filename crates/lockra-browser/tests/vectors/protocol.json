@@ -162,6 +162,18 @@
       "top_url": "https://www.example.com/",
       "trigger": "shortcut"
     },
+    "fill_next_step": {
+      "allow_http": false,
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+      "op": "fill",
+      "req": 13,
+      "top_url": "https://www.example.com/",
+      "trigger": "next_step"
+    },
     "generate": {
       "frame_chain": [
         "https://www.example.com/frame"
@@ -314,7 +326,8 @@
       "req": 6,
       "result": {
         "code": "654321",
-        "copied": true
+        "copied": true,
+        "submit": true
       }
     },
     "query": {

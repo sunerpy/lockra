@@ -93,7 +93,7 @@ export const frameFactsSchema = z.object({
 });
 export type FrameFacts = z.infer<typeof frameFactsSchema>;
 
-export const TRIGGERS = ["shortcut", "popup", "inline_menu", "page_load"] as const;
+export const TRIGGERS = ["shortcut", "popup", "inline_menu", "page_load", "next_step"] as const;
 export type Trigger = (typeof TRIGGERS)[number];
 
 export const copyPartSchema = z.discriminatedUnion("type", [
@@ -241,7 +241,12 @@ export const fillAnswerSchema = z.object({
 });
 export type FillAnswer = z.infer<typeof fillAnswerSchema>;
 
-export const otpAnswerSchema = z.object({ code: z.string(), copied: z.boolean() });
+/** `submit`: send the code's form once it is in (an app before 0.10 does not say: not sent). */
+export const otpAnswerSchema = z.object({
+  code: z.string(),
+  copied: z.boolean(),
+  submit: z.boolean().default(false),
+});
 export type OtpAnswer = z.infer<typeof otpAnswerSchema>;
 
 export const foundSchema = z.object({ items: z.array(itemSummarySchema) });

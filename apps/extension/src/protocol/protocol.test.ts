@@ -169,6 +169,13 @@ describe("requests", () => {
         trigger: "shortcut",
         allow_http: true,
       }),
+      fill_next_step: request(13, {
+        op: "fill",
+        item_id: item,
+        ...facts,
+        trigger: "next_step",
+        allow_http: false,
+      }),
       otp: request(6, { op: "otp", item_id: item, ...facts }),
       copy: request(7, { op: "copy", item_id: item, part: copyPart("password") }),
       save: request(8, {

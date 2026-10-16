@@ -33,6 +33,9 @@ export type ContentMessage =
     }
   /** A one-time-code field showed up (or got the focus). */
   | { kind: "content.otp" }
+  /** A sign-in form with a password showed up after a fill that put in the user name alone: the
+   *  next step of that sign-in. */
+  | { kind: "content.next_step" }
   /** A sign-in form on a page that just loaded (only asked when the policy fills as pages load). */
   | { kind: "content.page_load" }
   /** A form was submitted (or its typed password went away with the page). */
@@ -59,6 +62,9 @@ export interface StartAnswer {
   pageLoad: boolean;
   /** A save or update prompt waits to be shown in this page. */
   prompt: string | null;
+  /** Look for a sign-in form with a password: a fill gave the user name alone a moment ago, and
+   *  its password comes next. */
+  nextStep?: boolean;
 }
 
 export interface FocusAnswer {
@@ -84,7 +90,8 @@ export interface FillValues {
 
 export type BackgroundMessage =
   | { kind: "fill"; values: FillValues }
-  | { kind: "fill.otp"; code: string }
+  /** The code of a second step; `submit`: send its form once the code is in (the app's word). */
+  | { kind: "fill.otp"; code: string; submit?: boolean }
   /** Show the inline frame `token` under the focused field (the shortcut's confirmations). */
   | { kind: "menu.open"; token: string }
   /** Show the save or update prompt `token` at the top right. */

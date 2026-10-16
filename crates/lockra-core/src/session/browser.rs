@@ -471,12 +471,13 @@ impl Core {
             let entry = item.totp_entry.and_then(|e| vault.data.get(e)).ok_or(Refusal::NotFound)?;
             let code = current_code(entry, now_ms);
             let (title, copy) = (item.title.clone(), policy.copy_otp);
+            let submit = choose(&item.autofill.auto_submit, policy.auto_submit);
             if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.secret(&site, now)) {
                 return Err(self.pause(st, session, &site));
             }
             let clear_after = if copy { self.copy_secret(st, &code)? } else { None };
             self.record(st, session, &site, ActivityEvent::OtpFilled, Some(request.item_id), Some(title));
-            (OtpAnswer { code, copied: copy }, clear_after)
+            (OtpAnswer { code, copied: copy, submit }, clear_after)
         };
         self.changed();
         if answer.copied {
@@ -854,17 +855,29 @@ impl Core {
             return Err(Refusal::CrossOrigin);
         }
         let (_, found) = matches(data, &frame.frame);
+        let next_step = request.trigger == Trigger::NextStep;
         let (item_id, downgrade) = match request.item_id {
             Some(id) => found.iter().copied().find(|(found, _)| *found == id).ok_or(Refusal::NoMatch)?,
+            None if next_step => return Err(Refusal::NoMatch),
             None => found.first().copied().ok_or(Refusal::NoMatch)?,
         };
         let item = data.items.iter().find(|i| i.id == item_id).ok_or(Refusal::NotFound)?;
         if request.trigger == Trigger::PageLoad {
             page_load_allowed(&policy, item, frame, found.len(), downgrade)?;
-        } else if downgrade && !request.allow_http {
+        } else if downgrade && (next_step || !request.allow_http) {
             return Err(Refusal::HttpDowngrade);
         }
         let protected = item.protection_level() == Protection::Confirm;
+        if next_step {
+            // Nothing here asks the user: a login that asks first, or a frame of another site, waits
+            // for the user to fill it as usual.
+            if protected {
+                return Err(Refusal::Protected);
+            }
+            if cross {
+                return Err(Refusal::CrossOrigin);
+            }
+        }
         let mut reasons = Vec::new();
         if protected {
             reasons.push(ConfirmReason::Protected);
@@ -886,6 +899,9 @@ impl Core {
             needs_proof: protected,
             expires_at_ms: self.now_ms() + millis(CONFIRM_TTL),
         });
+        if next_step && !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.take_step(item_id, &site, now)) {
+            return Err(Refusal::NoMatch);
+        }
         if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.secret(&site, now)) {
             return Err(self.pause(st, session, &site));
         }
@@ -957,6 +973,11 @@ impl Core {
             touch_items(st);
             if let Some(state) = st.browser.sessions.get_mut(&session.0) {
                 state.filled(item_id, &site, now);
+                // A fill the user asked for may have a next step; one as the page loads, or a next
+                // step itself, has none.
+                if matches!(trigger, Trigger::Shortcut | Trigger::Popup | Trigger::InlineMenu) {
+                    state.stepped(item_id, &site, now);
+                }
             }
             self.record(st, session, &site, ActivityEvent::Filled, Some(item_id), Some(title));
             (answer, copied)

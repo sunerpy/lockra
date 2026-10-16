@@ -116,9 +116,26 @@ off **Open Lockra's menu when a field is clicked** on the extension's settings p
 opens only from that mark ([The browser's own password manager](#the-browser-s-own-password-manager)).
 
 Whichever way you fill, only the visible fields of the form you are in are filled, and the custom
-fields of the login that name a page field. A form is submitted after filling only if you turned
-that on, and only once a password went in: a first step that asks for the user name alone is left
-for you to send.
+fields of the login that name a page field. A form is submitted after filling only with **Submit
+after filling** on:
+
+- A step that asks for the user name alone is not submitted: **Next** is yours.
+- A login without a linked code is submitted once its password is in.
+- A login with a linked code is submitted once its code is in: with the password and the code on
+  one page, once both are; with the code on the next page, the password page waits for your **Sign
+  in**, and the code's page is submitted once the code is filled.
+
+Lockra submits as Enter would, with a click on the form's submit button, passing over buttons such
+as **Get code**, **Cancel** or another service's sign-in; a button the page has not enabled yet is
+waited for up to a second, and a form whose button stays disabled is not submitted.
+
+### Sign-ins over several pages
+
+A sign-in that asks for the user name first and the password on the next page is filled once, on
+the first page: after you choose **Next**, the next page of the same site that shows a password
+field within two minutes gets the same login's password by itself. It happens once, in the same tab
+and on the same site. A login set to **Verify first**, or a form in a frame of another site, is not
+filled this way: fill it again as usual. A fill as the page loads has no next page.
 
 ### When a fill asks first
 
@@ -136,9 +153,12 @@ for you to send.
 ## The code on the next page
 
 When a login has a linked code, the extension fills the code after the password: into the code
-field of the same page, or of the next page of the same site within five minutes, when a sign-in
-asks for it in a second step. Lockra recognises fields marked for one-time codes, fields named like
-one, and a code split into one box per digit. The code also goes to the clipboard, cleared after the
+field of the same page, or of a later page of the same site within five minutes, when a sign-in
+asks for it in a step of its own, a page that only changes its content included. With **Submit
+after filling** on, the code's form is then submitted (above). Lockra recognises fields marked for
+one-time codes, fields named like one, and a code split into one box per digit; it fills no image
+check, and no code field that says it is for a code sent by text message or mail or has a **Get
+code** button beside it. The code also goes to the clipboard, cleared after the
 time set in **Settings › Security › Clear clipboard**. **Fill in codes** and **Copy codes** turn
 either off ([What the extension may do](#what-the-extension-may-do)). The next page needs site
 access.
@@ -201,14 +221,14 @@ alone.
 
 **Settings › Browser › Autofill** decides what every paired extension may do on this computer:
 
-| Setting                                    | Default    | What it does                                                                                |
-| ------------------------------------------ | ---------- | ------------------------------------------------------------------------------------------- |
-| **Fill in codes**                          | On         | Fill a login's linked code into the page's code field                                       |
-| **Copy codes**                             | On         | Put that code on the clipboard as well                                                      |
-| **Submit after filling**                   | Off        | Submit the form once a password is filled; a step with the user name alone is not submitted |
-| **Confirm before filling**                 | Off        | Confirm in the page each time before filling                                                |
-| **Sign-in forms in frames of other sites** | Never fill | **Never fill**, or **Ask first** in Lockra                                                  |
-| **Fill as pages load**                     | Off        | Fill matching pages as they open, without a click (below)                                   |
+| Setting                                    | Default    | What it does                                                                                                                             |
+| ------------------------------------------ | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Fill in codes**                          | On         | Fill a login's linked code into the page's code field                                                                                    |
+| **Copy codes**                             | On         | Put that code on the clipboard as well                                                                                                   |
+| **Submit after filling**                   | Off        | Submit the form once the password is filled, or the code for a login with a linked one; a step with the user name alone is not submitted |
+| **Confirm before filling**                 | Off        | Confirm in the page each time before filling                                                                                             |
+| **Sign-in forms in frames of other sites** | Never fill | **Never fill**, or **Ask first** in Lockra                                                                                               |
+| **Fill as pages load**                     | Off        | Fill matching pages as they open, without a click (below)                                                                                |
 
 A change that lets the extension do more asks for the master password, Touch ID or Windows Hello:
 turning on **Fill in codes**, **Submit after filling** or **Fill as pages load**, turning off

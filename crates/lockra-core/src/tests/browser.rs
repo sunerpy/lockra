@@ -323,6 +323,73 @@ async fn a_fill_brings_the_linked_code_and_a_second_step_gets_it_for_five_minute
 }
 
 #[tokio::test(start_paused = true)]
+async fn the_next_step_of_a_sign_in_gets_the_password_once_and_moments_later() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let id = h.core.item_add(login("AWS", "root@example.com", "https://signin.aws.amazon.com/", Matching::Domain)).unwrap();
+    let next = |url: &str| FillRequest { item_id: Some(id), trigger: Trigger::NextStep, ..fill_at(url) };
+    let first = "https://signin.aws.amazon.com/signin";
+    let second = "https://signin.aws.amazon.com/oauth";
+    // Nothing the user started: no next step.
+    assert_eq!(h.core.browser_fill(session, next(second)).await, Err(Refusal::NoMatch));
+    // The user fills the first step; the next page of the same site gets the password, once.
+    h.core.browser_fill(session, fill_at(first)).await.unwrap();
+    assert_eq!(h.core.browser_fill(session, next(second)).await.unwrap().password.as_str(), PASSWORD);
+    assert_eq!(h.core.browser_fill(session, next(second)).await, Err(Refusal::NoMatch), "once");
+    // A next step is named, never guessed, and starts none of its own.
+    h.core.browser_fill(session, fill_at(first)).await.unwrap();
+    let guessed = FillRequest { trigger: Trigger::NextStep, ..fill_at(second) };
+    assert_eq!(h.core.browser_fill(session, guessed).await, Err(Refusal::NoMatch));
+    // Two minutes at most (the vault kept open meanwhile).
+    h.core.browser_fill(session, fill_at(first)).await.unwrap();
+    advance(Duration::from_secs(60)).await;
+    h.core.activity();
+    advance(Duration::from_secs(60)).await;
+    assert_eq!(h.core.browser_fill(session, next(second)).await, Err(Refusal::NoMatch), "two minutes at most");
+    // A fill as the page loads starts no next step.
+    riskier(&h, |p| p.on_page_load = true).await;
+    let on_load = FillRequest { trigger: Trigger::PageLoad, ..fill_at(first) };
+    h.core.browser_fill(session, on_load).await.unwrap();
+    assert_eq!(h.core.browser_fill(session, next(second)).await, Err(Refusal::NoMatch));
+    // A login that asks first is filled only as the user asks, step by step.
+    let bank = h.core.item_add(ItemDraft { protection: Protection::Confirm, ..login("Bank", "me", "https://bank.example/", Matching::Domain) }).unwrap();
+    let core = h.core.clone();
+    let fill = tokio::spawn(async move { core.browser_fill(session, fill_at("https://bank.example/")).await });
+    settle().await;
+    h.core.browser_confirm(h.core.state().browser.confirms[0].id, Some(pw(MASTER)), None).await.unwrap();
+    fill.await.unwrap().unwrap();
+    let bank_next = FillRequest { item_id: Some(bank), trigger: Trigger::NextStep, ..fill_at("https://bank.example/password") };
+    assert_eq!(h.core.browser_fill(session, bank_next).await, Err(Refusal::Protected));
+    // Nor in a frame of another site, where the user would be asked.
+    riskier(&h, |p| p.cross_origin_frames = Lenient::Known(FrameRule::Ask)).await;
+    h.core.browser_fill(session, fill_at(first)).await.unwrap();
+    let framed = FillRequest {
+        item_id: Some(id),
+        trigger: Trigger::NextStep,
+        facts: FrameFacts { frame_url: second.into(), top_url: "https://shop.example/".into(), frame_chain: Vec::new() },
+        ..FillRequest::default()
+    };
+    assert_eq!(h.core.browser_fill(session, framed).await, Err(Refusal::CrossOrigin));
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_code_of_a_second_step_is_submitted_as_the_login_or_the_policy_says() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let entry = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    let id = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("GitHub", "octocat", "https://github.com/", Matching::Domain) }).unwrap();
+    let otp = OtpRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor") };
+    h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
+    assert!(!h.core.browser_otp(session, otp.clone()).unwrap().submit, "the policy does not submit by default");
+    riskier(&h, |p| p.auto_submit = true).await;
+    assert!(h.core.browser_otp(session, otp.clone()).unwrap().submit);
+    h.core
+        .item_update(id, ItemPatch { autofill: Some(AutofillChoice { auto_submit: Tri::Off, ..AutofillChoice::default() }), ..ItemPatch::default() })
+        .unwrap();
+    assert!(!h.core.browser_otp(session, otp).unwrap().submit, "the login's own choice wins");
+}
+
+#[tokio::test(start_paused = true)]
 async fn page_load_fills_only_where_everything_is_plain() {
     let h = Harness::unlocked().await;
     let (_, session) = paired(&h).await;

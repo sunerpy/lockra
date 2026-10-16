@@ -185,6 +185,29 @@ describe("one-time codes", () => {
     expect(scanField(input("zip"), view).kind).not.toBe("otp");
   });
 
+  it("are not an image check or a code sent by text message or mail", () => {
+    // 2026-10-16: a sign-in page's image check named 验证码 took the authenticator's code.
+    page(`
+      <form>
+        <div><input id="captcha" name="captcha" placeholder="验证码" maxlength="4"><img src="/captcha.jpg" alt=""></div>
+        <div><input id="img" placeholder="请输入验证码" maxlength="4"><img id="refresh" src="/api/verify/image?t=1"></div>
+        <div><input id="drawn" placeholder="验证码" maxlength="5"><canvas width="100" height="32"></canvas></div>
+        <div><input id="sms" name="smsCode" placeholder="短信验证码" maxlength="6"></div>
+        <div><input id="mail" placeholder="邮箱验证码" inputmode="numeric"></div>
+        <div><input id="sent" placeholder="请输入验证码" maxlength="6"><button type="button">获取验证码</button></div>
+        <div><input id="resend" autocomplete="one-time-code" maxlength="6"><a href="#">Resend code</a></div>
+        <div><input id="totp" placeholder="身份验证器中的 6 位动态码" maxlength="6"><button type="button">发送短信验证码</button></div>
+        <div><input id="plain" placeholder="请输入验证码" inputmode="numeric"></div>
+      </form>`);
+    for (const id of ["captcha", "img", "drawn", "sms", "mail", "sent", "resend"])
+      expect([id, scanField(input(id), view).kind]).not.toEqual([id, "otp"]);
+    // The authenticator's own words win over a button to send a text instead; a plain code field
+    // stays a code field.
+    expect(scanField(input("totp"), view).kind).toBe("otp");
+    expect(scanField(input("plain"), view).kind).toBe("otp");
+    expect(findOtp(document, view)?.map((i) => i.id)).toEqual(["totp"]);
+  });
+
   it("are put together from one box per digit", () => {
     page(`
       <form>
