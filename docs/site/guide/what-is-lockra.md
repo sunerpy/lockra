@@ -2,11 +2,12 @@
 
 This page explains what Lockra is for and what sets it apart from other authenticators.
 
-Lockra is a two-factor authenticator for your computers and your Android phone. When a website asks
-for a six-digit code after your password, Lockra shows it, and one click or tap copies it. It works with every service that
-offers an authenticator app: the codes follow the open TOTP and HOTP standards, the same ones
-Google Authenticator and Microsoft Authenticator use. From version 0.10.0 it keeps your passwords
-as well, in the same vault ([Passwords](#passwords)).
+Lockra is a two-factor authenticator and password manager for your computers and your Android
+phone. When a website asks for a six-digit code after your password, Lockra shows it, and one click
+or tap copies it. It works with every service that offers an authenticator app: the codes follow the
+open TOTP and HOTP standards, the same ones Google Authenticator and Microsoft Authenticator use.
+From version 0.10.0 it keeps your passwords as well, in the same vault, and its browser extension
+fills them ([Passwords](#passwords)).
 
 ## Where your accounts are kept
 
