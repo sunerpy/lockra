@@ -105,14 +105,58 @@ describe("TauriBackend", () => {
     // `codes_unsubscribe` of the first subscription stopped the second: no codes in `tauri dev`.
     const f = fake();
     const backend = new TauriBackend(f.transport);
+    const frames: CodesFrame[] = [];
     const first = await backend.subscribeCodes(() => undefined);
-    const second = await backend.subscribeCodes(() => undefined);
+    const second = await backend.subscribeCodes((frame) => frames.push(frame));
     first();
     await Promise.resolve();
-    expect(f.calls.map(([command]) => command)).toEqual(["codes_subscribe", "codes_subscribe"]);
+    expect(f.calls.map(([command]) => command)).not.toContain("codes_unsubscribe");
+    f.channels.at(-1)?.onmessage(ipcFixtures.responses.codes_frame);
+    expect(frames).toHaveLength(1);
     second();
     await Promise.resolve();
     expect(f.calls.at(-1)?.[0]).toBe("codes_unsubscribe");
+  });
+
+  it("regression: one subscription ending leaves the others running (the detail pane under the edit dialog)", async () => {
+    // 2026-10-17, the tutorial recording: after editing a login, the Passwords page's detail pane
+    // showed "— — —" for good. The core keeps one stream per window: the dialog's subscription
+    // replaced the pane's, and ending it stopped the stream for both.
+    const f = fake();
+    const backend = new TauriBackend(f.transport);
+    const pane: CodesFrame[] = [];
+    const dialog: CodesFrame[] = [];
+    const offPane = await backend.subscribeCodes((frame) => pane.push(frame));
+    f.channels[0]?.onmessage(ipcFixtures.responses.codes_frame);
+    // The dialog shares the stream, and has the last frame at once.
+    const offDialog = await backend.subscribeCodes((frame) => dialog.push(frame));
+    expect(f.calls.filter(([command]) => command === "codes_subscribe")).toHaveLength(1);
+    expect([pane.length, dialog.length]).toEqual([1, 1]);
+    f.channels[0]?.onmessage(ipcFixtures.responses.codes_frame);
+    expect([pane.length, dialog.length]).toEqual([2, 2]);
+    offDialog();
+    await Promise.resolve();
+    expect(f.calls.map(([command]) => command)).not.toContain("codes_unsubscribe");
+    f.channels[0]?.onmessage(ipcFixtures.responses.codes_frame);
+    expect([pane.length, dialog.length]).toEqual([3, 2]);
+    // The last one out stops the stream; the next subscription starts a new one.
+    offPane();
+    offPane();
+    await Promise.resolve();
+    expect(f.calls.filter(([command]) => command === "codes_unsubscribe")).toHaveLength(1);
+    await backend.subscribeCodes(() => undefined);
+    expect(f.calls.filter(([command]) => command === "codes_subscribe")).toHaveLength(2);
+    expect(f.calls.at(-1)?.[1]?.onFrame).toBe(f.channels[1]);
+  });
+
+  it("shares one subscription among callers that ask at the same time, and a failed one with none", async () => {
+    const f = fake();
+    const backend = new TauriBackend(f.transport);
+    await Promise.all([backend.subscribeCodes(() => undefined), backend.subscribeCodes(() => undefined)]);
+    expect(f.calls.filter(([command]) => command === "codes_subscribe")).toHaveLength(1);
+    const failing = new TauriBackend(fake({}, new Error("no shell")).transport);
+    await expect(failing.subscribeCodes(() => undefined)).rejects.toBeInstanceOf(Error);
+    await expect(failing.subscribeCodes(() => undefined)).rejects.toBeInstanceOf(Error);
   });
 
   it("exports logins through the shell, which answers with the file's name alone", async () => {
