@@ -1,13 +1,13 @@
 ---
 layout: home
-title: Lockra — 适用于 Windows、macOS、Linux 和 Android 的加密两步验证器
+title: Lockra — 适用于 Windows、macOS、Linux 和 Android 的加密验证器与密码管理器
 titleTemplate: false
 description: Lockra 把两步验证码和密码保存在电脑和 Android 手机上的加密文件中，经端到端加密同步，每台设备上的内容保持一致。可以在 Lockra 与 Google 身份验证器、Microsoft Authenticator 之间迁移账号，用浏览器扩展填入登录项，并把加密备份写入你选择的文件夹。
 
 hero:
   name: Lockra
-  text: 两步验证码，留在你自己的设备上。
-  tagline: 适用于 Windows、macOS、Linux 和 Android 的加密验证器，密码也保存在同一个保险库中。端到端加密同步让每台设备上的账号保持一致；可以从 Google 身份验证器或 Microsoft Authenticator 迁入账号，并把加密备份放在你选择的位置。
+  text: 两步验证码和密码，留在你自己的设备上。
+  tagline: 适用于 Windows、macOS、Linux 和 Android 的加密验证器与密码管理器，浏览器扩展替你填入登录项及其验证码。端到端加密同步让每台设备上的账号保持一致；可以从 Google 身份验证器或 Microsoft Authenticator 迁入账号，并把加密备份放在你选择的位置。
   actions:
     - theme: brand
       text: 下载
@@ -102,6 +102,10 @@ home:
             body: 在 Windows、macOS 和 Linux 上填入登录项及其验证码，分几页的登录也只需填一次，并提示保存新密码。Chrome、Edge 和 Brave 从 Lockra 的发布页加载扩展；Firefox 版要等商店页面上线。
             status: available
             link: /zh/passwords/browser
+          - title: 全局快捷搜索
+            body: 在任何应用中按下你设定的组合键，唤出 Lockra 的命令面板，复制用户名、密码或验证码。
+            status: available
+            link: /zh/passwords/#全局快捷搜索
       - name: 迁移账号
         items:
           - title: 从 Google 身份验证器迁入
@@ -281,6 +285,14 @@ home:
       - 用户账户，或能读取账号的服务器。同步无需注册账户，中继或存储里只有加密的文件。
       - Steam 令牌等非标准验证码。
 ---
+
+## 密码，在浏览器中自动填入
+
+自 0.10.0 版起，Lockra 把登录项与验证码保存在同一个保险库、同一份备份中，电脑和手机上都可以使用。适用于 Chrome、Edge 和 Firefox 的浏览器扩展会先填入登录项，再填入它的验证码，分几页的登录会逐页接着填；扩展还会提示保存和更新密码，并在注册表单中按网站的规则生成密码。扩展本身不保存密码，而是经两者之间加密的连接向同一台电脑上的 Lockra 请求，每一次填充都由 Lockra 决定。登录项可以从浏览器和密码管理器导入，也可以导出为 KeePass 数据库或 CSV 文件。
+
+<ScreenFigure src="/screens/passwords-zh-light.webp" dark="/screens/passwords-zh-dark.webp" width="1440" height="900" alt="密码页：顶部是搜索框和「添加登录项」，下面是筛选按钮和按分组排列的登录项，右侧的详情栏显示 GitHub 登录项的用户名、以圆点显示的密码和所关联账号的验证码。" />
+
+[密码](/zh/passwords/) · [浏览器扩展](/zh/passwords/browser) · [导入与导出登录项](/zh/passwords/import-export)
 
 ## 多端同步
 

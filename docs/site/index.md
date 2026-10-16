@@ -1,13 +1,13 @@
 ---
 layout: home
-title: Lockra — an encrypted two-factor authenticator for Windows, macOS, Linux and Android
+title: Lockra — an encrypted authenticator and password manager for Windows, macOS, Linux and Android
 titleTemplate: false
 description: Lockra keeps your two-factor codes and your passwords in an encrypted file on your computers and your Android phone, the same on every device through end-to-end encrypted sync. Move accounts from and to Google Authenticator and Microsoft Authenticator, fill logins with the browser extension, and keep encrypted backups in a folder you choose.
 
 hero:
   name: Lockra
-  text: Two-factor codes that stay on your devices.
-  tagline: An encrypted authenticator for Windows, macOS, Linux and Android, with your passwords in the same vault. Keep the same accounts on every device with end-to-end encrypted sync, move them from Google Authenticator or Microsoft Authenticator, and keep encrypted backups where you choose.
+  text: Two-factor codes and passwords that stay on your devices.
+  tagline: An encrypted authenticator and password manager for Windows, macOS, Linux and Android, with a browser extension that fills your logins and their codes. Keep the same accounts on every device with end-to-end encrypted sync, move them from Google Authenticator or Microsoft Authenticator, and keep encrypted backups where you choose.
   actions:
     - theme: brand
       text: Download
@@ -102,6 +102,10 @@ home:
             body: Fills logins and their codes on Windows, macOS and Linux, page after page when a sign-in takes several, and offers to save new passwords. Chrome, Edge and Brave load it from Lockra's release; the Firefox version waits for its store listing.
             status: available
             link: /passwords/browser
+          - title: Quick search from anywhere
+            body: A key combination of your own brings up Lockra's command palette over any app, to copy a user name, a password or a code.
+            status: available
+            link: /passwords/#quick-search-from-anywhere
       - name: Moving accounts
         items:
           - title: From Google Authenticator
@@ -281,6 +285,14 @@ home:
       - An account, or a server that can read your accounts. Sync needs no account, and the relay or storage holds encrypted files only.
       - Non-standard codes such as Steam Guard.
 ---
+
+## Passwords, filled in the browser
+
+From version 0.10.0, Lockra keeps your logins beside the codes, in the same vault and the same backup, on the computer and on the phone. The browser extension for Chrome, Edge and Firefox fills a login and then its code, page by page when a sign-in asks for them one at a time, offers to save and update passwords, and makes a password to the site's rules on a sign-up form. It keeps no passwords itself: it asks Lockra on the same computer, over a connection encrypted between the two, and Lockra decides every fill. Logins come in from browsers and password managers, and go out to KeePass or a CSV file.
+
+<ScreenFigure src="/screens/passwords-en-light.webp" dark="/screens/passwords-en-dark.webp" width="1440" height="900" alt="The Passwords page: the search field and Add login at the top, the filters, the logins in their groups, and the GitHub login in the pane on the right with its user name, its password as dots and the linked account's code." />
+
+[Passwords](/passwords/) · [The browser extension](/passwords/browser) · [Importing and exporting logins](/passwords/import-export)
 
 ## Every device, in sync
 

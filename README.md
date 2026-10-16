@@ -18,17 +18,28 @@
 
 ---
 
-Lockra is a TOTP/HOTP authenticator for Windows, macOS, Linux and Android. Your accounts live in
-an encrypted file on each of your devices, and Lockra goes online only for its updates and, once you
-turn it on, for end-to-end encrypted sync between them. It imports from Google Authenticator and
-Microsoft Authenticator, exports back to them, and keeps encrypted backups in a folder you choose.
-From 0.10.0 it keeps your passwords in the same vault, with a browser extension for Chrome, Edge and
-Firefox that fills them.
+Lockra is a two-factor authenticator and password manager for Windows, macOS, Linux and Android.
+Your codes and passwords live in an encrypted file on each of your devices, and Lockra goes online
+only for its updates and, once you turn it on, for end-to-end encrypted sync between them. Its
+browser extension for Chrome, Edge and Firefox fills your logins and their codes. Lockra moves your
+accounts in from Google Authenticator and Microsoft Authenticator and back out, imports passwords
+from browsers and password managers, and keeps encrypted backups in a folder you choose. The
+passwords and the extension are new in 0.10.0.
 
 ![Lockra on a computer and on a phone, showing the same accounts with the same codes](./docs/site/public/screens/devices-en-light.webp)
 
 ## Highlights
 
+- **Passwords, new in 0.10.0**: logins beside the codes in the same vault, under one master
+  password and in one backup, on the computer and on the phone. A generator makes passwords to
+  sites' own rules, and logins come in from Chrome, Edge, Firefox, Safari, Bitwarden, 1Password,
+  LastPass and KeePass.
+- **A browser extension that fills for you**: in Chrome, Edge and Firefox it fills a login and then
+  its code, page by page when a sign-in asks for them one at a time, and, if you let it, submits the
+  form once the password or the linked code is in. It offers to save and update passwords, makes one
+  on a sign-up form, can take the browser's own password prompts over, and opens its menu clear of
+  the browser's list. It keeps no passwords: it asks Lockra on the same computer, which decides
+  every fill.
 - **Every device**: one app for Windows, macOS and Linux (x64 and ARM64) and Android 8 or later,
   with the same design, eight themes, and Chinese and English. An iPhone and iPad app is planned.
 - **The same accounts everywhere**: end-to-end encrypted sync through the built-in Lockra relay
@@ -37,9 +48,6 @@ Firefox that fills them.
   storage holds ciphertext only.
 - **Pairing by QR code**: a phone joins by scanning the computer's QR code, or by pasting its
   pairing link or invitation; a recovery key brings the space back if every device is lost.
-- **Passwords in the same vault**: logins beside the codes, one master password and one backup for
-  both, a password generator, imports from browsers and password managers, and a browser extension
-  that fills a login and then its code.
 - **No account**: no sign-up, no telemetry and no server that can read your codes or passwords.
   Move your accounts in from Google Authenticator or Microsoft Authenticator, and back out again.
 
@@ -98,13 +106,21 @@ Firefox that fills them.
   the Windows installer or the macOS app).
 - **Interface**: eight themes (Clear sky by default, which follows the system's light or dark
   mode), eight accents, a list or cards, Chinese and English, a command palette (`Ctrl K`) and
-  keyboard shortcuts throughout.
+  keyboard shortcuts throughout. On a computer, a tray icon (from 0.10.0) opens the window, the
+  quick search, the settings and the update check, and locks the vault.
 
 ## Screenshots
 
-The Android app: the codes page, adding an account, and sync.
+The passwords page on a computer: the logins in their groups, and the one chosen with its linked
+code.
+
+![The Passwords page: the search field and Add login at the top, the filters, the logins in their groups, and the GitHub login in the pane on the right with its user name, its password as dots and the linked account's code](./docs/site/public/screens/passwords-en-light.webp)
+
+The Android app: the codes page, adding an account, and sync; and the logins on the phone.
 
 ![Three screens of the Android app: the codes page, adding an account, and sync](./docs/site/public/screens/phones-en-light.webp)
+
+![Two phone screens: the Passwords page with the logins in cards, and the GitHub login's page with its user name, password and code](./docs/site/public/screens/phones-passwords-en-light.webp)
 
 More pages, on a computer and on the phone, are in the [documentation](https://firlab.app/lockra/).
 
