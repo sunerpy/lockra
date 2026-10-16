@@ -65,9 +65,13 @@ Firefox that fills them.
 - **Browser extension** (Chrome, Edge and Firefox, on Windows, macOS and Linux): it keeps no
   passwords and asks the running Lockra over an end-to-end encrypted local channel, paired once by
   comparing a six-digit code. It fills from its popup, with `Ctrl Shift L` or from a menu by the
-  field, fills the linked code on the next page, and offers to save and update passwords; Lockra
-  decides every fill, and can keep running in the tray for it. The store listings are not live yet
-  ([extension guide](https://firlab.app/lockra/passwords/browser)).
+  field. One fill carries a sign-in over several pages: the user name, then the password on the
+  next page, then the linked code. With _Submit after filling_ on, a form is sent only once its
+  password is in, or the code for a login with a linked one. It offers to save and update
+  passwords, and can turn off the browser's own offer to save them, so that only Lockra asks.
+  Lockra decides every fill, and can keep running in the tray for it. Chrome, Edge and Brave load
+  it unpacked from the release; the Edge Add-ons and Firefox Add-ons listings, which Firefox needs,
+  are not live yet ([extension guide](https://firlab.app/lockra/passwords/browser)).
 - **Quick search** (from 0.10.0, on Windows, macOS and Linux): a key combination of your own
   brings up the command palette over any app, to copy a user name, a password or a code; on
   Wayland, bind `lockra-desktop --palette` in the desktop's settings instead

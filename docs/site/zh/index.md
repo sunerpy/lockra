@@ -99,8 +99,8 @@ home:
             status: available
             link: /zh/passwords/import-export
           - title: 浏览器扩展
-            body: 在 Windows、macOS 和 Linux 上的 Chrome、Edge 和 Firefox 中填入登录项及其验证码，并提示保存新密码。商店页面尚未上线。
-            status: building
+            body: 在 Windows、macOS 和 Linux 上填入登录项及其验证码，分几页的登录也只需填一次，并提示保存新密码。Chrome、Edge 和 Brave 从 Lockra 的发布页加载扩展；Firefox 版要等商店页面上线。
+            status: available
             link: /zh/passwords/browser
       - name: 迁移账号
         items:

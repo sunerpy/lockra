@@ -30,9 +30,10 @@ From version 0.10.0, Lockra keeps logins beside the codes: the user name, the pa
 it is for, and the account whose code goes with it. A generator makes new passwords, and logins come
 in from browsers and password managers and go out to KeePass or a CSV file. On a computer, the
 browser extension for Chrome, Edge and Firefox fills a login and then its code into the sign-in
-page, and offers to save a new password; it keeps no passwords itself and asks Lockra, which runs
-on the same computer ([The browser extension](/passwords/browser)). On the phone, logins are shown,
-copied and edited ([Passwords](/passwords/)).
+page, page after page when the sign-in asks for them one at a time, and offers to save a new
+password; it keeps no passwords itself and asks Lockra, which runs on the same computer
+([The browser extension](/passwords/browser)). On the phone, logins are shown, copied and edited
+([Passwords](/passwords/)).
 
 ## On the phone
 

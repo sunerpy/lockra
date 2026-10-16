@@ -99,8 +99,8 @@ home:
             status: available
             link: /passwords/import-export
           - title: The browser extension
-            body: Fills logins and their codes in Chrome, Edge and Firefox on Windows, macOS and Linux, and offers to save new passwords. Its store listings are not live yet.
-            status: building
+            body: Fills logins and their codes on Windows, macOS and Linux, page after page when a sign-in takes several, and offers to save new passwords. Chrome, Edge and Brave load it from Lockra's release; the Firefox version waits for its store listing.
+            status: available
             link: /passwords/browser
       - name: Moving accounts
         items:

@@ -54,8 +54,11 @@ Lockra 只为自身的更新以及你开启的设备间端到端加密同步联�
   编辑登录项（[密码指南](https://firlab.app/lockra/zh/passwords/)）。
 - **浏览器扩展**（Windows、macOS 和 Linux 上的 Chrome、Edge 和 Firefox）：扩展本身不保存密码，而是经端到端
   加密的本机通道向正在运行的 Lockra 请求，只需核对一次 6 位代码完成配对。可以从弹窗、用 `Ctrl Shift L` 或从
-  输入框旁的菜单填充，在下一页填入关联的验证码，并提示保存和更新密码；每一次填充都由 Lockra 决定，Lockra 可以
-  为此留在托盘中运行。商店页面尚未上线（[扩展指南](https://firlab.app/lockra/zh/passwords/browser)）。
+  输入框旁的菜单填充。分几页的登录只需填一次：先填用户名，下一页自动填入密码，再填入关联的验证码。
+  开启「填充后自动提交」时，填入密码后才提交，关联了验证码的登录项则在填入验证码后才提交。扩展会提示保存和
+  更新密码，也可以关闭浏览器自带的保存密码提示，只由 Lockra 提示。每一次填充都由 Lockra 决定，Lockra 可以为此
+  留在托盘中运行。Chrome、Edge 和 Brave 从发布页以解压方式加载扩展；Edge 加载项和 Firefox 附加组件的页面
+  尚未上线，Firefox 只能从后者安装（[扩展指南](https://firlab.app/lockra/zh/passwords/browser)）。
 - **全局快捷搜索**（0.10.0 起，Windows、macOS 和 Linux）：在任何应用里按下自己设定的组合键唤出命令面板，复制
   用户名、密码或验证码；在 Wayland 上改为在桌面环境的设置里绑定 `lockra-desktop --palette`
   （[全局快捷搜索](https://firlab.app/lockra/zh/passwords/#全局快捷搜索)）。
