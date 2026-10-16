@@ -152,7 +152,10 @@ describe("TauriBackend", () => {
   it("shares one subscription among callers that ask at the same time, and a failed one with none", async () => {
     const f = fake();
     const backend = new TauriBackend(f.transport);
-    await Promise.all([backend.subscribeCodes(() => undefined), backend.subscribeCodes(() => undefined)]);
+    await Promise.all([
+      backend.subscribeCodes(() => undefined),
+      backend.subscribeCodes(() => undefined),
+    ]);
     expect(f.calls.filter(([command]) => command === "codes_subscribe")).toHaveLength(1);
     const failing = new TauriBackend(fake({}, new Error("no shell")).transport);
     await expect(failing.subscribeCodes(() => undefined)).rejects.toBeInstanceOf(Error);
