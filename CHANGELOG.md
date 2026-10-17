@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.10.1](https://github.com/sunerpy/lockra/compare/v0.10.0...v0.10.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **extension:** 同一表单只生成一个密码，确认密码框不再换新密码，并可复制生成的密码 ([#161](https://github.com/sunerpy/lockra/issues/161)) ([d4e3e14](https://github.com/sunerpy/lockra/commit/d4e3e14fcbcbf2d1edbd2794f3d37de15101836e))
+* **ui:** 命令面板刚打开时按 Esc 也能关闭，焦点不在面板里时按键照样生效 ([#165](https://github.com/sunerpy/lockra/issues/165)) ([c072ff3](https://github.com/sunerpy/lockra/commit/c072ff3321819d0a267ea84d3fa84de9b3be8455))
+* **ui:** 编辑登录项后详情栏的验证码不再停住 ([#163](https://github.com/sunerpy/lockra/issues/163)) ([735c2d3](https://github.com/sunerpy/lockra/commit/735c2d3e4948b5f7c4778382c6b8eed19c8334db))
+
 ## [0.10.0](https://github.com/sunerpy/lockra/compare/v0.9.1...v0.10.0) (2026-10-16)
 
 
