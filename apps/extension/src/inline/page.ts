@@ -12,7 +12,7 @@ import type {
   InlineView,
   MenuItem,
 } from "../shared/messages";
-import { AVATAR_RADIUS, AVATAR_TEXT, autoColor, initial } from "../shared/avatar";
+import { AVATAR_RADIUS, AVATAR_TEXT, autoColor, initial } from "../shared/avatar-look";
 import { type IconName, icon, logo } from "../shared/icons";
 import { refusalText } from "../shared/refusal";
 
