@@ -26,6 +26,7 @@ function paired(browser: string, connected: boolean): PairedView {
     last_seen_ms: null,
     connected,
     page_access: true,
+    version: null,
     paused: false,
   };
 }

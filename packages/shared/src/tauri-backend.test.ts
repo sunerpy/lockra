@@ -317,6 +317,39 @@ describe("TauriBackend", () => {
     ]);
   });
 
+  it("asks the shell for the extension's folder, puts its path on the clipboard and shows it", async () => {
+    const folder = {
+      path: "C:\\Users\\me\\AppData\\Local\\Lockra\\browser\\extension",
+      version: "0.10.2",
+      ready: true,
+    };
+    const f = fake({ browser_extension: folder, browser_extension_reveal: true });
+    const backend = new TauriBackend(f.transport);
+    expect(await backend.browserExtension()).toEqual(folder);
+    await backend.browserExtensionCopy();
+    expect(await backend.browserExtensionReveal()).toBe(true);
+    // The release's package: opened in the browser (null), or its address to show.
+    expect(await backend.browserExtensionDownload()).toBeNull();
+    const address =
+      "https://github.com/sunerpy/lockra/releases/download/v0.10.2/lockra-extension_0.10.2_chromium-unpacked.zip";
+    expect(
+      await new TauriBackend(
+        fake({ browser_extension_download: address }).transport,
+      ).browserExtensionDownload(),
+    ).toBe(address);
+    expect(f.calls.map(([c, a]) => [c, a])).toEqual([
+      ["browser_extension", undefined],
+      ["browser_extension_copy", undefined],
+      ["browser_extension_reveal", undefined],
+      ["browser_extension_download", undefined],
+    ]);
+    // A build made before the extension carries none; an answer that is no folder is refused.
+    expect(await new TauriBackend(fake().transport).browserExtension()).toBeNull();
+    await expect(
+      new TauriBackend(fake({ browser_extension: { path: 1 } }).transport).browserExtension(),
+    ).rejects.toThrow(/expected string/);
+  });
+
   it("turns the core's errors into LockraError", async () => {
     const limited = new TauriBackend(fake({}, { code: "rate_limited", retry_at_ms: 99 }).transport);
     const error = await limited

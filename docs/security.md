@@ -218,6 +218,13 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   a process holding the name first makes Lockra not listen rather than share the pipe, and it
   refuses remote clients; its default access lets other users of the machine open it, which
   gets them no further than a Noise handshake they cannot complete.
+- **The extension's folder.** The desktop app writes the extension it was built with (from its own
+  binary, so the same signed update that brought the app brought it) into a folder of the user's
+  local data, for the user to load unpacked; it writes nothing else there and reads only its own
+  marker back. The folder is as writable as any folder the user unzips the release package into,
+  and like any unpacked extension's its id proves nothing: whatever runs from it still has to pair.
+  The extension reloads itself only from its own package (no remote code, nothing downloaded), and
+  the app sends it no path: Settings › 浏览器 shows the folder's path, the extension never learns it.
 - **Locked means nothing.** While locked the app answers only `hello` and the request to unlock
   (at most every ten seconds); locking ends every session, refuses every waiting request and
   empties the activity list. A browser's requests never restart the idle timer.

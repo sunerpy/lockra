@@ -55,6 +55,39 @@ it from there instead; remove the unpacked one first, since both have the same I
 Firefox installs an extension only once Firefox Add-ons has signed it, so the Firefox extension
 comes with its listing.
 
+## Updating with Lockra
+
+<StatusTag status="building" /> In the next version, Lockra keeps its own copy of the extension and
+updates it along with itself.
+
+Chrome, Edge and Brave never update an extension loaded unpacked. With browser integration on,
+Lockra puts the extension of its own version in a folder of its own, shown under **Settings ›
+Browser › Extension folder** with **Copy path** and **Open folder**:
+
+| System  | Folder                                                   |
+| ------- | -------------------------------------------------------- |
+| Windows | `%LOCALAPPDATA%\Lockra\browser\extension`                |
+| macOS   | `~/Library/Application Support/Lockra/browser/extension` |
+| Linux   | `~/.local/share/Lockra/browser/extension`                |
+
+The section also offers **Download the extension package**, which opens the release's
+self-install package of the same version in the browser: for loading by hand, as above, but an
+extension installed that way does not update with Lockra.
+
+Load that folder unpacked once, as in steps 2 and 3 above. If you loaded the extension from a
+release package before, load this folder all the same: under the same ID it takes the old one's
+place and stays paired. Keep **Developer mode** on: without it the browser turns an unpacked
+extension off when it reloads.
+
+From then on, each time Lockra updates, it puts the new extension in the folder as it starts. The
+extension finds it and reloads itself once none of its popup, options page or menus is open, and
+stays paired; pages already open use the new extension once they are reloaded.
+
+When the extension is older than Lockra, its popup says so and, for one that came another way, asks
+to load Lockra's folder instead. **Settings › Browser** shows each paired extension's version and
+marks one older than Lockra **Update available**. Firefox keeps no unpacked extension, so none of
+this applies there.
+
 ## Turning on browser integration
 
 1. In Lockra, open **Settings › Browser** and turn on **Browser integration**. Lockra writes a

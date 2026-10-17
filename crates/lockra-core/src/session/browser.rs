@@ -310,6 +310,7 @@ impl Core {
             st.browser.sessions.retain(|_, s| s.pairing != id);
             st.browser.paused.remove(&id);
             st.browser.page_access.remove(&id);
+            st.browser.versions.remove(&id);
             st.browser.confirms.retain(|c| st.browser.sessions.contains_key(&c.session));
             st.browser.record(Activity {
                 at_ms: now_ms,
@@ -352,6 +353,11 @@ impl Core {
             st.browser.next_session += 1;
             let id = st.browser.next_session;
             st.browser.page_access.insert(pairing, client.page_access);
+            if client.version.is_empty() {
+                st.browser.versions.remove(&pairing);
+            } else {
+                st.browser.versions.insert(pairing, client.version.clone());
+            }
             st.browser.sessions.insert(id, SessionState::new(pairing, client));
             id
         };
@@ -849,6 +855,7 @@ impl Core {
                         last_seen_ms: p.last_seen_ms,
                         connected: st.browser.connected(p.id),
                         page_access: st.browser.page_access.get(&p.id).copied(),
+                        version: st.browser.versions.get(&p.id).cloned(),
                         paused: st.browser.paused.contains(&p.id),
                     })
                     .collect()

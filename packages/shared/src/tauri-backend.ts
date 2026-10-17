@@ -21,6 +21,8 @@ import {
   type BrowserId,
   type BrowserStatus,
   browserStatusSchema,
+  extensionFolderSchema,
+  type ExtensionFolder,
   type CommandName,
   type CommandOf,
   type ResultOf,
@@ -222,6 +224,25 @@ export class TauriBackend implements Backend {
 
   async browserStatus(): Promise<BrowserStatus[]> {
     return z.array(browserStatusSchema).parse(await this.call("browser_status"));
+  }
+
+  async browserExtension(): Promise<ExtensionFolder | null> {
+    return extensionFolderSchema.nullable().parse(await this.call("browser_extension"));
+  }
+
+  async browserExtensionCopy(): Promise<void> {
+    await this.call("browser_extension_copy");
+  }
+
+  async browserExtensionReveal(): Promise<boolean> {
+    return z.boolean().parse(await this.call("browser_extension_reveal"));
+  }
+
+  async browserExtensionDownload(): Promise<string | null> {
+    return z
+      .string()
+      .nullable()
+      .parse(await this.call("browser_extension_download"));
   }
 
   async quickAccessDone(copied: boolean): Promise<void> {

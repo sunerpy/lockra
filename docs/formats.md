@@ -577,6 +577,18 @@ Mozilla}\NativeMessagingHosts\dev.lockra.browser` (Brave reads Chrome's). Writte
   browsers the user turns the integration on for, written again at each start while it is on,
   removed when it is turned off. A debug build may put the Chromium ones in
   `$LOCKRA_DEV_BROWSER_MANIFEST_DIR/NativeMessagingHosts/` (a test browser's `--user-data-dir`).
+- **The extension's folder** (after 0.10.1): the Chromium build of the extension the desktop app
+  carries (the self-install package's files, Edge Add-ons' public key), for the browsers to load
+  unpacked, in `Lockra/browser/extension` under the local data folder (`%LOCALAPPDATA%` on Windows,
+  `~/Library/Application Support` on macOS, `$XDG_DATA_HOME` or `~/.local/share` on Linux). Its
+  `lockra-folder.json` is `{"version": "0.10.2", "digest": "sha256:<hex>"}`: the version of the
+  copy and the SHA-256 over every file sorted by its path, each as the path's length (u64
+  little-endian), the path, the content's length and the content. It is written last, into a new
+  copy beside the folder (`extension.staging`), which then takes the folder's place
+  (`extension.old` meanwhile, removed after). The app rewrites the folder when the digest differs
+  from its own copy's; the extension reads only `version`, from its own package, and reloads itself
+  when it differs from the manifest it runs (`update.reload_tried` in its `storage.local` keeps it to
+  one try per version).
 
 `crates/lockra-browser/tests/vectors/` holds every message as these types write it
 (`protocol.json`) and both handshakes with fixed keys, their hashes, the code and channel messages

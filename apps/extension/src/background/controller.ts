@@ -38,6 +38,7 @@ import { type FramesOf, type TrustedFrame, factsForFrame, factsFromSender, webUr
 import { type InlineFrame, InlineFrames } from "./inline-frames";
 import { chooseFrame, probe } from "./shortcut";
 import { type Submission, TabMemory } from "./tabs";
+import type { SelfUpdate } from "./update";
 import { contentMessage, inlineMessage, popupMessage } from "./validate";
 import { browserListsPasswords } from "../popup/browser-features";
 import { avoidBrowserList, menuOnFocus } from "../shared/prefs";
@@ -47,6 +48,8 @@ export interface ControllerDeps {
   connection: Connection;
   clock: Clock;
   extensionVersion: string;
+  /** Its own update, from the folder Lockra keeps it in. */
+  update: SelfUpdate;
 }
 
 interface PopupContext {
@@ -57,6 +60,8 @@ interface PopupContext {
 }
 
 const SNAPSHOT = "snapshot";
+/** How soon a reload put off by a request or a pairing under way is tried again. */
+const UPDATE_RETRY_MS = 5_000;
 const MAX_FRAME_HEIGHT = 560;
 
 function menuItem(item: ItemSummary): MenuItem {
@@ -100,6 +105,9 @@ export class Controller {
   private unlockAsked = false;
   private shortcut = "";
   private lastSession: ConnectionView["session"] = "none";
+  /** Lockra's version at the last hello: a new one may come with a new copy in the folder. */
+  private lastAppVersion: string | null = null;
+  private updateTimer: number | undefined;
 
   constructor(private readonly deps: ControllerDeps) {
     this.api = deps.api;
@@ -128,6 +136,7 @@ export class Controller {
     this.connection.onLocked(() => void this.locked());
     void this.syncAccess(false);
     void this.readShortcut();
+    void this.checkUpdate(true);
   }
 
   // ---- content scripts ---------------------------------------------------------------------
@@ -545,6 +554,7 @@ export class Controller {
     port.onDisconnect.addListener(() => {
       const frame = this.frames.byPort(port);
       if (frame) frame.port = null;
+      void this.checkUpdate(false);
     });
   }
 
@@ -982,7 +992,11 @@ export class Controller {
     port.onDisconnect.addListener(() => {
       this.popups.delete(port);
       this.options.delete(port);
+      void this.checkUpdate(false);
     });
+    // A copy Lockra put in its folder meanwhile shows as the page opens, and takes over once it
+    // closes.
+    void this.checkUpdate(true);
   }
 
   private async page(port: Port, context: PopupContext, raw: unknown): Promise<void> {
@@ -1196,6 +1210,7 @@ export class Controller {
       shortcut: this.shortcut,
       unlockAsked: this.unlockAsked && view.app?.state === "locked",
       pairedAt: record?.paired_at ?? null,
+      update: this.deps.update.note(view.app?.version ?? null),
     };
   }
 
@@ -1222,6 +1237,11 @@ export class Controller {
   private onView(view: ConnectionView): void {
     const opened = view.session === "open" && this.lastSession !== "open";
     this.lastSession = view.session;
+    const appVersion = view.app?.version ?? null;
+    if (appVersion !== null && appVersion !== this.lastAppVersion) {
+      this.lastAppVersion = appVersion;
+      void this.checkUpdate(true);
+    }
     if (view.app?.state !== "locked") this.unlockAsked = false;
     void this.postAll();
     if (opened) void this.sessionOpened();
@@ -1247,6 +1267,30 @@ export class Controller {
       context.frame = null;
     }
     await this.api.storage.session.remove(SNAPSHOT).catch(() => undefined);
+  }
+
+  /** The folder Lockra keeps the extension in, read again with `refresh` (as the background
+   *  starts, at each new version of Lockra, as a page opens), then a reload when another version
+   *  waits there and nothing is open: no page, no connected inline frame. A page or an inline
+   *  frame closing asks again; a request or a pairing under way puts it off for a moment. */
+  private async checkUpdate(refresh: boolean): Promise<void> {
+    const update = this.deps.update;
+    if (refresh) {
+      await update.refresh();
+      await this.postAll();
+    }
+    const open =
+      this.popups.size > 0 ||
+      this.options.size > 0 ||
+      this.frames.all().some((frame) => frame.port !== null);
+    if (await update.reloadIfIdle(open || this.connection.busy)) return;
+    this.deps.clock.clearTimeout(this.updateTimer);
+    if (update.waiting && !open) {
+      this.updateTimer = this.deps.clock.setTimeout(
+        () => void this.checkUpdate(false),
+        UPDATE_RETRY_MS,
+      );
+    }
   }
 
   private async syncAccess(refresh: boolean): Promise<void> {

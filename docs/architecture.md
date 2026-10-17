@@ -164,6 +164,23 @@ extension").
   removed) and `browser_status` (per browser: installed, Lockra's manifest in place) answer
   `browser_unavailable` without password management. At each start with the integration on, the
   manifests are written again (the program may have moved with an update).
+- The extension's folder (`browser/extension.rs`): Chrome, Edge and Brave never update an extension
+  loaded unpacked, so the desktop app carries the Chromium build of its own release (`build.rs`
+  embeds `apps/extension/dist/chromium-unpacked/`, which the `beforeBuildCommand` builds first;
+  `LOCKRA_EXTENSION_REQUIRED=1` in the release legs makes a missing build, or one of another
+  version, fail) and keeps it in `<local data>/Lockra/browser/extension`. At each start with the
+  integration on (before the socket is listened on) and at `browser_enable`, the folder is brought
+  to this build's copy: written beside it, `lockra-folder.json` last (the version and the digest of
+  the files), then two renames; a folder whose marker names this build's digest is left as it is,
+  and a failure is only logged. `browser_extension` (where it is, the version, whether it holds it),
+  `browser_extension_copy` (its path on the clipboard) and `browser_extension_reveal` (the file
+  manager) serve Settings › 浏览器. The extension reads the marker from its own package
+  (`apps/extension/src/background/update.ts`) as its background starts, at each new version of
+  Lockra and as one of its pages opens; when the folder holds another version than the one that
+  runs, it calls `runtime.reload()` once nothing of it is open and no request or pairing is under
+  way, at most once per version. The browser reads the folder again and keeps the extension's
+  storage. Without the marker (a folder the user unzipped, Firefox) the popup tells an extension
+  older than Lockra; `PairedView.version` lets Settings › 浏览器 tell it too.
 - The tray (`src-tauri/src/background.rs`): an icon whenever Lockra runs on a desktop, the app
   icon's padlock without its tile (`icons/tray/`, drawn at the size the system shows it; a template
   image on macOS). A left press brings the window up (Windows, macOS: the press alone, never its

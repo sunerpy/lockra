@@ -13,4 +13,5 @@ export * from "./shortcut";
 export * from "./storage-form";
 export * from "./storage-presets";
 export * from "./tauri-backend";
+export * from "./version";
 export * from "./login-form";

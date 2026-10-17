@@ -55,6 +55,7 @@ function state(change: Partial<PopupState> = {}): PopupState {
     shortcut: "Ctrl+Shift+L",
     unlockAsked: false,
     pairedAt: 1_760_000_000_000,
+    update: null,
     ...change,
   };
 }
@@ -95,6 +96,36 @@ function setup(initial: PopupState | null = state(), extra: Partial<PageClient> 
 }
 
 describe("the popup", () => {
+  it("tells the extension's own update under the header, in every screen", () => {
+    const { push } = setup(state({ update: "waiting" }));
+    expect(screen.getByTestId("popup-update")).toHaveTextContent("关闭这个窗口后扩展会自动更新");
+    push({
+      kind: "state",
+      state: state({
+        screen: "locked",
+        update: "manual",
+        appVersion: "0.10.2",
+        extensionVersion: "0.10.1",
+      }),
+    });
+    expect(screen.getByTestId("popup-update")).toHaveTextContent(
+      "这个扩展是 0.10.1，比 Lockra 0.10.2 旧",
+    );
+    expect(screen.getByTestId("popup-update")).toHaveTextContent("设置 › 浏览器");
+    push({ kind: "state", state: state({ update: "folder", appVersion: "0.10.2" }) });
+    expect(screen.getByTestId("popup-update")).toHaveTextContent("重启 Lockra 后会再试");
+    push({ kind: "state", state: state() });
+    expect(screen.queryByTestId("popup-update")).not.toBeInTheDocument();
+  });
+
+  it("in Firefox, an older extension is updated on the add-ons page", () => {
+    setup(state({ update: "manual", appVersion: "0.10.2", extensionVersion: "0.10.1" }), {
+      target: "firefox",
+    });
+    expect(screen.getByTestId("popup-update")).toHaveTextContent("附加组件");
+    expect(screen.getByTestId("popup-update")).not.toHaveTextContent("设置 › 浏览器");
+  });
+
   it("says hello, then lists the site's logins: the first is the default", () => {
     const { sent } = setup();
     expect(sent[0]).toEqual({ kind: "hello" });
@@ -311,9 +342,13 @@ describe("the popup's other states", () => {
   it("on Firefox, says where the extension updates instead of a button", () => {
     setup(state({ screen: "update_extension", appVersion: "0.12.0" }), { target: "firefox" });
     expect(screen.queryByRole("button", { name: "打开扩展页面" })).toBeNull();
-    expect(
-      screen.getByText("浏览器通常会在几小时内自动更新扩展；也可以在扩展管理页里手动更新。"),
-    ).toBeInTheDocument();
+    // Firefox installs no unpacked extension for good: its add-ons page, not Lockra's folder.
+    expect(screen.getByText("在 Firefox 的附加组件页里更新扩展。")).toBeInTheDocument();
+  });
+
+  it("in Chromium, says that the extension loaded from Lockra's folder updates itself", () => {
+    setup(state({ screen: "update_extension", appVersion: "0.12.0" }));
+    expect(screen.getByText(/从 Lockra 的扩展文件夹加载的扩展会自动更新/)).toBeInTheDocument();
   });
 
   it("retries when no host answered, and opens Lockra when it has no vault", () => {

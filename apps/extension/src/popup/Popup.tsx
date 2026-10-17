@@ -23,6 +23,7 @@ import type { PopupState, Screen } from "../shared/messages";
 import { Avatar } from "../shared/Avatar";
 import { refusalText } from "../shared/refusal";
 import { useText } from "../shared/text";
+import { UpdateNote } from "../shared/UpdateNote";
 import type { PageClient } from "./client";
 import { type Page, usePage } from "./usePage";
 
@@ -79,6 +80,9 @@ export function Popup({ client, now = Date.now }: { client: PageClient; now?: ()
           onClick={() => client.openOptions()}
         />
       </header>
+      {state?.update ? (
+        <UpdateNote state={state} target={client.target} className="mx-4 mb-1" />
+      ) : null}
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-3">
         <Body page={page} client={client} now={now} />
       </main>
@@ -213,7 +217,11 @@ function Body({ page, client, now }: { page: Page; client: PageClient; now: () =
               </Button>
             ) : null
           }
-          note={t("updateExtension.note")}
+          note={
+            client.target === "chromium"
+              ? t("updateExtension.note")
+              : t("updateExtension.noteFirefox")
+          }
         />
       );
   }

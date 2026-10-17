@@ -56,7 +56,7 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 17] = [
+pub const COMMANDS: [&str; 21] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -73,6 +73,10 @@ pub const COMMANDS: [&str; 17] = [
     "browser_enable",
     "browser_disable",
     "browser_status",
+    "browser_extension",
+    "browser_extension_copy",
+    "browser_extension_reveal",
+    "browser_extension_download",
     "quick_access_done",
 ];
 
@@ -496,6 +500,10 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             browser::service::browser_enable,
             browser::service::browser_disable,
             browser::service::browser_status,
+            browser::service::browser_extension,
+            browser::service::browser_extension_copy,
+            browser::service::browser_extension_reveal,
+            browser::service::browser_extension_download,
             quick_access::quick_access_done
         ])
         .setup(move |app| {
@@ -524,6 +532,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 None => Arc::new(NoUpdater),
             };
             let sync: Arc<dyn SyncTransport> = options.sync.clone().unwrap_or_else(|| Arc::new(sync::Storages));
+            app.manage(browser::service::PathClipboard(clipboard.clone()));
             let ports = Ports { secrets, clipboard, clock: Arc::new(SystemClock), updater, sync, biometrics: biometric_check() };
             // The core's scheduler is a tokio task: start it inside Tauri's runtime.
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });

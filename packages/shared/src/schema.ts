@@ -820,6 +820,8 @@ export const pairedViewSchema = z.object({
   connected: z.boolean(),
   /** It may run in pages, as it said when it connected last; null until it has. */
   page_access: z.boolean().nullable(),
+  /** The version it said it was when it connected last; null until it has, or when it named none. */
+  version: z.string().nullable(),
   /** It asked too often and gets nothing until resumed. */
   paused: z.boolean(),
 });
@@ -897,6 +899,16 @@ export const browserStatusSchema = z.object({
   manifest: z.boolean(),
 });
 export type BrowserStatus = z.infer<typeof browserStatusSchema>;
+
+/** The folder the desktop shell keeps its copy of the extension in (`browser_extension`), for
+ *  Chrome, Edge and Brave to load unpacked: where it is, the version this build carries, and
+ *  whether the folder holds it now. */
+export const extensionFolderSchema = z.object({
+  path: z.string(),
+  version: z.string(),
+  ready: z.boolean(),
+});
+export type ExtensionFolder = z.infer<typeof extensionFolderSchema>;
 
 /** Settings › Browser and the requests waiting for the user (lockra-core `BrowserView`). */
 export const browserViewSchema = z.object({
@@ -1529,6 +1541,10 @@ export const SHELL_COMMAND_NAMES = [
   "browser_enable",
   "browser_disable",
   "browser_status",
+  "browser_extension",
+  "browser_extension_copy",
+  "browser_extension_reveal",
+  "browser_extension_download",
   "quick_access_done",
 ] as const;
 
