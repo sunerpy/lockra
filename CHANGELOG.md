@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/sunerpy/lockra/compare/v0.11.1...v0.12.0) (2026-10-17)
+
+
+### Features
+
+* **extension:** 新增「匹配端口」开关，同一地址不同端口的登录项分开填充 ([#174](https://github.com/sunerpy/lockra/issues/174)) ([d41ff9e](https://github.com/sunerpy/lockra/commit/d41ff9e186d49f79dd8f1f12be4a59aedded91d1))
+* **extension:** 菜单和弹窗可以删除登录项，弹窗可以填入和复制验证码 ([#177](https://github.com/sunerpy/lockra/issues/177)) ([d402902](https://github.com/sunerpy/lockra/commit/d4029024a34ee220957d0b95d47e5837ab9a9a29))
+* **extension:** 页内菜单匹配到多个登录项时可以搜索 ([#176](https://github.com/sunerpy/lockra/issues/176)) ([1de7fa9](https://github.com/sunerpy/lockra/commit/1de7fa935e430a2a75d2a2429e280930c0f47223))
+
+
+### Bug Fixes
+
+* 识别 Google 身份验证器的验证码框，详情栏可直接关联验证码 ([#172](https://github.com/sunerpy/lockra/issues/172)) ([6ec3726](https://github.com/sunerpy/lockra/commit/6ec37260c6e1f50d35170db86bfe3b2f30c28f9a))
+
 ## [0.11.1](https://github.com/sunerpy/lockra/compare/v0.11.0...v0.11.1) (2026-10-17)
 
 
