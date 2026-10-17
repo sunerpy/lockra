@@ -389,6 +389,20 @@ describe("what the background sends", () => {
     agent.stop();
   });
 
+  it("opens the menu the background answers for a code field", async () => {
+    document.body.innerHTML = `<form><input type="tel" id="totpPin" name="totpPin" pattern="[0-9 ]*"></form>`;
+    const token = "c".repeat(32);
+    const { agent, sent } = setup({}, null, (message) =>
+      message.form === "otp" ? { token } : { token: null },
+    );
+    await agent.start();
+    input("totpPin").focus();
+    await vi.waitFor(() =>
+      expect(sent.find((m) => m.kind === "content.focus")).toMatchObject({ form: "otp" }),
+    );
+    await vi.waitFor(() => expect(agent.menuFrame?.src).toContain(`#${token}`));
+  });
+
   it("fills a code into the page's code field", async () => {
     document.body.innerHTML = `<div>${[1, 2, 3, 4, 5, 6].map((n) => `<input id="d${n}" maxlength="1">`).join("")}</div>`;
     const { agent, deliver } = setup();

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>2-Step Verification · login.test</title>
+  </head>
+  <body>
+    <!-- Google's sign-in after its password (the user's report, 2026-10-17): a prompt on the phone
+         first, then 「改用其他验证方式」 and the authenticator, in the same page. Its code field is
+         Google's: a tel field named after TOTP, with neither a length nor a numeric keyboard. -->
+    <main id="step">
+      <h1>Check your phone</h1>
+      <p>Tap Yes on the notification to sign in.</p>
+      <button id="another" type="button">Try another way</button>
+    </main>
+    <script>
+      const step = document.getElementById("step");
+      document.getElementById("another").addEventListener("click", () => {
+        step.innerHTML = `<h1>Choose how you want to sign in</h1>
+          <div role="link" tabindex="0" id="authenticator">Get a verification code from the Google Authenticator app</div>
+          <div role="link" tabindex="0" id="sms">Get a verification code at ••• 42</div>`;
+        document.getElementById("authenticator").addEventListener("click", () => {
+          step.innerHTML = "<p>Loading…</p>";
+          setTimeout(() => {
+            step.innerHTML = `<h1>2-Step Verification</h1>
+              <form id="totp" action="/welcome.html" method="get">
+                <input type="tel" autocomplete="off" aria-label="Enter code" name="totpPin" id="totpPin" pattern="[0-9 ]*" />
+                <button id="totpNext" type="submit">Next</button>
+              </form>`;
+            history.pushState({}, "", "/otp-switch.html?challenge=totp");
+          }, 400);
+        });
+      });
+    </script>
+  </body>
+</html>

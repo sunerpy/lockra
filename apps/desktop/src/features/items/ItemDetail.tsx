@@ -18,7 +18,6 @@ import {
   Banner,
   Button,
   Card,
-  CountdownRing,
   DetailSection,
   EmptyState,
   EntryAvatar,
@@ -28,10 +27,7 @@ import {
   KeyValueRow,
   Menu,
   type MenuSection,
-  OtpCode,
   UrlRow,
-  WARNING_SECONDS,
-  remaining,
   useClock,
   useCodes,
   useLocale,
@@ -42,6 +38,7 @@ import { useEffect, useState } from "react";
 import { motionReduced } from "../../app/appearance";
 import { useDispatch } from "../../app/dispatch";
 import { useShell } from "../../app/shell-state";
+import { CodePicker, LinkedCode } from "./CodePicker";
 import { useItemActions } from "./actions";
 import { useSecretView } from "./secret-view";
 
@@ -112,6 +109,10 @@ function DetailCard({ item }: { item: ItemView }) {
   const name = itemName(item);
   const linked =
     item.totp_entry === null ? undefined : state.entries.find((e) => e.id === item.totp_entry);
+  // The code picker of the login's form, here without the form: a pick links at once.
+  const [pickingCode, setPickingCode] = useState(false);
+  const linkCode = (entry: string | null) =>
+    void dispatch({ command: "item_update", id: item.id, patch: { totp_entry: entry } });
   const code = linked === undefined ? undefined : codes.get(linked.id);
   const day = (ms: number) => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(ms);
   const tri = (own: Tri, policy: boolean) =>
@@ -367,23 +368,71 @@ function DetailCard({ item }: { item: ItemView }) {
                 {DOTS}
               </FieldRow>
             )}
-            {linked !== undefined && (
+            {linked !== undefined ? (
               <FieldRow
                 label={t("passwords.detail.code", {
                   name: entryLabel(linked.issuer, linked.account),
                 })}
                 actions={
-                  <IconButton
-                    icon="copy"
-                    label={t("item.copy.code")}
-                    size={24}
-                    onClick={() => void actions.copy(item, { type: "totp" })}
-                    data-testid="detail-copy-code"
-                  />
+                  <>
+                    <IconButton
+                      icon="copy"
+                      label={t("item.copy.code")}
+                      size={24}
+                      onClick={() => void actions.copy(item, { type: "totp" })}
+                      data-testid="detail-copy-code"
+                    />
+                    {!item.read_only && (
+                      <>
+                        <IconButton
+                          icon="link"
+                          label={t("passwords.detail.codeChange")}
+                          size={24}
+                          onClick={() => setPickingCode(true)}
+                          data-testid="detail-code-change"
+                        />
+                        <IconButton
+                          icon="x"
+                          label={t("passwords.detail.codeUnlink")}
+                          size={24}
+                          onClick={() => linkCode(null)}
+                          data-testid="detail-code-unlink"
+                        />
+                      </>
+                    )}
+                  </>
                 }
                 data-testid="detail-code">
                 <LinkedCode code={code} now={now} still={motionReduced(state.settings)} />
               </FieldRow>
+            ) : (
+              !item.read_only && (
+                <FieldRow
+                  label={t("item.code.label")}
+                  actions={
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon="key"
+                      onClick={() => setPickingCode(true)}
+                      data-testid="detail-code-link">
+                      {t("item.code.link")}
+                    </Button>
+                  }
+                  data-testid="detail-no-code">
+                  <span className="text-[12px] text-fg-subtle">{t("passwords.detail.noCode")}</span>
+                </FieldRow>
+              )
+            )}
+            {pickingCode && (
+              <CodePicker
+                entries={state.entries}
+                onPick={(id) => {
+                  setPickingCode(false);
+                  linkCode(id);
+                }}
+                onClose={() => setPickingCode(false)}
+              />
             )}
           </DetailSection>
           {item.urls.length > 0 && (
@@ -511,45 +560,5 @@ function DetailCard({ item }: { item: ItemView }) {
         </div>
       </div>
     </Card>
-  );
-}
-
-/** The linked account's current code and its ring (from the code frames, as the codes page). */
-export function LinkedCode({
-  code,
-  now,
-  still,
-  size = 20,
-  ring = 20,
-}: {
-  code: ReturnType<ReturnType<typeof useCodes>["get"]>;
-  now: number;
-  still: boolean;
-  size?: number;
-  ring?: number;
-}) {
-  if (code === undefined) return <span className="mono text-fg-subtle">— — —</span>;
-  const totp = code.valid_from_ms !== null && code.valid_until_ms !== null;
-  const expired = totp && code.valid_until_ms !== null && now >= code.valid_until_ms;
-  const current = expired && code.next_code !== null ? code.next_code : code.code;
-  const left =
-    totp && !expired
-      ? remaining(code.valid_from_ms ?? 0, code.valid_until_ms ?? 0, now)
-      : undefined;
-  const warning = left !== undefined && left.seconds <= WARNING_SECONDS;
-  return (
-    <span className="inline-flex items-center gap-2">
-      <OtpCode code={current} size={size} weight="semibold" tone={warning ? "warning" : "normal"} />
-      {totp && !expired && code.valid_from_ms !== null && code.valid_until_ms !== null && (
-        <CountdownRing
-          validFromMs={code.valid_from_ms}
-          validUntilMs={code.valid_until_ms}
-          nowMs={now}
-          size={ring}
-          stroke={2.5}
-          still={still}
-        />
-      )}
-    </span>
   );
 }

@@ -33,6 +33,9 @@ export interface InlineFrame {
   visible: boolean | null;
   /** The trigger a fill from it reports. */
   trigger: "inline_menu" | "shortcut";
+  /** Opened by a code field: its fill puts the chosen login's code in, and no later step of the
+   *  sign-in is waited for. */
+  code?: boolean;
 }
 
 function randomToken(): string {

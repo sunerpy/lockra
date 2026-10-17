@@ -144,6 +144,8 @@ export function fillForm(scan: FormScan, values: FillValues, view: View): FillRe
       code = true;
     }
   }
-  if (values.submit && password && (values.otp === null || code)) void submitForm(scan.root, view);
+  // The login's last part: its password, or its code on a page that asks for the code alone.
+  const last = password || (scan.kind === "otp" && code);
+  if (values.submit && last && (values.otp === null || code)) void submitForm(scan.root, view);
   return { filled, password, code };
 }

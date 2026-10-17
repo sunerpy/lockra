@@ -111,6 +111,22 @@ describe("filling a sign-in form", () => {
     await vi.waitFor(() => expect(submitted).toHaveBeenCalledTimes(1));
   });
 
+  it("fills the code of a page that asks for it alone, and submits it when told", async () => {
+    document.body.innerHTML = `
+      <form id="f"><input type="tel" id="totpPin" name="totpPin" pattern="[0-9 ]*"><button>Next</button></form>`;
+    const form = document.getElementById("f") as HTMLFormElement;
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    const result = fillForm(
+      scanField(input("totpPin"), view),
+      { ...VALUES, otp: "123456", submit: true },
+      view,
+    );
+    expect(input("totpPin").value).toBe("123456");
+    expect(result).toEqual({ filled: 1, password: false, code: true });
+    await vi.waitFor(() => expect(submitted).toHaveBeenCalledTimes(1));
+  });
+
   it("regression: a first step with the user name alone is filled but never submitted", () => {
     // 2026-10-16, the AWS console's root sign-in: its first page asks for the e-mail alone; sent
     // by Lockra, it answered 400. Only a step that took a password is sent.

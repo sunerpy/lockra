@@ -185,6 +185,27 @@ describe("one-time codes", () => {
     expect(scanField(input("zip"), view).kind).not.toBe("otp");
   });
 
+  it("are an authenticator's field by its own words, or a field that takes digits alone", () => {
+    // Google's code step, reached through 「改用其他验证方式」 too: a `tel` field named after TOTP,
+    // with neither a length nor a numeric keyboard (the user's report, 2026-10-17).
+    page(`
+      <input type="tel" autocomplete="off" aria-label="输入验证码" name="totpPin" id="totpPin" pattern="[0-9 ]*">
+      <input type="text" id="auth" aria-label="Authenticator app code">
+      <input type="tel" id="digits" placeholder="Enter code" pattern="\\d*">
+      <input type="tel" id="phone" name="phone_code" placeholder="Code">
+      <input type="text" id="word" name="code" pattern="[A-Za-z0-9]*">`);
+    expect(scanField(input("totpPin"), view).kind).toBe("otp");
+    expect(scanField(input("auth"), view).kind).toBe("otp");
+    expect(scanField(input("digits"), view).kind).toBe("otp");
+    // A code field with nothing more stays what it was, and a pattern that takes letters says nothing.
+    expect(scanField(input("phone"), view).kind).not.toBe("otp");
+    expect(scanField(input("word"), view).kind).not.toBe("otp");
+    page(
+      `<form><input type="tel" name="totpPin" id="totpPin" pattern="[0-9 ]*" aria-label="Enter code"></form>`,
+    );
+    expect(findOtp(document, view)?.map((i) => i.id)).toEqual(["totpPin"]);
+  });
+
   it("are not an image check or a code sent by text message or mail", () => {
     // 2026-10-16: a sign-in page's image check named 验证码 took the authenticator's code.
     page(`

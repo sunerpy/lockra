@@ -133,7 +133,14 @@ export interface MenuItem {
 }
 
 export type InlineView =
-  | { view: "list"; site: string; items: MenuItem[]; active: number }
+  | {
+      view: "list";
+      site: string;
+      items: MenuItem[];
+      active: number;
+      /** Opened by a code field: the chosen login's code goes in. */
+      code?: boolean;
+    }
   | {
       view: "signup";
       site: string;

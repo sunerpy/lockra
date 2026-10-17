@@ -135,6 +135,8 @@ export const extensionEn: typeof extensionZhCN = {
   inline: {
     matches: { one: "{site} · {n} match", other: "{site} · {n} matches" },
     close: "Close",
+    codeHint: "{site} · fill a code",
+    codeFooter: "↑↓ select · ↵ fill the code · Esc close",
     listFooter: "↑↓ select · ↵ fill · Esc close",
     signupTitle: "Use a generated password",
     signupHint: "Sign-up form",

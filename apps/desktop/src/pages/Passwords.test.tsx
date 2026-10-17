@@ -2,6 +2,7 @@ import {
   MOCK_PASSWORD,
   MockBackend,
   type MockOptions,
+  mockItemView,
   sampleEntries,
   sampleItems,
 } from "@lockra/shared/mock";
@@ -129,6 +130,52 @@ describe("Passwords", () => {
     expect(within(row("GitHub")).getByTestId("row-copied")).toHaveTextContent("已复制密码");
     await user.click(within(row("Figma")).getByTestId("row-copy-username"));
     expect(lastCall(backend, "item_copy")).toMatchObject({ part: { type: "email" } });
+  });
+
+  it("links a login's code from its detail, changes it and unlinks it, without the edit dialog", async () => {
+    const { user, backend } = renderPasswords();
+    await openPage(user);
+    await user.click(row("Figma"));
+    expect(detail().queryByTestId("detail-code")).not.toBeInTheDocument();
+    expect(detail().getByTestId("detail-no-code")).toHaveTextContent("未关联验证码");
+    await user.click(detail().getByTestId("detail-code-link"));
+    let picker = within(await screen.findByTestId("item-form-code-picker"));
+    await user.click(picker.getAllByTestId("item-form-code-option")[0] as HTMLElement);
+    const linked = lastCall(backend, "item_update");
+    expect(linked).toMatchObject({ patch: { totp_entry: expect.any(String) } });
+    expect(await detail().findByTestId("detail-code")).toBeInTheDocument();
+    expect(screen.queryByTestId("item-form-code-picker")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: /编辑/ })).not.toBeInTheDocument();
+    // Another account, from the row itself.
+    await user.click(detail().getByRole("button", { name: "更换验证码" }));
+    picker = within(await screen.findByTestId("item-form-code-picker"));
+    await user.click(picker.getAllByTestId("item-form-code-option")[1] as HTMLElement);
+    const changed = lastCall(backend, "item_update");
+    expect(changed).toMatchObject({ patch: { totp_entry: expect.any(String) } });
+    expect(changed).not.toEqual(linked);
+    // Unlinked.
+    await user.click(detail().getByRole("button", { name: "取消关联验证码" }));
+    expect(lastCall(backend, "item_update")).toMatchObject({ patch: { totp_entry: null } });
+    expect(await detail().findByTestId("detail-code-link")).toBeInTheDocument();
+  });
+
+  it("offers no code to link or unlink on a login of a later Lockra", async () => {
+    const entries = sampleEntries();
+    const github = entries.find((e) => e.view.issuer === "GitHub")?.view.id ?? null;
+    const { user } = renderPasswords({
+      entries,
+      items: [
+        { view: mockItemView("Linked", { read_only: true, totp_entry: github }) },
+        { view: mockItemView("Unlinked", { read_only: true }) },
+      ],
+    });
+    await openPage(user);
+    await user.click(row("Linked"));
+    expect(detail().getByTestId("detail-copy-code")).toBeInTheDocument();
+    expect(detail().queryByTestId("detail-code-change")).not.toBeInTheDocument();
+    expect(detail().queryByTestId("detail-code-unlink")).not.toBeInTheDocument();
+    await user.click(row("Unlinked"));
+    expect(detail().queryByTestId("detail-no-code")).not.toBeInTheDocument();
   });
 
   it("shows the notes and hidden fields on request and hides them after two minutes", async () => {

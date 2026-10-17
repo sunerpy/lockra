@@ -804,6 +804,90 @@ describe("the code of a second step", () => {
   });
 });
 
+describe("a code field", () => {
+  it("nothing was filled for lately offers the site's logins that have a code, and fills the chosen one's", async () => {
+    const context = await setup();
+    const { browser, app, contentGot, filled } = context;
+    app.handlers.query = () =>
+      queryAnswer([summary(ITEM, { has_totp: false }), summary(ITEM2, { has_totp: true })]);
+    app.handlers.fill = (request) => ({
+      item_id: request.item_id,
+      username: "octocat-work",
+      password: "s3cret",
+      fields: [],
+      otp: "246810",
+      submit: false,
+    });
+    filled.value = { filled: 1, password: false, code: true };
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "otp" })) as {
+      token: string | null;
+    };
+    expect(app.requests.some((r) => r.op === "otp")).toBe(false);
+    expect(answer.token).toMatch(/^[0-9a-f]{32}$/);
+    const frame = inlineFrame(context, answer.token ?? "");
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toMatchObject({
+        view: "list",
+        code: true,
+        items: [{ username: "octocat-work" }],
+      }),
+    );
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: null,
+      trusted: true,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+    expect(contentGot.find((m) => m.kind === "fill")).toMatchObject({ values: { otp: "246810" } });
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "fill",
+      item_id: ITEM2,
+      trigger: "inline_menu",
+    });
+    // A code's fill waits for no later step.
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      nextStep: false,
+    });
+    // Filled lately: the code goes in by itself, no menu.
+    app.handlers.otp = () => ({ code: "111222", copied: false });
+    expect(await browser.fromContent({ kind: "content.focus", form: "otp" })).toEqual({
+      token: null,
+    });
+    await vi.waitFor(() =>
+      expect(contentGot.findLast((m) => m.kind === "fill.otp")).toMatchObject({ code: "111222" }),
+    );
+    // A site with no login that has a code: no menu.
+    delete app.handlers.otp;
+    app.handlers.query = () => queryAnswer([summary(ITEM, { has_totp: false })]);
+    expect(await browser.fromContent({ kind: "content.focus", form: "otp" })).toEqual({
+      token: null,
+    });
+  });
+
+  it("says so when Lockra gives the chosen login no code to fill (its 填入验证码 off)", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.query = () => queryAnswer([summary(ITEM2, { has_totp: true })]);
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "otp" })) as {
+      token: string | null;
+    };
+    const frame = inlineFrame(context, answer.token ?? "");
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ view: "list", code: true }));
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: null,
+      trusted: true,
+    });
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toMatchObject({ view: "notice", refusal: "protected" }),
+    );
+    expect(app.requests.at(-1)).toMatchObject({ op: "fill", item_id: ITEM2 });
+    expect(contentGot.some((m) => m.kind === "fill")).toBe(false);
+  });
+});
+
 describe("the shortcut", () => {
   it("fills the focused frame's likeliest login, and the next one when pressed again soon", async () => {
     const context = await setup();

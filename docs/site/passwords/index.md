@@ -90,7 +90,9 @@ opens it for a login you have. Only the title is required.
   in the key…** takes the key the site shows. The new account is linked as soon as it is added; a
   QR code or an image with several accounts is imported on the codes page instead. After the
   extension fills the password, the linked account's code goes into the page's code field.
-  **Change…** and **Unlink** change it later.
+  **Change…** and **Unlink** change it later. <StatusTag status="building" /> In the next version,
+  the login's pane on the right does the same without the form: **Link a code…** in its
+  **Code** row, and beside a linked code **Change the code** and **Unlink the code**.
 - **Notes**: treated as a secret, so a login being edited shows them only after you choose
   **Show**.
 - **Custom fields**: **Add a field** adds a name and a value, as **Text** or **Hidden**. A field
