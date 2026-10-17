@@ -90,8 +90,10 @@ pub struct BestMatches<K> {
 /// past that a pattern never matches.
 const REGEX_SIZE_LIMIT: usize = 1 << 20;
 
-/// How `saved` matches `page`, or `None`.
-pub fn match_url(page: &WebUrl, saved: SavedUrl<'_>, equivalents: &EquivalentDomains) -> Option<UrlMatch> {
+/// How `saved` matches `page`, or `None`. `ports`: the port counts at the domain level too (the
+/// user's choice, Settings › Browser), so a saved URL of another port, or of none where the page
+/// has one, is no match; the scheme's default port is none, as for [`Matching::Host`].
+pub fn match_url(page: &WebUrl, saved: SavedUrl<'_>, equivalents: &EquivalentDomains, ports: bool) -> Option<UrlMatch> {
     match saved.matching {
         Matching::Never => return None,
         // A blank pattern would match every page; it is an empty field, not a wish.
@@ -106,7 +108,7 @@ pub fn match_url(page: &WebUrl, saved: SavedUrl<'_>, equivalents: &EquivalentDom
     }
     let url = WebUrl::parse_saved(saved.url)?;
     let level = match saved.matching {
-        Matching::Domain if url.same_site(page) || equivalents.allows(&url, page) => MatchLevel::Domain,
+        Matching::Domain if (url.same_site(page) || equivalents.allows(&url, page)) && (!ports || url.port() == page.port()) => MatchLevel::Domain,
         Matching::Host if url.host() == page.host() && url.port() == page.port() => MatchLevel::Host,
         Matching::StartsWith if page.as_str().starts_with(url.as_str()) => MatchLevel::Pattern,
         Matching::Exact if url.as_str() == page.as_str() => MatchLevel::Exact,
@@ -117,8 +119,8 @@ pub fn match_url(page: &WebUrl, saved: SavedUrl<'_>, equivalents: &EquivalentDom
 
 /// The items whose saved URLs reach the best level any of them reaches on `page`, each with the
 /// URL that got it there; `None` when no saved URL matches. `items` pairs the caller's key with
-/// the item's saved URLs.
-pub fn best_matches<'a, K, U>(page: &WebUrl, items: impl IntoIterator<Item = (K, U)>, equivalents: &EquivalentDomains) -> Option<BestMatches<K>>
+/// the item's saved URLs; `ports` as for [`match_url`].
+pub fn best_matches<'a, K, U>(page: &WebUrl, items: impl IntoIterator<Item = (K, U)>, equivalents: &EquivalentDomains, ports: bool) -> Option<BestMatches<K>>
 where
     U: IntoIterator<Item = SavedUrl<'a>>,
 {
@@ -127,7 +129,7 @@ where
         // The item's closest URL; at the same level one without a downgrade, then the first.
         let mut closest: Option<(usize, UrlMatch)> = None;
         for (index, saved) in urls.into_iter().enumerate() {
-            let Some(found) = match_url(page, saved, equivalents) else { continue };
+            let Some(found) = match_url(page, saved, equivalents, ports) else { continue };
             let closer = closest.is_none_or(|(_, held)| (found.level, !found.downgrade) > (held.level, !held.downgrade));
             if closer {
                 closest = Some((index, found));
@@ -157,7 +159,7 @@ mod tests {
     }
 
     fn found(page_url: &str, saved: &str, matching: Matching) -> Option<UrlMatch> {
-        match_url(&page(page_url), SavedUrl { url: saved, matching }, &EquivalentDomains::default())
+        match_url(&page(page_url), SavedUrl { url: saved, matching }, &EquivalentDomains::default(), false)
     }
 
     #[test]
@@ -201,6 +203,46 @@ mod tests {
         assert_eq!(level("http://localhost:3000/", "http://localhost:8080/", Domain), Some(MatchLevel::Domain));
         assert_eq!(level("http://intranet/", "http://localhost/", Domain), None);
         assert_eq!(level("http://app.localhost/", "http://localhost/", Domain), None);
+    }
+
+    #[test]
+    fn with_ports_the_domain_rule_wants_the_page_s_port_too() {
+        let ports = |page_url: &str, saved: &str, matching: Matching| {
+            match_url(&page(page_url), SavedUrl { url: saved, matching }, &EquivalentDomains::default(), true).map(|found| found.level)
+        };
+        use Matching::{Domain, Exact, Host, Regex, StartsWith};
+        // One address, a login per port.
+        assert_eq!(ports("http://192.168.1.10:5000/", "http://192.168.1.10:5000/", Domain), Some(MatchLevel::Domain));
+        assert_eq!(ports("http://192.168.1.10:8080/", "http://192.168.1.10:5000/", Domain), None);
+        assert_eq!(ports("https://nas.example.com:5001/", "example.com:5001", Domain), Some(MatchLevel::Domain));
+        // A URL saved without a port is the scheme's default port, and so is a page without one.
+        assert_eq!(ports("https://example.com:8443/", "example.com", Domain), None);
+        assert_eq!(ports("https://login.example.com/", "example.com", Domain), Some(MatchLevel::Domain));
+        assert_eq!(ports("http://example.com/", "https://example.com:443/", Domain), Some(MatchLevel::Domain));
+        assert_eq!(ports("https://example.com/", "https://example.com:8443/", Domain), None);
+        // Equivalent domains too.
+        let user = EquivalentDomains::new([["example.com", "example.net"]]);
+        let saved = SavedUrl { url: "https://example.com:8443/", matching: Domain };
+        assert_eq!(match_url(&page("https://example.net:8443/"), saved, &user, true).map(|found| found.level), Some(MatchLevel::Domain));
+        assert_eq!(match_url(&page("https://example.net/"), saved, &user, true), None);
+        // The other rules are as they were: the host rule and the URLs' text already have the port.
+        assert_eq!(ports("https://example.com:8443/", "example.com:8443", Host), Some(MatchLevel::Host));
+        assert_eq!(ports("https://example.com:8443/", "example.com", Host), None);
+        assert_eq!(ports("https://example.com:8443/a", "https://example.com:8443/", StartsWith), Some(MatchLevel::Pattern));
+        assert_eq!(ports("https://example.com:8443/", "https://example.com:8443/", Exact), Some(MatchLevel::Exact));
+        assert_eq!(ports("https://example.com:8443/", r"example\.com", Regex), Some(MatchLevel::Pattern));
+        // Off, the port does not count at the domain level (the default).
+        assert_eq!(level("http://192.168.1.10:8080/", "http://192.168.1.10:5000/", Domain), Some(MatchLevel::Domain));
+        // And the best level is chosen among what is left.
+        let items = vec![
+            ("nas", urls(&[("http://192.168.1.10:5000/", Domain)])),
+            ("router", urls(&[("http://192.168.1.10/", Domain)])),
+            ("both", urls(&[("http://192.168.1.10:8080/", Domain), ("http://192.168.1.10:5000/", Domain)])),
+        ];
+        let best = best_matches(&page("http://192.168.1.10:5000/login"), items.clone(), &EquivalentDomains::default(), true).unwrap();
+        assert_eq!(best.items, [ItemMatch { item: "nas", url: 0, downgrade: false }, ItemMatch { item: "both", url: 1, downgrade: false }]);
+        let best = best_matches(&page("http://192.168.1.10/"), items, &EquivalentDomains::default(), true).unwrap();
+        assert_eq!(best.items, [ItemMatch { item: "router", url: 0, downgrade: false }]);
     }
 
     #[test]
@@ -300,7 +342,7 @@ mod tests {
     fn equivalent_domains_count_as_the_domain_level() {
         let user = EquivalentDomains::new([["example.com", "example.net"]]);
         let check = |page_url: &str, saved: &str, matching: Matching, equivalents: &EquivalentDomains| {
-            match_url(&page(page_url), SavedUrl { url: saved, matching }, equivalents)
+            match_url(&page(page_url), SavedUrl { url: saved, matching }, equivalents, false)
         };
         assert_eq!(check("https://www.airbnb.co.uk/", "airbnb.com", Matching::Domain, &user), Some(UrlMatch { level: MatchLevel::Domain, downgrade: false }));
         assert_eq!(
@@ -326,7 +368,7 @@ mod tests {
             ("host too", urls(&[("example.net", Matching::Domain), ("login.example.com", Matching::Host)])),
             ("never", urls(&[("https://login.example.com/", Matching::Never)])),
         ];
-        let best = best_matches(&page("https://login.example.com/signin"), items, &EquivalentDomains::default()).unwrap();
+        let best = best_matches(&page("https://login.example.com/signin"), items, &EquivalentDomains::default(), false).unwrap();
         assert_eq!(best.level, MatchLevel::Host);
         assert_eq!(best.items, [ItemMatch { item: "host", url: 0, downgrade: false }, ItemMatch { item: "host too", url: 1, downgrade: false }]);
 
@@ -335,7 +377,7 @@ mod tests {
             ("exact", urls(&[("https://login.example.com/signin", Matching::Exact)])),
             ("starts", urls(&[("https://login.example.com/sign", Matching::StartsWith)])),
         ];
-        let best = best_matches(&page("https://login.example.com/signin"), exact, &EquivalentDomains::default()).unwrap();
+        let best = best_matches(&page("https://login.example.com/signin"), exact, &EquivalentDomains::default(), false).unwrap();
         assert_eq!(best.level, MatchLevel::Exact);
         assert_eq!(best.items, [ItemMatch { item: "exact", url: 0, downgrade: false }]);
 
@@ -344,7 +386,7 @@ mod tests {
             ("starts", urls(&[("https://login.example.com/", Matching::StartsWith)])),
             ("domain", urls(&[("example.com", Matching::Domain)])),
         ];
-        let best = best_matches(&page("https://login.example.com/signin"), patterns, &EquivalentDomains::default()).unwrap();
+        let best = best_matches(&page("https://login.example.com/signin"), patterns, &EquivalentDomains::default(), false).unwrap();
         assert_eq!(best.level, MatchLevel::Pattern);
         assert_eq!(best.items.iter().map(|found| found.item).collect::<Vec<_>>(), ["regex", "starts"]);
     }
@@ -355,17 +397,17 @@ mod tests {
             7,
             urls(&[("https://example.com", Matching::Domain), ("http://example.com", Matching::Domain), ("https://example.com/b", Matching::Domain)]),
         )];
-        let best = best_matches(&page("http://www.example.com/"), items, &EquivalentDomains::default()).unwrap();
+        let best = best_matches(&page("http://www.example.com/"), items, &EquivalentDomains::default(), false).unwrap();
         assert_eq!(best.items, [ItemMatch { item: 7, url: 1, downgrade: false }]);
         let only_https = vec![(7, urls(&[("https://example.com", Matching::Domain), ("https://example.com/b", Matching::Domain)]))];
-        let best = best_matches(&page("http://www.example.com/"), only_https, &EquivalentDomains::default()).unwrap();
+        let best = best_matches(&page("http://www.example.com/"), only_https, &EquivalentDomains::default(), false).unwrap();
         assert_eq!(best.items, [ItemMatch { item: 7, url: 0, downgrade: true }]);
     }
 
     #[test]
     fn nothing_matches_nothing() {
         let items = vec![("a", urls(&[("example.net", Matching::Domain)])), ("b", urls(&[])), ("c", urls(&[("example.com", Matching::Never)]))];
-        assert_eq!(best_matches(&page("https://example.com/"), items, &EquivalentDomains::default()), None);
-        assert_eq!(best_matches::<u8, Vec<SavedUrl<'_>>>(&page("https://example.com/"), [], &EquivalentDomains::default()), None);
+        assert_eq!(best_matches(&page("https://example.com/"), items, &EquivalentDomains::default(), false), None);
+        assert_eq!(best_matches::<u8, Vec<SavedUrl<'_>>>(&page("https://example.com/"), [], &EquivalentDomains::default(), false), None);
     }
 }

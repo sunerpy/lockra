@@ -208,6 +208,32 @@ async fn a_fill_gets_the_best_match_for_the_frame_and_nothing_else() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn with_the_port_switch_each_port_of_an_address_has_its_own_logins() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let nas = h.core.item_add(login("NAS", "admin", "http://192.168.1.10:5000/", Matching::Domain)).unwrap();
+    let router = h.core.item_add(login("Router", "root", "http://192.168.1.10/", Matching::Domain)).unwrap();
+    let query = |page: &str| {
+        let answer = h.core.browser_query(session, QueryRequest { facts: facts(page), ..QueryRequest::default() }).unwrap();
+        answer.items.iter().map(|i| i.item_id).collect::<Vec<_>>()
+    };
+    // Off (the default): one address, so both logins on each of its ports.
+    assert_eq!(query("http://192.168.1.10:5000/").len(), 2);
+    // On, without proof (it only narrows what the extensions get): each port its own logins.
+    let on = BrowserPolicy { match_port: true, ..h.core.state().browser.policy };
+    h.core.browser_set_policy(on.clone(), None, None).await.unwrap();
+    assert_eq!(query("http://192.168.1.10:5000/login"), [nas]);
+    assert_eq!(query("http://192.168.1.10/"), [router]);
+    assert!(query("http://192.168.1.10:8080/").is_empty());
+    let named = FillRequest { item_id: Some(router), ..fill_at("http://192.168.1.10:5000/") };
+    assert_eq!(h.core.browser_fill(session, named).await, Err(Refusal::NoMatch));
+    assert_eq!(h.core.browser_fill(session, fill_at("http://192.168.1.10:5000/")).await.unwrap().item_id, nas);
+    // Off again is the default, which needs no proof either.
+    h.core.browser_set_policy(BrowserPolicy { match_port: false, ..on }, None, None).await.unwrap();
+    assert_eq!(query("http://192.168.1.10:5000/").len(), 2);
+}
+
+#[tokio::test(start_paused = true)]
 async fn frames_of_other_sites_and_plain_http_pages_are_refused_unless_allowed() {
     let h = Harness::unlocked().await;
     let (_, session) = paired(&h).await;

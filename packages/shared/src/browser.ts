@@ -19,6 +19,7 @@ export function defaultBrowserPolicy(): BrowserPolicy {
     confirm_fill: false,
     cross_origin_frames: "never",
     on_page_load: false,
+    match_port: false,
   };
 }
 
