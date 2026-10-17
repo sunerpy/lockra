@@ -238,6 +238,13 @@ export class TauriBackend implements Backend {
     return z.boolean().parse(await this.call("browser_extension_reveal"));
   }
 
+  async browserExtensionDownload(): Promise<string | null> {
+    return z
+      .string()
+      .nullable()
+      .parse(await this.call("browser_extension_download"));
+  }
+
   async quickAccessDone(copied: boolean): Promise<void> {
     await this.call("quick_access_done", { copied });
   }

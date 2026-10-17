@@ -142,3 +142,8 @@ fn the_build_carries_the_extension_it_was_made_with_or_none() {
         assert!(carried.files.iter().any(|(name, _)| *name == "background.js"));
     }
 }
+
+#[test]
+fn the_package_to_download_is_the_self_install_one_of_this_version() {
+    assert_eq!(download_url("0.10.2"), "https://github.com/sunerpy/lockra/releases/download/v0.10.2/lockra-extension_0.10.2_chromium-unpacked.zip");
+}

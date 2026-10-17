@@ -83,6 +83,9 @@ export interface Backend {
   browserExtensionCopy(): Promise<void>;
   /** The folder in the file manager; `false` when none could show it. */
   browserExtensionReveal(): Promise<boolean>;
+  /** The extension's self-install package of this version in the system's browser, for loading by
+   *  hand. `null` once a browser opened it, else its address, to show (none opened it). */
+  browserExtensionDownload(): Promise<string | null>;
   /** The command palette the quick search opened (`open_palette`) is closed (the desktop's):
    *  after a copy from it (`copied`), the window goes back where it was, hidden again if the quick
    *  search had brought it up. */

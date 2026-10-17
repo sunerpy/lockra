@@ -1093,6 +1093,10 @@ export const en: Messages = {
           "Choose Load unpacked and pick this folder; you can copy its path first and paste it into the dialog.",
         step3:
           "If you loaded the Lockra extension from a release package before, load this folder all the same: it takes the old one's place and stays paired.",
+        download: "Download the extension package",
+        downloadHint:
+          "You can also download the extension's package from the release: unzip it into a folder you keep and load that folder as in step 2. An extension installed that way does not update with Lockra.",
+        downloadNotOpened: "No browser could be opened: copy this address into a browser:",
       },
       paired: {
         title: "Paired extensions",

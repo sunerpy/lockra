@@ -30,6 +30,9 @@ use super::manifest::Places;
 /// The file written last into the folder: the version it holds and the digest of its files.
 pub const MARKER: &str = "lockra-folder.json";
 
+/// The releases' page, where each release has the extension's self-install package.
+const RELEASES_URL: &str = "https://github.com/sunerpy/lockra/releases";
+
 /// How often a rename is tried, and the pause before the next try (Windows refuses to move a folder
 /// while a file in it is open, as a scanner may hold one it has just seen written).
 const RENAME_TRIES: u32 = 5;
@@ -203,21 +206,56 @@ fn remove_dir(path: &Path) -> io::Result<()> {
     }
 }
 
+/// The self-install package of the extension of `version` on its release: the folder's files, for
+/// loading by hand where the folder will not do (it does not update with Lockra).
+pub fn download_url(version: &str) -> String {
+    format!("{RELEASES_URL}/download/v{version}/lockra-extension_{version}_chromium-unpacked.zip")
+}
+
 /// The file manager showing the folder: Explorer and Finder with it selected, on Linux its parent
 /// (`xdg-open` selects nothing). Whether one started.
 pub fn reveal(folder: &Path) -> bool {
-    let mut command = reveal_command(folder);
+    started(reveal_command(folder), "no file manager could show the extension's folder")
+}
+
+/// `url` in the system's browser. Whether one started.
+pub fn open_url(url: &str) -> bool {
+    started(url_command(url), "no browser could open the address")
+}
+
+fn started(mut command: std::process::Command, failed: &str) -> bool {
     match command.spawn() {
         Ok(mut child) => {
-            // Reaped on a thread of its own: Explorer answers 1 even when it opened the folder.
+            // Reaped on a thread of its own: Explorer answers 1 even when it did what it was asked.
             std::thread::spawn(move || child.wait());
             true
         }
         Err(error) => {
-            tracing::warn!(%error, "no file manager could show the extension's folder");
+            tracing::warn!(%error, "{failed}");
             false
         }
     }
+}
+
+#[cfg(windows)]
+fn url_command(url: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("explorer.exe");
+    command.arg(url);
+    command
+}
+
+#[cfg(target_os = "macos")]
+fn url_command(url: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("open");
+    command.arg(url);
+    command
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn url_command(url: &str) -> std::process::Command {
+    let mut command = std::process::Command::new("xdg-open");
+    command.arg(url);
+    command
 }
 
 #[cfg(windows)]

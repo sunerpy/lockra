@@ -1544,6 +1544,7 @@ export const SHELL_COMMAND_NAMES = [
   "browser_extension",
   "browser_extension_copy",
   "browser_extension_reveal",
+  "browser_extension_download",
   "quick_access_done",
 ] as const;
 

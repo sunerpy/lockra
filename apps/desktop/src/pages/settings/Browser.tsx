@@ -223,6 +223,8 @@ function FolderSection() {
   const [folder, setFolder] = useState<ExtensionFolder | null>(null);
   const [copied, setCopied] = useState(false);
   const [notOpened, setNotOpened] = useState(false);
+  /** The package's address, when no browser opened it. */
+  const [address, setAddress] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -240,7 +242,35 @@ function FolderSection() {
     return () => clearTimeout(timer);
   }, [copied]);
 
-  if (folder === null) return null;
+  const download = async () => {
+    const shown = await guarded(() => backend.browserExtensionDownload());
+    if (shown !== undefined) setAddress(shown);
+  };
+  const packageLine = (
+    <div className="mt-3 flex items-start gap-3" data-testid="extension-download">
+      <p className="min-w-0 flex-1 text-[12px] leading-4 text-fg-muted">
+        {t("settings.browser.folder.downloadHint")}
+        {address !== null && (
+          <span className="mt-1 block text-warning-text">
+            {t("settings.browser.folder.downloadNotOpened")}{" "}
+            <span
+              className="font-mono break-all text-fg select-text"
+              data-testid="extension-download-address">
+              {address}
+            </span>
+          </span>
+        )}
+      </p>
+      <Button size="sm" variant="outline" icon="download" onClick={() => void download()}>
+        {t("settings.browser.folder.download")}
+      </Button>
+    </div>
+  );
+  if (folder === null) {
+    return (
+      <SettingsSection title={t("settings.browser.folder.title")}>{packageLine}</SettingsSection>
+    );
+  }
   const copy = async () => {
     const done = await guarded(async () => {
       await backend.browserExtensionCopy();
@@ -300,6 +330,7 @@ function FolderSection() {
         <li>{t("settings.browser.folder.step2")}</li>
         <li>{t("settings.browser.folder.step3")}</li>
       </ol>
+      {packageLine}
     </SettingsSection>
   );
 }

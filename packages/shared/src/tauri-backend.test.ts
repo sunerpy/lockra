@@ -328,10 +328,20 @@ describe("TauriBackend", () => {
     expect(await backend.browserExtension()).toEqual(folder);
     await backend.browserExtensionCopy();
     expect(await backend.browserExtensionReveal()).toBe(true);
+    // The release's package: opened in the browser (null), or its address to show.
+    expect(await backend.browserExtensionDownload()).toBeNull();
+    const address =
+      "https://github.com/sunerpy/lockra/releases/download/v0.10.2/lockra-extension_0.10.2_chromium-unpacked.zip";
+    expect(
+      await new TauriBackend(
+        fake({ browser_extension_download: address }).transport,
+      ).browserExtensionDownload(),
+    ).toBe(address);
     expect(f.calls.map(([c, a]) => [c, a])).toEqual([
       ["browser_extension", undefined],
       ["browser_extension_copy", undefined],
       ["browser_extension_reveal", undefined],
+      ["browser_extension_download", undefined],
     ]);
     // A build made before the extension carries none; an answer that is no folder is refused.
     expect(await new TauriBackend(fake().transport).browserExtension()).toBeNull();

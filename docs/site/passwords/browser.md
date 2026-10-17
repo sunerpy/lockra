@@ -70,6 +70,10 @@ Browser › Extension folder** with **Copy path** and **Open folder**:
 | macOS   | `~/Library/Application Support/Lockra/browser/extension` |
 | Linux   | `~/.local/share/Lockra/browser/extension`                |
 
+The section also offers **Download the extension package**, which opens the release's
+self-install package of the same version in the browser: for loading by hand, as above, but an
+extension installed that way does not update with Lockra.
+
 Load that folder unpacked once, as in steps 2 and 3 above. If you loaded the extension from a
 release package before, load this folder all the same: under the same ID it takes the old one's
 place and stays paired. Keep **Developer mode** on: without it the browser turns an unpacked

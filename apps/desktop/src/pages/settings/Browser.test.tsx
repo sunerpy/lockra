@@ -155,9 +155,32 @@ describe("Settings › 浏览器", () => {
     await user.click(folder.getByRole("button", { name: "打开文件夹" }));
     expect(backend.extensionReveals).toBe(1);
     expect(folder.queryByText(/没能打开文件管理器/)).not.toBeInTheDocument();
+    // Or the release's package, by hand: it opens in the browser.
+    const download = within(pane.getByTestId("extension-download"));
+    expect(download.getByText(/不会随 Lockra 自动更新/)).toBeInTheDocument();
+    await user.click(download.getByRole("button", { name: "下载扩展安装包" }));
+    expect(backend.extensionDownloads).toBe(1);
+    expect(download.queryByTestId("extension-download-address")).not.toBeInTheDocument();
   });
 
-  it("says when the folder does not hold this build's extension yet, and is not there without one", async () => {
+  it("shows the package's address when no browser opened it, and offers it without a folder too", async () => {
+    const backend = core({
+      settings: { run_in_background: true },
+      extensionFolder: null,
+      extensionDownloadOpens: false,
+    });
+    await backend.browserEnable(["chrome"]);
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const download = within(await pane.findByTestId("extension-download"));
+    await user.click(download.getByRole("button", { name: "下载扩展安装包" }));
+    expect(await download.findByTestId("extension-download-address")).toHaveTextContent(
+      `releases/download/v${MOCK_APP_VERSION}/lockra-extension_${MOCK_APP_VERSION}_chromium-unpacked.zip`,
+    );
+  });
+
+  it("says when the folder does not hold this build's extension yet, and shows no folder without one", async () => {
     const pending = core({
       settings: { run_in_background: true },
       extensionFolder: { path: MOCK_EXTENSION_FOLDER, version: "0.10.2", ready: false },
@@ -178,6 +201,7 @@ describe("Settings › 浏览器", () => {
     const other = await openBrowser(user);
     expect(await other.findByTestId("browser-rows")).toBeInTheDocument();
     expect(other.queryByTestId("extension-folder")).not.toBeInTheDocument();
+    expect(other.getByTestId("extension-download")).toBeInTheDocument();
   });
 
   it("tells each paired extension's version, and the ones older than Lockra", async () => {

@@ -195,3 +195,15 @@ pub async fn browser_extension_reveal(core: State<'_, Core>) -> Result<bool, Cor
     offered(&core)?;
     on_blocking(|| Ok(extension::reveal(&extension_folder()?))).await
 }
+
+/// The extension's self-install package of this version in the system's browser, for loading by
+/// hand where the folder will not do. The address is the shell's: the webview names none. `None`
+/// once a browser opened it, else the address, to show.
+#[tauri::command]
+pub async fn browser_extension_download<R: tauri::Runtime>(app: tauri::AppHandle<R>, core: State<'_, Core>) -> Result<Option<String>, CoreError> {
+    offered(&core)?;
+    let url = extension::download_url(&app.package_info().version.to_string());
+    let address = url.clone();
+    let opened = tauri::async_runtime::spawn_blocking(move || extension::open_url(&address)).await.unwrap_or(false);
+    Ok(if opened { None } else { Some(url) })
+}

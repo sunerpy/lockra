@@ -56,7 +56,7 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 20] = [
+pub const COMMANDS: [&str; 21] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -76,6 +76,7 @@ pub const COMMANDS: [&str; 20] = [
     "browser_extension",
     "browser_extension_copy",
     "browser_extension_reveal",
+    "browser_extension_download",
     "quick_access_done",
 ];
 
@@ -502,6 +503,7 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             browser::service::browser_extension,
             browser::service::browser_extension_copy,
             browser::service::browser_extension_reveal,
+            browser::service::browser_extension_download,
             quick_access::quick_access_done
         ])
         .setup(move |app| {

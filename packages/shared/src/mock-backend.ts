@@ -134,6 +134,8 @@ export interface MockOptions {
   /** The folder the shell keeps its copy of the extension in (default: one holding this build's,
    *  in the platform's place); `null`: a build that carries none. */
   extensionFolder?: ExtensionFolder | null;
+  /** A browser opens the extension's package (the default), or none does. */
+  extensionDownloadOpens?: boolean;
 }
 
 /** A login of the mock: its view and its secrets. */
@@ -852,9 +854,12 @@ export class MockBackend implements Backend {
   /** The browsers whose manifests the mock's shell has written. */
   private manifests = new Set<BrowserId>();
   private extensionFolder: ExtensionFolder | null;
-  /** How often the folder's path went to the clipboard and the file manager showed it, for tests. */
+  private extensionDownloadOpens: boolean;
+  /** How often the folder's path went to the clipboard, the file manager showed it and a browser
+   *  was asked for the package, for tests. */
   extensionCopies = 0;
   extensionReveals = 0;
+  extensionDownloads = 0;
   /** The shell could not register the quick search's shortcut (the core keeps it in memory). */
   private shortcutError: ErrorCode | null = null;
   /** Every command dispatched, for tests. */
@@ -877,6 +882,7 @@ export class MockBackend implements Backend {
     this.biometricAnswer = options.biometricAnswer ?? null;
     this.passwords = options.passwords ?? false;
     this.items = options.items ?? [];
+    this.extensionDownloadOpens = options.extensionDownloadOpens ?? true;
     this.extensionFolder =
       options.extensionFolder === undefined
         ? { path: MOCK_EXTENSION_FOLDER, version: MOCK_APP_VERSION, ready: true }
@@ -1227,6 +1233,15 @@ export class MockBackend implements Backend {
     this.requireBrowserShell();
     this.extensionReveals += 1;
     return this.extensionFolder !== null;
+  }
+
+  async browserExtensionDownload(): Promise<string | null> {
+    this.requireBrowserShell();
+    this.extensionDownloads += 1;
+    const version = this.state.app_version;
+    return this.extensionDownloadOpens
+      ? null
+      : `https://github.com/sunerpy/lockra/releases/download/v${version}/lockra-extension_${version}_chromium-unpacked.zip`;
   }
 
   async quickAccessDone(copied: boolean): Promise<void> {
