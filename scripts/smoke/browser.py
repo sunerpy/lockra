@@ -340,8 +340,20 @@ class Smoke:
         )
         print("smoke: the inline menu filled the login with the keyboard")
 
+    def room_to_fill(self, fills=1):
+        """Lockra pauses an extension that asks for more than ten secrets a minute, and the steps
+        before come close: wait until this step's `fills` fit in the minute's count."""
+
+        def fits():
+            now = time.time() * 1000
+            recent = [e for e in self.activity() if e["event"] in ("filled", "otp_filled", "copied") and now - e["at_ms"] < 60_000]
+            return len(recent) + fills <= 10
+
+        until("room in the extension's ten secrets a minute", fits, 75)
+
     def menu_search(self):
         """Three logins for one site: the menu's box narrows them, and Enter fills the one left."""
+        self.room_to_fill()
         for user in ("alice", "bob", "carol"):
             self.app.invoke(
                 {
@@ -711,11 +723,11 @@ class Smoke:
             self.cross_site_frame()
             self.hijack_pages()
             self.many_fields()
-            # Last of the fills: a fill of another site would leave the next pages' code steps
-            # without the login they follow.
-            self.menu_search()
             self.signup()
             self.save_prompt()
+            # Last of the fills: a fill of another site would leave the code steps without the
+            # login they follow, and the steps before fill ten times in their first minute.
+            self.menu_search()
             self.lock_follows()
             if self.chrome:
                 self.self_update()
