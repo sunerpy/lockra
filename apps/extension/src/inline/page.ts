@@ -35,6 +35,10 @@ export interface InlineOptions {
 type Child = Node | string | null | undefined | false;
 
 /** IntersectionObserver v2's options (Chromium): the frame's visibility, occlusion included. */
+/** A list's row, and how many show before it scrolls. */
+const ROW_HEIGHT = 52;
+const MAX_ROWS = 7;
+
 const VISIBILITY: IntersectionObserverInit & { trackVisibility: boolean; delay: number } = {
   threshold: 1,
   trackVisibility: true,
@@ -47,6 +51,8 @@ export class InlinePage {
   private view: InlineView | null = null;
   private revealed = false;
   private lastHeight = -1;
+  /** A searchable list's parts, kept while its view changes: the box keeps its text and focus. */
+  private searching: { hint: HTMLElement; rows: HTMLElement } | null = null;
 
   constructor(private readonly options: InlineOptions) {
     this.root = options.doc.getElementById("root") ?? options.doc.body;
@@ -114,11 +120,13 @@ export class InlinePage {
 
   private afterRender: () => void = () => undefined;
 
-  private act(action: InlineAction, event?: MouseEvent): void {
+  /** A click goes with where it landed; a key with no point (the checks run at the frame's
+   *  middle). */
+  private act(action: InlineAction, event?: MouseEvent | KeyboardEvent): void {
     this.send({
       kind: "action",
       action,
-      point: event ? { x: event.clientX, y: event.clientY } : null,
+      point: event && "clientX" in event ? { x: event.clientX, y: event.clientY } : null,
       trusted: event?.isTrusted ?? false,
     });
   }
@@ -201,43 +209,68 @@ export class InlinePage {
 
   private clear(): void {
     this.view = null;
+    this.searching = null;
     this.root.replaceChildren();
   }
 
   private render(view: InlineView): void {
     if (this.view?.view !== view.view) this.revealed = false;
+    const before = this.view;
     this.view = view;
+    // A searchable list that stays one changes its hint and rows only: redrawn whole, the box
+    // would lose the focus and the caret at every key.
+    if (
+      this.searching &&
+      view.view === "list" &&
+      view.search !== undefined &&
+      before?.view === "list" &&
+      before.search !== undefined
+    ) {
+      this.searching.hint.textContent = this.hint(view);
+      this.searching.rows.replaceChildren(...this.rows(view.items, view.active));
+      this.showActive(this.searching.rows);
+      this.afterRender();
+      return;
+    }
+    this.searching = null;
     const body =
       view.view === "save" || view.view === "update" ? this.prompt(view) : this.menu(view);
     this.root.replaceChildren(body);
     this.afterRender();
   }
 
+  private hint(view: Exclude<InlineView, { view: "save" } | { view: "update" }>): string {
+    const site = "site" in view ? view.site : "";
+    return view.view === "list"
+      ? view.code
+        ? this.t("inline.codeHint", { site })
+        : this.t("inline.matches", { site, n: view.items.length })
+      : view.view === "signup"
+        ? this.t("inline.signupHint")
+        : site;
+  }
+
   /** The menu's frame: a header, the content, a footer of keys. */
   private menu(view: Exclude<InlineView, { view: "save" } | { view: "update" }>): HTMLElement {
     const t = (key: ExtensionKey, params?: Params) => this.t(key, params);
-    const site = "site" in view ? view.site : "";
-    const hint =
-      view.view === "list"
-        ? view.code
-          ? t("inline.codeHint", { site })
-          : t("inline.matches", { site, n: view.items.length })
-        : view.view === "signup"
-          ? t("inline.signupHint")
-          : site;
+    const hint = this.el(
+      "span",
+      "min-w-0 flex-1 truncate text-[11px] text-fg-subtle",
+      this.hint(view),
+    );
     const header = this.el(
       "div",
       "flex h-[34px] items-center gap-2 px-3",
       logo(this.options.doc, 18),
       this.el("span", "text-[12px] font-semibold text-fg", "Lockra"),
-      this.el("span", "min-w-0 flex-1 truncate text-[11px] text-fg-subtle", hint),
+      hint,
       this.iconButton("x", t("inline.close"), () => this.act({ type: "close" })),
     );
     let content: HTMLElement;
     let footer: string;
     switch (view.view) {
       case "list":
-        content = this.list(view.items, view.active);
+        content = this.list(view, hint);
         footer = t(view.code ? "inline.codeFooter" : "inline.listFooter");
         break;
       case "signup":
@@ -276,11 +309,31 @@ export class InlinePage {
     );
   }
 
-  private list(items: MenuItem[], active: number): HTMLElement {
-    const rows = items.map((item, index) => {
+  /** The logins, seven rows high at most (the rest scroll), under the search box when the list
+   *  has one. A list being searched keeps the height it opened with: a frame that changes its
+   *  size starts its wait before a click or Enter counts again, so an Enter right after typing
+   *  would close it unfilled. */
+  private list(view: Extract<InlineView, { view: "list" }>, hint: HTMLElement): HTMLElement {
+    const rows = this.el(
+      "div",
+      "flex flex-col overflow-y-auto",
+      ...this.rows(view.items, view.active),
+    );
+    rows.style.maxHeight = `${MAX_ROWS * ROW_HEIGHT}px`;
+    queueMicrotask(() => this.showActive(rows));
+    if (view.search === undefined) return rows;
+    rows.style.minHeight = `${Math.min(view.items.length, MAX_ROWS) * ROW_HEIGHT}px`;
+    this.searching = { hint, rows };
+    return this.el("div", "flex flex-col gap-1", this.searchBox(view.search), rows);
+  }
+
+  private rows(items: MenuItem[], active: number): HTMLElement[] {
+    if (items.length === 0)
+      return [this.el("p", "px-2 py-3 text-[12px] text-fg-subtle", this.t("inline.noMatch"))];
+    return items.map((item, index) => {
       const row = this.el(
         "button",
-        `flex h-[52px] w-full items-center gap-3 rounded-6 px-2 text-left transition-colors ${index === active ? "bg-inset" : "hover:bg-inset"}`,
+        `flex h-[52px] w-full shrink-0 items-center gap-3 rounded-6 px-2 text-left transition-colors ${index === active ? "bg-inset" : "hover:bg-inset"}`,
         this.avatar(item),
         this.el(
           "span",
@@ -292,10 +345,51 @@ export class InlinePage {
       );
       row.type = "button";
       row.title = `${item.title} · ${item.username}`;
+      if (index === active) row.dataset.active = "true";
       row.addEventListener("click", (event) => this.act({ type: "choose", index }, event));
       return row;
     });
-    return this.el("div", "flex flex-col", ...rows);
+  }
+
+  /** The chosen row in sight, where the list scrolls. */
+  private showActive(rows: HTMLElement): void {
+    rows.querySelector<HTMLElement>("[data-active]")?.scrollIntoView?.({ block: "nearest" });
+  }
+
+  /** The box that narrows the list: what it holds goes to the background, which sends the list
+   *  again; its arrows move the choice, Enter fills it, Esc empties the box, then closes. */
+  private searchBox(text: string): HTMLElement {
+    const label = this.t("inline.search");
+    const input = this.input(text, label);
+    input.type = "text";
+    input.setAttribute("aria-label", label);
+    input.className = "min-w-0 flex-1 bg-transparent outline-none placeholder:text-fg-subtle";
+    input.addEventListener("input", () => this.send({ kind: "search", text: input.value }));
+    input.addEventListener("keydown", (event) => {
+      const view = this.view;
+      if (view?.view !== "list") return;
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        this.send({ kind: "key", key: event.key });
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        if (view.items.length > 0) this.act({ type: "choose", index: view.active }, event);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        if (input.value === "") {
+          this.act({ type: "close" });
+          return;
+        }
+        input.value = "";
+        this.send({ kind: "search", text: "" });
+      }
+    });
+    return this.el(
+      "div",
+      "flex h-8 shrink-0 items-center gap-2 rounded-6 bg-surface-solid px-2.5 text-[13px] hairline focus-within:border-fg",
+      icon(this.options.doc, "search", 14, "shrink-0 text-fg-subtle"),
+      input,
+    );
   }
 
   private signup(view: Extract<InlineView, { view: "signup" }>): HTMLElement {

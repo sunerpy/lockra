@@ -63,9 +63,34 @@ const SNAPSHOT = "snapshot";
 /** How soon a reload put off by a request or a pairing under way is tried again. */
 const UPDATE_RETRY_MS = 5_000;
 const MAX_FRAME_HEIGHT = 560;
+/** From how many logins a list gets its search box. */
+const SEARCH_FROM = 2;
 
 function menuItem(item: ItemSummary): MenuItem {
   return { title: item.title, username: item.username || item.email, downgrade: item.downgrade };
+}
+
+/** The menu's list of `items`, searchable when there are several. */
+function listView(site: string, items: ItemSummary[], code = false): InlineView {
+  return {
+    view: "list",
+    site,
+    items: items.map(menuItem),
+    active: 0,
+    ...(code ? { code: true } : {}),
+    ...(items.length >= SEARCH_FROM ? { search: "" } : {}),
+  };
+}
+
+/** The logins whose title, user name or email address hold `text`, without regard to case. */
+function searched(items: ItemSummary[], text: string): ItemSummary[] {
+  const needle = text.trim().toLocaleLowerCase();
+  if (!needle) return items;
+  return items.filter((item) =>
+    [item.title, item.username, item.email].some((part) =>
+      part.toLocaleLowerCase().includes(needle),
+    ),
+  );
 }
 
 /** A sign-up form in the tab's memory: its frame, its document (its address where the browser
@@ -238,8 +263,9 @@ export class Controller {
       kind: "menu",
       frame,
       frameUrl: frame.facts.frame_url,
-      view: { view: "list", site: answer.site, items: answer.items.map(menuItem), active: 0 },
+      view: listView(answer.site, answer.items),
       items: answer.items,
+      all: answer.items,
       policy: answer.policy,
       item: null,
       generated: null,
@@ -372,8 +398,9 @@ export class Controller {
       kind: "menu",
       frame,
       frameUrl: frame.facts.frame_url,
-      view: { view: "list", site: answer.site, items: items.map(menuItem), active: 0, code: true },
+      view: listView(answer.site, items, true),
       items,
+      all: items,
       policy: answer.policy,
       item: null,
       generated: null,
@@ -498,16 +525,8 @@ export class Controller {
       return null;
     const view = frame.view;
     if (key === "Escape") return this.close(frame);
-    if (
-      (key === "ArrowDown" || key === "ArrowUp") &&
-      view.view === "list" &&
-      view.items.length > 0
-    ) {
-      const step = key === "ArrowDown" ? 1 : -1;
-      this.show(frame, {
-        ...view,
-        active: (view.active + step + view.items.length) % view.items.length,
-      });
+    if (key === "ArrowDown" || key === "ArrowUp") {
+      this.move(frame, key === "ArrowDown" ? 1 : -1);
       return null;
     }
     if (key !== "Enter") return null;
@@ -522,6 +541,24 @@ export class Controller {
             : null;
     if (action) await this.perform(frame, action);
     return null;
+  }
+
+  /** The list's choice one row down or up, round its end. */
+  private move(frame: InlineFrame, step: 1 | -1): void {
+    const view = frame.view;
+    if (view.view !== "list" || view.items.length === 0) return;
+    this.show(frame, {
+      ...view,
+      active: (view.active + step + view.items.length) % view.items.length,
+    });
+  }
+
+  /** The list narrowed to what its search box holds; its choice starts again at the top. */
+  private search(frame: InlineFrame, text: string): void {
+    const view = frame.view;
+    if (view.view !== "list" || view.search === undefined) return;
+    frame.items = searched(frame.all ?? frame.items, text);
+    this.show(frame, { ...view, items: frame.items.map(menuItem), active: 0, search: text });
   }
 
   /** Tell a content script, in the document it spoke from. */
@@ -610,6 +647,12 @@ export class Controller {
       }
       case "visible":
         frame.visible = message.visible;
+        return;
+      case "search":
+        this.search(frame, message.text);
+        return;
+      case "key":
+        this.move(frame, message.key === "ArrowDown" ? 1 : -1);
         return;
       case "action": {
         if (message.action.type === "close") {

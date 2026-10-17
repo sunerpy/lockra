@@ -146,6 +146,12 @@ field, Lockra's menu opens above the field instead, or under it when there is no
 list is open, the arrow keys and Esc go to it: Esc closes it, and the arrow keys then move in
 Lockra's menu.
 
+<StatusTag status="building" /> In the next version, a menu of two logins or more has a search box
+at its top: click into it and type part of a login's title, user name or email address, and the
+list keeps the logins that hold it; the arrow keys choose, Enter fills, Esc empties the box and
+then closes the menu. What you type there stays in Lockra's menu: the page cannot read it. A long
+list scrolls, seven logins high.
+
 Whichever way you fill, only the visible fields of the form you are in are filled, and the custom
 fields of the login that name a page field. A form is submitted after filling only with **Submit
 after filling** on:

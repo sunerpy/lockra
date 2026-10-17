@@ -237,6 +237,8 @@ describe("the inline menu", () => {
           { title: "GitHub", username: "octocat-work", downgrade: false },
         ],
         active: 0,
+        // Two logins or more: the menu may be searched.
+        search: "",
       }),
     );
     frame.send({ kind: "visible", visible: true });
@@ -801,6 +803,91 @@ describe("the code of a second step", () => {
     expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
       otp: false,
     });
+  });
+});
+
+describe("searching the menu", () => {
+  const ITEM3 = "5c0fe1a2-0b3c-4d5e-8f60-000000000003";
+  const three = () =>
+    queryAnswer([
+      summary(ITEM),
+      summary(ITEM2),
+      summary(ITEM3, { title: "GitLab", username: "", email: "dev@example.com" }),
+    ]);
+
+  it("narrows the list to what the box holds, and its arrows and Enter go by what is shown", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.query = three;
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ view: "list", search: "" }));
+    // Title, user name and email address, without regard to case.
+    frame.send({ kind: "search", text: "WORK" });
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toMatchObject({
+        items: [{ username: "octocat-work" }],
+        active: 0,
+        search: "WORK",
+      }),
+    );
+    frame.send({ kind: "search", text: "dev@" });
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toMatchObject({
+        items: [{ title: "GitLab", username: "dev@example.com" }],
+      }),
+    );
+    frame.send({ kind: "search", text: "git" });
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ items: { length: 3 } }));
+    frame.send({ kind: "key", key: "ArrowUp" });
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ active: 2 }));
+    frame.send({ kind: "search", text: "octo" });
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toMatchObject({ items: { length: 2 }, active: 0 }),
+    );
+    frame.send({ kind: "key", key: "ArrowDown" });
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ active: 1 }));
+    // Nothing left: nothing to choose.
+    frame.send({ kind: "search", text: "nobody" });
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ items: [], search: "nobody" }));
+    frame.send({ kind: "key", key: "ArrowDown" });
+    // The chosen row is the one shown at that place.
+    frame.send({ kind: "search", text: "lab" });
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ items: [{ title: "GitLab" }] }));
+    frame.send({ kind: "visible", visible: true });
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: null,
+      trusted: true,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+    expect(contentGot.find((m) => m.kind === "frame.verify")).toMatchObject({
+      point: null,
+      trusted: true,
+    });
+    expect(app.requests.at(-1)).toMatchObject({ op: "fill", item_id: ITEM3 });
+  });
+
+  it("is offered only over two logins or more, and takes no malformed message", async () => {
+    const context = await setup();
+    const { browser, app } = context;
+    app.handlers.query = () => queryAnswer([summary(ITEM)]);
+    const one = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, one.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    expect(lastView(frame)).not.toHaveProperty("search");
+    // A list that is no search's is not narrowed.
+    frame.send({ kind: "search", text: "nobody" });
+    frame.send({ kind: "search", text: "x".repeat(300) });
+    frame.send({ kind: "key", key: "Tab" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(lastView(frame)).toMatchObject({ items: [{ username: "octocat" }] });
+    expect(lastView(frame)).not.toHaveProperty("search");
   });
 });
 

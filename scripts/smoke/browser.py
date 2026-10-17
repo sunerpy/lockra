@@ -340,6 +340,39 @@ class Smoke:
         )
         print("smoke: the inline menu filled the login with the keyboard")
 
+    def menu_search(self):
+        """Three logins for one site: the menu's box narrows them, and Enter fills the one left."""
+        for user in ("alice", "bob", "carol"):
+            self.app.invoke(
+                {
+                    "command": "item_add",
+                    "draft": {
+                        "title": "Many test",
+                        "username": user,
+                        "password": {"type": "set", "value": f"{user}-{PAY_PASSWORD}"},
+                        "urls": [{"url": self.url("many.test", "")}],
+                    },
+                }
+            )
+        self.web.go(self.url("many.test", "login.html"))
+        self.open_menu("#username")
+        # The box sits under the menu's header (34 px, a rule, the content's 4 px): a real click
+        # takes the focus into the menu's frame, then the keys go to it.
+        rect = self.web.run("return document.querySelector('[popover]:popover-open').getBoundingClientRect().toJSON()")
+        self.web.click_at(int(rect["left"] + 80), int(rect["top"] + 55))
+        # The list keeps its height as it narrows (a frame that changes its size makes the next
+        # Enter wait), and the background narrows it as each key arrives, before the Enter: the
+        # Enter fills the first login left, carol, or the step fails on another one's values.
+        self.web.keys(*"car")
+        self.shot("menu-search")
+        self.web.keys(ENTER)
+        until(
+            "the login the search left filled",
+            lambda: self.web.values("#username", "#password") == ["carol", f"carol-{PAY_PASSWORD}"],
+            30,
+        )
+        print("smoke: the menu's search box narrowed three logins to one, and Enter filled it")
+
     def activity(self):
         return self.app.invoke({"command": "app_state"})["browser"]["activity"]
 
@@ -678,6 +711,9 @@ class Smoke:
             self.cross_site_frame()
             self.hijack_pages()
             self.many_fields()
+            # Last of the fills: a fill of another site would leave the next pages' code steps
+            # without the login they follow.
+            self.menu_search()
             self.signup()
             self.save_prompt()
             self.lock_follows()
