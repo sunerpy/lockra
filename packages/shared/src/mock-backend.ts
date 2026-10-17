@@ -21,6 +21,7 @@ import {
   type BiometricKind,
   type BrowserId,
   type BrowserStatus,
+  type ExtensionFolder,
   type BrowserView,
   type ConfirmView,
   type PairRequestView,
@@ -130,6 +131,9 @@ export interface MockOptions {
   /** The browser extension's pairings, waiting requests, policy and activity (shown once
    *  unlocked). */
   browser?: Partial<Pick<BrowserView, "paired" | "pairing" | "confirms" | "policy" | "activity">>;
+  /** The folder the shell keeps its copy of the extension in (default: one holding this build's,
+   *  in the platform's place); `null`: a build that carries none. */
+  extensionFolder?: ExtensionFolder | null;
 }
 
 /** A login of the mock: its view and its secrets. */
@@ -409,6 +413,7 @@ export function sampleBrowser(now: number = Date.now()): NonNullable<MockOptions
         last_seen_ms: now,
         connected: true,
         page_access: true,
+        version: MOCK_APP_VERSION,
         paused: false,
       },
       {
@@ -420,6 +425,7 @@ export function sampleBrowser(now: number = Date.now()): NonNullable<MockOptions
         last_seen_ms: now - 2 * 24 * 60 * minute,
         connected: false,
         page_access: false,
+        version: null,
         paused: false,
       },
     ],
@@ -645,6 +651,9 @@ function mockTag(seed: string): string {
 /** The version the mock app reports, and its devices write with. */
 export const MOCK_APP_VERSION = "0.1.0";
 
+/** Where the mock's shell keeps the extension (the Windows place, as the boards show it). */
+export const MOCK_EXTENSION_FOLDER = "C:\\Users\\me\\AppData\\Local\\Lockra\\browser\\extension";
+
 /** A space the mock can start with (the showcase and the page tests): S3, two devices. */
 export function mockSyncSpace(overrides: Partial<SyncSpaceView> = {}): SyncSpaceView {
   return {
@@ -842,6 +851,10 @@ export class MockBackend implements Backend {
   private browser: Pick<BrowserView, "paired" | "pairing" | "confirms" | "policy" | "activity">;
   /** The browsers whose manifests the mock's shell has written. */
   private manifests = new Set<BrowserId>();
+  private extensionFolder: ExtensionFolder | null;
+  /** How often the folder's path went to the clipboard and the file manager showed it, for tests. */
+  extensionCopies = 0;
+  extensionReveals = 0;
   /** The shell could not register the quick search's shortcut (the core keeps it in memory). */
   private shortcutError: ErrorCode | null = null;
   /** Every command dispatched, for tests. */
@@ -864,6 +877,10 @@ export class MockBackend implements Backend {
     this.biometricAnswer = options.biometricAnswer ?? null;
     this.passwords = options.passwords ?? false;
     this.items = options.items ?? [];
+    this.extensionFolder =
+      options.extensionFolder === undefined
+        ? { path: MOCK_EXTENSION_FOLDER, version: MOCK_APP_VERSION, ready: true }
+        : options.extensionFolder;
     this.browser = {
       paired: options.browser?.paired ?? [],
       pairing: options.browser?.pairing ?? [],
@@ -1194,6 +1211,22 @@ export class MockBackend implements Backend {
   async browserStatus(): Promise<BrowserStatus[]> {
     this.requireBrowserShell();
     return this.browserStatuses();
+  }
+
+  async browserExtension(): Promise<ExtensionFolder | null> {
+    this.requireBrowserShell();
+    return this.extensionFolder;
+  }
+
+  async browserExtensionCopy(): Promise<void> {
+    this.requireBrowserShell();
+    this.extensionCopies += 1;
+  }
+
+  async browserExtensionReveal(): Promise<boolean> {
+    this.requireBrowserShell();
+    this.extensionReveals += 1;
+    return this.extensionFolder !== null;
   }
 
   async quickAccessDone(copied: boolean): Promise<void> {
@@ -1758,6 +1791,7 @@ export class MockBackend implements Backend {
             last_seen_ms: null,
             connected: false,
             page_access: null,
+            version: null,
             paused: false,
           },
         ];

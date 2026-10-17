@@ -1308,6 +1308,7 @@ describe("MockBackend", () => {
             last_seen_ms: null,
             connected: true,
             page_access: true,
+            version: null,
             paused: true,
           },
         ],

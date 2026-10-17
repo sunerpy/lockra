@@ -520,6 +520,9 @@
     "browser_enable",
     "browser_disable",
     "browser_status",
+    "browser_extension",
+    "browser_extension_copy",
+    "browser_extension_reveal",
     "quick_access_done"
   ]
 }

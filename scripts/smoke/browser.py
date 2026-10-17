@@ -41,6 +41,8 @@ PAY_PASSWORD = "Pay-Frame-Secret-3"
 NEW_USER = "bob"
 NEW_PASSWORD = "Fresh-Login-Secret-9"
 CHROME_ID = "egbpficliljjnpkjbigonldakfllebco"
+# The id of the extension in the folder the app keeps for the browsers (manifest/unpacked.json's key).
+FOLDER_ID = "flgfdomeabdfbebfjonaocddjcamgblk"
 FIREFOX_ID = "lockra@firlab.app"
 # The add-on's internal UUID, fixed so its pages have a known address (extensions.webextensions.uuids).
 FIREFOX_UUID = "6b3e1f2a-4c5d-4e6f-8a9b-0c1d2e3f4a5b"
@@ -202,34 +204,37 @@ class Smoke:
                     archive.write(full, os.path.relpath(full, target))
         return packed
 
+    def chrome_capabilities(self, extension, prefs=None):
+        return {
+            "browserName": "chrome",
+            "acceptInsecureCerts": True,
+            "goog:chromeOptions": {
+                "binary": self.args.binary,
+                "prefs": {"credentials_enable_service": False, "profile.password_manager_enabled": False, "autofill.profile_enabled": False, **(prefs or {})},
+                "args": [
+                    f"--user-data-dir={os.path.join(self.args.work, 'chrome-profile')}",
+                    f"--load-extension={extension}",
+                    f"--disable-extensions-except={extension}",
+                    "--host-resolver-rules=MAP *.test 127.0.0.1",
+                    # The test sites are this machine's: never through a proxy of the environment.
+                    "--no-proxy-server",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disable-search-engine-choice-screen",
+                    "--lang=en-US",
+                    "--window-size=1280,900",
+                    "--enable-logging",
+                    f"--log-file={os.path.join(self.args.work, 'chrome.log')}",
+                    "--v=0",
+                    *(["--no-sandbox"] if self.args.no_sandbox else []),
+                ],
+            },
+        }
+
     def start_browser(self):
         extension = self.extension()
         if self.chrome:
-            capabilities = {
-                "browserName": "chrome",
-                "acceptInsecureCerts": True,
-                "goog:chromeOptions": {
-                    "binary": self.args.binary,
-                    "prefs": {"credentials_enable_service": False, "profile.password_manager_enabled": False, "autofill.profile_enabled": False},
-                    "args": [
-                        f"--user-data-dir={os.path.join(self.args.work, 'chrome-profile')}",
-                        f"--load-extension={extension}",
-                        f"--disable-extensions-except={extension}",
-                        "--host-resolver-rules=MAP *.test 127.0.0.1",
-                        # The test sites are this machine's: never through a proxy of the environment.
-                        "--no-proxy-server",
-                        "--no-first-run",
-                        "--no-default-browser-check",
-                        "--disable-search-engine-choice-screen",
-                        "--lang=en-US",
-                        "--window-size=1280,900",
-                        "--enable-logging",
-                        f"--log-file={os.path.join(self.args.work, 'chrome.log')}",
-                        "--v=0",
-                        *(["--no-sandbox"] if self.args.no_sandbox else []),
-                    ],
-                },
-            }
+            capabilities = self.chrome_capabilities(extension)
         else:
             capabilities = {
                 "browserName": "firefox",
@@ -593,6 +598,37 @@ class Smoke:
         until("the popup to say Lockra is locked", lambda: self.popup_state() == "Locked", 60)
         print("smoke: locking Lockra locked the extension")
 
+    def self_update(self):
+        """Chrome, in a session of its own: the extension loaded from the folder the app keeps it in
+        (as the app wrote it, developer mode on as the user turns it on) reloads itself when a newer
+        copy lands there, as Lockra puts one after its own update: the next page that opens tells
+        it, and once that page closes the browser has read the folder again."""
+        folder = self.app.invoke_shell("browser_extension", {})
+        if not folder or not folder["ready"]:
+            sys.exit(f"smoke: the app's extension folder is not in place: {folder}")
+        path, version = folder["path"], folder["version"]
+        self.web.quit()
+        self.web = Browser(self.args.webdriver, self.chrome_capabilities(path, {"extensions.ui.developer_mode": True}))
+        options = f"chrome-extension://{FOLDER_ID}/options.html"
+        loaded = lambda: self.web.run("return typeof chrome === 'object' && chrome.runtime?.id ? chrome.runtime.getManifest().version : null")  # noqa: E731
+        self.web.go(options)
+        until("the folder's extension", lambda: loaded() == version, 20)
+        newer = f"{version}.1"
+        replace_folder(path, newer)
+        # The page opens again: the background reads the folder and the copy waits for it to close.
+        self.web.go(options)
+        note = lambda: (lambda e: None if e is None else self.web.text(e))(self.web.find('[data-testid="popup-update"]'))  # noqa: E731
+        until("the options page's word of the waiting copy", lambda: "关闭这个窗口后" in (note() or "") or "once this window closes" in (note() or ""), 20)
+        self.web.go("about:blank")
+
+        def reloaded():
+            self.web.go(options)
+            return loaded() == newer
+
+        until(f"the extension at {newer} after it reloaded itself", reloaded, 30)
+        self.shot("self-update")
+        print(f"smoke: the extension in the app's folder went from {version} to {newer} by itself")
+
     def run(self):
         os.makedirs(self.args.out, exist_ok=True)
         try:
@@ -609,6 +645,8 @@ class Smoke:
             self.signup()
             self.save_prompt()
             self.lock_follows()
+            if self.chrome:
+                self.self_update()
         except SystemExit:
             if self.app is not None:
                 try:
@@ -627,6 +665,26 @@ class Smoke:
                 self.web.quit()
             if self.app is not None:
                 self.app.quit()
+
+
+def replace_folder(path, version):
+    """The folder's copy at `version`, put in its place as the app puts one
+    (apps/desktop/src-tauri/src/browser/extension.rs): written beside it, the marker last, then two
+    renames."""
+    staging, old = path + ".staging", path + ".old"
+    for leftover in (staging, old):
+        shutil.rmtree(leftover, ignore_errors=True)
+    shutil.copytree(path, staging)
+    for name in ("manifest.json", "lockra-folder.json"):
+        file = os.path.join(staging, name)
+        with open(file) as f:
+            data = json.load(f)
+        data["version"] = version
+        with open(file, "w") as f:
+            json.dump(data, f, indent=2)
+    os.rename(path, old)
+    os.rename(staging, path)
+    shutil.rmtree(old)
 
 
 def main():

@@ -533,9 +533,10 @@ pub const COMMANDS: [&str; 74] = [
 
 /// The Tauri commands of the desktop shell: the dispatcher, the code stream, the actions that open a
 /// native file dialog first (`entry_add_image` among them: the one account an image's QR code
-/// holds, for a login's form to link), the browser integration's switch, and the end of a quick
+/// holds, for a login's form to link), the browser integration's switch and the extension's folder
+/// (its status, its path on the clipboard, the file manager showing it), and the end of a quick
 /// search (the window goes back where it was).
-pub const SHELL_COMMANDS: [&str; 17] = [
+pub const SHELL_COMMANDS: [&str; 20] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -552,6 +553,9 @@ pub const SHELL_COMMANDS: [&str; 17] = [
     "browser_enable",
     "browser_disable",
     "browser_status",
+    "browser_extension",
+    "browser_extension_copy",
+    "browser_extension_reveal",
     "quick_access_done",
 ];
 

@@ -512,6 +512,7 @@ fn browser() -> BrowserView {
                 last_seen_ms: Some(T0 - 60_000),
                 connected: true,
                 page_access: Some(true),
+                version: Some("0.10.1".into()),
                 paused: false,
             },
             PairedView {
@@ -523,6 +524,7 @@ fn browser() -> BrowserView {
                 last_seen_ms: None,
                 connected: false,
                 page_access: None,
+                version: None,
                 paused: true,
             },
         ],

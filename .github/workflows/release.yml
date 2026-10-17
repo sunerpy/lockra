@@ -36,6 +36,10 @@
 # into SHA256SUMS and the attestations with the rest, and into no updater manifest (the phone
 # updates from the store or the releases page). `bundle-relay` (the relay server's archives) and
 # `bundle-extension` (the browser extension's store packages and its source) go the same way.
+# The desktop app carries the Chromium build of the extension too (the folder it keeps for Chrome,
+# Edge and Brave to load unpacked, apps/desktop/src-tauri/src/browser/extension.rs): the
+# `beforeBuildCommand` builds it first and LOCKRA_EXTENSION_REQUIRED=1 makes build.rs fail without
+# it, or with one of another version.
 name: Release
 
 on:
@@ -299,6 +303,7 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
           NODE_OPTIONS: --max_old_space_size=4096
+          LOCKRA_EXTENSION_REQUIRED: "1"
         run: |
           set -euo pipefail
           case "$PACKAGE_MANAGER" in

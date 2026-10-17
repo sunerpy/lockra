@@ -152,6 +152,13 @@ export class Connection {
 
   constructor(private readonly deps: ConnectionDeps) {}
 
+  /** A request waits for its answer, or a pairing is under way: no time for the extension to
+   *  reload itself (background/update.ts). */
+  get busy(): boolean {
+    const stage = this.view.pairing.stage;
+    return this.pending.size > 0 || stage === "handshake" || stage === "waiting";
+  }
+
   get view(): ConnectionView {
     return this.state;
   }

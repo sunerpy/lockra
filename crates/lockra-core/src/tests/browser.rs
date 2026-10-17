@@ -633,6 +633,41 @@ async fn the_popup_searches_every_login_and_tells_those_of_the_page() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn the_paired_list_tells_the_version_each_extension_said_it_was() {
+    let h = Harness::unlocked().await;
+    let (pairing, session) = paired(&h).await;
+    let version = |h: &Harness| h.core.state().browser.paired[0].version.clone();
+    assert_eq!(version(&h).as_deref(), Some("0.10.0"));
+    // It stays once the session ends, and the next connection's replaces it.
+    h.core.browser_session_close(session);
+    assert_eq!(version(&h).as_deref(), Some("0.10.0"));
+    h.core.browser_session_open(pairing, ClientInfo { version: "0.10.2".into(), ..chrome() }).unwrap();
+    assert_eq!(version(&h).as_deref(), Some("0.10.2"));
+    // An extension that names none has none.
+    h.core.browser_session_open(pairing, ClientInfo { version: " \n".into(), ..chrome() }).unwrap();
+    assert_eq!(version(&h), None);
+    // Forgotten with the pairing.
+    h.core.browser_session_open(pairing, chrome()).unwrap();
+    h.core.browser_unpair(pairing).unwrap();
+    let again = paired_again(&h).await;
+    assert_ne!(again, pairing);
+    assert_eq!(h.core.state().browser.paired[0].version.as_deref(), Some("0.10.0"));
+}
+
+/// A second pairing of the same extension, without a session.
+async fn paired_again(h: &Harness) -> Uuid {
+    let core = h.core.clone();
+    let pairing = tokio::spawn(async move { core.browser_pair(chrome(), KEY, "123456".into()).await });
+    settle().await;
+    let request = h.core.state().browser.pairing[0].id;
+    h.core.browser_pair_approve(request, Some(pw(MASTER)), None).await.unwrap();
+    let pairing = pairing.await.unwrap().unwrap();
+    assert_eq!(h.core.state().browser.paired[0].version, None, "none before it connects");
+    h.core.browser_session_open(pairing, chrome()).unwrap();
+    pairing
+}
+
+#[tokio::test(start_paused = true)]
 async fn removing_a_pairing_ends_its_sessions_at_once() {
     let h = Harness::unlocked().await;
     let (pairing, session) = paired(&h).await;

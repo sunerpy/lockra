@@ -3,6 +3,7 @@ import {
   type BrowserPolicy,
   type BrowserRowState,
   type BrowserStatus,
+  type ExtensionFolder,
   type PairedView,
   type SiteRuleView,
   browserName,
@@ -10,6 +11,7 @@ import {
   errorText,
   formatDateTime,
   installedBrowsers,
+  olderThan,
   pairedName,
   relativeTime,
   riskierPolicy,
@@ -45,8 +47,8 @@ import { useUpdateSettings } from "../../app/settings";
 import { useVerify } from "../../features/items/verify";
 
 /** Settings › 浏览器 (boards 13–16): the integration's switch and running in the background; with
- *  it on, each browser's connection, the paired extensions, the autofill policy, the site lists
- *  and the recent activity. What the extensions may do is the vault's (`browser_set_policy`);
+ *  it on, each browser's connection, the folder Lockra keeps its extension in, the paired
+ *  extensions, the autofill policy, the site lists and the recent activity. What the extensions may do is the vault's (`browser_set_policy`);
  *  whether Lockra listens and which browsers have its manifest are the shell's. */
 export function Browser() {
   const t = useT();
@@ -122,6 +124,7 @@ export function Browser() {
       {enabled && (
         <>
           <BrowserList statuses={statuses} paired={browser.paired} onWrite={write} />
+          <FolderSection />
           <PairedList paired={browser.paired} />
           <Policy policy={browser.policy} />
           <SiteLists rules={siteRules} />
@@ -207,11 +210,106 @@ function BrowserList({
   );
 }
 
+/** How long 「已复制」 shows on the copy button. */
+const COPIED_FOR_MS = 2_000;
+
+/** The folder the shell keeps its copy of the extension in (none in a build that carries none):
+ *  where it is, the version, and how to load it. The browsers never update an extension loaded
+ *  unpacked: Lockra puts each new one there and the extension reloads itself. */
+function FolderSection() {
+  const t = useT();
+  const { backend } = useBackend();
+  const guarded = useGuarded();
+  const [folder, setFolder] = useState<ExtensionFolder | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [notOpened, setNotOpened] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void guarded(() => backend.browserExtension()).then((answer) => {
+      if (live && answer !== undefined) setFolder(answer);
+    });
+    return () => {
+      live = false;
+    };
+  }, [backend, guarded]);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), COPIED_FOR_MS);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  if (folder === null) return null;
+  const copy = async () => {
+    const done = await guarded(async () => {
+      await backend.browserExtensionCopy();
+      return true;
+    });
+    if (done) setCopied(true);
+  };
+  const open = async () => {
+    const opened = await guarded(() => backend.browserExtensionReveal());
+    if (opened !== undefined) setNotOpened(!opened);
+  };
+  return (
+    <SettingsSection
+      title={t("settings.browser.folder.title")}
+      description={t("settings.browser.folder.description")}>
+      <div data-testid="extension-folder">
+        <TileRow
+          icon="folder"
+          title={
+            <span className="block truncate font-mono text-[12px] select-text" title={folder.path}>
+              {folder.path}
+            </span>
+          }
+          subtitle={
+            <span className="flex items-center gap-1.5" data-testid="extension-folder-state">
+              <Lamp tone={folder.ready ? "ok" : "warn"} size={6} />
+              {folder.ready
+                ? t("settings.browser.folder.carries", { version: folder.version })
+                : t("settings.browser.folder.notReady")}
+            </span>
+          }
+          actions={
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                icon={copied ? "check" : "copy"}
+                onClick={() => void copy()}>
+                {copied ? t("settings.browser.folder.copied") : t("settings.browser.folder.copy")}
+              </Button>
+              <Button size="sm" variant="outline" icon="folder" onClick={() => void open()}>
+                {t("settings.browser.folder.open")}
+              </Button>
+            </>
+          }
+          note={
+            notOpened ? (
+              <span className="text-warning-text">{t("settings.browser.folder.notOpened")}</span>
+            ) : undefined
+          }
+        />
+      </div>
+      <ol
+        className="mt-2 list-decimal space-y-1 pl-5 text-[12px] leading-4 text-fg-muted"
+        data-testid="extension-folder-steps">
+        <li>{t("settings.browser.folder.step1")}</li>
+        <li>{t("settings.browser.folder.step2")}</li>
+        <li>{t("settings.browser.folder.step3")}</li>
+      </ol>
+    </SettingsSection>
+  );
+}
+
 function PairedList({ paired }: { paired: readonly PairedView[] }) {
   const t = useT();
   const locale = useLocale();
   const now = useClock();
   const dispatch = useDispatch();
+  const { app_version: appVersion } = useUiState();
   const [unpairing, setUnpairing] = useState<PairedView | null>(null);
   const meta = (p: PairedView) =>
     t("settings.browser.paired.meta", {
@@ -248,6 +346,19 @@ function PairedList({ paired }: { paired: readonly PairedView[] }) {
                   </>
                 )}
                 <span className="truncate">{meta(p)}</span>
+                {p.version !== null && (
+                  <>
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0">
+                      {t("settings.browser.paired.version", { version: p.version })}
+                    </span>
+                    {olderThan(p.version, appVersion) && (
+                      <span className="shrink-0 text-warning-text">
+                        {t("settings.browser.paired.outdated")}
+                      </span>
+                    )}
+                  </>
+                )}
               </>
             }
             actions={
@@ -256,11 +367,21 @@ function PairedList({ paired }: { paired: readonly PairedView[] }) {
               </Button>
             }
             note={
-              p.page_access === false ? (
-                <span className="flex items-center gap-1.5 text-warning-text">
-                  <Icon name="alert" size={13} />
-                  {t("settings.browser.paired.noPageAccess")}
-                </span>
+              p.page_access === false || olderThan(p.version, appVersion) ? (
+                <>
+                  {p.page_access === false && (
+                    <span className="flex items-center gap-1.5 text-warning-text">
+                      <Icon name="alert" size={13} />
+                      {t("settings.browser.paired.noPageAccess")}
+                    </span>
+                  )}
+                  {olderThan(p.version, appVersion) && (
+                    <span className="flex items-center gap-1.5 text-warning-text">
+                      <Icon name="alert" size={13} />
+                      {t("settings.browser.paired.outdatedNote", { app: appVersion })}
+                    </span>
+                  )}
+                </>
               ) : undefined
             }
             data-testid={`paired-${p.id}`}

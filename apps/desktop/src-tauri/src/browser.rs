@@ -5,11 +5,14 @@
 //! - [`socket`]: where the app listens (a Unix socket in a folder of the user's alone, a named
 //!   pipe on Windows) and how the host reaches it.
 //! - [`manifest`]: the native-messaging manifests that tell each browser where the host is.
+//! - [`extension`]: the folder Lockra keeps its own copy of the extension in, for Chrome, Edge and
+//!   Brave to load unpacked; the extension reloads itself when Lockra puts a new copy there.
 //! - [`service`]: the app's side, `lockra_browser::serve` on the socket while the integration is
 //!   on, and the shell commands that turn it on and off.
 //!
 //! Nothing here reads what passes: Noise is end to end between the extension and the core.
 
+pub mod extension;
 pub mod host;
 pub mod manifest;
 pub mod service;

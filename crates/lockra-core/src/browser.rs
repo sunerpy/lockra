@@ -256,6 +256,9 @@ pub struct PairedView {
     /// It may run in pages (the browser's site access), as it said when it connected last; none
     /// until it has connected.
     pub page_access: Option<bool>,
+    /// The version it said it was when it connected last; none until it has, or when it named
+    /// none. Settings › 浏览器 tells one older than Lockra.
+    pub version: Option<String>,
     /// It asked too often and gets nothing until the user resumes it.
     pub paused: bool,
 }
@@ -805,6 +808,8 @@ pub(crate) struct BrowserRuntime {
     pub paused: HashSet<Uuid>,
     /// What each pairing said of its site access when it connected last.
     pub page_access: HashMap<Uuid, bool>,
+    /// The version each pairing said it was when it connected last (when it named one).
+    pub versions: HashMap<Uuid, String>,
     pub activity: VecDeque<Activity>,
     pub unlock_asked: Option<Instant>,
 }

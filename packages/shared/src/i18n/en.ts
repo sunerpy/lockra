@@ -1077,6 +1077,23 @@ export const en: Messages = {
         },
         write: "Write",
       },
+      folder: {
+        title: "Extension folder",
+        description:
+          "Chrome, Edge and Brave load the Lockra extension from this folder. When Lockra updates, it puts the new extension here and the extension reloads itself: no files to replace by hand.",
+        carries: "The extension of Lockra {version}",
+        notReady: "Lockra could not write this folder yet; it tries again when it starts next.",
+        copy: "Copy path",
+        copied: "Copied",
+        open: "Open folder",
+        notOpened: "No file manager could be opened: open the path above yourself.",
+        step1:
+          "Open the browser's extensions page (chrome://extensions, edge://extensions or brave://extensions) and turn on Developer mode; leave it on.",
+        step2:
+          "Choose Load unpacked and pick this folder; you can copy its path first and paste it into the dialog.",
+        step3:
+          "If you loaded the Lockra extension from a release package before, load this folder all the same: it takes the old one's place and stays paired.",
+      },
       paired: {
         title: "Paired extensions",
         none: "No extension is paired yet. Open the Lockra extension in your browser and follow its steps.",
@@ -1084,6 +1101,10 @@ export const en: Messages = {
         neverSeen: "not used yet",
         connected: "Connected",
         paused: "Paused",
+        version: "Extension {version}",
+        outdated: "Update available",
+        outdatedNote:
+          "This extension is older than Lockra {app}. One loaded from the extension folder above updates itself; if it came another way, load that folder instead.",
         noPageAccess:
           "Site access not granted yet: the inline menu, save prompts and filling as pages load will not work.",
         unpair: "Unpair",

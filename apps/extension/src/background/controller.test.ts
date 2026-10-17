@@ -9,6 +9,7 @@ import { ManualClock } from "../test/clock";
 import { generateKeyPair, type KeyPair } from "../noise/crypto";
 import { Connection, type Keys, type PairingRecord } from "./connection";
 import { Controller } from "./controller";
+import { SelfUpdate } from "./update";
 import type { BackgroundMessage, InlineView, PopupEvent, PopupState } from "../shared/messages";
 import { AVOID_BROWSER_LIST, MENU_ON_FOCUS } from "../shared/prefs";
 
@@ -69,7 +70,8 @@ function queryAnswer(items: unknown[], change: Record<string, unknown> = {}) {
   };
 }
 
-async function setup() {
+/** `folder`: the version in Lockra's folder, when the extension was loaded from it. */
+async function setup(options: { folder?: string } = {}) {
   const app = await FakeApp.start();
   const browser = new FakeBrowser();
   const clock = new ManualClock();
@@ -86,11 +88,21 @@ async function setup() {
       page_access: browser.granted,
     }),
   });
+  const folder = { version: options.folder };
+  const update = new SelfUpdate({
+    api: browser,
+    loaded: "0.10.0",
+    fetch: async () => {
+      if (folder.version === undefined) throw new TypeError("Failed to fetch");
+      return { ok: true, json: async () => ({ version: folder.version }) };
+    },
+  });
   const controller = new Controller({
     api: browser,
     connection,
     clock,
     extensionVersion: "0.10.0",
+    update,
   });
   controller.install();
   connection.start();
@@ -137,6 +149,7 @@ async function setup() {
     controller,
     pairing,
     contentGot,
+    folder,
     refuseClicks: () => {
       verify = { ok: false, reason: "covered" } as typeof verify;
     },
@@ -1083,5 +1096,124 @@ describe("the extension's own pages", () => {
     await vi.waitFor(() =>
       expect([content, stranger, elsewhere, nameless].every((p) => p.closed)).toBe(true),
     );
+  });
+});
+
+describe("its own update", () => {
+  function popup(context: Context) {
+    const port = context.browser.connectPort("lockra-popup", {
+      id: context.browser.runtime.id,
+      url: context.browser.runtime.getURL("popup.html"),
+    });
+    port.send({ kind: "hello" });
+    const states = () =>
+      (port.received as PopupEvent[])
+        .filter((e): e is Extract<PopupEvent, { kind: "state" }> => e.kind === "state")
+        .map((e) => e.state);
+    return { port, states };
+  }
+
+  /** Lockra updated to `version` and put its copy of the extension in the folder, then said hello
+   *  again. */
+  function lockraUpdated(context: Context, version: string, folder = true) {
+    context.app.version = version;
+    if (folder) context.folder.version = version;
+    context.connection.refreshHello();
+  }
+
+  it("reloads itself as it starts when Lockra's folder holds another version", async () => {
+    const { browser } = await setup({ folder: "0.10.1" });
+    await vi.waitFor(() => expect(browser.reloads).toBe(1));
+  });
+
+  it("a copy Lockra puts there while the popup is open waits for it to close, and says so", async () => {
+    const context = await setup({ folder: "0.10.0" });
+    const { port, states } = popup(context);
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("ready"));
+    expect(states().at(-1)?.update).toBeNull();
+    lockraUpdated(context, "0.10.1");
+    await vi.waitFor(() => expect(states().at(-1)?.update).toBe("waiting"));
+    expect(context.browser.reloads).toBe(0);
+    port.disconnect();
+    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+  });
+
+  it("finds a copy Lockra put there as a page opens, and reloads once it closes", async () => {
+    const context = await setup({ folder: "0.10.0" });
+    context.folder.version = "0.10.1";
+    const { port, states } = popup(context);
+    await vi.waitFor(() => expect(states().at(-1)?.update).toBe("waiting"));
+    expect(context.browser.reloads).toBe(0);
+    port.disconnect();
+    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+  });
+
+  it("waits for the menu by a field to close, not for one whose page went", async () => {
+    const context = await setup({ folder: "0.10.0" });
+    const open = async () => {
+      const answer = (await context.browser.fromContent({
+        kind: "content.focus",
+        form: "login",
+      })) as {
+        token: string;
+      };
+      const frame = inlineFrame(context, answer.token);
+      await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+      return frame;
+    };
+    // A menu whose page went away (its port gone, its frame still listed) holds nothing up.
+    const gone = await open();
+    gone.disconnect();
+    const menu = await open();
+    context.folder.version = "0.10.1";
+    const { port, states } = popup(context);
+    await vi.waitFor(() => expect(states().at(-1)?.update).toBe("waiting"));
+    port.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(context.browser.reloads).toBe(0);
+    menu.disconnect();
+    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+  });
+
+  it("waits for a request under way, then tries again", async () => {
+    const context = await setup({ folder: "0.10.0" });
+    const { port, states } = popup(context);
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("ready"));
+    lockraUpdated(context, "0.10.1");
+    await vi.waitFor(() => expect(states().at(-1)?.update).toBe("waiting"));
+    await vi.waitFor(() => expect(context.connection.view.session).toBe("open"));
+    let answer = () => undefined as void;
+    const status = context.app.handlers.status;
+    if (!status) throw new Error("the fake app answers status");
+    context.app.handlers.status = (raw) =>
+      new Promise((resolve) => (answer = () => resolve(status(raw))));
+    const request = context.connection.request({ op: "status" });
+    await vi.waitFor(() => expect(context.connection.busy).toBe(true));
+    port.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(context.browser.reloads).toBe(0);
+    answer();
+    expect(await request).toMatchObject({ ok: true });
+    expect(context.connection.busy).toBe(false);
+    context.clock.advance(5_000);
+    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+  });
+
+  it("not loaded from Lockra's folder, it tells it is older than Lockra and stays as it is", async () => {
+    const context = await setup();
+    const { states } = popup(context);
+    await vi.waitFor(() => expect(states().at(-1)?.screen).toBe("ready"));
+    expect(states().at(-1)?.update).toBeNull();
+    lockraUpdated(context, "0.10.1", false);
+    await vi.waitFor(() => expect(states().at(-1)?.update).toBe("manual"));
+    expect(context.browser.reloads).toBe(0);
+  });
+
+  it("a folder Lockra has not brought up to date says so", async () => {
+    const context = await setup({ folder: "0.10.0" });
+    const { states } = popup(context);
+    lockraUpdated(context, "0.10.1", false);
+    await vi.waitFor(() => expect(states().at(-1)?.update).toBe("folder"));
+    expect(context.browser.reloads).toBe(0);
   });
 });

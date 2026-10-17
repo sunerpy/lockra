@@ -82,11 +82,12 @@ if [ "$which" != chrome ]; then
   geckodriver="$gdir/geckodriver"
 fi
 
-echo "smoke: building the web bundle, the app and the extension"
+echo "smoke: building the extension, the web bundle and the app"
+# The extension first: the app carries its Chromium build (build.rs), the folder Chrome loads here.
+pnpm --filter @lockra/extension run build >/dev/null
 pnpm --filter @lockra/desktop build >/dev/null
 # custom-protocol: the binary serves the bundle it embeds instead of the Vite dev server.
-cargo build -q -p lockra-desktop --features tauri/custom-protocol
-pnpm --filter @lockra/extension run build >/dev/null
+LOCKRA_EXTENSION_REQUIRED=1 cargo build -q -p lockra-desktop --features tauri/custom-protocol
 app="$root/target/debug/lockra-desktop"
 
 display=""

@@ -1046,6 +1046,22 @@ export const zhCN = {
         },
         write: "写入",
       },
+      folder: {
+        title: "扩展文件夹",
+        description:
+          "Chrome、Edge 和 Brave 从这个文件夹加载 Lockra 扩展。Lockra 更新时会把新版扩展放进来，扩展随后自行重新载入，不用再手动替换文件。",
+        carries: "Lockra {version} 附带的扩展",
+        notReady: "还没能写入这个文件夹，重启 Lockra 后会再试。",
+        copy: "复制路径",
+        copied: "已复制",
+        open: "打开文件夹",
+        notOpened: "没能打开文件管理器，请按上面的路径自己打开。",
+        step1:
+          "打开浏览器的扩展页（chrome://extensions、edge://extensions 或 brave://extensions），开启「开发者模式」并保持开启。",
+        step2: "选「加载已解压的扩展程序」，选这个文件夹；可以先复制路径，在对话框里粘贴。",
+        step3:
+          "以前从发布包加载过 Lockra 扩展的，同样加载这个文件夹即可：它会替换原来的扩展，配对保留。",
+      },
       paired: {
         title: "已配对的扩展",
         none: "还没有配对的扩展。在浏览器里打开 Lockra 扩展，按提示连接。",
@@ -1053,6 +1069,10 @@ export const zhCN = {
         neverSeen: "还没有使用",
         connected: "已连接",
         paused: "已暂停",
+        version: "扩展 {version}",
+        outdated: "可更新",
+        outdatedNote:
+          "这个扩展比 Lockra {app} 旧。从上面的扩展文件夹加载的扩展会自动更新；其他方式装的，请改为加载那个文件夹。",
         noPageAccess: "尚未获得网站访问权限，内联菜单、保存提示和页面加载填充不会生效。",
         unpair: "取消配对",
         unpairTitle: "取消配对「{name}」？",

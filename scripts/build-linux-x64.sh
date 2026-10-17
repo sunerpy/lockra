@@ -21,6 +21,9 @@ if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
   unsigned=(--config '{"bundle":{"createUpdaterArtifacts":false}}')
   echo "build-linux-x64: no TAURI_SIGNING_PRIVATE_KEY; the packages are not signed for the updater"
 fi
+# The app carries the extension it keeps in its folder for the browsers (the beforeBuildCommand
+# builds it first): as in the release, a build without it, or of another version, fails.
+export LOCKRA_EXTENSION_REQUIRED=1
 (cd apps/desktop && pnpm exec tauri build --ci "${unsigned[@]}" --bundles "$bundles")
 
 version=$(node -p 'require("./package.json").version')

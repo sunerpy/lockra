@@ -16,6 +16,8 @@ name = "lockra_desktop_lib"
 crate-type = ["rlib"]
 
 [build-dependencies]
+# The version of the extension the build carries, checked against the release's (build.rs).
+serde_json.workspace = true
 tauri-build = { version = "=2.6.3", features = [] }
 tauri-codegen = "=2.6.3"
 
