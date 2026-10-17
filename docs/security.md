@@ -169,7 +169,8 @@ All of it is security-framework's safe calls: the workspace keeps forbidding uns
   means: its window is always `FLAG_SECURE` (no screenshots or screen recording, a blank card among
   the recent apps); a copied code goes on marked `EXTRA_IS_SENSITIVE` (the paste preview and the
   keyboards' clipboard history leave it out) and comes off after the configured time only while the
-  clipboard still holds it; the vault locks as soon as the app leaves the screen. **Unlock with
+  clipboard still holds it; the vault locks as soon as the app leaves the screen, from the
+  activity's own pause (and the webview's page event besides). **Unlock with
   fingerprint** keeps the device key sealed with AES-GCM by an Android Keystore key that the
   secure hardware holds: it works only for ten seconds after a passed strong-biometric check, and
   never again once a new fingerprint is enrolled (the master password unlocks then, and the

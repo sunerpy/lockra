@@ -1,4 +1,5 @@
-// The vault locks as the app leaves the screen (App.tsx), but not when Lockra itself opens a
+// The vault locks as the app leaves the screen (App.tsx, and the shell's src-tauri/src/leaving.rs,
+// which counts the same screens where the plugins open them), but not when Lockra itself opens a
 // screen of the phone's over it: the camera, the photo picker, the camera permission prompt. The
 // app is hidden behind those, not left. The call comes back as that screen closes, often before
 // the app is in front again, so its hiding lasts until the app is visible once more. Leaving the

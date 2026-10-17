@@ -293,12 +293,16 @@ the page of the release found, or the Play listing (in the Play app first), thro
 `MainActivity.kt` keeps the window `FLAG_SECURE` and draws it edge to edge (the webview pads with
 `env(safe-area-inset-*)`); edge to edge the window no longer shrinks for the keyboard, so the
 content takes the keyboard's height as bottom padding and the field being typed in stays above it
-(the device smoke test checks that the webview gives way). The webview locks the vault when the page
-is hidden (`visibilitychange`: another app in front, the screen off), except behind a screen of the
-phone's own that Lockra opened, the camera's or the photo picker (`app/phone-screen.ts`): wry
-pauses the webview for any activity in front, even the permission prompt, and the call comes back
-as that screen closes, often before the webview has resumed, so the exception lasts until the page
-is visible again. Leaving from the camera's page locks the vault in Rust (`away`).
+(the device smoke test checks that the webview gives way). The shell locks the vault as the activity
+pauses (`WindowEvent::Suspended`, `src/leaving.rs`: another app in front, Home, the screen off),
+except while a screen of the phone's own that Lockra opened is up, the camera's or a file picker:
+the plugin calls that open them hold a count (`PhoneScreens`), and the activity pauses within the
+call. The webview locks it too when the page is hidden (`visibilitychange`), with the same
+exception (`app/phone-screen.ts`): wry pauses the webview for any activity in front, even the
+permission prompt, and the call comes back as that screen closes, often before the webview has
+resumed, so there the exception lasts until the page is visible again. The webview's event alone
+once missed a Home (CI, 2026-10-17), hence the activity's. Leaving from the camera's page locks the
+vault in Rust (`away`).
 
 The phone app (`apps/mobile/src`) uses `@lockra/ui` and `@lockra/shared` as the desktop does; what
 both need lives there: the codes list's logic (sorting, filtering, group sections) and a form's kind
