@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { cx } from "../cx";
 import { useT } from "../i18n/I18nProvider";
 import { Icon, type IconName } from "./Icon";
@@ -58,6 +58,9 @@ function Highlight({ text, query }: { text: string; query: string }): ReactNode 
   );
 }
 
+/** The keys the palette answers, wherever the focus is while it is open. */
+const PALETTE_KEYS = new Set(["ArrowDown", "ArrowUp", "Tab", "Enter", "Escape"]);
+
 /** Ctrl K palette: 560 wide, grouped items, ↑↓ Enter Tab Esc, 28 % scrim. Remounts on open so
  *  query and cursor start fresh every time. */
 export function CommandPalette(props: CommandPaletteProps) {
@@ -72,6 +75,7 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
   // The action Enter runs on the highlighted item, among its own (a login's).
   const [action, setAction] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const results = useMemo(() => filterCommands(items, query), [items, query]);
   const groups = useMemo(() => {
     const order: string[] = [];
@@ -80,7 +84,9 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
   }, [results]);
   const current = results[Math.min(cursor, Math.max(0, results.length - 1))];
 
-  useEffect(() => {
+  // The input has the focus before anything can be typed: an effect runs a few frames after the
+  // palette is in the page, and an Esc in between closed nothing (the quick search, measured).
+  useLayoutEffect(() => {
     inputRef.current?.focus();
   }, []);
 
@@ -109,6 +115,42 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
     else item.run();
     onClose();
   };
+  const onKey = (e: { key: string; shiftKey: boolean; preventDefault: () => void }) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      move(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      move(-1);
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      // On a login, Tab goes through its actions; elsewhere it jumps to the next group.
+      if (actions.length > 1) cycle(e.shiftKey ? -1 : 1);
+      else jumpGroup();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      run(current, chosen);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+    }
+  };
+  const latestKey = useRef(onKey);
+  useLayoutEffect(() => {
+    latestKey.current = onKey;
+  });
+  // A key that lands outside the dialog (on <body> after a click on a part of the palette that
+  // takes no focus) still drives it, and the focus goes back to the input.
+  useEffect(() => {
+    const outside = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !PALETTE_KEYS.has(e.key)) return;
+      if (e.target instanceof Node && dialogRef.current?.contains(e.target)) return;
+      inputRef.current?.focus();
+      latestKey.current(e);
+    };
+    document.addEventListener("keydown", outside);
+    return () => document.removeEventListener("keydown", outside);
+  }, []);
 
   return (
     <div
@@ -116,6 +158,7 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
       onClick={onClose}
       data-testid="palette-scrim">
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={t("ui.palette.label")}
@@ -123,26 +166,7 @@ function PaletteBody({ items, onClose, onHighlight, placeholder }: CommandPalett
           e.stopPropagation();
         }}
         className="flex w-[560px] max-h-[424px] flex-col overflow-hidden rounded-14 bg-overlay hairline shadow-pop overlay-frost"
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            move(1);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            move(-1);
-          } else if (e.key === "Tab") {
-            e.preventDefault();
-            // On a login, Tab goes through its actions; elsewhere it jumps to the next group.
-            if (actions.length > 1) cycle(e.shiftKey ? -1 : 1);
-            else jumpGroup();
-          } else if (e.key === "Enter") {
-            e.preventDefault();
-            run(current, chosen);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            onClose();
-          }
-        }}>
+        onKeyDown={onKey}>
         <div className="flex h-14 items-center gap-3 border-b border-border px-4">
           <Icon name="search" size={16} className="text-fg-subtle" />
           <input

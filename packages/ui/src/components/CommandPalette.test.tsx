@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type CommandItem, CommandPalette, filterCommands } from "./CommandPalette";
 
@@ -75,6 +75,49 @@ describe("CommandPalette", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     await user.click(screen.getByTestId("palette-scrim"));
     expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("regression: keys that land outside the dialog still drive it (the quick search's Esc before its focus)", async () => {
+    // 2026-10-17, the desktop smoke under Xvfb: the shortcut's palette was in the page 30 ms before
+    // its input took the focus, and an Esc in between reached <body> and closed nothing. A click on
+    // a part of the palette that takes no focus puts it on <body> too.
+    const onClose = vi.fn();
+    const run = vi.fn();
+    render(<CommandPalette open items={items(run)} onClose={onClose} />);
+    expect(screen.getByRole("combobox")).toHaveFocus();
+    const press = (key: string) =>
+      act(() => {
+        document.body.dispatchEvent(
+          new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+        );
+      });
+    screen.getByRole("combobox").blur();
+    expect(document.body).toHaveFocus();
+    press("ArrowDown");
+    expect(screen.getByRole("option", { name: /主题 › 暗黑/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("combobox")).toHaveFocus();
+    screen.getByRole("combobox").blur();
+    press("Enter");
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    screen.getByRole("combobox").blur();
+    press("Escape");
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it("closes once on an Esc in its own input, and not on keys it does not use", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    render(<CommandPalette open items={items()} onClose={onClose} />);
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+    act(() => {
+      document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("goes through a login's own actions with Tab; Enter or a click runs the one chosen (board 11)", async () => {
