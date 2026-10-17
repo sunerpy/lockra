@@ -228,7 +228,7 @@ export const en: Messages = {
     },
     sync: {
       rowOff: "Set up sync",
-      settingsHint: "Sync with your other devices through a Lockra relay or storage of your own",
+      settingsHint: "Sync with your other devices on storage of your own or through a Lockra relay",
       fromScan: "Scan",
       scan: "Scan to join",
       scanPrompt: "Point the camera at the invitation on the other device",
@@ -548,7 +548,7 @@ export const en: Messages = {
   welcome: {
     title: "Welcome to Lockra",
     subtitle:
-      "A two-factor authenticator encrypted on your own devices. Codes are generated here; sync is off unless you set it up, end-to-end encrypted, through a Lockra relay or on storage of your own.",
+      "A two-factor authenticator encrypted on your own devices. Codes are generated here; sync is off unless you set it up, end-to-end encrypted, on storage of your own or through a Lockra relay.",
     create: {
       title: "Create a vault",
       body: "Choose a master password. It cannot be recovered, so make sure you remember it.",
@@ -1216,11 +1216,11 @@ export const en: Messages = {
     },
   },
   sync: {
-    lede: "End-to-end encrypted sync between your devices, through a Lockra relay or on storage of your own. The relay and the storage hold ciphertext only.",
+    lede: "End-to-end encrypted sync between your devices, on storage of your own or through a Lockra relay. The storage and the relay hold ciphertext only.",
     off: {
       createTitle: "Start syncing from this device",
       createBody:
-        "The sync space goes on a Lockra relay (no storage of your own needed), or into your S3-compatible bucket or WebDAV folder. Then save its recovery key: if every device is lost, it recovers the space.",
+        "Put the sync space on storage of your own (a WebDAV folder, an S3-compatible bucket, or a cloud drive's folder on a computer) or on a Lockra relay you run, so that sync depends on no one else's server. Lockra's built-in relay needs no storage of your own and is there for trying sync out. Then save the space's recovery key: if every device is lost, it recovers the space.",
       createSubmit: "Start syncing",
       joinTitle: "Join an existing sync",
       joinBody:
@@ -1230,7 +1230,7 @@ export const en: Messages = {
       kind: "Storage",
       relay: "Lockra relay",
       relayHint:
-        "No storage of your own needed: the snapshots are encrypted on the devices and synced through the relay, which sees ciphertext only.",
+        "The snapshots are encrypted on the devices and synced through the relay, which sees ciphertext only. A relay you run yourself is recommended: the space stays in your hands.",
       relayUrl: "Relay address",
       relayUrlHint:
         "Starts with https://, for example https://relay.example.com. The docs explain how to run one.",
@@ -1284,9 +1284,9 @@ export const en: Messages = {
       },
       presetHints: {
         "relay-hosted":
-          "The relay Lockra runs; nothing to fill in. It keeps the snapshots as the devices encrypted them and opens none of them; it sees when devices sync and from which addresses.",
+          "One free server run by the Lockra project; nothing to fill in, for trying sync out. It keeps the snapshots as the devices encrypted them and opens none of them, but it sees when devices sync and from which addresses, and it may be unavailable for a while or close. For lasting use, run a relay of your own or use storage of your own.",
         "relay-custom":
-          "A lockra-relay you run yourself, behind HTTPS. Like the built-in one, it keeps ciphertext only.",
+          "A lockra-relay you run yourself, behind HTTPS. Like the built-in one, it keeps ciphertext only, and the space depends on your server alone.",
         aws: "For the China regions (Beijing, Ningxia), choose AWS S3 (China regions): their accounts and keys are separate.",
         "aws-cn":
           "Beijing (cn-north-1) or Ningxia (cn-northwest-1). Keys of the China regions do not work in the global regions.",
@@ -1365,7 +1365,7 @@ export const en: Messages = {
       promptBiometric: "Verify to show the recovery key, or enter the master password.",
       reason: "show the recovery key",
       submit: "Show recovery key",
-      body: "If every device is lost, the space's storage settings, this recovery key and the master password of any device recover the accounts. Write it down or keep it in a password manager, not next to the master password.",
+      body: "If every device is lost, the space's storage settings, this recovery key and the master password of any device recover the accounts. Write it down or keep it in a password manager, not next to the master password: to someone who has it and the space's files, only the devices' master passwords still protect your accounts.",
       key: "Recovery key",
       hideIn: "The recovery key hides in {s} s",
       done: "I have kept it",
@@ -1448,7 +1448,7 @@ export const en: Messages = {
       submit: "Show invitation",
       body: "On the new device, scan this QR code, then enter that device's own master password.",
       warning:
-        "A device with the invitation joins the sync space and reads your accounts without any other password: use it on your own devices only.",
+        "A device with the invitation joins the sync space and reads your accounts without any other password: use it on your own devices only. If it got out, a new sync space only stops what comes next: change the passwords of the accounts already read and set up their two-step verification again.",
       keyOnly:
         "This space is in a cloud drive folder on this computer, so the invitation carries no storage settings. The other device chooses how it reaches the same folder: a computer, the same drive's folder; a phone, that drive's WebDAV.",
       cantScan: "Can't scan?",
@@ -1463,7 +1463,7 @@ export const en: Messages = {
       bodyLink:
         "On the new device, scan this QR code, or copy the pairing link, send it there and paste it; then enter that device's own master password. No code needed.",
       linkWarning:
-        "The pairing link does not expire: whoever has it joins the sync space and reads all your accounts without any password, until you start a new sync space. Send it to your own devices only.",
+        "The pairing link does not expire: whoever has it joins the sync space and reads all your accounts without any password, until you start a new sync space. Send it to your own devices only. If it got out, a new sync space only stops what comes next: change the passwords of the accounts already read and set up their two-step verification again.",
       copyLink: "Copy the pairing link",
       copiedLink: "Copied: paste it on the other device, under Join an existing sync.",
     },

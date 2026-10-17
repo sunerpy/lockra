@@ -45,6 +45,27 @@ described below.
 | Nextcloud               | Server, user name, app password                      | Create the app password under Settings › Security.                                                                               |
 | Synology NAS            | Server, user name, password                          | Needs the WebDAV Server package (HTTPS on port 5006 by default); start **Folder** with a shared folder, such as `home/lockra`.   |
 
+## Choosing where to sync
+
+Every kind of storage gets the same encrypted files, and none can open them
+([What the storage can see](#what-the-storage-can-see)). What differs is who runs it, what else
+that one sees, and how long it stays. Lockra recommends storage of your own or a relay of your own,
+so that your sync depends on no server you did not choose:
+
+| Where                                                                    | Who runs it                                 | Sees besides the encrypted files                                 | How long it stays                                       |
+| ------------------------------------------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| Storage of your own: a WebDAV folder, an S3 bucket, a cloud drive folder | your provider, or you                       | what the provider sees of any file: sizes, times, your addresses | as long as your account there                           |
+| A relay of your own ([Running your own relay](/backup/relay))            | you                                         | nothing that anyone else sees                                    | as long as you run it                                   |
+| Lockra's built-in relay                                                  | the Lockra project, on one server, for free | when your devices sync and from which addresses                  | no promise: it can be unavailable for a while, or close |
+
+The built-in relay needs nothing set up, which makes it the quickest way to try sync out. Wherever
+the space is, your devices keep every account: a storage that goes away stops sync, not your
+vaults.
+
+<StatusTag status="building" /> In the next version, the storage form starts on **WebDAV**, and
+**Lockra relay** on **A relay of your own**; **Lockra's built-in relay** is chosen as the provider
+by name.
+
 ## Starting to sync
 
 1. On the first device, open **Settings › Sync** and choose **Start syncing**.
@@ -188,7 +209,9 @@ The pairing link is the same invitation as the QR code: the relay's address and 
 with no storage credentials. It does not expire: whoever has it joins the space and reads all your
 accounts without any password, until you start a new sync space. Send it to your own devices only.
 If others may have seen it (in a chat other people can read, for example), turn off sync on every
-device, start a new sync space, and add the devices to it.
+device, start a new sync space, and add the devices to it. A new space keeps them out of what comes
+next, not out of what they may have read already: change the passwords of the logins that matter
+and set up their two-step verification again, so that the old secrets stop working.
 
 A device with version 0.8.3 can already join by pasting a pairing link. Sync spaces on
 S3-compatible storage, WebDAV or a cloud drive folder do not change: their invitation carries the
@@ -277,9 +300,10 @@ What the relay can see:
   that value and refuses every request without it. Someone who learns where a space lives on the
   relay can neither read nor change it.
 - **The relay can be unavailable.** It can also delete a space, like any storage: the devices keep
-  every account, and write the space again on their next sync. The built-in relay is a single
-  server; for a space that must not depend on it, run a relay of your own or use storage of your
-  own.
+  every account, and write the space again on their next sync. The built-in relay is one server
+  the Lockra project runs for free, with no promise of service: it is there to try sync out. For a
+  space you rely on, run a relay of your own or use storage of your own
+  ([Choosing where to sync](#choosing-where-to-sync)).
 
 The built-in relay keeps a space for 400 days after a device last reached it, holds at most 64
 devices and 32 MiB per space, and limits the requests each network address makes. When it is full,
@@ -391,7 +415,9 @@ the other devices go on. You can join again later with an invitation or the reco
   out a lost device, someone who saw an invitation or a pairing link, or someone who has the
   recovery key and an old
   master password, turn off sync on
-  every device, start a new sync space and add the devices to it.
+  every device, start a new sync space and add the devices to it. That keeps them out of what comes
+  next, not out of what they may have read already: change the passwords of the logins that matter
+  and set up their two-step verification again.
 - **Backups leave sync out.** The storage settings, their credentials and the recovery key are kept in
   the vault file only. A backup does not contain them; a device restored from a backup joins the
   space again.

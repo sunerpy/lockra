@@ -145,9 +145,10 @@ const B2_REGIONS = [
 
 export const PRESETS: Readonly<Record<PresetId, Preset>> = {
   // A Lockra relay keeps the space's encrypted snapshots and opens none (docs/security.md, "The
-  // relay"): Lockra's own, or one the user runs.
-  "relay-hosted": { id: "relay-hosted", kind: "relay", fields: [], address: () => BUILT_IN_RELAY },
+  // relay"): one the user runs, listed first, or Lockra's own, one server of the project's for
+  // trying sync out (the sync page recommends storage or a relay of one's own).
   "relay-custom": { id: "relay-custom", kind: "relay", fields: ["url"] },
+  "relay-hosted": { id: "relay-hosted", kind: "relay", fields: [], address: () => BUILT_IN_RELAY },
   aws: {
     id: "aws",
     kind: "s3",
@@ -261,16 +262,16 @@ export function customPreset(kind: StorageKind): PresetId {
   return kind === "s3" ? "s3-custom" : "webdav-custom";
 }
 
-/** The preset a kind starts with: Lockra's relay for a relay, the custom one otherwise. */
+/** The preset a kind starts with: the custom one, which asks for every field (a relay starts on
+ *  one's own; Lockra's built-in relay is chosen by name). */
 export function startPreset(kind: StorageKind): PresetId {
-  return kind === "relay" ? "relay-hosted" : customPreset(kind);
+  return customPreset(kind);
 }
 
 /**
  * The form after `patch`, with what its preset decides filled in: the address, the region of a
- * service without one, and the addressing style. A new kind starts on its first preset (Lockra's
- * relay, or the custom one); a preset left for the custom one keeps the address it made, ready
- * to be edited.
+ * service without one, and the addressing style. A new kind starts on its custom preset; a preset
+ * left for the custom one keeps the address it made, ready to be edited.
  */
 export function withPreset(form: StorageForm, patch: Partial<StorageForm>): StorageForm {
   const next = { ...form, ...patch };

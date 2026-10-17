@@ -88,13 +88,14 @@ export function StorageFields({
       setPicking(false);
     }
   };
+  // Storage of one's own first, as the sync page recommends; Lockra's relays last.
   const kinds = [
-    { value: "relay" as const, label: t("sync.storage.relay") },
-    { value: "s3" as const, label: t("sync.storage.s3") },
     { value: "webdav" as const, label: t("sync.storage.webdav") },
+    { value: "s3" as const, label: t("sync.storage.s3") },
     ...(pickFolder !== undefined || form.kind === "folder"
       ? [{ value: "folder" as const, label: t("sync.storage.folder") }]
       : []),
+    { value: "relay" as const, label: t("sync.storage.relay") },
   ];
   const kindHint = {
     relay: t("sync.storage.relayHint"),

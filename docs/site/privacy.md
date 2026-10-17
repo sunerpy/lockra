@@ -80,6 +80,9 @@ developer, on a server in AWS's Seoul region (South Korea).
   and never written to disk. The relay logs no request, and the load balancer in front of it keeps
   no access logs.
 - **No sharing**: nothing the relay holds is shared or sold. AWS hosts the server.
+- **No promise of service**: the built-in relay is one server, run for free, for trying sync out;
+  it can be unavailable for a while, or close. For a space you rely on, use storage of your own or
+  a relay of your own ([Choosing where to sync](/backup/sync#choosing-where-to-sync)).
 
 ## On Android
 
