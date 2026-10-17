@@ -62,7 +62,7 @@ The built-in relay needs nothing set up, which makes it the quickest way to try 
 the space is, your devices keep every account: a storage that goes away stops sync, not your
 vaults.
 
-<StatusTag status="building" /> In the next version, the storage form starts on **WebDAV**, and
+<StatusTag status="available" /> From version 0.11.1, the storage form starts on **WebDAV**, and
 **Lockra relay** on **A relay of your own**; **Lockra's built-in relay** is chosen as the provider
 by name.
 
@@ -265,10 +265,10 @@ their own. Lockra runs one, the built-in relay, and you can run your own
 ([Running your own relay](/backup/relay)). To the devices it is one more kind of storage: they
 write the same encrypted files there as anywhere else, and the relay can open none of them.
 
-1. On the first device, open **Settings › Sync** and choose **Start syncing**. **Storage** starts
-   on **Lockra relay**, with **Lockra's built-in relay** as the provider and nothing to fill in.
-   For a relay of your own, choose **A relay of your own** and enter its **Relay address**, which
-   starts with `https://`.
+1. On the first device, open **Settings › Sync** and choose **Start syncing**. Under **Storage**,
+   choose **Lockra relay**: the provider starts on **A relay of your own**; enter its **Relay
+   address**, which starts with `https://`. To try sync out on Lockra's built-in relay instead,
+   choose **Lockra's built-in relay** as the provider, with nothing to fill in.
 2. Check **This device's name**, enter the master password, and choose **Start syncing**.
 3. Save the recovery key **Settings › Sync** reminds you of, as for any storage.
 
@@ -279,7 +279,8 @@ invitation on the computer (**Invite another device**) and scan its QR code on t
 screen): the phone needs no storage settings, only a master password. **Copy the
 pairing link** and pasting it works too, on a phone or a computer, with no code
 ([Pairing links](#pairing-links)). Without
-another device at hand, choose **Recovery key**, keep **Lockra relay**, and enter the recovery key.
+another device at hand, choose **Recovery key**, choose **Lockra relay** with the provider the
+space is on, and enter the recovery key.
 
 While the vault is unlocked, a device keeps one request waiting at the relay, which answers it when
 another device writes: the change arrives about a second later. Besides, a device syncs at the

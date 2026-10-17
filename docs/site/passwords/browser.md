@@ -5,7 +5,7 @@ extension: installing and pairing it, filling and saving, and the settings that 
 do.
 
 <StatusTag status="available" /> Available from version 0.10.0, on Windows, macOS and Linux. You
-install the extension from Lockra's release: see
+load the extension from the folder Lockra keeps it in: see
 [Installing the extension](#installing-the-extension), also for where the stores stand.
 
 The extension keeps no passwords of its own. It asks Lockra on the same computer, over a connection
@@ -17,7 +17,8 @@ the master password.
 
 ## What you need
 
-- Lockra 0.10.0 or later on Windows, macOS or Linux, running on the same computer as the browser.
+- Lockra 0.10.0 or later on Windows, macOS or Linux, running on the same computer as the browser
+  (0.11.1 or later to load the extension from Lockra's folder, which updates it).
 - Chrome or Microsoft Edge 133 or later, or Firefox 140 or later. Lockra also sets up Chromium and
   Brave, which install the same package as Chrome. Browsers installed as a Snap or a Flatpak are not
   supported ([Platform notes](/reference/platforms#browser-extension)).
@@ -25,63 +26,56 @@ the master password.
 
 ## Installing the extension
 
-| Browser                       | Where from                        | Status                           |
-| ----------------------------- | --------------------------------- | -------------------------------- |
-| Chrome, Edge, Brave, Chromium | Lockra's release, loaded unpacked | <StatusTag status="available" /> |
-| Microsoft Edge                | Microsoft Edge Add-ons            | <StatusTag status="building" />  |
-| Firefox                       | Firefox Add-ons                   | <StatusTag status="building" />  |
+| Browser                       | Where from                                 | Status                           |
+| ----------------------------- | ------------------------------------------ | -------------------------------- |
+| Chrome, Edge, Brave, Chromium | Lockra's extension folder, loaded unpacked | <StatusTag status="available" /> |
+| Microsoft Edge                | Microsoft Edge Add-ons                     | <StatusTag status="building" />  |
+| Firefox                       | Firefox Add-ons                            | <StatusTag status="building" />  |
 
-The extension is not in the Chrome Web Store. In Chrome, Edge and Brave you install it from Lockra's
-release:
+The extension is not in the Chrome Web Store. From version 0.11.1, Lockra carries the extension of
+its own version and keeps it in a folder of its own, which Chrome, Edge and Brave load unpacked:
 
-1. From [Lockra's releases](https://github.com/sunerpy/lockra/releases/latest), download
-   `lockra-extension_<version>_chromium-unpacked.zip` and unzip it into a folder you keep: the
-   browser loads the extension from that folder every time it starts, so moving or deleting the
-   folder removes the extension.
+1. In Lockra, open **Settings › Browser** and turn on **Browser integration**
+   ([Turning on browser integration](#turning-on-browser-integration)). **Extension folder** then
+   shows the folder, with **Copy path** and **Open folder**:
+
+   | System  | Folder                                                   |
+   | ------- | -------------------------------------------------------- |
+   | Windows | `%LOCALAPPDATA%\Lockra\browser\extension`                |
+   | macOS   | `~/Library/Application Support/Lockra/browser/extension` |
+   | Linux   | `~/.local/share/Lockra/browser/extension`                |
+
 2. Open the browser's extensions page (`chrome://extensions`, `edge://extensions` or
-   `brave://extensions`) and turn on **Developer mode**.
-3. Choose **Load unpacked** and pick the folder, the one that holds `manifest.json`.
+   `brave://extensions`) and turn on **Developer mode**. Leave it on: without it the browser turns
+   an unpacked extension off when it reloads.
+3. Choose **Load unpacked** and pick that folder: paste the copied path into the dialog.
 
 The extension's card shows the ID `flgfdomeabdfbebfjonaocddjcamgblk`, the same as the extension
-Edge Add-ons will publish; Lockra connects to no other Chromium extension. The release's other
-Chromium file, `lockra-extension_<version>_chromium-store.zip`, is the stores' package: loaded
-unpacked it gets another ID and cannot connect.
+Edge Add-ons will publish; Lockra connects to no other Chromium extension. If you loaded the
+extension from a release package before, load Lockra's folder all the same: under the same ID it
+takes the old one's place and stays paired.
 
-To update it, replace the folder's files with the newer release's package and choose the reload
-button on the extension's card: the extension stays paired. Removing the extension forgets the
-pairing, so pair again after loading it anew. Once Edge Add-ons lists the extension, Edge can install
-it from there instead; remove the unpacked one first, since both have the same ID.
+**Download the extension package**, in the same section, opens the release's
+`lockra-extension_<version>_chromium-unpacked.zip` of Lockra's version: unzip it into a folder you
+keep and load that folder instead (with Lockra 0.10, this is the way). An extension installed that
+way does not update with Lockra: replace the folder's files with a newer release's package and
+choose the reload button on the extension's card. The release's other Chromium file,
+`lockra-extension_<version>_chromium-store.zip`, is the stores' package: loaded unpacked it gets
+another ID and cannot connect. Removing the extension forgets the pairing, so pair again after
+loading it anew. Once Edge Add-ons lists the extension, Edge can install it from there instead;
+remove the unpacked one first, since both have the same ID.
 
 Firefox installs an extension only once Firefox Add-ons has signed it, so the Firefox extension
 comes with its listing.
 
 ## Updating with Lockra
 
-<StatusTag status="building" /> In the next version, Lockra keeps its own copy of the extension and
-updates it along with itself.
+<StatusTag status="available" /> Available from version 0.11.1.
 
-Chrome, Edge and Brave never update an extension loaded unpacked. With browser integration on,
-Lockra puts the extension of its own version in a folder of its own, shown under **Settings ›
-Browser › Extension folder** with **Copy path** and **Open folder**:
-
-| System  | Folder                                                   |
-| ------- | -------------------------------------------------------- |
-| Windows | `%LOCALAPPDATA%\Lockra\browser\extension`                |
-| macOS   | `~/Library/Application Support/Lockra/browser/extension` |
-| Linux   | `~/.local/share/Lockra/browser/extension`                |
-
-The section also offers **Download the extension package**, which opens the release's
-self-install package of the same version in the browser: for loading by hand, as above, but an
-extension installed that way does not update with Lockra.
-
-Load that folder unpacked once, as in steps 2 and 3 above. If you loaded the extension from a
-release package before, load this folder all the same: under the same ID it takes the old one's
-place and stays paired. Keep **Developer mode** on: without it the browser turns an unpacked
-extension off when it reloads.
-
-From then on, each time Lockra updates, it puts the new extension in the folder as it starts. The
-extension finds it and reloads itself once none of its popup, options page or menus is open, and
-stays paired; pages already open use the new extension once they are reloaded.
+Chrome, Edge and Brave never update an extension loaded unpacked, so Lockra does: each time it
+updates, it puts the new extension in its folder as it starts. The extension finds it and reloads
+itself once none of its popup, options page or menus is open, and stays paired; pages already open
+use the new extension once they are reloaded.
 
 When the extension is older than Lockra, its popup says so and, for one that came another way, asks
 to load Lockra's folder instead. **Settings › Browser** shows each paired extension's version and
