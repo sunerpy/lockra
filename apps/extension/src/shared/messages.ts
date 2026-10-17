@@ -140,6 +140,8 @@ export type InlineView =
       active: number;
       /** Opened by a code field: the chosen login's code goes in. */
       code?: boolean;
+      /** Several logins: the box that narrows them, and what it holds. */
+      search?: string;
     }
   | {
       view: "signup";
@@ -181,7 +183,11 @@ export type InlineToBackground =
       action: InlineAction;
       point: { x: number; y: number } | null;
       trusted: boolean;
-    };
+    }
+  /** What the list's search box holds now. */
+  | { kind: "search"; text: string }
+  /** An arrow in the search box: the list's choice moves. */
+  | { kind: "key"; key: "ArrowDown" | "ArrowUp" };
 
 export type BackgroundToInline = { kind: "view"; view: InlineView } | { kind: "close" };
 

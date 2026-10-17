@@ -61,6 +61,8 @@ const inlineSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("size"), height: z.number().finite() }),
   z.object({ kind: z.literal("visible"), visible: z.boolean().nullable() }),
   z.object({ kind: z.literal("action"), action: actionSchema, point, trusted: z.boolean() }),
+  z.object({ kind: z.literal("search"), text: z.string().max(256) }),
+  z.object({ kind: z.literal("key"), key: z.enum(["ArrowDown", "ArrowUp"]) }),
 ]);
 
 const popupSchema = z.discriminatedUnion("kind", [

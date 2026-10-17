@@ -14,8 +14,10 @@ export interface InlineFrame {
   /** Its URL then, to check (with its document in Chromium) that it is still the same page. */
   frameUrl: string;
   view: InlineView;
-  /** The logins behind a list, in its order. */
+  /** The logins behind a list, in its order (those its search leaves). */
   items: ItemSummary[];
+  /** A list's logins before its search narrowed them. */
+  all?: ItemSummary[];
   policy: Policy | null;
   /** The login a confirmation or a warning is about. */
   item: ItemSummary | null;

@@ -138,6 +138,8 @@ export const extensionEn: typeof extensionZhCN = {
     codeHint: "{site} · fill a code",
     codeFooter: "↑↓ select · ↵ fill the code · Esc close",
     listFooter: "↑↓ select · ↵ fill · Esc close",
+    search: "Search logins",
+    noMatch: "No login matches",
     signupTitle: "Use a generated password",
     signupHint: "Sign-up form",
     signupRules: "Made to this site's password rules · {n} characters",

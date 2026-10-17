@@ -130,6 +130,8 @@ export const extensionZhCN = {
     matches: { one: "{site} · {n} 个匹配", other: "{site} · {n} 个匹配" },
     close: "关闭",
     listFooter: "↑↓ 选择 · ↵ 填充 · Esc 关闭",
+    search: "搜索登录项",
+    noMatch: "没有匹配的登录项",
     codeHint: "{site} · 填入验证码",
     codeFooter: "↑↓ 选择 · ↵ 填入验证码 · Esc 关闭",
     signupTitle: "使用生成的密码",

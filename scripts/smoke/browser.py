@@ -340,6 +340,51 @@ class Smoke:
         )
         print("smoke: the inline menu filled the login with the keyboard")
 
+    def room_to_fill(self, fills=1):
+        """Lockra pauses an extension that asks for more than ten secrets a minute, and the steps
+        before come close: wait until this step's `fills` fit in the minute's count."""
+
+        def fits():
+            now = time.time() * 1000
+            recent = [e for e in self.activity() if e["event"] in ("filled", "otp_filled", "copied") and now - e["at_ms"] < 60_000]
+            return len(recent) + fills <= 10
+
+        until("room in the extension's ten secrets a minute", fits, 75)
+
+    def menu_search(self):
+        """Three logins for one site: the menu's box narrows them, and Enter fills the one left."""
+        self.room_to_fill()
+        for user in ("alice", "bob", "carol"):
+            self.app.invoke(
+                {
+                    "command": "item_add",
+                    "draft": {
+                        "title": "Many test",
+                        "username": user,
+                        "password": {"type": "set", "value": f"{user}-{PAY_PASSWORD}"},
+                        "urls": [{"url": self.url("many.test", "")}],
+                    },
+                }
+            )
+        self.web.go(self.url("many.test", "login.html"))
+        self.open_menu("#username")
+        # The box sits under the menu's header (34 px, a rule, the content's 4 px): a real click
+        # takes the focus into the menu's frame, then the keys go to it.
+        rect = self.web.run("return document.querySelector('[popover]:popover-open').getBoundingClientRect().toJSON()")
+        self.web.click_at(int(rect["left"] + 80), int(rect["top"] + 55))
+        # The list keeps its height as it narrows (a frame that changes its size makes the next
+        # Enter wait), and the background narrows it as each key arrives, before the Enter: the
+        # Enter fills the first login left, carol, or the step fails on another one's values.
+        self.web.keys(*"car")
+        self.shot("menu-search")
+        self.web.keys(ENTER)
+        until(
+            "the login the search left filled",
+            lambda: self.web.values("#username", "#password") == ["carol", f"carol-{PAY_PASSWORD}"],
+            30,
+        )
+        print("smoke: the menu's search box narrowed three logins to one, and Enter filled it")
+
     def activity(self):
         return self.app.invoke({"command": "app_state"})["browser"]["activity"]
 
@@ -680,6 +725,9 @@ class Smoke:
             self.many_fields()
             self.signup()
             self.save_prompt()
+            # Last of the fills: a fill of another site would leave the code steps without the
+            # login they follow, and the steps before fill ten times in their first minute.
+            self.menu_search()
             self.lock_follows()
             if self.chrome:
                 self.self_update()

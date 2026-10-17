@@ -241,3 +241,87 @@ describe("the inline frame", () => {
     expect(posted.at(-1)).toEqual({ kind: "size", height: 0 });
   });
 });
+
+describe("the search box", () => {
+  const WORK = { ...GITHUB, username: "octocat-work" };
+  const list = (search: string | undefined, items = [GITHUB, WORK], active = 0): InlineView => ({
+    view: "list",
+    site: "github.com",
+    items,
+    active,
+    ...(search === undefined ? {} : { search }),
+  });
+  const box = () => document.querySelector<HTMLInputElement>('input[aria-label="搜索登录项"]');
+  const key = (target: Element, name: string) =>
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
+    );
+
+  it("shows over a list that may be searched, and sends what is typed", () => {
+    const { posted, show } = setup();
+    show(list(undefined));
+    expect(box()).toBeNull();
+    show(list(""));
+    const input = box() as HTMLInputElement;
+    expect(input.placeholder).toBe("搜索登录项");
+    input.value = "work";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(posted.at(-1)).toEqual({ kind: "search", text: "work" });
+  });
+
+  it("keeps the box, its text, its focus and its height as the list narrows, and says when nothing is left", () => {
+    const { show, root } = setup();
+    show(list(""));
+    const input = box() as HTMLInputElement;
+    const rows = root().querySelector<HTMLElement>(".overflow-y-auto") as HTMLElement;
+    expect(rows.style.minHeight).toBe("104px");
+    input.focus();
+    input.value = "work";
+    show(list("work", [WORK]));
+    expect(box()).toBe(input);
+    expect(root().querySelector(".overflow-y-auto")).toBe(rows);
+    expect(rows.style.minHeight).toBe("104px");
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("work");
+    expect(root().textContent).toContain("github.com · 1 个匹配");
+    expect(
+      Array.from(root().querySelectorAll("button")).filter((b) => b.title.startsWith("GitHub")),
+    ).toHaveLength(1);
+    input.value = "nobody";
+    show(list("nobody", []));
+    expect(box()).toBe(input);
+    expect(root().textContent).toContain("没有匹配的登录项");
+  });
+
+  it("moves with the arrows, fills with Enter, and clears before it closes with Esc", () => {
+    const { posted, show } = setup();
+    show(list("", [GITHUB, WORK], 1));
+    const input = box() as HTMLInputElement;
+    key(input, "ArrowDown");
+    expect(posted.at(-1)).toEqual({ kind: "key", key: "ArrowDown" });
+    key(input, "ArrowUp");
+    expect(posted.at(-1)).toEqual({ kind: "key", key: "ArrowUp" });
+    key(input, "Enter");
+    // A key has no point: the checks run at the frame's middle, as for Enter in the page's field.
+    expect(posted.at(-1)).toEqual({
+      kind: "action",
+      action: { type: "choose", index: 1 },
+      point: null,
+      trusted: false,
+    });
+    input.value = "work";
+    key(input, "Escape");
+    expect(input.value).toBe("");
+    expect(posted.at(-1)).toEqual({ kind: "search", text: "" });
+    key(input, "Escape");
+    expect(posted.at(-1)).toMatchObject({ kind: "action", action: { type: "close" } });
+  });
+
+  it("sends no Enter while nothing is listed", () => {
+    const { posted, show } = setup();
+    show(list("nobody", []));
+    const before = posted.length;
+    key(box() as HTMLInputElement, "Enter");
+    expect(posted).toHaveLength(before);
+  });
+});
