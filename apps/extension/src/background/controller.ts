@@ -218,8 +218,8 @@ export class Controller {
     const frame = await this.frameOf(sender);
     if (!frame) return none;
     if (message.form === "otp") {
-      await this.fillOtp(frame);
-      return none;
+      if (await this.fillOtp(frame)) return none;
+      return this.codeMenu(frame, message);
     }
     // In-page help only with a session; the popup says what is missing otherwise.
     if (this.connection.view.session !== "open") {
@@ -335,16 +335,52 @@ export class Controller {
       : null;
   }
 
-  private async fillOtp(frame: TrustedFrame): Promise<void> {
+  /** The code of the login just filled in this tab, into the frame's code field: whether Lockra
+   *  gave one (a login filled on this site in the last five minutes, its code linked). */
+  private async fillOtp(frame: TrustedFrame): Promise<boolean> {
     const itemId = this.memory.filledItem(frame.tabId);
-    if (!itemId) return;
+    if (!itemId) return false;
     const outcome = await this.connection.request({ op: "otp", item_id: itemId, ...frame.facts });
-    if (!outcome.ok) return;
+    if (!outcome.ok) return false;
     await this.send(frame, {
       kind: "fill.otp",
       code: outcome.value.code,
       submit: outcome.value.submit,
     });
+    return true;
+  }
+
+  /** A code field no fill of the last minutes goes with (the time is up, the background started
+   *  again, or the sign-in's first steps were typed): the menu offers the site's logins that have
+   *  a code, and the chosen one's goes in. The user's choice, as from the popup. */
+  private async codeMenu(
+    frame: TrustedFrame,
+    message: Extract<ContentMessage, { kind: "content.focus" }>,
+  ): Promise<FocusAnswer> {
+    const none: FocusAnswer = { token: null };
+    if (this.connection.view.session !== "open") {
+      this.connection.ensure(true);
+      return none;
+    }
+    const answer = await this.query(frame);
+    if (!answer || answer.never_fill) return none;
+    const items = answer.items.filter((item) => item.has_totp);
+    if (items.length === 0) return none;
+    if (answer.cross_origin && answer.policy.cross_origin_frames !== "ask") return none;
+    if (!(await this.opensNow(message))) return { token: null, mark: true };
+    const opened = this.frames.open({
+      kind: "menu",
+      frame,
+      frameUrl: frame.facts.frame_url,
+      view: { view: "list", site: answer.site, items: items.map(menuItem), active: 0, code: true },
+      items,
+      policy: answer.policy,
+      item: null,
+      generated: null,
+      trigger: "inline_menu",
+      code: true,
+    });
+    return { token: opened.token, side: await this.menuSide() };
   }
 
   /** The next step of a sign-in the user started: the password of the login whose user name the
@@ -751,7 +787,9 @@ export class Controller {
       if (outcome.error === "http_downgrade") return this.showHttp(frame, item);
       return this.notice(frame, outcome.error);
     }
-    await this.deliver(facts, outcome.value);
+    // A code field's menu is for the code alone: a login whose code Lockra does not fill says so.
+    if (frame.code === true && outcome.value.otp === null) return this.notice(frame, "protected");
+    await this.deliver(facts, outcome.value, { continues: frame.code !== true });
     await this.close(frame);
   }
 

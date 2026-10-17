@@ -419,6 +419,40 @@ class Smoke:
         self.is_code(value)
         print("smoke: the next pages' code fields got the login's code, whole and digit by digit")
 
+    def switch_to_authenticator(self):
+        """Google's way to its code (otp-switch.html): a prompt on the phone, 「Try another way」,
+        the authenticator; its code field comes last, in the same page."""
+        self.web.go(self.url("login.test", "otp-switch.html"))
+        self.web.click(self.web.wait("#another"))
+        self.web.click(self.web.wait("#authenticator"))
+        return self.web.wait("#totpPin")
+
+    def otp_after_switch(self):
+        """Right after a login filled: the code still goes in by itself once the user switched to
+        the authenticator."""
+        self.fill_from_menu()
+        self.switch_to_authenticator()
+        value = until("the code filled after the switch", lambda: (lambda v: v if v and len(v) == 6 else None)(self.web.values("#totpPin")[0]), 30)
+        self.is_code(value)
+        print("smoke: after 「Try another way」 the authenticator's field got the login's code by itself")
+
+    def otp_menu(self):
+        """A tab where no login was filled: the code field's menu offers the site's login that has
+        a code, and Enter puts its code in."""
+        first = self.web.call("GET", self.web.s("/window"))
+        tab = self.web.call("POST", self.web.s("/window/new"), {"type": "tab"})["handle"]
+        self.web.call("POST", self.web.s("/window"), {"handle": tab})
+        self.switch_to_authenticator()
+        self.open_menu("#totpPin")
+        self.shot("code-menu")
+        # Enter takes the menu's row once an arrow key went into it (the page keeps its own Enter).
+        self.web.keys(ARROW_DOWN, ENTER)
+        value = until("the code filled from the code field's menu", lambda: (lambda v: v if v and len(v) == 6 else None)(self.web.values("#totpPin")[0]), 30)
+        self.is_code(value)
+        self.web.call("DELETE", self.web.s("/window"))
+        self.web.call("POST", self.web.s("/window"), {"handle": first})
+        print("smoke: in a tab with no fill, the code field's menu filled the login's code")
+
     def is_code(self, value):
         now = time.time()
         if value not in {totp(LOGIN_SECRET, now), totp(LOGIN_SECRET, now - 30)}:
@@ -637,6 +671,8 @@ class Smoke:
             self.pair()
             self.fill_from_menu()
             self.otp_follows()
+            self.otp_after_switch()
+            self.otp_menu()
             self.shortcut_two_steps()
             self.http_page()
             self.cross_site_frame()

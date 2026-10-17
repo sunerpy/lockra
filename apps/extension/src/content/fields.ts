@@ -93,15 +93,28 @@ function looksOtp(input: HTMLInputElement): boolean {
   return codeField(input) && !anotherCode(input);
 }
 
+/** A field named as a code's takes one when it says how: a code's length, a numeric keyboard, a
+ *  pattern of digits alone, or the authenticator's own words (Google's `totpPin` has neither a
+ *  length nor a keyboard, only `pattern="[0-9 ]*"`). */
 function codeField(input: HTMLInputElement): boolean {
   if (autocomplete(input) === "one-time-code") return true;
   if (!["", "text", "tel", "number"].includes(typeOf(input))) return false;
-  if (!OTP_HINT.test(hints(input))) return false;
+  const own = hints(input);
+  if (!OTP_HINT.test(own)) return false;
   const max = lengthOf(input, "maxlength");
   return (
     (max !== null && max >= 4 && max <= 8) ||
-    input.getAttribute("inputmode")?.toLowerCase() === "numeric"
+    input.getAttribute("inputmode")?.toLowerCase() === "numeric" ||
+    digitsOnly(input) ||
+    AUTHENTICATOR_HINT.test(own)
   );
+}
+
+/** A `pattern` that takes digits alone, and the spaces some codes are typed with: `[0-9 ]*`, `\d{6}`. */
+function digitsOnly(input: HTMLInputElement): boolean {
+  const pattern = input.getAttribute("pattern") ?? "";
+  if (!/0-9|\\d/.test(pattern)) return false;
+  return pattern.replace(/0-9|\\d/g, "").replace(/[[\]\s{}(),*+?^$\d|]/g, "") === "";
 }
 
 /** A code field that is not the authenticator's: an image check, or a code the site sends by text

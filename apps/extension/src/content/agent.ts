@@ -265,7 +265,7 @@ export class ContentAgent {
     const message = this.focusMessage(scan, again);
     const answer = await this.send(message);
     const token = tokenOf(answer);
-    if (scan.kind === "otp" || deepActive(this.options.doc) !== field) return;
+    if (deepActive(this.options.doc) !== field) return;
     if (token) {
       this.openMenu(token, field, false, sideOf(answer));
       return;
@@ -475,7 +475,9 @@ export class ContentAgent {
     const result = fillForm(scan, values, view);
     const now = this.options.now();
     if (result.password) this.stepUntil = 0;
-    else if (result.filled > 0 && !values.newPassword) this.stepUntil = now + STEP_FOR_MS;
+    // A code's page asks for no password after it.
+    else if (result.filled > 0 && !values.newPassword && scan.kind !== "otp")
+      this.stepUntil = now + STEP_FOR_MS;
     if (values.otp !== null && !result.code) this.otpUntil = now + OTP_FOR_MS;
     this.watch();
     return result;

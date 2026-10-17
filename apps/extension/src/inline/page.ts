@@ -219,7 +219,9 @@ export class InlinePage {
     const site = "site" in view ? view.site : "";
     const hint =
       view.view === "list"
-        ? t("inline.matches", { site, n: view.items.length })
+        ? view.code
+          ? t("inline.codeHint", { site })
+          : t("inline.matches", { site, n: view.items.length })
         : view.view === "signup"
           ? t("inline.signupHint")
           : site;
@@ -236,7 +238,7 @@ export class InlinePage {
     switch (view.view) {
       case "list":
         content = this.list(view.items, view.active);
-        footer = t("inline.listFooter");
+        footer = t(view.code ? "inline.codeFooter" : "inline.listFooter");
         break;
       case "signup":
         content = this.signup(view);

@@ -194,6 +194,14 @@ time set in **Settings › Security › Clear clipboard**. **Fill in codes** and
 either off ([What the extension may do](#what-the-extension-may-do)). The next page needs site
 access.
 
+### A code field on its own
+
+<StatusTag status="building" /> In the next version, Lockra also recognises a code field named for
+an authenticator, or one that takes digits alone, as Google's does after **Try another way**: the
+code goes in there too. And when no login was filled in that tab in the last five minutes (the
+first steps were typed, or the time is up), choosing the code field opens the menu with the site's
+logins that have a linked code: choose one, and its code goes in.
+
 ## Saving and updating passwords
 
 With site access, the extension notices a form you submit:
