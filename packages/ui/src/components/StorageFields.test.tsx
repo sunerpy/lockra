@@ -78,26 +78,36 @@ describe("StorageFields", () => {
     expect(screen.getByRole("button", { name: "更换文件夹…" })).toBeInTheDocument();
   });
 
-  it("starts on Lockra's relay, which needs nothing typed in, or takes one's own", async () => {
+  it("starts on storage of one's own, listed first; a relay starts on one's own", async () => {
     const user = userEvent.setup();
     let form = emptyStorageForm();
-    render(<Form onForm={(next) => (form = next)} />);
-    expect(screen.getByRole("radio", { name: "Lockra 中继" })).toBeChecked();
-    expect(screen.getByTestId("storage-address")).toHaveTextContent(BUILT_IN_RELAY);
-    expect(screen.getByTestId("storage-preset-hint")).toHaveTextContent("打不开其中任何一个");
-    // Nothing to type: no credentials, no folder.
-    expect(screen.queryByLabelText("中继地址")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("文件夹（可选）")).not.toBeInTheDocument();
-    // One's own relay: its address is typed.
-    await user.selectOptions(screen.getByTestId("storage-provider"), "relay-custom");
-    const address = screen.getByLabelText("中继地址");
-    await user.clear(address);
-    await user.type(address, "https://relay.example.com");
+    render(<Form onForm={(next) => (form = next)} pickFolder={async () => null} />);
+    expect(screen.getAllByRole("radio").map((radio) => radio.textContent)).toEqual([
+      "WebDAV",
+      "S3 兼容",
+      "网盘文件夹",
+      "Lockra 中继",
+    ]);
+    expect(screen.getByRole("radio", { name: "WebDAV" })).toBeChecked();
+    expect(screen.getByLabelText("WebDAV 地址")).toHaveValue("");
+    // A relay: one's own, its address typed.
+    await user.click(screen.getByRole("radio", { name: "Lockra 中继" }));
+    expect(screen.getByTestId("storage-provider")).toHaveValue("relay-custom");
+    expect(screen.getByText(/推荐自建中继/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("中继地址"), "https://relay.example.com");
     expect(form).toMatchObject({
       kind: "relay",
       preset: "relay-custom",
       url: "https://relay.example.com",
     });
+    // Lockra's built-in relay, chosen by name: nothing to type, and what it means said.
+    await user.selectOptions(screen.getByTestId("storage-provider"), "relay-hosted");
+    expect(screen.getByTestId("storage-address")).toHaveTextContent(BUILT_IN_RELAY);
+    const hint = screen.getByTestId("storage-preset-hint");
+    expect(hint).toHaveTextContent("打不开其中任何一个");
+    expect(hint).toHaveTextContent("可能暂时不可用或停止服务");
+    expect(hint).toHaveTextContent("长期使用请自建中继或用你自己的存储");
+    expect(screen.queryByLabelText("中继地址")).not.toBeInTheDocument();
     // WebDAV does not keep the relay's address.
     await user.click(screen.getByRole("radio", { name: "WebDAV" }));
     expect(form).toMatchObject({ kind: "webdav", url: "" });

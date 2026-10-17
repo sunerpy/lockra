@@ -2,10 +2,10 @@
 // ones they start from. The secret (S3 secret key, WebDAV password) is typed in every time: the
 // core never sends it back. A folder of the computer is chosen through the system's dialog every
 // time too: the form only shows it, and the core takes the one the dialog chose. A Lockra relay
-// needs its address alone, and the form starts on Lockra's own.
+// needs its address alone. The form starts on storage of one's own, WebDAV, as the sync page
+// recommends: Lockra's built-in relay is one choice among the relays, for trying sync out.
 import type { StorageConfig, StorageKind, StorageView } from "./schema";
 import {
-  BUILT_IN_RELAY,
   type PresetId,
   PRESETS,
   customPreset,
@@ -36,11 +36,11 @@ export interface StorageForm {
   folder: string;
 }
 
-/** A new form: on Lockra's relay, which needs nothing typed in. */
+/** A new form: on WebDAV, storage of one's own. */
 export function emptyStorageForm(): StorageForm {
   return {
-    kind: "relay",
-    preset: startPreset("relay"),
+    kind: "webdav",
+    preset: startPreset("webdav"),
     account: "",
     host: "",
     endpoint: "",
@@ -49,7 +49,7 @@ export function emptyStorageForm(): StorageForm {
     accessKeyId: "",
     secretAccessKey: "",
     pathStyle: false,
-    url: BUILT_IN_RELAY,
+    url: "",
     username: "",
     password: "",
     prefix: "lockra",

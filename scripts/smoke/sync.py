@@ -17,8 +17,8 @@ one phase per app start:
 
 Then the same through a Lockra relay (lockra-relay on 127.0.0.1, its data folder read back):
 
-  r1 device C: the storage form starts on Lockra's built-in relay; C sets up a space on a relay of
-     its own instead, and shows an invitation: its QR code and "Copy the pairing link", which puts
+  r1 device C: the storage form starts on WebDAV and a relay on one's own; C sets up a space on this
+     test's relay, and shows an invitation: its QR code and "Copy the pairing link", which puts
      the plain invitation on the X clipboard (kept for device D); no "Can't scan?" and no code. The
      relay holds one snapshot, nothing readable, and the SHA-256 of the access token derived from
      the sync key (computed here apart), never the sync key.
@@ -245,7 +245,7 @@ class Phase:
         self.web.invoke({"command": "settings_set", "settings": {**settings, "locale": "zh-cn", "follow_system_theme": False, "theme": "light", "reduce_motion": True}})
 
     def storage_form(self, scope):
-        # The form starts on Lockra's relay; this smoke test syncs through S3.
+        # The form starts on WebDAV, storage of one's own; this smoke test syncs through S3.
         self.web.click(self.web.wait(xpath=f"{scope}//*[@role='radio'][normalize-space()='S3 兼容']"))
         self.fill("服务地址", self.args.s3, scope)
         self.fill("区域", REGION, scope)
@@ -411,17 +411,17 @@ class Phase:
         self.open_sync()
         web.click(web.wait(css="[data-testid=sync-create-open]"))
         scope = "//*[@data-testid='sync-create']"
-        # The form starts on Lockra's built-in relay, with nothing to fill in.
-        web.wait(xpath=f"{scope}//*[@role='radio'][@aria-checked='true'][normalize-space()='Lockra 中继']")
-        address = web.text(web.wait(xpath=f"{scope}//*[@data-testid='storage-address']"))
-        if "https://lockra-relay.onethinker.top" not in address:
-            sys.exit(f"smoke-sync: the form does not start on the built-in relay: {address}")
+        # The form starts on storage of one's own, and a relay on one's own: this smoke test's, on
+        # this computer. Lockra's built-in relay is chosen by name.
+        web.wait(xpath=f"{scope}//*[@role='radio'][@aria-checked='true'][normalize-space()='WebDAV']")
+        web.click(web.wait(xpath=f"{scope}//*[@role='radio'][normalize-space()='Lockra 中继']"))
+        provider = web.wait(xpath=f"{scope}//select[@data-testid='storage-provider']")
+        if web.run("return arguments[0].value", {ELEMENT: provider}) != "relay-custom":
+            sys.exit("smoke-sync: a relay does not start on one's own")
+        self.fill("中继地址", self.args.relay, scope)
         self.fill("这台设备的名称", "台式机", scope)
         self.fill("主密码", PASSWORD, scope)
         self.shot("sync-relay-create-light")
-        # This smoke test's relay is one of its own, on this computer.
-        web.run(SELECT, {ELEMENT: web.wait(xpath=f"{scope}//select[@data-testid='storage-provider']")}, "relay-custom")
-        self.fill("中继地址", self.args.relay, scope)
         before = int(time.time() * 1000)
         web.click(self.button("开始同步", scope))
         key = self.reveal_recovery_key()

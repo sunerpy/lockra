@@ -47,11 +47,11 @@ home:
             status: available
             link: /guide/install
           - title: Sync between your devices
-            body: End-to-end encrypted, through a Lockra relay, an S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder. Whatever keeps the space sees only encrypted files.
+            body: End-to-end encrypted, on an S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder of your own, or through a Lockra relay. Whatever keeps the space sees only encrypted files.
             status: available
             link: /backup/sync
           - title: Sync through a Lockra relay
-            body: No storage of your own needed. The built-in relay, or one you run yourself, keeps the encrypted files and opens none of them.
+            body: A relay you run yourself keeps the encrypted files and opens none of them; the built-in relay needs nothing set up, to try sync out.
             status: available
             link: /backup/sync#through-a-lockra-relay
           - title: A phone joins by scanning

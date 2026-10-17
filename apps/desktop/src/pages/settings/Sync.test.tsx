@@ -76,16 +76,24 @@ describe("Settings › Sync", () => {
     expect(document.body.textContent).not.toContain(MOCK_STORAGE_SECRET);
   });
 
-  it("sets up a space on Lockra's relay with nothing to type but the master password", async () => {
+  it("starts on storage of one's own, and sets up a space on Lockra's built-in relay chosen by name", async () => {
     const { user, backend } = renderApp();
     await ready();
     const pane = await openSync(user);
+    expect(pane.getByText(/推荐把同步空间建在你自己的存储上/)).toBeInTheDocument();
     await user.click(pane.getByTestId("sync-create-open"));
     const form = within(pane.getByTestId("sync-create"));
-    expect(form.getByRole("radio", { name: "Lockra 中继" })).toBeChecked();
+    // The form starts on WebDAV, storage of one's own; a relay starts on one's own.
+    expect(form.getByRole("radio", { name: "WebDAV" })).toBeChecked();
+    expect(form.getByRole("button", { name: "开始同步" })).toBeDisabled();
+    await user.click(form.getByRole("radio", { name: "Lockra 中继" }));
+    expect(form.getByTestId("storage-provider")).toHaveValue("relay-custom");
+    // The built-in relay, chosen by name, with what it means.
+    await user.selectOptions(form.getByTestId("storage-provider"), "relay-hosted");
     expect(form.getByTestId("storage-address")).toHaveTextContent(
       "https://lockra-relay.onethinker.top",
     );
+    expect(form.getByTestId("storage-preset-hint")).toHaveTextContent("长期使用请自建中继");
     await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "开始同步" }));
     expect(await pane.findByTestId("sync-storage")).toHaveTextContent(
@@ -102,7 +110,7 @@ describe("Settings › Sync", () => {
     await user.click(within(prompt).getByRole("button", { name: "显示邀请码" }));
     const invite = await screen.findByTestId("sync-invite");
     expect(invite).toHaveTextContent(
-      "配对链接长期有效：拿到它的人无需任何密码就能加入同步空间、读取你的所有账号，直到你开始新的同步空间。只发给你自己的设备。",
+      "配对链接长期有效：拿到它的人无需任何密码就能加入同步空间、读取你的所有账号，直到你开始新的同步空间。只发给你自己的设备。万一外泄，新建同步空间只能挡住以后的同步：已经被读走的账号要改密码、重设两步验证。",
     );
     expect(within(invite).getByRole("img", { name: "二维码" })).toBeInTheDocument();
     expect(within(invite).queryByTestId("invite-key-only")).not.toBeInTheDocument();

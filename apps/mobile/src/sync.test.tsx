@@ -55,7 +55,7 @@ describe("sync on the phone", () => {
     await user.click(screen.getByTestId("dock-settings"));
     const row = await screen.findByTestId("settings-sync");
     expect(row).toHaveTextContent("设置同步");
-    expect(row).toHaveTextContent("经 Lockra 中继或你自己的存储，与其他设备同步");
+    expect(row).toHaveTextContent("经你自己的存储或 Lockra 中继，与其他设备同步");
     await user.click(row);
     await user.click(await screen.findByTestId("sync-setup-open"));
     const form = within(await screen.findByTestId("sync-create"));
@@ -163,7 +163,7 @@ describe("sync on the phone", () => {
     expect(await page.findByRole("img", { name: "二维码" })).toBeInTheDocument();
     expect(
       page.getByText(
-        "配对链接长期有效：拿到它的人无需任何密码就能加入同步空间、读取你的所有账号，直到你开始新的同步空间。只发给你自己的设备。",
+        "配对链接长期有效：拿到它的人无需任何密码就能加入同步空间、读取你的所有账号，直到你开始新的同步空间。只发给你自己的设备。万一外泄，新建同步空间只能挡住以后的同步：已经被读走的账号要改密码、重设两步验证。",
       ),
     ).toBeInTheDocument();
     expect(page.queryByRole("button", { name: "无法扫码？" })).not.toBeInTheDocument();

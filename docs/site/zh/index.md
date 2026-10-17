@@ -47,11 +47,11 @@ home:
             status: available
             link: /zh/guide/install
           - title: 多设备同步
-            body: 经 Lockra 中继、S3 兼容存储桶、WebDAV 文件夹，或在电脑之间经网盘同步文件夹进行端到端加密同步。保存同步空间的一方只能看到加密的文件。
+            body: 在你自己的 S3 兼容存储桶、WebDAV 文件夹，或在电脑之间经网盘同步文件夹进行端到端加密同步，也可以经 Lockra 中继同步。保存同步空间的一方只能看到加密的文件。
             status: available
             link: /zh/backup/sync
           - title: 经 Lockra 中继同步
-            body: 无需自备存储。内置中继或你自建的中继保存加密文件，无法打开其中任何一个。
+            body: 自建的中继保存加密文件，无法打开其中任何一个；内置中继无需任何设置，适合试用同步。
             status: available
             link: /zh/backup/sync#经-lockra-中继同步
           - title: 手机扫码加入

@@ -510,11 +510,15 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   and a copy of the storage taken earlier keeps its keyring (a cloud drive's version history is
   such a copy, and so is every computer its folder reaches). To shut out a lost device, or someone
   who has the sync key and an old master password, set up a new space and join the other devices
-  to it.
+  to it. A new space stops only what comes next: whoever held the space may have read every
+  account already, so the logins' passwords and the codes' secrets (each site's two-step setup)
+  are to be changed too. The app says so where it shows an invitation or a pairing link.
 - A relay, the built-in one included, sees when and from which addresses a space's devices sync,
-  and its operator can make the space unavailable; the built-in relay is a single server, and can
-  be down. For a space that must not depend on Lockra's server, run a relay of your own or use
-  storage of your own.
+  and its operator can make the space unavailable; the built-in relay is a single server the
+  project runs for free, with no promise of service, and can be down or close. For a space that
+  must not depend on Lockra's server, run a relay of your own or use storage of your own: the
+  app recommends them (the storage form starts on WebDAV, a relay on one of one's own, and the
+  built-in relay is chosen by name, for trying sync out).
 - On Android, the sync trusts the certificate authorities the system ships (its Conscrypt
   module's since Android 14, the system image's before): one the user turned off in the system's
   settings is still trusted by the sync, and Android's blocklist of distrusted certificates is not
