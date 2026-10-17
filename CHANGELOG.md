@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/sunerpy/lockra/compare/v0.12.0...v0.12.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **mobile:** 离开应用时由原生层锁定保险库，不再只靠 WebView 的页面事件 ([#179](https://github.com/sunerpy/lockra/issues/179)) ([9540432](https://github.com/sunerpy/lockra/commit/9540432b572e27df0ba01c3e5fde60ac8b39dfd2))
+
 ## [0.12.0](https://github.com/sunerpy/lockra/compare/v0.11.1...v0.12.0) (2026-10-17)
 
 
