@@ -87,7 +87,8 @@ made-up site; a sharper version plays on the [website](https://firlab.app/lockra
   password is in, or the code for a login with a linked one. It offers to save and update
   passwords, and can turn off the browser's own offer to save them, so that only Lockra asks.
   Lockra decides every fill, and can keep running in the tray for it. Chrome, Edge and Brave load
-  it unpacked from the release; the Edge Add-ons and Firefox Add-ons listings, which Firefox needs,
+  it unpacked from the folder Lockra keeps it in, and Lockra updates it there with itself (from
+  0.11.1); the Edge Add-ons and Firefox Add-ons listings, which Firefox needs,
   are not live yet ([extension guide](https://firlab.app/lockra/passwords/browser)).
 - **Quick search** (from 0.10.0, on Windows, macOS and Linux): a key combination of your own
   brings up the command palette over any app, to copy a user name, a password or a code; on

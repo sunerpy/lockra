@@ -83,7 +83,7 @@ AppImage 无需安装：添加可执行权限后直接运行。Lockra 需要 Web
 
 ## 浏览器扩展
 
-适用于 Chrome、Edge 和 Firefox 的扩展，从同一台电脑上运行的 Lockra（0.10.0 或更高版本）取得登录项并填入网页。Chrome、Edge 和 Brave 以解压方式加载发布页上的 `lockra-extension_<版本>_chromium-unpacked.zip`；Microsoft Edge 加载项和 Firefox 附加组件的页面尚未上线。安装扩展后，请在 Lockra 中开启「设置 › 浏览器 › 浏览器集成」，再将两者配对（[浏览器扩展](/zh/passwords/browser)）。
+适用于 Chrome、Edge 和 Firefox 的扩展，从同一台电脑上运行的 Lockra（0.10.0 或更高版本）取得登录项并填入网页。Chrome、Edge 和 Brave 以解压方式加载扩展：自 0.11.1 版起，加载 Lockra 保存并负责更新的扩展文件夹（在 Lockra 中开启「设置 › 浏览器 › 浏览器集成」后，见「扩展文件夹」），也可以加载发布页上的 `lockra-extension_<版本>_chromium-unpacked.zip`。Microsoft Edge 加载项和 Firefox 附加组件的页面尚未上线。安装扩展后，将两者配对（[浏览器扩展](/zh/passwords/browser)）。
 
 ## 后续步骤
 

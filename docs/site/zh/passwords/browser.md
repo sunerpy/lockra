@@ -2,7 +2,7 @@
 
 本页介绍如何使用 Lockra 扩展在 Chrome、Edge 和 Firefox 中填充密码和验证码：安装与配对、填充与保存，以及决定扩展可以做什么的设置。
 
-<StatusTag status="available" /> 自 0.10.0 版起在 Windows、macOS 和 Linux 上提供。扩展从 Lockra 的发布页安装，见[安装扩展](#安装扩展)，那里也说明了各商店的情况。
+<StatusTag status="available" /> 自 0.10.0 版起在 Windows、macOS 和 Linux 上提供。扩展从 Lockra 保存它的文件夹加载，见[安装扩展](#安装扩展)，那里也说明了各商店的情况。
 
 扩展本身不保存任何密码。它向同一台电脑上的 Lockra 请求，两者之间的连接经过加密，并且只在 Lockra 运行且已解锁时才能请求；是否可以填充某个网页、填充哪个登录项，都由 Lockra 决定。扩展随 Lockra 一起锁定和解锁，从不要求输入主密码。
 
@@ -10,47 +10,42 @@
 
 ## 准备工作
 
-- Windows、macOS 或 Linux 上的 Lockra 0.10.0 或更高版本，与浏览器在同一台电脑上运行。
+- Windows、macOS 或 Linux 上的 Lockra 0.10.0 或更高版本，与浏览器在同一台电脑上运行（从 Lockra 的文件夹加载扩展、由 Lockra 更新扩展需要 0.11.1 或更高版本）。
 - Chrome 或 Microsoft Edge 133 及以上，或 Firefox 140 及以上。Lockra 也会为 Chromium 和 Brave 完成设置，它们安装和 Chrome 相同的程序包。不支持以 Snap 或 Flatpak 形式安装的浏览器（[平台说明](/zh/reference/platforms#浏览器扩展)）。
 - 保险库中已有登录项（[密码](/zh/passwords/)）。
 
 ## 安装扩展
 
-| 浏览器                        | 来源                            | 状态                             |
-| ----------------------------- | ------------------------------- | -------------------------------- |
-| Chrome、Edge、Brave、Chromium | Lockra 的发布页，以解压方式加载 | <StatusTag status="available" /> |
-| Microsoft Edge                | Microsoft Edge 加载项           | <StatusTag status="building" />  |
-| Firefox                       | Firefox 附加组件                | <StatusTag status="building" />  |
+| 浏览器                        | 来源                                | 状态                             |
+| ----------------------------- | ----------------------------------- | -------------------------------- |
+| Chrome、Edge、Brave、Chromium | Lockra 的扩展文件夹，以解压方式加载 | <StatusTag status="available" /> |
+| Microsoft Edge                | Microsoft Edge 加载项               | <StatusTag status="building" />  |
+| Firefox                       | Firefox 附加组件                    | <StatusTag status="building" />  |
 
-扩展没有上架 Chrome 网上应用店。在 Chrome、Edge 和 Brave 中，从 Lockra 的发布页安装：
+扩展没有上架 Chrome 网上应用店。自 0.11.1 版起，Lockra 自带与自己同版本的扩展，放在它自己的一个文件夹里，Chrome、Edge 和 Brave 以解压方式加载这个文件夹：
 
-1. 在 [Lockra 的发布页](https://github.com/sunerpy/lockra/releases/latest)下载 `lockra-extension_<版本>_chromium-unpacked.zip`，解压到一个会长期保留的文件夹：浏览器每次启动都从这个文件夹加载扩展，移动或删除文件夹，扩展也就没有了。
-2. 打开浏览器的扩展页面（`chrome://extensions`、`edge://extensions` 或 `brave://extensions`），开启「开发者模式」。
-3. 选择「加载已解压的扩展程序」，选中这个文件夹，也就是包含 `manifest.json` 的那一层。
+1. 在 Lockra 中打开「设置 › 浏览器」，开启「浏览器集成」（[开启浏览器集成](#开启浏览器集成)）。随后「扩展文件夹」会显示这个文件夹，并提供「复制路径」和「打开文件夹」：
 
-扩展的卡片上显示的 ID 是 `flgfdomeabdfbebfjonaocddjcamgblk`，与 Edge 加载项将要发布的扩展相同；Lockra 不与其他 Chromium 扩展连接。发布页上另一个 Chromium 文件 `lockra-extension_<版本>_chromium-store.zip` 是提交给商店的程序包，以解压方式加载时 ID 不同，无法连接。
+   | 系统    | 文件夹                                                   |
+   | ------- | -------------------------------------------------------- |
+   | Windows | `%LOCALAPPDATA%\Lockra\browser\extension`                |
+   | macOS   | `~/Library/Application Support/Lockra/browser/extension` |
+   | Linux   | `~/.local/share/Lockra/browser/extension`                |
 
-更新时，用新版本的程序包替换文件夹中的文件，再点击扩展卡片上的重新加载按钮，配对仍然保留。移除扩展会清除配对，重新加载扩展后需要再配对一次。Edge 加载项上架后，Edge 也可以改从那里安装；两者 ID 相同，请先移除以解压方式加载的扩展。
+2. 打开浏览器的扩展页面（`chrome://extensions`、`edge://extensions` 或 `brave://extensions`），开启「开发者模式」，并保持开启：关闭后，以解压方式加载的扩展在重新载入时会被浏览器停用。
+3. 选择「加载已解压的扩展程序」，选中这个文件夹：可以在对话框中粘贴复制的路径。
+
+扩展的卡片上显示的 ID 是 `flgfdomeabdfbebfjonaocddjcamgblk`，与 Edge 加载项将要发布的扩展相同；Lockra 不与其他 Chromium 扩展连接。以前从发布包加载过扩展的，同样加载 Lockra 的文件夹即可：ID 相同，它会替换原来的扩展，配对保留。
+
+同一节的「下载扩展安装包」会打开与 Lockra 同版本的发布包 `lockra-extension_<版本>_chromium-unpacked.zip`：解压到一个会长期保留的文件夹，再加载这个文件夹（使用 Lockra 0.10 时只能这样安装）。这样装的扩展不会随 Lockra 更新：更新时用新版本的程序包替换文件夹中的文件，再点击扩展卡片上的重新加载按钮。发布页上另一个 Chromium 文件 `lockra-extension_<版本>_chromium-store.zip` 是提交给商店的程序包，以解压方式加载时 ID 不同，无法连接。移除扩展会清除配对，重新加载扩展后需要再配对一次。Edge 加载项上架后，Edge 也可以改从那里安装；两者 ID 相同，请先移除以解压方式加载的扩展。
 
 Firefox 只安装经 Firefox 附加组件签名的扩展，所以 Firefox 版扩展要等商店页面上线后才能安装。
 
 ## 随 Lockra 更新
 
-<StatusTag status="building" /> 下一个版本起，Lockra 会自带一份扩展，并随自己一起更新它。
+<StatusTag status="available" /> 自 0.11.1 版起提供。
 
-Chrome、Edge 和 Brave 不会更新以解压方式加载的扩展。开启浏览器集成后，Lockra 会把与自己同版本的扩展放进它自己的一个文件夹；「设置 › 浏览器 › 扩展文件夹」会显示这个文件夹，并提供「复制路径」和「打开文件夹」：
-
-| 系统    | 文件夹                                                   |
-| ------- | -------------------------------------------------------- |
-| Windows | `%LOCALAPPDATA%\Lockra\browser\extension`                |
-| macOS   | `~/Library/Application Support/Lockra/browser/extension` |
-| Linux   | `~/.local/share/Lockra/browser/extension`                |
-
-这一节还提供「下载扩展安装包」，在浏览器中打开同版本的发布包，供手动安装（方法同上）；这样装的扩展不会随 Lockra 自动更新。
-
-按上面的第 2、3 步，以解压方式加载这个文件夹一次。以前从发布包加载过扩展的，同样加载这个文件夹即可：ID 相同，它会替换原来的扩展，配对保留。请保持「开发者模式」开启：关闭后，以解压方式加载的扩展在重新载入时会被浏览器停用。
-
-此后 Lockra 每次更新，启动时都会把新版扩展放进这个文件夹。扩展发现后，等它的弹窗、选项页和菜单都关闭，就自行重新载入，配对保留；已经打开的网页刷新后才会用上新版扩展。
+Chrome、Edge 和 Brave 不会更新以解压方式加载的扩展，所以由 Lockra 来更新：Lockra 每次更新，启动时都会把新版扩展放进它的文件夹。扩展发现后，等它的弹窗、选项页和菜单都关闭，就自行重新载入，配对保留；已经打开的网页刷新后才会用上新版扩展。
 
 扩展比 Lockra 旧时，弹窗会提示；如果扩展是以其他方式安装的，还会建议改为加载 Lockra 的文件夹。「设置 › 浏览器」会显示每个已配对扩展的版本，比 Lockra 旧的标为「可更新」。Firefox 不保留以解压方式加载的扩展，这一节不适用于 Firefox。
 
