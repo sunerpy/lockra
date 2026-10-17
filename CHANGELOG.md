@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/sunerpy/lockra/compare/v0.11.0...v0.11.1) (2026-10-17)
+
+
+### Bug Fixes
+
+* **extension:** 改名只差大小写的模块，修复 macOS 和 Windows 上的发布构建 ([#169](https://github.com/sunerpy/lockra/issues/169)) ([a307e13](https://github.com/sunerpy/lockra/commit/a307e13415f01c622bbaabd724b81058270f1b8d))
+
 ## [0.11.0](https://github.com/sunerpy/lockra/compare/v0.10.1...v0.11.0) (2026-10-17)
 
 
