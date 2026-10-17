@@ -127,6 +127,8 @@ export function portPair(name: string, sender?: MessageSender): [FakePortEnd, Fa
 export type ContentHandler = (message: unknown) => unknown;
 
 export class FakeBrowser implements BrowserApi {
+  /** How often the extension reloaded itself (`runtime.reload`). */
+  reloads = 0;
   openTabs: Tab[] = [{ id: 1, url: "https://www.example.com/login", active: true, windowId: 1 }];
   frames = new Map<number, FrameDetails[]>([
     [
@@ -173,6 +175,9 @@ export class FakeBrowser implements BrowserApi {
     },
     sendMessage: async (): Promise<unknown> => undefined,
     openOptionsPage: async () => undefined,
+    reload: (): void => {
+      this.reloads += 1;
+    },
     onMessage: new FakeEvent<MessageListener>(),
     onConnect: new FakeEvent<(port: Port) => void>(),
     onStartup: new FakeEvent<() => void>(),

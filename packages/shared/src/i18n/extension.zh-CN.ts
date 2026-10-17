@@ -108,7 +108,17 @@ export const extensionZhCN = {
     title: "请更新扩展",
     body: "Lockra {app} 需要更新版本的扩展，这个扩展是 {extension}。",
     open: "打开扩展页面",
-    note: "浏览器通常会在几小时内自动更新扩展；也可以在扩展管理页里手动更新。",
+    note: "从 Lockra 的扩展文件夹加载的扩展会自动更新；其他方式装的，请在 Lockra 的「设置 › 浏览器」里改为加载那个文件夹。",
+    noteFirefox: "在 Firefox 的附加组件页里更新扩展。",
+  },
+  selfUpdate: {
+    waiting: "Lockra 已放好新版扩展，关闭这个窗口后扩展会自动更新。",
+    folder:
+      "这个扩展是 {extension}，Lockra 是 {app}：Lockra 还没能更新扩展文件夹，重启 Lockra 后会再试。",
+    manual:
+      "这个扩展是 {extension}，比 Lockra {app} 旧。在 Lockra 的「设置 › 浏览器」里改为加载扩展文件夹，以后会随 Lockra 自动更新。",
+    manualFirefox:
+      "这个扩展是 {extension}，比 Lockra {app} 旧，请在 Firefox 的附加组件页里更新它。",
   },
   access: {
     title: "在网页中启用 Lockra",

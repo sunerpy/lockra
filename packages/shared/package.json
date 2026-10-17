@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./i18n/extension": "./src/i18n/extension.ts",
     "./mock": "./src/mock-backend.ts",
+    "./version": "./src/version.ts",
     "./fixtures": "./src/fixtures/index.ts"
   },
   "scripts": {

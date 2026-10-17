@@ -395,7 +395,8 @@
           "last_seen_ms": 1789999940000,
           "page_access": true,
           "paired_at_ms": 1789913600000,
-          "paused": false
+          "paused": false,
+          "version": "0.10.1"
         },
         {
           "browser": "firefox",
@@ -406,7 +407,8 @@
           "last_seen_ms": null,
           "page_access": null,
           "paired_at_ms": 1789996400000,
-          "paused": true
+          "paused": true,
+          "version": null
         }
       ],
       "pairing": [

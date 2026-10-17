@@ -22,6 +22,7 @@ function state(change: Partial<PopupState> = {}): PopupState {
     shortcut: "Ctrl+Shift+L",
     unlockAsked: false,
     pairedAt: Date.UTC(2026, 9, 12, 12),
+    update: null,
     ...change,
   };
 }
@@ -69,6 +70,13 @@ async function setup(initial: PopupState, extra: Partial<PageClient> = {}) {
 }
 
 describe("the options page", () => {
+  it("tells the extension's own update in the connection", async () => {
+    await setup(state({ update: "manual", appVersion: "0.10.2", extensionVersion: "0.10.1" }));
+    expect(screen.getByTestId("popup-update")).toHaveTextContent(
+      "这个扩展是 0.10.1，比 Lockra 0.10.2 旧",
+    );
+  });
+
   it("shows the pairing and unpairs it", async () => {
     const { sent } = await setup(state());
     expect(screen.getByText("Lockra 扩展")).toBeInTheDocument();

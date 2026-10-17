@@ -25,7 +25,10 @@ one workflow run builds, verifies and publishes everything.
    - `bundle` builds each target with the lockfile's Tauri CLI: `tauri build --no-bundle` without
      any secret, then `tauri bundle` with the update signing key (deb, rpm and AppImage on Linux x64
      and arm64; the app archive and the dmg for Apple silicon and Intel; NSIS and MSI on Windows
-     x64, NSIS on Windows arm64), which signs every package for the in-app update;
+     x64, NSIS on Windows arm64), which signs every package for the in-app update. The
+     `beforeBuildCommand` builds the extension first: the app carries its Chromium build for the
+     folder it keeps for the browsers, and `LOCKRA_EXTENSION_REQUIRED=1` stops the leg when that
+     build is missing or of another version (`apps/desktop/src-tauri/build.rs`);
    - `bundle-android` builds the phone app's APK and AAB for arm64 unsigned, signs them with the
      Android key in a step of its own and checks them against the pinned certificate (below);
    - `bundle-relay` builds the relay server's static Linux archives (`docs/relay.md`);

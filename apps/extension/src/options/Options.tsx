@@ -8,6 +8,7 @@ import type { BrowserFeatures, Feature, Holder } from "../popup/browser-features
 import type { PageClient } from "../popup/client";
 import { usePage } from "../popup/usePage";
 import { useText } from "../shared/text";
+import { UpdateNote } from "../shared/UpdateNote";
 
 export const SOURCE_URL = "https://firlab.app/lockra/";
 
@@ -103,6 +104,9 @@ export function Options({ client, locale }: { client: PageClient; locale: string
               </Button>
             ) : null}
           </StatusRow>
+          {state?.update ? (
+            <UpdateNote state={state} target={client.target} className="mt-2" />
+          ) : null}
         </Section>
         <Section title={t("options.shortcuts")}>
           <StatusRow label={t("options.fillShortcut")} help={t("options.fillShortcutHelp")}>

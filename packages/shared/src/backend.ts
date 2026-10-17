@@ -4,6 +4,7 @@ import type {
   BrowserId,
   BrowserStatus,
   CodesFrame,
+  ExtensionFolder,
   CommandName,
   CommandOf,
   ErrorCode,
@@ -75,6 +76,16 @@ export interface Backend {
   browserDisable(): Promise<BrowserStatus[]>;
   /** Every browser's status: its profiles here, Lockra's manifest in place. */
   browserStatus(): Promise<BrowserStatus[]>;
+  /** The folder Lockra keeps its copy of the extension in, for the browsers to load unpacked;
+   *  `null` when this build carries none. */
+  browserExtension(): Promise<ExtensionFolder | null>;
+  /** The folder's path on the clipboard, for the browser's folder dialog. */
+  browserExtensionCopy(): Promise<void>;
+  /** The folder in the file manager; `false` when none could show it. */
+  browserExtensionReveal(): Promise<boolean>;
+  /** The extension's self-install package of this version in the system's browser, for loading by
+   *  hand. `null` once a browser opened it, else its address, to show (none opened it). */
+  browserExtensionDownload(): Promise<string | null>;
   /** The command palette the quick search opened (`open_palette`) is closed (the desktop's):
    *  after a copy from it (`copied`), the window goes back where it was, hidden again if the quick
    *  search had brought it up. */

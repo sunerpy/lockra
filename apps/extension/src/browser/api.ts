@@ -123,6 +123,8 @@ export interface BrowserApi {
     connect(info?: { name?: string }): Port;
     sendMessage(message: unknown): Promise<unknown>;
     openOptionsPage(): Promise<void>;
+    /** The extension starts again; one loaded unpacked is read from its folder again. */
+    reload(): void;
     onMessage: BrowserEvent<MessageListener>;
     onConnect: BrowserEvent<(port: Port) => void>;
     onStartup: BrowserEvent<() => void>;

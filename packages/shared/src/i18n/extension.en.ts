@@ -114,7 +114,17 @@ export const extensionEn: typeof extensionZhCN = {
     title: "Please update the extension",
     body: "Lockra {app} needs a newer extension; this one is {extension}.",
     open: "Open the extensions page",
-    note: "Browsers usually update extensions within a few hours; you can also update it on the extensions page.",
+    note: "An extension loaded from Lockra's extension folder updates itself; if this one came another way, load that folder instead (Lockra's Settings › Browser).",
+    noteFirefox: "Update the extension on Firefox's add-ons page.",
+  },
+  selfUpdate: {
+    waiting: "Lockra has put a new extension in place: it updates itself once this window closes.",
+    folder:
+      "This extension is {extension}, Lockra {app}: Lockra could not update the extension folder yet; it tries again when it starts next.",
+    manual:
+      "This extension is {extension}, older than Lockra {app}. In Lockra's Settings › Browser, load the extension folder instead: from then on it updates with Lockra.",
+    manualFirefox:
+      "This extension is {extension}, older than Lockra {app}: update it on Firefox's add-ons page.",
   },
   access: {
     title: "Turn on Lockra in web pages",

@@ -202,6 +202,12 @@ export interface SiteView {
   crossOrigin: boolean;
 }
 
+/** The extension's own update, as the popup and the options page tell it
+ *  (background/update.ts): a new copy in Lockra's folder waits for them to close (`waiting`),
+ *  the folder's copy is behind Lockra (`folder`), or the extension came another way and is older
+ *  than Lockra (`manual`). */
+export type UpdateNote = "waiting" | "folder" | "manual";
+
 export interface PopupState {
   screen: Screen;
   /** Lockra is being started. */
@@ -223,6 +229,8 @@ export interface PopupState {
   unlockAsked: boolean;
   /** When the extension was paired (the options page). */
   pairedAt: number | null;
+  /** The extension's own update; null when there is nothing to tell. */
+  update: UpdateNote | null;
 }
 
 export type PopupRequest =

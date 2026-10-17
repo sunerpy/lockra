@@ -8,6 +8,7 @@ import { Connection } from "./connection";
 import { Controller } from "./controller";
 import { KeyStore, indexedDbVault } from "./keys";
 import { nativePort } from "./native";
+import { SelfUpdate } from "./update";
 
 const api = browserApi();
 const brands = brandsOf(navigator);
@@ -17,10 +18,12 @@ const connection = new Connection({
   clock: systemClock,
   client: () => clientInfo(api, brands),
 });
+const extensionVersion = api.runtime.getManifest().version;
 new Controller({
   api,
   connection,
   clock: systemClock,
-  extensionVersion: api.runtime.getManifest().version,
+  extensionVersion,
+  update: new SelfUpdate({ api, loaded: extensionVersion, fetch: (url, init) => fetch(url, init) }),
 }).install();
 connection.start();

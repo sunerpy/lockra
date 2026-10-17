@@ -1,5 +1,12 @@
 import type { ActivityView, PairedView } from "@lockra/shared";
-import { MOCK_PASSWORD, MockBackend, type MockOptions, sampleEntries } from "@lockra/shared/mock";
+import {
+  MOCK_APP_VERSION,
+  MOCK_EXTENSION_FOLDER,
+  MOCK_PASSWORD,
+  MockBackend,
+  type MockOptions,
+  sampleEntries,
+} from "@lockra/shared/mock";
 import { screen, within } from "@testing-library/react";
 import { ready, renderApp } from "../../test/render";
 
@@ -13,6 +20,7 @@ function paired(over: Partial<PairedView> = {}): PairedView {
     last_seen_ms: null,
     connected: true,
     page_access: true,
+    version: null,
     paused: false,
     ...over,
   };
@@ -127,6 +135,98 @@ describe("Settings › 浏览器", () => {
     expect((await backend.browserStatus()).find((s) => s.browser === "firefox")?.manifest).toBe(
       true,
     );
+  });
+
+  it("shows the folder Lockra keeps its extension in, puts its path on the clipboard and opens it", async () => {
+    const backend = core({ settings: { run_in_background: true } });
+    await backend.browserEnable(["chrome"]);
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const folder = within(await pane.findByTestId("extension-folder"));
+    expect(folder.getByText(MOCK_EXTENSION_FOLDER)).toBeInTheDocument();
+    expect(folder.getByTestId("extension-folder-state")).toHaveTextContent(
+      `Lockra ${MOCK_APP_VERSION} 附带的扩展`,
+    );
+    expect(pane.getByTestId("extension-folder-steps")).toHaveTextContent("加载已解压的扩展程序");
+    await user.click(folder.getByRole("button", { name: "复制路径" }));
+    expect(backend.extensionCopies).toBe(1);
+    expect(await folder.findByRole("button", { name: "已复制" })).toBeInTheDocument();
+    await user.click(folder.getByRole("button", { name: "打开文件夹" }));
+    expect(backend.extensionReveals).toBe(1);
+    expect(folder.queryByText(/没能打开文件管理器/)).not.toBeInTheDocument();
+    // Or the release's package, by hand: it opens in the browser.
+    const download = within(pane.getByTestId("extension-download"));
+    expect(download.getByText(/不会随 Lockra 自动更新/)).toBeInTheDocument();
+    await user.click(download.getByRole("button", { name: "下载扩展安装包" }));
+    expect(backend.extensionDownloads).toBe(1);
+    expect(download.queryByTestId("extension-download-address")).not.toBeInTheDocument();
+  });
+
+  it("shows the package's address when no browser opened it, and offers it without a folder too", async () => {
+    const backend = core({
+      settings: { run_in_background: true },
+      extensionFolder: null,
+      extensionDownloadOpens: false,
+    });
+    await backend.browserEnable(["chrome"]);
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const download = within(await pane.findByTestId("extension-download"));
+    await user.click(download.getByRole("button", { name: "下载扩展安装包" }));
+    expect(await download.findByTestId("extension-download-address")).toHaveTextContent(
+      `releases/download/v${MOCK_APP_VERSION}/lockra-extension_${MOCK_APP_VERSION}_chromium-unpacked.zip`,
+    );
+  });
+
+  it("says when the folder does not hold this build's extension yet, and shows no folder without one", async () => {
+    const pending = core({
+      settings: { run_in_background: true },
+      extensionFolder: { path: MOCK_EXTENSION_FOLDER, version: "0.10.2", ready: false },
+    });
+    await pending.browserEnable(["chrome"]);
+    const first = renderApp({ backend: pending });
+    await ready();
+    const pane = await openBrowser(first.user);
+    expect(await pane.findByTestId("extension-folder-state")).toHaveTextContent(
+      "还没能写入这个文件夹",
+    );
+    first.unmount();
+
+    const without = core({ settings: { run_in_background: true }, extensionFolder: null });
+    await without.browserEnable(["chrome"]);
+    const { user } = renderApp({ backend: without });
+    await ready();
+    const other = await openBrowser(user);
+    expect(await other.findByTestId("browser-rows")).toBeInTheDocument();
+    expect(other.queryByTestId("extension-folder")).not.toBeInTheDocument();
+    expect(other.getByTestId("extension-download")).toBeInTheDocument();
+  });
+
+  it("tells each paired extension's version, and the ones older than Lockra", async () => {
+    const backend = core({
+      settings: { run_in_background: true },
+      browser: {
+        paired: [
+          paired({ id: "p-chrome", version: MOCK_APP_VERSION }),
+          paired({ id: "p-edge", browser: "edge", connected: false, version: "0.0.9" }),
+          paired({ id: "p-firefox", browser: "firefox", connected: false }),
+        ],
+      },
+    });
+    await backend.browserEnable(["chrome", "edge", "firefox"]);
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const chrome = await pane.findByTestId("paired-p-chrome");
+    expect(chrome).toHaveTextContent(`扩展 ${MOCK_APP_VERSION}`);
+    expect(chrome).not.toHaveTextContent("可更新");
+    const edge = pane.getByTestId("paired-p-edge");
+    expect(edge).toHaveTextContent("扩展 0.0.9");
+    expect(edge).toHaveTextContent("可更新");
+    expect(edge).toHaveTextContent(`比 Lockra ${MOCK_APP_VERSION} 旧`);
+    expect(pane.getByTestId("paired-p-firefox")).not.toHaveTextContent("扩展 ");
   });
 
   it("turning it off removes every manifest", async () => {
