@@ -412,6 +412,26 @@ describe("what the background sends", () => {
     agent.stop();
   });
 
+  it("puts a code the user asked for into the focused field where it can tell no code field, never a password", async () => {
+    document.body.innerHTML = `<input id="mystery" name="answer"><input id="secret" type="password">`;
+    const { agent, deliver } = setup();
+    await agent.start();
+    input("mystery").focus();
+    // The next step's code goes only into a code field.
+    expect(await deliver({ kind: "fill.otp", code: "246810" })).toEqual({ code: false });
+    expect(input("mystery").value).toBe("");
+    expect(await deliver({ kind: "fill.otp", code: "246810", focused: true })).toEqual({
+      code: true,
+    });
+    expect(input("mystery").value).toBe("246810");
+    input("secret").focus();
+    expect(await deliver({ kind: "fill.otp", code: "135790", focused: true })).toEqual({
+      code: false,
+    });
+    expect(input("secret").value).toBe("");
+    agent.stop();
+  });
+
   it("shows a prompt at the top right, and a confirmation under the focused field", async () => {
     document.body.innerHTML = LOGIN;
     const { agent, deliver } = setup({}, null);

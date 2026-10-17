@@ -202,4 +202,24 @@ describe("a fill waiting for the user", () => {
     await user.click(dialog.getByRole("button", { name: "拒绝" }));
     expect(backend.calls.at(-1)).toMatchObject({ command: "browser_fill_deny" });
   });
+
+  it("a deletion from the extension says it cannot be undone, and goes after the proof", async () => {
+    const backend = core();
+    const { user } = renderApp({ backend });
+    await ready();
+    act(() => {
+      backend.simulateConfirm(confirm({ action: "delete" }));
+    });
+    const dialog = within(
+      await screen.findByRole("dialog", { name: "Chrome 请求删除「招商银行」" }),
+    );
+    expect(dialog.getByText(/删除前需要验证身份/)).toBeInTheDocument();
+    expect(dialog.getByText("删除后无法恢复，同步的设备也会删除它。")).toBeInTheDocument();
+    await user.type(dialog.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(dialog.getByRole("button", { name: "删除" }));
+    expect(backend.calls.at(-1)).toMatchObject({
+      command: "browser_fill_confirm",
+      password: MOCK_PASSWORD,
+    });
+  });
 });

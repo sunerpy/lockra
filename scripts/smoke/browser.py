@@ -51,6 +51,8 @@ HOSTS = ["login.test", "shop.test", "pay.test", "signup.test", "otp.test", "many
 MENU_SETTLE = 0.45
 ARROW_DOWN = "\ue015"
 ENTER = "\ue007"
+SHIFT = "\ue008"
+TAB = "\ue004"
 ESCAPE = "\ue00c"
 
 
@@ -69,6 +71,11 @@ class Browser(Session):
         actions = []
         for key in keys:
             actions += [{"type": "keyDown", "value": key}, {"type": "keyUp", "value": key}]
+        self.call("POST", self.s("/actions"), {"actions": [{"type": "key", "id": "keyboard", "actions": actions}]})
+
+    def chord(self, *keys):
+        """Keys held down together, then let go in the other order (Shift+Tab)."""
+        actions = [{"type": "keyDown", "value": key} for key in keys] + [{"type": "keyUp", "value": key} for key in reversed(keys)]
         self.call("POST", self.s("/actions"), {"actions": [{"type": "key", "id": "keyboard", "actions": actions}]})
 
     def values(self, *selectors):
@@ -384,6 +391,30 @@ class Smoke:
             30,
         )
         print("smoke: the menu's search box narrowed three logins to one, and Enter filled it")
+
+    def menu_delete(self):
+        """The chosen row's delete button asks in the menu first; 删除 deletes that login in Lockra
+        (carol, the one filled last, heads the list), and the menu lists the others."""
+        self.room_to_fill()
+        self.web.go(self.url("many.test", "login.html"))
+        self.open_menu("#username")
+        rect = self.web.run("return document.querySelector('[popover]:popover-open').getBoundingClientRect().toJSON()")
+        # The first row's button, at its right end: under the border, the header (34 px), a rule,
+        # the content's 4 px and the search box (32 px and a 4 px gap), the row's middle.
+        self.web.click_at(int(rect["right"] - 23), int(rect["top"] + 102))
+        # The question takes the menu's place: a frame that changed its size counts a key only
+        # once it held still.
+        self.settle()
+        self.shot("menu-delete")
+        # The focus starts on 取消; Shift+Tab goes to 删除, and Enter presses it.
+        self.web.chord(SHIFT, TAB)
+        self.web.keys(ENTER)
+        many = lambda: sorted(i["username"] for i in self.items() if i["title"] == "Many test")  # noqa: E731
+        until("the login deleted in Lockra", lambda: many() == ["alice", "bob"], 30)
+        deleted = next((e for e in self.activity() if e["event"] == "deleted"), None)
+        if not deleted or deleted["site"] != "many.test":
+            sys.exit(f"smoke: the activity does not tell the deletion: {deleted}")
+        print("smoke: the menu's delete button asked first, then 删除 deleted the login in Lockra")
 
     def activity(self):
         return self.app.invoke({"command": "app_state"})["browser"]["activity"]
@@ -728,6 +759,7 @@ class Smoke:
             # Last of the fills: a fill of another site would leave the code steps without the
             # login they follow, and the steps before fill ten times in their first minute.
             self.menu_search()
+            self.menu_delete()
             self.lock_follows()
             if self.chrome:
                 self.self_update()

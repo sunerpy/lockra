@@ -235,10 +235,21 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   user set that rule to ask, and then Lockra asks; an `https` login on an `http` page only once the
   user agreed in the page; a `no_extension` login never; a `confirm` login only after the master
   password or the biometric check in Lockra (and copying its password from the popup the same); a
-  linked code for a second step only on the site just filled, for five minutes. The sign-up menu's
+  linked code for a second step only on the site just filled, for five minutes, or, where the user
+  asks for a login's code in the popup, the code of a login offered for the frame, in the page or
+  a frame of its own site. The sign-up menu's
   copy (`copy_generated`) puts on the clipboard only a password of the generator's history made
   for the frame's site, with the hints and the clearing a login's password gets, so the extension
   cannot have the app write anything else there.
+- **Deleting from the browser** (from 0.12): the menu and the popup ask first, in the extension;
+  the menu's click on **Delete** goes through the same checks as a fill's (the user's, in a
+  visible, still frame), and the popup is the browser's own window, which a page cannot cover. The
+  app deletes only a login it offers for the frame the extension names, in the
+  page or a frame of its own site, never on a never-fill site; a `confirm` login only after the
+  master password or the biometric check in Lockra. Deletions count with the fills against the
+  session's limits (ten a minute, twenty sites in ten minutes), past which the extension is paused
+  until the user resumes it, so even an extension that misbehaves cannot empty the vault in a
+  burst. A deletion cannot be undone, and it syncs to the other devices like one made in Lockra.
 - **Filling as a page loads** is off unless the user turns it on (a warning, then the master
   password or the biometric check), and then only in the page itself (no frame), on `https` or
   where the login was saved for `http`, with exactly one match, for a `fill` login whose own

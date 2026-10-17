@@ -742,6 +742,17 @@ export class Controller {
 
   private async perform(frame: InlineFrame, action: InlineAction): Promise<void> {
     switch (action.type) {
+      case "remove": {
+        const item = frame.items[action.index];
+        if (!item || frame.view.view !== "list") return;
+        frame.item = item;
+        return this.show(frame, { view: "delete", site: frame.view.site, item: menuItem(item) });
+      }
+      case "delete": {
+        const item = frame.item;
+        if (!item || frame.view.view !== "delete") return;
+        return this.deleteFrom(frame, item, frame.view.site);
+      }
       case "choose": {
         const item = frame.items[action.index];
         if (!item) return;
@@ -834,6 +845,32 @@ export class Controller {
     if (frame.code === true && outcome.value.otp === null) return this.notice(frame, "protected");
     await this.deliver(facts, outcome.value, { continues: frame.code !== true });
     await this.close(frame);
+  }
+
+  /** The login the user agreed to delete, gone from Lockra; the list shows again without it, or
+   *  closes when it was the last. A login that asks first waits for the proof in Lockra. */
+  private async deleteFrom(frame: InlineFrame, item: ItemSummary, site: string): Promise<void> {
+    const facts = await this.refreshed(frame);
+    if (!facts) {
+      await this.close(frame);
+      return;
+    }
+    if (item.protection !== "fill") this.show(frame, { view: "waiting", item: menuItem(item) });
+    const outcome = await this.connection.request({
+      op: "delete",
+      item_id: item.item_id,
+      ...facts.facts,
+    });
+    if (!outcome.ok) return this.notice(frame, outcome.error);
+    const left = (frame.all ?? frame.items).filter((i) => i.item_id !== item.item_id);
+    if (left.length === 0) {
+      await this.close(frame);
+      return;
+    }
+    frame.all = left;
+    frame.items = left;
+    frame.item = null;
+    this.show(frame, listView(site, left, frame.code === true));
   }
 
   /** A sign-up form's generated password: saved at once as a new login, then filled into every
@@ -1137,6 +1174,10 @@ export class Controller {
       }
       case "fill":
         return this.popupFill(port, context, message.itemId, message.allowHttp);
+      case "fill_code":
+        return this.popupFillCode(port, context, message.itemId);
+      case "delete":
+        return this.popupDelete(port, context, message.itemId);
       case "copy": {
         const outcome = await connection.request({
           op: "copy",
@@ -1212,18 +1253,10 @@ export class Controller {
     await this.post(port, context);
   }
 
-  private async popupFill(
-    port: Port,
-    context: PopupContext,
-    itemId: string,
-    allowHttp: boolean,
-  ): Promise<void> {
-    const result = (outcome: string) =>
-      this.postEvent(port, { kind: "result", action: "fill", itemId, outcome });
-    const item = context.site?.items.find((i) => i.item_id === itemId);
+  /** The frame a request from the popup is about, as it is now: the one its matches came from. */
+  private async popupFrame(context: PopupContext): Promise<TrustedFrame | "navigated" | null> {
     const picked = context.frame;
-    if (!item || !picked || !context.tab) return result("not_found");
-    if (item.downgrade && !allowHttp) return result("http_downgrade");
+    if (!picked || !context.tab) return null;
     const facts = await factsForFrame(
       {
         tabId: picked.tabId,
@@ -1235,7 +1268,23 @@ export class Controller {
       },
       this.framesOf,
     );
-    if ("error" in facts) return result("navigated");
+    return "error" in facts ? "navigated" : facts;
+  }
+
+  private async popupFill(
+    port: Port,
+    context: PopupContext,
+    itemId: string,
+    allowHttp: boolean,
+  ): Promise<void> {
+    const result = (outcome: string) =>
+      this.postEvent(port, { kind: "result", action: "fill", itemId, outcome });
+    const item = context.site?.items.find((i) => i.item_id === itemId);
+    if (!item) return result("not_found");
+    if (item.downgrade && !allowHttp) return result("http_downgrade");
+    const facts = await this.popupFrame(context);
+    if (facts === null) return result("not_found");
+    if (facts === "navigated") return result("navigated");
     await this.inject(facts);
     if (item.protection !== "fill") result("waiting");
     const outcome = await this.connection.request({
@@ -1248,6 +1297,54 @@ export class Controller {
     if (!outcome.ok) return result(outcome.error);
     await this.deliver(facts, outcome.value);
     result("done");
+  }
+
+  /** The login's code into the page, which the user asked for: its code field, or the field that
+   *  has the focus where Lockra cannot tell one. */
+  private async popupFillCode(port: Port, context: PopupContext, itemId: string): Promise<void> {
+    const result = (outcome: string) =>
+      this.postEvent(port, { kind: "result", action: "fill", itemId, outcome, part: "totp" });
+    const item = context.site?.items.find((i) => i.item_id === itemId);
+    if (!item?.has_totp) return result("not_found");
+    const facts = await this.popupFrame(context);
+    if (facts === null) return result("not_found");
+    if (facts === "navigated") return result("navigated");
+    await this.inject(facts);
+    const outcome = await this.connection.request({
+      op: "otp",
+      item_id: itemId,
+      ...facts.facts,
+      trigger: "popup",
+    });
+    if (!outcome.ok) return result(outcome.error);
+    const answer = await this.send(facts, {
+      kind: "fill.otp",
+      code: outcome.value.code,
+      submit: outcome.value.submit,
+      focused: true,
+    }).catch(() => undefined);
+    const filled =
+      typeof answer === "object" && answer !== null && "code" in answer && answer.code === true;
+    result(filled ? "done" : "no_code_field");
+  }
+
+  /** Delete the login, which the user agreed to in the popup; the page's matches come again. */
+  private async popupDelete(port: Port, context: PopupContext, itemId: string): Promise<void> {
+    const result = (outcome: string) =>
+      this.postEvent(port, { kind: "result", action: "delete", itemId, outcome });
+    const item = context.site?.items.find((i) => i.item_id === itemId);
+    if (!item) return result("not_found");
+    const facts = await this.popupFrame(context);
+    if (facts === null) return result("not_found");
+    if (facts === "navigated") return result("navigated");
+    if (item.protection !== "fill") result("waiting");
+    const outcome = await this.connection.request({
+      op: "delete",
+      item_id: itemId,
+      ...facts.facts,
+    });
+    result(outcome.ok ? "done" : outcome.error);
+    if (outcome.ok) await this.refreshSite(port, context);
   }
 
   private screen(view: ConnectionView): Screen {

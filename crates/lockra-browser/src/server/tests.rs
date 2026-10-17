@@ -375,7 +375,7 @@ async fn every_op_goes_through_to_the_core() {
     let entry = app.core.add_uri("otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub").unwrap();
     let id = app.core.item_add(ItemDraft { totp_entry: Some(entry), ..github() }).unwrap();
     assert!(extension.request(Op::Fill(FillRequest { facts: facts("https://github.com/"), ..FillRequest::default() })).await.ok);
-    let otp = extension.request(Op::Otp(OtpRequest { item_id: id, facts: facts("https://github.com/2fa") })).await;
+    let otp = extension.request(Op::Otp(OtpRequest { item_id: id, facts: facts("https://github.com/2fa"), trigger: None })).await;
     assert!(matches!(otp.result, Some(Answer::Otp(ref answer)) if answer.code.len() == 6), "{otp:?}");
     let copy = extension.request(Op::Copy(lockra_core::CopyRequest { item_id: id, part: CopyPart::Username })).await;
     assert_eq!(copy.result, Some(Answer::Done {}));
@@ -392,6 +392,9 @@ async fn every_op_goes_through_to_the_core() {
     let found = extension.request(Op::Search(SearchRequest { text: "github".into(), top_url: "https://github.com/".into() })).await;
     assert!(matches!(found.result, Some(Answer::Found { ref items }) if items.len() == 1));
     assert_eq!(app.core.state().site_rules.len(), 1);
+    let delete = lockra_core::DeleteRequest { item_id: id, facts: facts("https://github.com/") };
+    assert_eq!(extension.request(Op::Delete(delete)).await.result, Some(Answer::Done {}));
+    assert!(!app.core.items_list().unwrap().iter().any(|item| item.id == id));
 }
 
 #[tokio::test(start_paused = true)]

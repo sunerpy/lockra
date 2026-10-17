@@ -200,11 +200,11 @@ function ConfirmDialog({
   const { seconds } = remaining(request.expires_at_ms - CONFIRM_TTL_MS, request.expires_at_ms, now);
   // The title names the browser; the facts, which of its paired extensions asks.
   const asker = browserName(browser);
+  // The words of what it asks for: a fill, a copy or a deletion.
+  const verb = action === "copy" ? "Copy" : action === "delete" ? "Delete" : "Fill";
   const heading = frame
     ? t("browser.confirm.titleFrame", { browser: asker })
-    : action === "copy"
-      ? t("browser.confirm.titleCopy", { browser: asker, title })
-      : t("browser.confirm.titleFill", { browser: asker, title });
+    : t(`browser.confirm.title${verb}`, { browser: asker, title });
   const rows: [string, ReactNode, boolean][] =
     request.top_url === null
       ? [
@@ -223,19 +223,11 @@ function ConfirmDialog({
       proof={request.needs_proof}
       confirm={
         request.needs_proof
-          ? t(action === "copy" ? "browser.confirm.copy" : "browser.confirm.fill")
+          ? t(`browser.confirm.${action}`)
           : t(frame ? "browser.confirm.fillAnyway" : "browser.confirm.fill")
       }
-      confirmWith={(kind) =>
-        t(
-          action === "copy"
-            ? `browser.confirm.copyWith.${kind}`
-            : `browser.confirm.fillWith.${kind}`,
-        )
-      }
-      reason={t(action === "copy" ? "browser.confirm.reasonCopy" : "browser.confirm.reasonFill", {
-        title,
-      })}
+      confirmWith={(kind) => t(`browser.confirm.${action}With.${kind}`)}
+      reason={t(`browser.confirm.reason${verb}`, { title })}
       onConfirm={async (proof) => {
         await backend.dispatch({ command: "browser_fill_confirm", id: request.id, ...proof });
         onDone();
@@ -258,14 +250,7 @@ function ConfirmDialog({
       }>
       {frame && <p>{t("browser.confirm.frame")}</p>}
       {request.reasons.includes("protected") && (
-        <p>
-          {t(
-            action === "copy" ? "browser.confirm.protectedCopy" : "browser.confirm.protectedFill",
-            {
-              title,
-            },
-          )}
-        </p>
+        <p>{t(`browser.confirm.protected${verb}`, { title })}</p>
       )}
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 rounded-10 bg-inset px-4 py-3 text-[12px] leading-4">
         {rows.map(([label, value, mono]) => (
@@ -277,6 +262,9 @@ function ConfirmDialog({
       </dl>
       {action === "fill" && (
         <p className="text-[12px] text-fg-muted">{t("browser.confirm.fillNote")}</p>
+      )}
+      {action === "delete" && (
+        <p className="text-[12px] text-fg-muted">{t("browser.confirm.deleteNote")}</p>
       )}
     </ProofDialog>
   );

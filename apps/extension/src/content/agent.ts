@@ -6,6 +6,7 @@
 // password, a code field to come, an open menu) and is disconnected otherwise.
 import type {
   BackgroundMessage,
+  CodeAnswer,
   ContentMessage,
   FillValues,
   FocusKind,
@@ -21,6 +22,7 @@ import {
   findOtp,
   formOf,
   isFillable,
+  isPassword,
   scanField,
 } from "./fields";
 import { type FillResult, fillForm, fillOtp, submitForm } from "./fill";
@@ -422,8 +424,8 @@ export class ContentAgent {
       case "fill":
         return Promise.resolve(this.fill(message.values));
       case "fill.otp": {
-        this.fillCode(message.code, message.submit === true);
-        return Promise.resolve(null);
+        const code = this.fillCode(message.code, message.submit === true, message.focused === true);
+        return Promise.resolve({ code } satisfies CodeAnswer);
       }
       case "menu.open": {
         const active = deepActive(this.options.doc);
@@ -483,15 +485,21 @@ export class ContentAgent {
     return result;
   }
 
-  private fillCode(code: string, submit: boolean): void {
+  /** The code into the page's code field, the focused one first. Asked for by the user
+   *  (`asked`), it goes into the focused field where Lockra can tell no code field, though never
+   *  into a password field. Whether it went in. */
+  private fillCode(code: string, submit: boolean, asked: boolean): boolean {
     const view = this.options.view;
     const active = deepActive(this.options.doc);
-    const focused =
-      active instanceof HTMLInputElement && isFillable(active) ? scanField(active, view) : null;
-    const fields = focused?.kind === "otp" ? focused.otp : findOtp(this.options.doc, view);
+    const field = active instanceof HTMLInputElement && isFillable(active) ? active : null;
+    const focused = field ? scanField(field, view) : null;
+    let fields = focused?.kind === "otp" ? focused.otp : findOtp(this.options.doc, view);
+    if (!fields && asked && field && !isPassword(field)) fields = [field];
     const first = fields?.[0];
-    if (fields && first && fillOtp(fields, code) && submit) void submitForm(formOf(first), view);
+    const filled = fields !== null && first !== undefined && fillOtp(fields, code);
+    if (filled && submit) void submitForm(formOf(first), view);
     this.otpUntil = 0;
+    return filled;
   }
 
   // ---- watching the page ------------------------------------------------------------------------

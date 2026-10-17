@@ -303,6 +303,8 @@ pub enum ConfirmAction {
     Fill,
     /// Put a part of it on the clipboard.
     Copy,
+    /// Delete it (the user agreed in the extension's menu or popup first).
+    Delete,
 }
 
 /// A request to fill or copy a login, waiting for the user.
@@ -352,6 +354,8 @@ pub enum ActivityEvent {
     Saved,
     /// A login's password was changed.
     Updated,
+    /// A login was deleted, from the extension's menu or popup.
+    Deleted,
     /// A password was made for a sign-up form.
     Generated,
     /// A request was refused.
@@ -646,12 +650,28 @@ pub struct FillAnswer {
     pub submit: bool,
 }
 
-/// A request for a login's code on a second sign-in step.
+/// A request for a login's code: for a second sign-in step, or where the user asked for it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OtpRequest {
-    /// The login filled on the step before.
+    /// The login filled on the step before, or the one the user chose.
     pub item_id: Uuid,
     /// Where.
+    #[serde(flatten)]
+    pub facts: FrameFacts,
+    /// What made it ask. None: the next step of a fill, which gets the code of a login filled on
+    /// this site in the last minutes. The popup, the menu or the shortcut: the user asked for this
+    /// login's code, which a login offered for the frame gets (as the page load and the next step
+    /// ask for nothing themselves, they are the next step's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trigger: Option<Trigger>,
+}
+
+/// A request to delete a login, which the user agreed to in the extension's menu or popup.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DeleteRequest {
+    /// The login: one offered for the frame.
+    pub item_id: Uuid,
+    /// Where the extension offered it.
     #[serde(flatten)]
     pub facts: FrameFacts,
 }

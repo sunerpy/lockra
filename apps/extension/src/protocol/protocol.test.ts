@@ -177,6 +177,7 @@ describe("requests", () => {
         allow_http: false,
       }),
       otp: request(6, { op: "otp", item_id: item, ...facts }),
+      otp_asked: request(15, { op: "otp", item_id: item, ...facts, trigger: "popup" }),
       copy: request(7, { op: "copy", item_id: item, part: copyPart("password") }),
       save: request(8, {
         op: "save",
@@ -202,6 +203,7 @@ describe("requests", () => {
       }),
       site_rule: request(11, { op: "site_rule", kind: "never_save", ...facts }),
       search: request(12, { op: "search", text: "exam", top_url: "https://www.example.com/" }),
+      delete: request(16, { op: "delete", item_id: item, ...facts }),
     };
     expect(Object.keys(built).toSorted()).toEqual(Object.keys(f.requests).toSorted());
     for (const [name, raw] of Object.entries(f.requests))

@@ -11,9 +11,9 @@ use data_encoding::HEXLOWER;
 use lockra_browser::noise::{PAIRING_CODE_INFO, PAIRING_PATTERN, PROLOGUE, Responder, SESSION_PATTERN, pairing_code};
 use lockra_browser::protocol::{Answer, AppPlain, AppState, ClientPlain, Envelope, Kind, Op, Outgoing, Push, Request, Response};
 use lockra_core::{
-    BrowserPolicy, ClientInfo, CopyGeneratedRequest, CopyRequest, FillAnswer, FillField, FillRequest, FrameFacts, GenerateAnswer, GenerateRequest,
-    GenerateSave, ItemSummary, OtpAnswer, OtpRequest, Protection, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SaveAction, SaveAdvice, SaveRequest,
-    SearchRequest, SiteRuleKind, SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
+    BrowserPolicy, ClientInfo, CopyGeneratedRequest, CopyRequest, DeleteRequest, FillAnswer, FillField, FillRequest, FrameFacts, GenerateAnswer,
+    GenerateRequest, GenerateSave, ItemSummary, OtpAnswer, OtpRequest, Protection, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SaveAction, SaveAdvice,
+    SaveRequest, SearchRequest, SiteRuleKind, SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -90,7 +90,8 @@ fn requests() -> Vec<(&'static str, Request)> {
         ("fill", r(4, Op::Fill(FillRequest { item_id: Some(id(1)), facts: facts(), trigger: Trigger::InlineMenu, allow_http: false }))),
         ("fill_likeliest", r(5, Op::Fill(FillRequest { item_id: None, facts: facts(), trigger: Trigger::Shortcut, allow_http: true }))),
         ("fill_next_step", r(13, Op::Fill(FillRequest { item_id: Some(id(1)), facts: facts(), trigger: Trigger::NextStep, allow_http: false }))),
-        ("otp", r(6, Op::Otp(OtpRequest { item_id: id(1), facts: facts() }))),
+        ("otp", r(6, Op::Otp(OtpRequest { item_id: id(1), facts: facts(), trigger: None }))),
+        ("otp_asked", r(15, Op::Otp(OtpRequest { item_id: id(1), facts: facts(), trigger: Some(Trigger::Popup) }))),
         ("copy", r(7, Op::Copy(CopyRequest { item_id: id(1), part: lockra_core::CopyPart::Password }))),
         (
             "save",
@@ -122,6 +123,7 @@ fn requests() -> Vec<(&'static str, Request)> {
         ("copy_generated", r(14, Op::CopyGenerated(CopyGeneratedRequest { facts: facts(), password: Zeroizing::new("q7vx2mz9kd4w8p1r6t3y".into()) }))),
         ("site_rule", r(11, Op::SiteRule(SiteRuleRequest { kind: Some(SiteRuleKind::NeverSave), facts: facts() }))),
         ("search", r(12, Op::Search(SearchRequest { text: "exam".into(), top_url: "https://www.example.com/".into() }))),
+        ("delete", r(16, Op::Delete(DeleteRequest { item_id: id(1), facts: facts() }))),
     ]
 }
 

@@ -32,9 +32,9 @@ mod tests;
 pub use backup::{AUTO_PREFIX, BACKUP_EXTENSION, is_auto_name};
 pub use browser::{
     ActivityEvent, ActivityView, BrowserPolicy, BrowserView, CONFIRM_TTL, ClientInfo, ConfirmAction, ConfirmReason, ConfirmView, CopyGeneratedRequest,
-    CopyRequest, FILLS_PER_MINUTE, FillAnswer, FillField, FillRequest, FrameFacts, FrameRule, GenerateAnswer, GenerateRequest, GenerateSave, ItemSummary,
-    MAX_PENDING_PAIRS, OtpAnswer, OtpRequest, PAIR_TTL, PairRequestView, PairedView, QUERIES_PER_MINUTE, QueryAnswer, QueryPurpose, QueryRequest, Refusal,
-    SITES_PER_TEN_MINUTES, SaveAction, SaveAdvice, SaveRequest, SearchRequest, SessionId, SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
+    CopyRequest, DeleteRequest, FILLS_PER_MINUTE, FillAnswer, FillField, FillRequest, FrameFacts, FrameRule, GenerateAnswer, GenerateRequest, GenerateSave,
+    ItemSummary, MAX_PENDING_PAIRS, OtpAnswer, OtpRequest, PAIR_TTL, PairRequestView, PairedView, QUERIES_PER_MINUTE, QueryAnswer, QueryPurpose, QueryRequest,
+    Refusal, SITES_PER_TEN_MINUTES, SaveAction, SaveAdvice, SaveRequest, SearchRequest, SessionId, SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
 };
 pub use entry::{AccountColor, Entry, EntryDraft, EntryPatch, EntryView, ExportCompat, Local, MARK_CHARS, PinnedGroup, VAULT_DATA_FORMAT, VaultData};
 pub use error::{CoreError, CoreResult, ErrorCode};

@@ -29,6 +29,13 @@ export const extensionEn: typeof extensionZhCN = {
     copyUsername: "Copy user name",
     copyPassword: "Copy password",
     copyCode: "Copy code",
+    fillCode: "Fill the code",
+    delete: "Delete…",
+    deleteTitle: "Delete “{name}”?",
+    deleteNote: "A deleted login cannot be brought back, and it goes from the synced devices too.",
+    deleteConfirm: "Delete",
+    cancel: "Cancel",
+    deleted: "Deleted",
     otpHint:
       "The code goes into the next page once the password is filled, and onto the clipboard.",
     results: "Results · {n}",
@@ -140,6 +147,10 @@ export const extensionEn: typeof extensionZhCN = {
     listFooter: "↑↓ select · ↵ fill · Esc close",
     search: "Search logins",
     noMatch: "No login matches",
+    delete: "Delete…",
+    deleteTitle: "Delete “{name}”?",
+    deleteBody: "A deleted login cannot be brought back, and it goes from the synced devices too.",
+    deleteConfirm: "Delete",
     signupTitle: "Use a generated password",
     signupHint: "Sign-up form",
     signupRules: "Made to this site's password rules · {n} characters",
@@ -254,6 +265,8 @@ export const extensionEn: typeof extensionZhCN = {
     timeout: "Lockra did not answer.",
     ended: "The connection to Lockra ended.",
     navigated: "The page changed: nothing was filled.",
+    no_code_field:
+      "No code field found on the page: click into the code field, then fill the code.",
     other: "Not done ({code}).",
   },
 };

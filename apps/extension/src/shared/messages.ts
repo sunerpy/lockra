@@ -97,8 +97,10 @@ export interface FillValues {
 
 export type BackgroundMessage =
   | { kind: "fill"; values: FillValues }
-  /** The code of a second step; `submit`: send its form once the code is in (the app's word). */
-  | { kind: "fill.otp"; code: string; submit?: boolean }
+  /** The code of a second step; `submit`: send its form once the code is in (the app's word).
+   *  `focused`: the user asked for it, and a page whose code field Lockra cannot tell gets it in
+   *  the field that has the focus. Answered with a `CodeAnswer`. */
+  | { kind: "fill.otp"; code: string; submit?: boolean; focused?: true }
   /** Show the inline frame `token` at the focused field (the shortcut's confirmations). */
   | { kind: "menu.open"; token: string; side?: MenuSide }
   /** Show the save or update prompt `token` at the top right. */
@@ -122,6 +124,11 @@ export interface VerifyAnswer {
 
 export interface FillAnswer {
   filled: number;
+}
+
+/** Whether a code went in. */
+export interface CodeAnswer {
+  code: boolean;
 }
 
 // ---- the inline frame ------------------------------------------------------------------------
@@ -153,6 +160,8 @@ export type InlineView =
       copied?: boolean;
     }
   | { view: "confirm"; item: MenuItem }
+  /** Delete this login? The list's row asked; nothing goes until the user agrees here. */
+  | { view: "delete"; site: string; item: MenuItem }
   | { view: "http"; site: string; item: MenuItem }
   | { view: "waiting"; item: MenuItem }
   | { view: "save"; site: string; title: string; username: string; password: string }
@@ -162,6 +171,10 @@ export type InlineView =
 
 export type InlineAction =
   | { type: "choose"; index: number }
+  /** The row's delete button: ask first. */
+  | { type: "remove"; index: number }
+  /** The deletion agreed to. */
+  | { type: "delete" }
   | { type: "fill" }
   | { type: "allow_http" }
   | { type: "use" }
@@ -255,7 +268,11 @@ export type PopupRequest =
   | { kind: "retry" }
   | { kind: "search"; text: string }
   | { kind: "fill"; itemId: string; allowHttp: boolean }
+  /** The login's code into the page: its code field, or the field that has the focus. */
+  | { kind: "fill_code"; itemId: string }
   | { kind: "copy"; itemId: string; part: CopyPart }
+  /** Delete the login, which the user agreed to in the popup. */
+  | { kind: "delete"; itemId: string }
   | { kind: "access.changed" }
   | { kind: "unpair" }
   | { kind: "extensions" };
@@ -266,7 +283,7 @@ export type PopupEvent =
   /** How a fill or a copy ended: `done`, `waiting` while Lockra asks the user, or the refusal. */
   | {
       kind: "result";
-      action: "fill" | "copy";
+      action: "fill" | "copy" | "delete";
       itemId: string;
       outcome: string;
       part?: CopyPart["type"];

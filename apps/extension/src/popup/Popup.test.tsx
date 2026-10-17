@@ -97,6 +97,46 @@ function setup(initial: PopupState | null = state(), extra: Partial<PageClient> 
 }
 
 describe("the popup", () => {
+  it("fills or copies a login's code from its row", () => {
+    const { sent } = setup();
+    const fills = screen.getAllByRole("button", { name: "填入验证码" });
+    expect(fills).toHaveLength(2);
+    fireEvent.click(fills[1] as HTMLElement);
+    expect(sent.at(-1)).toEqual({ kind: "fill_code", itemId: ITEM2.item_id });
+    fireEvent.click(screen.getAllByRole("button", { name: "复制验证码" })[0] as HTMLElement);
+    expect(sent.at(-1)).toEqual({ kind: "copy", itemId: ITEM.item_id, part: { type: "totp" } });
+  });
+
+  it("says when the page has no field for the code", () => {
+    const { push } = setup();
+    push({
+      kind: "result",
+      action: "fill",
+      itemId: ITEM.item_id,
+      outcome: "no_code_field",
+      part: "totp",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("网页上没有找到验证码框");
+  });
+
+  it("deletes a login only after its row's question, which starts on 取消", () => {
+    const { sent } = setup();
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[1] as HTMLElement);
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除…" }));
+    const ask = screen.getByTestId("delete-confirm");
+    expect(ask).toHaveTextContent("删除「GitHub · octocat-work」？");
+    expect(ask).toHaveTextContent("删除后无法恢复，同步的设备也会删除它。");
+    expect(screen.getByRole("button", { name: "取消" })).toHaveFocus();
+    expect(sent.some((r) => r.kind === "delete")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByTestId("delete-confirm")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[1] as HTMLElement);
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除…" }));
+    fireEvent.click(screen.getByRole("button", { name: "删除" }));
+    expect(sent.at(-1)).toEqual({ kind: "delete", itemId: ITEM2.item_id });
+    expect(screen.queryByTestId("delete-confirm")).not.toBeInTheDocument();
+  });
+
   it("tells the extension's own update under the header, in every screen", () => {
     const { push } = setup(state({ update: "waiting" }));
     expect(screen.getByTestId("popup-update")).toHaveTextContent("关闭这个窗口后扩展会自动更新");
