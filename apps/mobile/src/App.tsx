@@ -208,8 +208,10 @@ function Pages() {
 }
 
 /** The vault locks as soon as the app leaves the screen: another app, the home screen, the screen
- *  turned off. The webview hears it as the page becoming hidden; behind a screen of the phone's
- *  own that Lockra opened (the camera, the photo picker), it is not left (app/phone-screen.ts). */
+ *  turned off. The shell locks it as the activity pauses (src-tauri/src/leaving.rs); the webview,
+ *  besides, as the page becomes hidden, an event that once never came. Behind a screen of the
+ *  phone's own that Lockra opened (the camera, the photo picker), it is not left
+ *  (app/phone-screen.ts). */
 function LockWhenLeaving() {
   const { backend, state } = useBackend();
   const unlocked = state?.phase === "unlocked";

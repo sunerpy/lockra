@@ -74,6 +74,8 @@ impl<R: Runtime> Scanner<R> {
         {
             use tauri::Manager as _;
             let plugin = self.app.try_state::<Plugin<R>>().ok_or_else(|| PortError("scanner: plugin missing".into()))?;
+            // The camera's page pauses the app's activity without leaving it (leaving.rs).
+            let _screen = crate::leaving::over(&self.app);
             let answer: Value = plugin.0.run_mobile_plugin("scan", texts.clone()).map_err(|e| PortError(e.to_string()))?;
             Ok(scan_of(&answer))
         }

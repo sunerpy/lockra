@@ -86,6 +86,8 @@ impl<R: Runtime> Files<R> {
         {
             use tauri::Manager as _;
             let plugin = self.app.try_state::<Plugin<R>>().ok_or_else(|| PortError("files: plugin missing".into()))?;
+            // A picker pauses the app's activity without leaving it (leaving.rs).
+            let _screen = crate::leaving::over(&self.app);
             plugin.0.run_mobile_plugin(command, args).map_err(|e| PortError(e.to_string()))
         }
         #[cfg(not(target_os = "android"))]

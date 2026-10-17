@@ -14,6 +14,7 @@ pub mod biometrics;
 pub mod browser;
 pub mod clipboard;
 pub mod files;
+pub mod leaving;
 pub mod scanner;
 pub mod sync;
 pub mod updater;
@@ -299,6 +300,8 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
         .plugin(biometrics::init())
         .plugin(browser::init())
         .plugin(updater::init())
+        .manage(leaving::PhoneScreens::default())
+        .on_window_event(leaving::on_window_event)
         .invoke_handler(tauri::generate_handler![
             lockra_dispatch,
             codes_subscribe,
