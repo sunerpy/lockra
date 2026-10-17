@@ -265,6 +265,11 @@ jobs:
       - name: No window message listeners
         run: scripts/check-no-window-message.sh
 
+      # macOS and Windows ignore case: two names that differ only in case break the build there
+      # (0.11.0's release legs, `avatar.ts` beside `Avatar.tsx`), though Linux builds them.
+      - name: No names that differ only in case
+        run: scripts/check-case-paths.sh
+
       # Builds the release web bundle and fails on development code or a remote URL in it.
       - name: Release web bundle
         run: scripts/check-web-bundle.sh
@@ -504,9 +509,22 @@ jobs:
         with:
           workspaces: . -> target
           shared-key: tauri-ci-windows-check
-      - name: Create an empty frontendDist so generate_context! compiles
+      # What the release's beforeBuildCommand builds, on this system: the extension the app carries and
+      # the web bundle. Linux alone missed a module whose name differed only in case (0.11.0).
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build the extension and the web bundle
         shell: bash
-        run: mkdir -p apps/desktop/dist
+        run: pnpm --filter @lockra/extension run build && pnpm --filter @lockra/desktop build
       # The phone shell (lockra-mobile) is never built for Windows; the `android` job checks it.
       - name: Cargo check
         shell: bash
@@ -551,8 +569,21 @@ jobs:
         with:
           workspaces: . -> target
           shared-key: tauri-ci-macos-check
-      - name: Create an empty frontendDist so generate_context! compiles
-        run: mkdir -p apps/desktop/dist
+      # What the release's beforeBuildCommand builds, on this system: the extension the app carries and
+      # the web bundle. Linux alone missed a module whose name differed only in case (0.11.0).
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          package_json_file: package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: package.json
+          cache: pnpm
+      - name: Install dependencies (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Build the extension and the web bundle
+        run: pnpm --filter @lockra/extension run build && pnpm --filter @lockra/desktop build
       - name: Clippy
         run: cargo clippy --locked -p lockra-desktop --all-targets -- -D warnings
       # The crates that write files, tested on macOS itself (as on Windows, above).

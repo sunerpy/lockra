@@ -1,7 +1,7 @@
 // A login's square, as the app draws an account left on its automatic colour (@lockra/ui
 // `EntryAvatar`): the same FNV-1a hash of the name over the same nine colours, so a site has the same
 // colour in the extension as in Lockra. The extension's own copy keeps the app's dictionaries and
-// IPC schemas out of its pages; avatar.test.ts checks the two agree.
+// IPC schemas out of its pages; avatar-look.test.tsx checks the two agree.
 export const AUTO_COLORS = [
   "red",
   "orange",

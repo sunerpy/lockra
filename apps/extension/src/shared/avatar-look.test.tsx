@@ -2,7 +2,7 @@
 // draw the app's paths.
 import { Icon, autoColor as appColor, initial as appInitial } from "@lockra/ui";
 import { render } from "@testing-library/react";
-import { AUTO_COLORS, autoColor, initial } from "./avatar";
+import { AUTO_COLORS, autoColor, initial } from "./avatar-look";
 import { ICONS, icon } from "./icons";
 
 describe("avatars", () => {

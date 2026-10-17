@@ -1,5 +1,5 @@
 import { cx } from "@lockra/ui";
-import { AVATAR_RADIUS, AVATAR_TEXT, autoColor, initial } from "./avatar";
+import { AVATAR_RADIUS, AVATAR_TEXT, autoColor, initial } from "./avatar-look";
 
 /** A login's square, as Lockra draws an account on its automatic colour (EntryAvatar). */
 export function Avatar({

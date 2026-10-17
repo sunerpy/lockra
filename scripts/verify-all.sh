@@ -37,6 +37,7 @@ step "web tests";        pnpm -r run test:coverage
 step "release config";   python3 .github/scripts/tauri-release.py check-config --project apps/desktop/src-tauri --targets-file .github/release-targets.json >/dev/null && python3 .github/scripts/tauri-release.py matrix --file .github/release-targets.json >/dev/null && python3 .github/scripts/test-tauri-release.py && .github/scripts/android-signing.sh >/dev/null
 step "colour literals";  scripts/check-no-literal-colors.sh
 step "window messages";  scripts/check-no-window-message.sh
+step "case-only names"; scripts/check-case-paths.sh
 step "release bundle";   scripts/check-web-bundle.sh
 step "extension bundle"; scripts/check-extension-bundle.sh
 step "extension files";  scripts/package-extension.sh --check
