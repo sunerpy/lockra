@@ -120,13 +120,14 @@ export class InlinePage {
 
   private afterRender: () => void = () => undefined;
 
-  /** A click goes with where it landed; a key with no point (the checks run at the frame's
-   *  middle). */
+  /** A click goes with where it landed; a key, or a button the keyboard pressed (a click of no
+   *  pointer, `detail` 0), with no point: the checks run at the frame's middle. */
   private act(action: InlineAction, event?: MouseEvent | KeyboardEvent): void {
+    const pointer = event && "clientX" in event && event.detail !== 0;
     this.send({
       kind: "action",
       action,
-      point: event && "clientX" in event ? { x: event.clientX, y: event.clientY } : null,
+      point: pointer ? { x: event.clientX, y: event.clientY } : null,
       trusted: event?.isTrusted ?? false,
     });
   }
@@ -149,12 +150,13 @@ export class InlinePage {
 
   private button(
     label: string,
-    variant: "primary" | "ghost" | "outline" | "text-muted",
+    variant: "primary" | "danger" | "ghost" | "outline" | "text-muted",
     onClick: (event: MouseEvent) => void,
     iconName?: IconName,
   ): HTMLButtonElement {
     const styles = {
       primary: "bg-primary text-primary-fg shadow-primary hover:opacity-90",
+      danger: "bg-danger text-surface-solid hover:opacity-90",
       ghost: "bg-transparent text-fg hover:bg-inset",
       outline: "bg-surface-solid text-fg hairline hover:bg-inset",
       "text-muted": "bg-transparent px-0 text-fg-muted hover:text-fg",
@@ -281,6 +283,10 @@ export class InlinePage {
         content = this.confirm(view.item);
         footer = t("inline.confirmFooter");
         break;
+      case "delete":
+        content = this.deleteView(view.item);
+        footer = t("inline.escFooter");
+        break;
       case "http":
         content = this.http();
         footer = t("inline.escFooter");
@@ -333,7 +339,7 @@ export class InlinePage {
     return items.map((item, index) => {
       const row = this.el(
         "button",
-        `flex h-[52px] w-full shrink-0 items-center gap-3 rounded-6 px-2 text-left transition-colors ${index === active ? "bg-inset" : "hover:bg-inset"}`,
+        "flex h-full min-w-0 flex-1 items-center gap-3 px-2 text-left",
         this.avatar(item),
         this.el(
           "span",
@@ -345,10 +351,56 @@ export class InlinePage {
       );
       row.type = "button";
       row.title = `${item.title} · ${item.username}`;
-      if (index === active) row.dataset.active = "true";
       row.addEventListener("click", (event) => this.act({ type: "choose", index }, event));
-      return row;
+      // Deleting asks first, in the menu (the background shows the question).
+      const remove = this.iconButton("trash", this.t("inline.delete"), (event) =>
+        this.act({ type: "remove", index }, event),
+      );
+      if (index !== active)
+        remove.classList.add("opacity-0", "group-hover:opacity-100", "focus-visible:opacity-100");
+      const line = this.el(
+        "div",
+        `group flex h-[52px] w-full shrink-0 items-center gap-1 rounded-6 pr-1.5 transition-colors ${index === active ? "bg-inset" : "hover:bg-inset"}`,
+        row,
+        remove,
+      );
+      if (index === active) line.dataset.active = "true";
+      return line;
     });
+  }
+
+  /** Delete this login? Nothing goes until 「删除」: the focus starts on 「取消」. */
+  private deleteView(item: MenuItem): HTMLElement {
+    const t = (key: ExtensionKey, params?: Params) => this.t(key, params);
+    const name = item.username ? `${item.title} · ${item.username}` : item.title;
+    const cancel = this.button(t("inline.cancel"), "ghost", () => this.act({ type: "close" }));
+    queueMicrotask(() => cancel.focus());
+    return this.el(
+      "div",
+      "flex gap-2.5 p-2.5",
+      this.el("span", "mt-0.5 text-danger", icon(this.options.doc, "trash", 16)),
+      this.el(
+        "div",
+        "min-w-0 flex-1",
+        this.el(
+          "p",
+          "truncate text-[13px] font-semibold text-fg",
+          t("inline.deleteTitle", { name }),
+        ),
+        this.el("p", "text-[12px] leading-snug text-fg-muted", t("inline.deleteBody")),
+        this.el(
+          "div",
+          "mt-2 flex gap-2",
+          this.button(
+            t("inline.deleteConfirm"),
+            "danger",
+            (event) => this.act({ type: "delete" }, event),
+            "trash",
+          ),
+          cancel,
+        ),
+      ),
+    );
   }
 
   /** The chosen row in sight, where the list scrolls. */

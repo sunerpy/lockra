@@ -517,18 +517,23 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   `inline_menu`, `page_load`, or `next_step`, the page asking for the password within two minutes
   of a fill the user asked for, once), `otp` (the code of a login filled on this site in the
   last five minutes, for a later step; `submit` in the answer says whether to send its form, absent
-  before 0.10: not sent), `copy` (a part on the clipboard, written by the app),
+  before 0.10: not sent; with `trigger` `popup`, `inline_menu` or `shortcut`, from 0.12, the code
+  of a login the user chose that is offered for the frame, in the page or a frame of its own site,
+  without a fill before), `copy` (a part on the clipboard, written by the app),
   `save`, `update`, `generate` (a password to the page's `passwordrules`, `minlength` and
   `maxlength` or the bundled rules, saved at once as a new login when asked), `copy_generated`
   (from 0.10.1: the sign-up menu's `password` on the clipboard, written by the app as a login's
   is, and only a password of the generator's history made for the frame's site, else
-  `not_found`), `site_rule` (never save or never fill the frame's site) and `search`. Each names
+  `not_found`), `site_rule` (never save or never fill the frame's site), `search` and `delete`
+  (from 0.12: a login offered for the frame, which the user agreed to delete in the menu or the
+  popup; never in a frame of another site or on a never-fill site, counted with the fills; the
+  deletion syncs as one made in Lockra). Each names
   its frame with `frame_url`,
   `top_url` and `frame_chain` (the ancestors, nearest first), which the extension's background
   script takes from the browser, never from the page. A request this version cannot read gets
-  `invalid` when its number can be read. `fill` and `copy` may wait for the user (a login of the
-  `confirm` level; a frame of another site under the `ask` rule), and other requests are answered
-  meanwhile.
+  `invalid` when its number can be read. `fill`, `copy` and `delete` may wait for the user (a login
+  of the `confirm` level; a frame of another site under the `ask` rule), and other requests are
+  answered meanwhile.
 - **Refusals**: `unavailable`, `locked`, `not_paired`, `paused`, `busy`, `invalid`, `never_fill`,
   `never_save`, `no_match`, `cross_origin`, `http_downgrade`, `protected`, `denied`, `expired`,
   `rate_limited`, `not_found`.

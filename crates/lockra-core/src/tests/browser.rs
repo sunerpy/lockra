@@ -6,9 +6,9 @@ use std::time::Duration;
 
 use super::*;
 use crate::browser::{
-    ActivityEvent, BrowserPolicy, ClientInfo, ConfirmReason, CopyGeneratedRequest, CopyRequest, FILLS_PER_MINUTE, FillRequest, FrameFacts, FrameRule,
-    GenerateRequest, GenerateSave, OtpRequest, QUERIES_PER_MINUTE, QueryPurpose, QueryRequest, Refusal, SITES_PER_TEN_MINUTES, SaveAction, SaveRequest,
-    SearchRequest, SessionId, SiteRuleRequest, Trigger, UpdateRequest,
+    ActivityEvent, BrowserPolicy, ClientInfo, ConfirmAction, ConfirmReason, CopyGeneratedRequest, CopyRequest, DeleteRequest, FILLS_PER_MINUTE, FillRequest,
+    FrameFacts, FrameRule, GenerateRequest, GenerateSave, OtpRequest, QUERIES_PER_MINUTE, QueryPurpose, QueryRequest, Refusal, SITES_PER_TEN_MINUTES,
+    SaveAction, SaveRequest, SearchRequest, SessionId, SiteRuleRequest, Trigger, UpdateRequest,
 };
 use crate::item::{Matching, Protection, SiteRuleKind, Tri};
 use crate::logins::{CopyPart, ItemDraft, ItemPatch, RevealParts, SecretChange, UrlDraft};
@@ -322,9 +322,9 @@ async fn a_fill_brings_the_linked_code_and_a_second_step_gets_it_for_five_minute
     assert!(h.notices().contains(&Notice::ItemCopied { item_id: Some(id), part: crate::ui::CopiedPart::Totp, clear_after_s: Some(30) }));
     assert!(h.core.items_list().unwrap()[0].last_used_at_ms.is_some());
     // The next page of the sign-in, on the same site.
-    let otp = OtpRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor") };
+    let otp = OtpRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor"), ..OtpRequest::default() };
     assert_eq!(h.core.browser_otp(session, otp.clone()).unwrap().code.len(), 6);
-    let elsewhere = OtpRequest { item_id: id, facts: facts("https://example.org/2fa") };
+    let elsewhere = OtpRequest { item_id: id, facts: facts("https://example.org/2fa"), ..OtpRequest::default() };
     assert_eq!(h.core.browser_otp(session, elsewhere), Err(Refusal::NoMatch));
     // The user is at work meanwhile (a browser request never keeps the vault open by itself).
     advance(Duration::from_secs(4 * 60)).await;
@@ -346,6 +346,92 @@ async fn a_fill_brings_the_linked_code_and_a_second_step_gets_it_for_five_minute
     let answer = h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
     assert!(answer.submit);
     assert_eq!(h.clipboard.current().as_deref(), Some("something else"), "not copied");
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_user_gets_a_login_s_code_where_the_login_is_offered_without_a_fill_before() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let entry = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    let id = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("GitHub", "octocat", "https://github.com/", Matching::Domain) }).unwrap();
+    let asked = |url: &str, trigger| OtpRequest { item_id: id, facts: facts(url), trigger: Some(trigger) };
+    // No fill before: the next step's request gets nothing, the user's does.
+    let next = OtpRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor"), ..OtpRequest::default() };
+    assert_eq!(h.core.browser_otp(session, next), Err(Refusal::NoMatch));
+    for trigger in [Trigger::Popup, Trigger::InlineMenu, Trigger::Shortcut] {
+        let answer = h.core.browser_otp(session, asked("https://github.com/sessions/two-factor", trigger)).unwrap();
+        assert_eq!(answer.code.len(), 6, "{trigger:?}");
+    }
+    assert_eq!(h.core.state().browser.activity[0].event, ActivityEvent::OtpFilled);
+    // Only where the login is offered, in the page or a frame of its own site.
+    assert_eq!(h.core.browser_otp(session, asked("https://example.org/2fa", Trigger::Popup)), Err(Refusal::NoMatch));
+    let framed = FrameFacts { frame_url: "https://github.com/2fa".into(), top_url: "https://example.org/".into(), frame_chain: Vec::new() };
+    let in_frame = OtpRequest { item_id: id, facts: framed, trigger: Some(Trigger::Popup) };
+    assert_eq!(h.core.browser_otp(session, in_frame), Err(Refusal::CrossOrigin));
+    // What fills nothing by itself is no user's request.
+    for trigger in [Trigger::PageLoad, Trigger::NextStep] {
+        assert_eq!(h.core.browser_otp(session, asked("https://github.com/", trigger)), Err(Refusal::NoMatch), "{trigger:?}");
+    }
+    // The login's choice still counts.
+    h.core.item_update(id, ItemPatch { autofill: Some(AutofillChoice { fill_otp: Tri::Off, ..AutofillChoice::default() }), ..ItemPatch::default() }).unwrap();
+    assert_eq!(h.core.browser_otp(session, asked("https://github.com/", Trigger::Popup)), Err(Refusal::Protected));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_login_is_deleted_from_the_extension_only_where_it_is_offered_and_after_proof_when_it_asks_first() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let github = h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
+    let other = h.core.item_add(login("Example", "me", "https://example.org/", Matching::Domain)).unwrap();
+    let bank = h.core.item_add(ItemDraft { protection: Protection::Confirm, ..login("Bank", "me", "https://bank.example/", Matching::Domain) }).unwrap();
+    let delete = |item_id, facts: FrameFacts| DeleteRequest { item_id, facts };
+    let ids = || h.core.items_list().unwrap().iter().map(|i| i.id).collect::<Vec<_>>();
+    // Not offered on this page, or only in a frame of another site: nothing goes.
+    assert_eq!(h.core.browser_delete(session, delete(other, facts("https://github.com/login"))).await, Err(Refusal::NoMatch));
+    let framed = FrameFacts { frame_url: "https://github.com/login".into(), top_url: "https://example.org/".into(), frame_chain: Vec::new() };
+    assert_eq!(h.core.browser_delete(session, delete(github, framed)).await, Err(Refusal::CrossOrigin));
+    assert_eq!(ids().len(), 3);
+    // Where it is offered: deleted, and the activity says so.
+    h.core.browser_delete(session, delete(github, facts("https://github.com/login"))).await.unwrap();
+    assert!(!ids().contains(&github));
+    let done = &h.core.state().browser.activity[0];
+    assert_eq!((done.event, done.title.as_deref(), done.site.as_str()), (ActivityEvent::Deleted, Some("GitHub"), "github.com"));
+    assert_eq!(h.core.browser_delete(session, delete(github, facts("https://github.com/login"))).await, Err(Refusal::NoMatch), "gone");
+    // A login that asks first waits for proof in Lockra, and a denial keeps it.
+    let core = h.core.clone();
+    let asking = tokio::spawn(async move { core.browser_delete(session, DeleteRequest { item_id: bank, facts: facts("https://bank.example/") }).await });
+    settle().await;
+    let waiting = h.core.state().browser.confirms[0].clone();
+    assert_eq!((waiting.action, waiting.needs_proof, waiting.title.as_str()), (ConfirmAction::Delete, true, "Bank"));
+    h.core.browser_confirm_deny(waiting.id).unwrap();
+    assert_eq!(asking.await.unwrap(), Err(Refusal::Denied));
+    assert!(ids().contains(&bank));
+    let core = h.core.clone();
+    let asking = tokio::spawn(async move { core.browser_delete(session, DeleteRequest { item_id: bank, facts: facts("https://bank.example/") }).await });
+    settle().await;
+    let waiting = h.core.state().browser.confirms[0].id;
+    h.core.browser_confirm(waiting, Some(pw(MASTER)), None).await.unwrap();
+    asking.await.unwrap().unwrap();
+    assert!(!ids().contains(&bank));
+    // Never on a never-fill site.
+    h.core.site_rule_add(SiteRuleKind::NeverFill, &["example.org".into()]).unwrap();
+    assert_eq!(h.core.browser_delete(session, delete(other, facts("https://example.org/"))).await, Err(Refusal::NeverFill));
+    assert!(ids().contains(&other));
+}
+
+#[tokio::test(start_paused = true)]
+async fn deleting_counts_with_the_secrets_so_a_session_cannot_empty_the_vault() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let ids: Vec<Uuid> =
+        (0..=FILLS_PER_MINUTE).map(|n| h.core.item_add(login(&format!("Site {n}"), "me", "https://example.com/", Matching::Domain)).unwrap()).collect();
+    for id in &ids[..FILLS_PER_MINUTE] {
+        h.core.browser_delete(session, DeleteRequest { item_id: *id, facts: facts("https://example.com/") }).await.unwrap();
+    }
+    let last = DeleteRequest { item_id: ids[FILLS_PER_MINUTE], facts: facts("https://example.com/") };
+    assert_eq!(h.core.browser_delete(session, last.clone()).await, Err(Refusal::RateLimited));
+    assert_eq!(h.core.browser_delete(session, last).await, Err(Refusal::Paused), "and paused until the user resumes it");
+    assert_eq!(h.core.items_list().unwrap().len(), 1, "the eleventh is kept");
 }
 
 #[tokio::test(start_paused = true)]
@@ -404,7 +490,7 @@ async fn the_code_of_a_second_step_is_submitted_as_the_login_or_the_policy_says(
     let (_, session) = paired(&h).await;
     let entry = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
     let id = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("GitHub", "octocat", "https://github.com/", Matching::Domain) }).unwrap();
-    let otp = OtpRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor") };
+    let otp = OtpRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor"), ..OtpRequest::default() };
     h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
     assert!(!h.core.browser_otp(session, otp.clone()).unwrap().submit, "the policy does not submit by default");
     riskier(&h, |p| p.auto_submit = true).await;

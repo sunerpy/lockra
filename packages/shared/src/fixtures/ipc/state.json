@@ -365,6 +365,16 @@
           "refusal": "cross_origin",
           "site": "evil.example",
           "title": null
+        },
+        {
+          "at_ms": 1789999997000,
+          "browser": "chrome",
+          "event": "deleted",
+          "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000015",
+          "label": "Work",
+          "refusal": null,
+          "site": "old.example",
+          "title": "Old"
         }
       ],
       "available": true,
@@ -384,6 +394,22 @@
           ],
           "title": "Bank",
           "top_url": "https://portal.example/",
+          "username": "me"
+        },
+        {
+          "action": "delete",
+          "browser": "chrome",
+          "expires_at_ms": 1790000059000,
+          "frame_url": "https://bank.example/login",
+          "id": "0f3f1a1e-8d4b-4c8e-9f7a-00000000002b",
+          "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+          "label": "Work",
+          "needs_proof": true,
+          "reasons": [
+            "protected"
+          ],
+          "title": "Bank",
+          "top_url": null,
           "username": "me"
         }
       ],

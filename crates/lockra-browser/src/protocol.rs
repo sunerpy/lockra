@@ -5,8 +5,8 @@
 
 use data_encoding::BASE64;
 use lockra_core::{
-    ClientInfo, CopyGeneratedRequest, CopyRequest, FillAnswer, FillRequest, GenerateAnswer, GenerateRequest, ItemSummary, OtpAnswer, OtpRequest, QueryAnswer,
-    QueryRequest, Refusal, SaveRequest, SearchRequest, SiteRuleRequest, StatusAnswer, UpdateRequest,
+    ClientInfo, CopyGeneratedRequest, CopyRequest, DeleteRequest, FillAnswer, FillRequest, GenerateAnswer, GenerateRequest, ItemSummary, OtpAnswer, OtpRequest,
+    QueryAnswer, QueryRequest, Refusal, SaveRequest, SearchRequest, SiteRuleRequest, StatusAnswer, UpdateRequest,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -162,7 +162,7 @@ pub enum Op {
     Query(QueryRequest),
     /// One login's secrets for a frame.
     Fill(FillRequest),
-    /// The code of a login filled on the step before.
+    /// The code of a login filled on the step before, or of one the user chose.
     Otp(OtpRequest),
     /// A part of a login on the clipboard.
     Copy(CopyRequest),
@@ -178,6 +178,8 @@ pub enum Op {
     SiteRule(SiteRuleRequest),
     /// The popup's search.
     Search(SearchRequest),
+    /// Delete a login the menu or the popup offered, once the user agreed there.
+    Delete(DeleteRequest),
 }
 
 /// What a request gets. Untagged: the extension knows which op it asked; read back (the tests),
@@ -205,7 +207,7 @@ pub enum Answer {
         /// Its id.
         item_id: Uuid,
     },
-    /// `copy`, `update`, `site_rule`: done.
+    /// `copy`, `update`, `site_rule`, `delete`: done.
     Done {},
 }
 

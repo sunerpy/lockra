@@ -149,6 +149,16 @@
       "req": 14,
       "top_url": "https://www.example.com/"
     },
+    "delete": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+      "op": "delete",
+      "req": 16,
+      "top_url": "https://www.example.com/"
+    },
     "fill": {
       "allow_http": false,
       "frame_chain": [
@@ -210,6 +220,17 @@
       "op": "otp",
       "req": 6,
       "top_url": "https://www.example.com/"
+    },
+    "otp_asked": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+      "op": "otp",
+      "req": 15,
+      "top_url": "https://www.example.com/",
+      "trigger": "popup"
     },
     "query": {
       "frame_chain": [

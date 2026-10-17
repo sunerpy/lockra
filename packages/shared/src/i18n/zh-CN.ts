@@ -1156,6 +1156,7 @@ export const zhCN = {
           copied: "复制「{title}」",
           saved: "保存「{title}」",
           updated: "更新「{title}」的密码",
+          deleted: "删除「{title}」",
           generated: "生成密码",
           refused: "拒绝：{reason}",
           paused: "已暂停：请求过于频繁",
@@ -1684,9 +1685,12 @@ export const zhCN = {
     confirm: {
       titleFill: "{browser} 请求填充「{title}」",
       titleCopy: "{browser} 请求复制「{title}」",
+      titleDelete: "{browser} 请求删除「{title}」",
       titleFrame: "{browser} 请求在框架里填充",
       protectedFill: "「{title}」的保护级别是「填充前验证」，填充前需要验证身份。",
       protectedCopy: "「{title}」的保护级别是「填充前验证」，复制前需要验证身份。",
+      protectedDelete: "「{title}」的保护级别是「填充前验证」，删除前需要验证身份。",
+      deleteNote: "删除后无法恢复，同步的设备也会删除它。",
       frame: "登录框在另一个网站的框架里。确认这是你要登录的地方再填充。",
       site: "网站",
       frameSite: "登录框所在",
@@ -1697,6 +1701,7 @@ export const zhCN = {
       autoDeny: { one: "{n} 秒后自动拒绝", other: "{n} 秒后自动拒绝" },
       fill: "填充",
       copy: "复制",
+      delete: "删除",
       fillAnyway: "仍然填充",
       fillWith: {
         touch_id: "使用 Touch ID 填充",
@@ -1708,8 +1713,14 @@ export const zhCN = {
         windows_hello: "使用 Windows Hello 复制",
         fingerprint: "使用指纹复制",
       },
+      deleteWith: {
+        touch_id: "使用 Touch ID 删除",
+        windows_hello: "使用 Windows Hello 删除",
+        fingerprint: "使用指纹删除",
+      },
       reasonFill: "填充「{title}」",
       reasonCopy: "复制「{title}」",
+      reasonDelete: "删除「{title}」",
     },
   },
   showcase: {

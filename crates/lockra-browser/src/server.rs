@@ -334,6 +334,14 @@ impl Conn {
                 }));
                 return Ok(Vec::new());
             }
+            Op::Delete(delete) => {
+                let (core, internal, generation) = (self.core.clone(), self.internal.clone(), self.generation);
+                self.tasks.push(tokio::spawn(async move {
+                    let response = Response::of(req, core.browser_delete(session, delete).await.map(|()| Answer::Done {}));
+                    let _ = internal.send(Internal::Answer { generation, response });
+                }));
+                return Ok(Vec::new());
+            }
         };
         self.send(&Outgoing::Response(Response::of(req, outcome)))
     }

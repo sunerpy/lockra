@@ -127,6 +127,13 @@ popup. It lists the site's logins; **Fill** fills one into the page, and ⋯ cop
 password or code. **Search all logins…** finds any login the extension may see: those that match
 the page can be filled, the others only copied.
 
+<StatusTag status="building" /> In the next version, a login with a linked code has two buttons
+beside **Fill**: **Fill the code** puts its current code into the page's code field, or, where
+Lockra cannot tell one, into the field you clicked into before opening the popup (never a password
+field); **Copy code** puts it on the clipboard. This is for the pages where the code does not come
+by itself: a sign-in whose first steps you typed, or a code field Lockra does not recognise. The
+login's ⋯ menu also has **Delete…** ([Deleting a login](#deleting-a-login)).
+
 ### With the shortcut
 
 Click into the sign-in form and press `Ctrl Shift L` (`⌘ Shift L` on macOS): the first login for the
@@ -165,6 +172,18 @@ after filling** on:
 Lockra submits as Enter would, with a click on the form's submit button, passing over buttons such
 as **Get code**, **Cancel** or another service's sign-in; a button the page has not enabled yet is
 waited for up to a second, and a form whose button stays disabled is not submitted.
+
+### Deleting a login
+
+<StatusTag status="building" /> In the next version, a login can be deleted from the menu by the
+field and from the popup. In the menu, the chosen row shows a delete button at its end (the others
+as the pointer comes); in the popup, it is **Delete…** in the login's ⋯ menu. Either asks first,
+naming the login, with the focus on **Cancel**; only **Delete** deletes it in Lockra, and the menu
+then lists the others. A deleted login cannot be brought back, and it goes from the synced devices
+too. Lockra deletes only a login it offers for the page, never one in a frame of another site or
+on a site of the never-fill list, and counts deletions with the fills, so an extension cannot empty
+the vault in a burst; a login of the **Verify first** level asks for the master password, Touch ID
+or Windows Hello in Lockra first.
 
 ### Sign-ins over several pages
 

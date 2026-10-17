@@ -132,15 +132,19 @@ async function setup(options: { folder?: string } = {}) {
   let verify = { ok: true };
   /** What the page's content script answers a fill: what went in. */
   const filled = { value: { filled: 2, password: true, code: false } };
+  /** What it answers a code: whether it went in. */
+  const codeIn = { value: { code: true } };
   browser.content.set("1:0", (message) => {
     contentGot.push(message as BackgroundMessage);
     const m = message as BackgroundMessage;
     if (m.kind === "frame.verify") return verify;
     if (m.kind === "fill") return filled.value;
+    if (m.kind === "fill.otp") return codeIn.value;
     return undefined;
   });
   return {
     filled,
+    codeIn,
     app,
     browser,
     clock,
@@ -891,6 +895,96 @@ describe("searching the menu", () => {
   });
 });
 
+describe("deleting a login", () => {
+  const click = { point: { x: 20, y: 60 }, trusted: true };
+
+  it("asks in the menu first, then deletes it where it is offered and lists the rest", async () => {
+    const context = await setup();
+    const { browser, app } = context;
+    app.handlers.delete = () => ({});
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    frame.send({ kind: "visible", visible: true });
+    frame.send({ kind: "action", action: { type: "remove", index: 1 }, ...click });
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toEqual({
+        view: "delete",
+        site: "example.com",
+        item: { title: "GitHub", username: "octocat-work", downgrade: false },
+      }),
+    );
+    // Nothing went to Lockra yet; Enter in the page's field deletes nothing either.
+    expect(app.requests.some((r) => r.op === "delete")).toBe(false);
+    await browser.fromContent({
+      kind: "content.key",
+      token: answer.token,
+      key: "Enter",
+      allowed: true,
+    });
+    expect(app.requests.some((r) => r.op === "delete")).toBe(false);
+    frame.send({ kind: "action", action: { type: "delete" }, ...click });
+    await vi.waitFor(() =>
+      expect(app.requests.at(-1)).toMatchObject({ op: "delete", item_id: ITEM2 }),
+    );
+    expect(app.requests.at(-1)).toMatchObject({
+      frame_url: "https://www.example.com/login",
+      top_url: "https://www.example.com/login",
+    });
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toEqual({
+        view: "list",
+        site: "example.com",
+        items: [{ title: "GitHub", username: "octocat", downgrade: false }],
+        active: 0,
+      }),
+    );
+    // The last one gone, the menu closes.
+    frame.send({ kind: "action", action: { type: "remove", index: 0 }, ...click });
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("delete"));
+    frame.send({ kind: "action", action: { type: "delete" }, ...click });
+    await vi.waitFor(() => expect(frame.closed).toBe(true));
+    expect(app.requests.filter((r) => r.op === "delete").map((r) => r.item_id)).toEqual([
+      ITEM2,
+      ITEM,
+    ]);
+  });
+
+  it("words Lockra's refusal, and a click that fails the checks deletes nothing", async () => {
+    const context = await setup();
+    const { browser, app } = context;
+    app.handlers.delete = () => ({ error: "denied" });
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    frame.send({ kind: "visible", visible: true });
+    frame.send({ kind: "action", action: { type: "remove", index: 0 }, ...click });
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("delete"));
+    frame.send({ kind: "action", action: { type: "delete" }, ...click });
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toMatchObject({ view: "notice", refusal: "denied" }),
+    );
+    // Not the user's click: the frame closes unasked.
+    const again = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const next = inlineFrame(context, again.token, 6);
+    await vi.waitFor(() => expect(lastView(next)?.view).toBe("list"));
+    next.send({
+      kind: "action",
+      action: { type: "remove", index: 0 },
+      point: null,
+      trusted: false,
+    });
+    await vi.waitFor(() => expect(next.closed).toBe(true));
+    expect(app.requests.filter((r) => r.op === "delete")).toHaveLength(1);
+  });
+});
+
 describe("a code field", () => {
   it("nothing was filled for lately offers the site's logins that have a code, and fills the chosen one's", async () => {
     const context = await setup();
@@ -1147,6 +1241,93 @@ describe("the popup", () => {
     await vi.waitFor(() =>
       expect(app.requests.at(-1)).toMatchObject({ op: "fill", allow_http: true }),
     );
+  });
+
+  it("fills a login's code into the page where the user asks, or says the page has no field for it", async () => {
+    const context = await setup();
+    const { browser, app, contentGot, codeIn } = context;
+    browser.probes.set(0, { focused: false, editable: true, framed: false });
+    app.handlers.otp = () => ({ code: "135790", copied: false, submit: false });
+    const { port, states, events } = popup(context);
+    port.send({ kind: "hello" });
+    await vi.waitFor(() => expect(states().at(-1)?.site?.items).toHaveLength(2));
+    port.send({ kind: "fill_code", itemId: ITEM });
+    await vi.waitFor(() =>
+      expect(events().some((e) => e.kind === "result" && e.part === "totp")).toBe(true),
+    );
+    expect(app.requests.at(-1)).toMatchObject({
+      op: "otp",
+      item_id: ITEM,
+      trigger: "popup",
+      frame_url: "https://www.example.com/login",
+    });
+    expect(contentGot.findLast((m) => m.kind === "fill.otp")).toEqual({
+      kind: "fill.otp",
+      code: "135790",
+      submit: false,
+      focused: true,
+    });
+    expect(events().findLast((e) => e.kind === "result")).toMatchObject({
+      action: "fill",
+      outcome: "done",
+      part: "totp",
+    });
+    codeIn.value = { code: false };
+    port.send({ kind: "fill_code", itemId: ITEM });
+    await vi.waitFor(() =>
+      expect(events().findLast((e) => e.kind === "result")).toMatchObject({
+        outcome: "no_code_field",
+      }),
+    );
+    // A login without a code is no such request.
+    app.handlers.query = () => queryAnswer([summary(ITEM, { has_totp: false })]);
+    port.send({ kind: "hello" });
+    await vi.waitFor(() => expect(states().at(-1)?.site?.items).toHaveLength(1));
+    const asked = app.requests.filter((r) => r.op === "otp").length;
+    port.send({ kind: "fill_code", itemId: ITEM });
+    await vi.waitFor(() =>
+      expect(events().findLast((e) => e.kind === "result")).toMatchObject({
+        outcome: "not_found",
+      }),
+    );
+    expect(app.requests.filter((r) => r.op === "otp")).toHaveLength(asked);
+  });
+
+  it("deletes a login the user agreed to, and shows the page's logins again", async () => {
+    const context = await setup();
+    const { browser, app } = context;
+    browser.probes.set(0, { focused: false, editable: true, framed: false });
+    let gone = false;
+    app.handlers.delete = () => {
+      gone = true;
+      return {};
+    };
+    app.handlers.query = () =>
+      queryAnswer(gone ? [summary(ITEM)] : [summary(ITEM), summary(ITEM2)]);
+    const { port, states, events } = popup(context);
+    port.send({ kind: "hello" });
+    await vi.waitFor(() => expect(states().at(-1)?.site?.items).toHaveLength(2));
+    port.send({ kind: "delete", itemId: ITEM2 });
+    await vi.waitFor(() =>
+      expect(events().findLast((e) => e.kind === "result")).toMatchObject({
+        action: "delete",
+        itemId: ITEM2,
+        outcome: "done",
+      }),
+    );
+    expect(app.requests.find((r) => r.op === "delete")).toMatchObject({
+      item_id: ITEM2,
+      frame_url: "https://www.example.com/login",
+    });
+    await vi.waitFor(() => expect(states().at(-1)?.site?.items).toHaveLength(1));
+    // One the page does not list is not deleted from here.
+    port.send({ kind: "delete", itemId: ITEM2 });
+    await vi.waitFor(() =>
+      expect(events().findLast((e) => e.kind === "result")).toMatchObject({
+        outcome: "not_found",
+      }),
+    );
+    expect(app.requests.filter((r) => r.op === "delete")).toHaveLength(1);
   });
 
   it("follows pairing, unlocking and starting Lockra", async () => {

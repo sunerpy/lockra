@@ -841,9 +841,9 @@ export const pairRequestViewSchema = z.object({
 export type PairRequestView = z.infer<typeof pairRequestViewSchema>;
 
 export const CONFIRM_REASONS = ["protected", "cross_origin"] as const;
-export const CONFIRM_ACTIONS = ["fill", "copy"] as const;
+export const CONFIRM_ACTIONS = ["fill", "copy", "delete"] as const;
 
-/** A fill (or a copy from the popup) waiting for the user. */
+/** A fill (or a copy from the popup, or a deletion from the menu or the popup) waiting for the user. */
 export const confirmViewSchema = z.object({
   id: idSchema,
   item_id: idSchema,
@@ -870,6 +870,7 @@ export const ACTIVITY_EVENTS = [
   "copied",
   "saved",
   "updated",
+  "deleted",
   "generated",
   "refused",
   "paused",

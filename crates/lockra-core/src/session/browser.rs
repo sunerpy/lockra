@@ -15,9 +15,9 @@ use super::items::{copy_part_text, remember_generated};
 use super::{Core, PhaseState, Session, State, current_code, touch_items};
 use crate::browser::BrowserPolicy;
 use crate::browser::{
-    Activity, ActivityEvent, BrowserView, CONFIRM_TTL, ClientInfo, ConfirmAction, ConfirmReason, ConfirmView, CopyGeneratedRequest, CopyRequest, FillAnswer,
-    FillField, FillRequest, FrameRule, GenerateAnswer, GenerateRequest, ItemSummary, MAX_FRAME_CHAIN, MAX_PENDING_PAIRS, OtpAnswer, OtpRequest, PAIR_TTL,
-    PairOutcome, PairedExtension, PairedView, PendingConfirm, PendingPair, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SEARCH_MAX, SaveAction,
+    Activity, ActivityEvent, BrowserView, CONFIRM_TTL, ClientInfo, ConfirmAction, ConfirmReason, ConfirmView, CopyGeneratedRequest, CopyRequest, DeleteRequest,
+    FillAnswer, FillField, FillRequest, FrameRule, GenerateAnswer, GenerateRequest, ItemSummary, MAX_FRAME_CHAIN, MAX_PENDING_PAIRS, OtpAnswer, OtpRequest,
+    PAIR_TTL, PairOutcome, PairedExtension, PairedView, PendingConfirm, PendingPair, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SEARCH_MAX, SaveAction,
     SaveAdvice, SaveRequest, SearchRequest, SessionId, SessionState, SiteRuleRequest, StaticKey, StatusAnswer, Trigger, UNLOCK_REQUEST_EVERY, UpdateRequest,
     choose, cross_origin, listed, matches, offered, page, site_of,
 };
@@ -453,12 +453,15 @@ impl Core {
         Ok(answer)
     }
 
-    /// The code of a login filled on this site in the last few minutes, for a second sign-in step.
+    /// The code of a login filled on this site in the last few minutes, for a second sign-in step;
+    /// or, where the user asked for a login's code (the popup, the menu, the shortcut), the code of
+    /// a login offered for the frame, in the page itself or a frame of its own site.
     pub fn browser_otp(&self, session: SessionId, request: OtpRequest) -> Result<OtpAnswer, Refusal> {
         let frame = Frame::of(&request.facts)?;
         let site = site_of(&frame.frame);
         let now = Instant::now();
         let now_ms = self.now_ms();
+        let asked = matches!(request.trigger, Some(Trigger::Popup | Trigger::InlineMenu | Trigger::Shortcut));
         let (answer, clear_after) = {
             let mut guard = self.lock();
             let st = &mut *guard;
@@ -466,7 +469,15 @@ impl Core {
             if listed(&vault.data, SiteRuleKind::NeverFill, &frame.frame) {
                 return Err(Refusal::NeverFill);
             }
-            if !state.filled_lately(request.item_id, &site, now) {
+            if asked {
+                if frame.cross_origin() {
+                    return Err(Refusal::CrossOrigin);
+                }
+                let (_, found) = matches(&vault.data, &frame.frame, policy(vault).match_port);
+                if !found.iter().any(|(id, _)| *id == request.item_id) {
+                    return Err(Refusal::NoMatch);
+                }
+            } else if !state.filled_lately(request.item_id, &site, now) {
                 return Err(Refusal::NoMatch);
             }
             let item = vault.data.items.iter().find(|i| i.id == request.item_id && offered(i)).ok_or(Refusal::NotFound)?;
@@ -554,6 +565,85 @@ impl Core {
         };
         self.notice(Notice::ItemCopied { item_id: Some(request.item_id), part, clear_after_s: clear_after });
         Ok(())
+    }
+
+    /// Delete a login the extension's menu or popup offered for this frame, once the user agreed
+    /// there: only in the page itself or a frame of its own site, never on a never-fill site, and a
+    /// login that asks first waits for proof in Lockra. It counts with the secrets, so a session
+    /// cannot empty the vault in a burst. The deletion syncs, as one made in Lockra.
+    pub async fn browser_delete(&self, session: SessionId, request: DeleteRequest) -> Result<(), Refusal> {
+        let frame = Frame::of(&request.facts)?;
+        let site = site_of(&frame.frame);
+        let now = Instant::now();
+        let (title, decision) = {
+            let mut guard = self.lock();
+            let st = &mut *guard;
+            let decided = self.decide_delete(st, session, &request, &frame, now);
+            match decided {
+                Ok(decided) => decided,
+                Err(refusal) => {
+                    self.refused(st, session, &site, refusal, Some(request.item_id));
+                    drop(guard);
+                    self.changed();
+                    return Err(refusal);
+                }
+            }
+        };
+        self.wait(decision).await?;
+        {
+            let st = self.lock();
+            active(&st, session, false)?;
+        }
+        self.item_delete(&[request.item_id]).map_err(|_| Refusal::NotFound)?;
+        {
+            let mut guard = self.lock();
+            self.record(&mut guard, session, &site, ActivityEvent::Deleted, Some(request.item_id), Some(title));
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// The checks of a deletion, in order: the login's title and whether to ask first.
+    fn decide_delete(&self, st: &mut State, session: SessionId, request: &DeleteRequest, frame: &Frame, now: Instant) -> Result<(String, Decision), Refusal> {
+        let site = site_of(&frame.frame);
+        let (vault, state) = active(st, session, false)?;
+        let data = &vault.data;
+        if listed(data, SiteRuleKind::NeverFill, &frame.frame) || listed(data, SiteRuleKind::NeverFill, &frame.top) {
+            return Err(Refusal::NeverFill);
+        }
+        if frame.cross_origin() {
+            return Err(Refusal::CrossOrigin);
+        }
+        let (_, found) = matches(data, &frame.frame, policy(vault).match_port);
+        if !found.iter().any(|(id, _)| *id == request.item_id) {
+            return Err(Refusal::NoMatch);
+        }
+        let item = data.items.iter().find(|i| i.id == request.item_id).ok_or(Refusal::NotFound)?;
+        let title = item.title.clone();
+        let view = (item.protection_level() == Protection::Confirm).then(|| ConfirmView {
+            id: Uuid::new_v4(),
+            item_id: item.id,
+            title: item.title.clone(),
+            username: username_of(item),
+            frame_url: frame.frame.as_str().to_owned(),
+            top_url: None,
+            browser: state.client.browser.clone(),
+            label: state.client.label.clone(),
+            reasons: vec![ConfirmReason::Protected],
+            action: ConfirmAction::Delete,
+            needs_proof: true,
+            expires_at_ms: self.now_ms() + millis(CONFIRM_TTL),
+        });
+        if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.secret(&site, now)) {
+            return Err(self.pause(st, session, &site));
+        }
+        Ok((
+            title,
+            match view {
+                Some(view) => self.ask(st, session, view),
+                None => Decision::Now,
+            },
+        ))
     }
 
     /// Save what a form submitted as a new login (the user chose to in the page).

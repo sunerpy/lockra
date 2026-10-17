@@ -11,7 +11,10 @@ export interface SearchResult {
   error: string | null;
 }
 
-export type Results = Record<string, { action: "fill" | "copy"; outcome: string; part?: string }>;
+export type Results = Record<
+  string,
+  { action: "fill" | "copy" | "delete"; outcome: string; part?: string }
+>;
 
 export interface Page {
   state: PopupState | null;

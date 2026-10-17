@@ -1193,6 +1193,7 @@ export const en: Messages = {
           copied: "Copied from “{title}”",
           saved: "Saved “{title}”",
           updated: "Updated the password of “{title}”",
+          deleted: "Deleted “{title}”",
           generated: "Generated a password",
           refused: "Refused: {reason}",
           paused: "Paused: too many requests",
@@ -1751,9 +1752,13 @@ export const en: Messages = {
     confirm: {
       titleFill: "{browser} asks to fill “{title}”",
       titleCopy: "{browser} asks to copy from “{title}”",
+      titleDelete: "{browser} asks to delete “{title}”",
       titleFrame: "{browser} asks to fill in a frame",
       protectedFill: "“{title}” is set to “Verify first”: filling it needs you to verify.",
       protectedCopy: "“{title}” is set to “Verify first”: copying from it needs you to verify.",
+      protectedDelete: "“{title}” is set to “Verify first”: deleting it needs you to verify.",
+      deleteNote:
+        "A deleted login cannot be brought back, and it goes from the synced devices too.",
       frame:
         "The sign-in form is in a frame of another site. Fill it only if this is where you mean to sign in.",
       site: "Site",
@@ -1765,6 +1770,7 @@ export const en: Messages = {
       autoDeny: { one: "Denied in {n} second", other: "Denied in {n} seconds" },
       fill: "Fill",
       copy: "Copy",
+      delete: "Delete",
       fillAnyway: "Fill anyway",
       fillWith: {
         touch_id: "Fill with Touch ID",
@@ -1776,8 +1782,14 @@ export const en: Messages = {
         windows_hello: "Copy with Windows Hello",
         fingerprint: "Copy with fingerprint",
       },
+      deleteWith: {
+        touch_id: "Delete with Touch ID",
+        windows_hello: "Delete with Windows Hello",
+        fingerprint: "Delete with fingerprint",
+      },
       reasonFill: "fill “{title}”",
       reasonCopy: "copy from “{title}”",
+      reasonDelete: "delete “{title}”",
     },
   },
   showcase: {

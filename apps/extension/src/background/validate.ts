@@ -44,6 +44,8 @@ const contentSchema = z.discriminatedUnion("kind", [
 
 const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("choose"), index: z.number().int().min(0).max(1000) }),
+  z.object({ type: z.literal("remove"), index: z.number().int().min(0).max(1000) }),
+  z.object({ type: z.literal("delete") }),
   z.object({ type: z.literal("fill") }),
   z.object({ type: z.literal("allow_http") }),
   z.object({ type: z.literal("use") }),
@@ -74,6 +76,8 @@ const popupSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("retry") }),
   z.object({ kind: z.literal("search"), text: z.string().max(256) }),
   z.object({ kind: z.literal("fill"), itemId: z.guid(), allowHttp: z.boolean() }),
+  z.object({ kind: z.literal("fill_code"), itemId: z.guid() }),
+  z.object({ kind: z.literal("delete"), itemId: z.guid() }),
   z.object({ kind: z.literal("copy"), itemId: z.guid(), part: copyPartSchema }),
   z.object({ kind: z.literal("access.changed") }),
   z.object({ kind: z.literal("unpair") }),

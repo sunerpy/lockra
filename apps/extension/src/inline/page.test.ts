@@ -43,8 +43,9 @@ function setup(
   };
 }
 
-function click(el: Element | null | undefined): void {
-  el?.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 12, clientY: 34 }));
+/** A pointer's click (`detail` 1); a button the keyboard presses clicks with `detail` 0. */
+function click(el: Element | null | undefined, detail = 1): void {
+  el?.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 12, clientY: 34, detail }));
 }
 
 function button(text: string): HTMLButtonElement | undefined {
@@ -323,5 +324,53 @@ describe("the search box", () => {
     const before = posted.length;
     key(box() as HTMLInputElement, "Enter");
     expect(posted).toHaveLength(before);
+  });
+});
+
+describe("deleting from the menu", () => {
+  const WORK = { ...GITHUB, username: "octocat-work" };
+  const rows = () =>
+    Array.from(document.querySelectorAll("button")).filter((b) => b.title.startsWith("GitHub"));
+
+  it("offers each row's deletion, which asks first", () => {
+    const { posted, show } = setup();
+    show({ view: "list", site: "github.com", items: [GITHUB, WORK], active: 0 });
+    const remove = document.querySelectorAll<HTMLButtonElement>('button[aria-label="删除…"]');
+    expect(remove).toHaveLength(2);
+    // The chosen row shows its button; the others as the pointer or the focus comes.
+    expect(remove[0]?.classList.contains("opacity-0")).toBe(false);
+    expect(remove[1]?.classList.contains("opacity-0")).toBe(true);
+    click(remove[1]);
+    expect(posted.at(-1)).toEqual({
+      kind: "action",
+      action: { type: "remove", index: 1 },
+      point: { x: 12, y: 34 },
+      trusted: false,
+    });
+    // The row itself still fills.
+    click(rows()[0]);
+    expect(posted.at(-1)).toMatchObject({ action: { type: "choose", index: 0 } });
+  });
+
+  it("asks with the login's name, starts on 取消, and deletes only on 删除", async () => {
+    const { posted, show, root } = setup();
+    show({ view: "delete", site: "github.com", item: WORK });
+    expect(root().textContent).toContain("删除「GitHub · octocat-work」？");
+    expect(root().textContent).toContain("删除后无法恢复，同步的设备也会删除它。");
+    expect(root().textContent).toContain("Esc 取消");
+    await Promise.resolve();
+    expect(document.activeElement).toBe(button("取消"));
+    click(button("取消"));
+    expect(posted.at(-1)).toMatchObject({ action: { type: "close" } });
+    click(button("删除"));
+    expect(posted.at(-1)).toEqual({
+      kind: "action",
+      action: { type: "delete" },
+      point: { x: 12, y: 34 },
+      trusted: false,
+    });
+    // Pressed from the keyboard, it has no point: the checks run at the frame's middle.
+    click(button("删除"), 0);
+    expect(posted.at(-1)).toMatchObject({ action: { type: "delete" }, point: null });
   });
 });

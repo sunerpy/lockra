@@ -124,7 +124,13 @@ export const opSchema = z.discriminatedUnion("op", [
     trigger: z.enum(TRIGGERS),
     allow_http: z.boolean(),
   }),
-  z.object({ op: z.literal("otp"), item_id: id, ...facts }),
+  /** A login's code: the next step's (no trigger), or one the user asked for. */
+  z.object({
+    op: z.literal("otp"),
+    item_id: id,
+    ...facts,
+    trigger: z.enum(["popup", "inline_menu", "shortcut"]).optional(),
+  }),
   z.object({ op: z.literal("copy"), item_id: id, part: copyPartSchema }),
   z.object({
     op: z.literal("save"),
@@ -147,6 +153,8 @@ export const opSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("copy_generated"), ...facts, password: z.string() }),
   z.object({ op: z.literal("site_rule"), kind: z.enum(["never_save", "never_fill"]), ...facts }),
   z.object({ op: z.literal("search"), text: z.string(), top_url: z.string() }),
+  /** A login the menu or the popup offered, deleted once the user agreed there. */
+  z.object({ op: z.literal("delete"), item_id: id, ...facts }),
 ]);
 export type Op = z.infer<typeof opSchema>;
 export type OpName = Op["op"];
@@ -276,6 +284,7 @@ export const ANSWER_SCHEMAS = {
   copy_generated: doneSchema,
   site_rule: doneSchema,
   search: foundSchema,
+  delete: doneSchema,
 } as const satisfies Record<OpName, z.ZodType>;
 export type AnswerOf<O extends OpName> = z.infer<(typeof ANSWER_SCHEMAS)[O]>;
 

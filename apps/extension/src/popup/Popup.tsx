@@ -410,6 +410,13 @@ function Ready({ page, state, client }: { page: Page; state: PopupState; client:
   };
   const copy = (item: ItemSummary, part: "username" | "password" | "totp") =>
     send({ kind: "copy", itemId: item.item_id, part: { type: part } });
+  const fillCode = (item: ItemSummary) => send({ kind: "fill_code", itemId: item.item_id });
+  // The row whose deletion waits for the user's word.
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const remove = (item: ItemSummary) => {
+    setDeleting(null);
+    send({ kind: "delete", itemId: item.item_id });
+  };
 
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target;
@@ -496,6 +503,11 @@ function Ready({ page, state, client }: { page: Page; state: PopupState; client:
           results={results}
           onFill={fill}
           onCopy={copy}
+          onFillCode={fillCode}
+          deleting={deleting}
+          onAskDelete={(item) => setDeleting(item.item_id)}
+          onDelete={remove}
+          onCancelDelete={() => setDeleting(null)}
           onOpen={() => send({ kind: "start", show: true })}
         />
       )}
@@ -532,6 +544,12 @@ interface RowsProps {
   results: Page["results"];
   onFill: (item: ItemSummary) => void;
   onCopy: (item: ItemSummary, part: "username" | "password" | "totp") => void;
+  /** The page's own matches only: their code into the page, and their deletion. */
+  onFillCode?: (item: ItemSummary) => void;
+  deleting?: string | null;
+  onAskDelete?: (item: ItemSummary) => void;
+  onDelete?: (item: ItemSummary) => void;
+  onCancelDelete?: () => void;
 }
 
 function SiteMatches({
@@ -650,6 +668,8 @@ function Outcomes({ items, results }: { items: ItemSummary[]; results: Page["res
     if (!result || (result.outcome === "done" && result.action === "fill")) return [];
     if (result.outcome === "waiting")
       return [{ id: item.item_id, text: t("popup.waiting"), tone: "muted" }];
+    if (result.outcome === "done" && result.action === "delete")
+      return [{ id: item.item_id, text: t("popup.deleted"), tone: "muted" }];
     if (result.outcome === "done")
       return [{ id: item.item_id, text: t("popup.copied"), tone: "muted" }];
     if (result.outcome === "http_downgrade") return [];
@@ -675,9 +695,23 @@ function MatchRow({
   isActive,
   onFill,
   onCopy,
+  onFillCode,
+  deleting,
+  onAskDelete,
+  onDelete,
+  onCancelDelete,
 }: RowsProps & { item: ItemSummary; mode: "fill" | "copy"; isActive: boolean }) {
   const t = useText();
   const user = item.username || item.email;
+  if (deleting === item.item_id && onDelete && onCancelDelete)
+    return (
+      <DeleteConfirm
+        name={user ? `${item.title} · ${user}` : item.title}
+        onDelete={() => onDelete(item)}
+        onCancel={onCancelDelete}
+      />
+    );
+  const code = mode === "fill" && item.has_totp && onFillCode !== undefined;
   const actions = [
     ...(user
       ? [
@@ -725,6 +759,20 @@ function MatchRow({
           <Button variant={isActive ? "primary" : "outline"} size="sm" onClick={() => onFill(item)}>
             {t("popup.fill")}
           </Button>
+          {code ? (
+            <>
+              <IconButton
+                icon="key"
+                label={t("popup.fillCode")}
+                onClick={() => onFillCode?.(item)}
+              />
+              <IconButton
+                icon="copy"
+                label={t("popup.copyCode")}
+                onClick={() => onCopy(item, "totp")}
+              />
+            </>
+          ) : null}
         </>
       ) : (
         <>
@@ -750,12 +798,64 @@ function MatchRow({
           trigger={<Icon name="more" size={14} />}
           triggerClassName="inline-flex size-6 items-center justify-center rounded-6 text-fg-muted hover:bg-inset hover:text-fg"
           align="end"
-          sections={[{ items: actions }]}
-          onSelect={(id) =>
-            onCopy(item, id === "username" ? "username" : id === "totp" ? "totp" : "password")
-          }
+          sections={[
+            { items: actions },
+            ...(onAskDelete
+              ? [
+                  {
+                    items: [
+                      {
+                        kind: "action" as const,
+                        id: "delete",
+                        label: t("popup.delete"),
+                        icon: "trash" as const,
+                      },
+                    ],
+                  },
+                ]
+              : []),
+          ]}
+          onSelect={(id) => {
+            if (id === "delete") onAskDelete?.(item);
+            else onCopy(item, id === "username" ? "username" : id === "totp" ? "totp" : "password");
+          }}
         />
       ) : null}
+    </div>
+  );
+}
+
+/** Delete this login? It goes from Lockra and the synced devices, only on 「删除」; the focus
+ *  starts on 「取消」. */
+function DeleteConfirm({
+  name,
+  onDelete,
+  onCancel,
+}: {
+  name: string;
+  onDelete: () => void;
+  onCancel: () => void;
+}) {
+  const t = useText();
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => box.current?.querySelectorAll("button")[1]?.focus(), []);
+  return (
+    <div
+      ref={box}
+      className="flex flex-col gap-2 rounded-6 bg-inset px-2.5 py-2"
+      data-testid="delete-confirm">
+      <p className="truncate text-[13px] font-semibold" title={name}>
+        {t("popup.deleteTitle", { name })}
+      </p>
+      <p className="text-[12px] leading-snug text-fg-muted">{t("popup.deleteNote")}</p>
+      <div className="flex gap-2">
+        <Button variant="danger" size="sm" icon="trash" onClick={onDelete}>
+          {t("popup.deleteConfirm")}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
+          {t("popup.cancel")}
+        </Button>
+      </div>
     </div>
   );
 }
