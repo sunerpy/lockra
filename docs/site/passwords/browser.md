@@ -127,7 +127,7 @@ popup. It lists the site's logins; **Fill** fills one into the page, and ⋯ cop
 password or code. **Search all logins…** finds any login the extension may see: those that match
 the page can be filled, the others only copied.
 
-<StatusTag status="building" /> In the next version, a login with a linked code has two buttons
+<StatusTag status="available" /> From version 0.12.0, a login with a linked code has two buttons
 beside **Fill**: **Fill the code** puts its current code into the page's code field, or, where
 Lockra cannot tell one, into the field you clicked into before opening the popup (never a password
 field); **Copy code** puts it on the clipboard. This is for the pages where the code does not come
@@ -153,7 +153,7 @@ field, Lockra's menu opens above the field instead, or under it when there is no
 list is open, the arrow keys and Esc go to it: Esc closes it, and the arrow keys then move in
 Lockra's menu.
 
-<StatusTag status="building" /> In the next version, a menu of two logins or more has a search box
+<StatusTag status="available" /> From version 0.12.0, a menu of two logins or more has a search box
 at its top: click into it and type part of a login's title, user name or email address, and the
 list keeps the logins that hold it; the arrow keys choose, Enter fills, Esc empties the box and
 then closes the menu. What you type there stays in Lockra's menu: the page cannot read it. A long
@@ -175,7 +175,7 @@ waited for up to a second, and a form whose button stays disabled is not submitt
 
 ### Deleting a login
 
-<StatusTag status="building" /> In the next version, a login can be deleted from the menu by the
+<StatusTag status="available" /> From version 0.12.0, a login can be deleted from the menu by the
 field and from the popup. In the menu, the chosen row shows a delete button at its end (the others
 as the pointer comes); in the popup, it is **Delete…** in the login's ⋯ menu. Either asks first,
 naming the login, with the focus on **Cancel**; only **Delete** deletes it in Lockra, and the menu
@@ -221,7 +221,7 @@ access.
 
 ### A code field on its own
 
-<StatusTag status="building" /> In the next version, Lockra also recognises a code field named for
+<StatusTag status="available" /> From version 0.12.0, Lockra also recognises a code field named for
 an authenticator, or one that takes digits alone, as Google's does after **Try another way**: the
 code goes in there too. And when no login was filled in that tab in the last five minutes (the
 first steps were typed, or the time is up), choosing the code field opens the menu with the site's
@@ -312,7 +312,7 @@ code** for itself ([Protection levels](/passwords/#protection-levels)).
 
 ### Matching the port
 
-<StatusTag status="building" /> In the next version, **Settings › Browser › Autofill** also has
+<StatusTag status="available" /> From version 0.12.0, **Settings › Browser › Autofill** also has
 **Match the port**, off by default. With it on, a login is offered only where the port matches
 too, so the ports of one address keep their own logins: a NAS at `http://192.168.1.10:5000` and a
 router at `http://192.168.1.10`. An address saved without a port matches the scheme's default port
