@@ -88,6 +88,7 @@
     "copy_otp": true,
     "cross_origin_frames": "never",
     "fill_otp": true,
+    "match_port": false,
     "on_page_load": false
   },
   "pushes": {
@@ -368,6 +369,7 @@
           "copy_otp": true,
           "cross_origin_frames": "never",
           "fill_otp": true,
+          "match_port": false,
           "on_page_load": false
         },
         "save": null,
@@ -389,6 +391,7 @@
           "copy_otp": true,
           "cross_origin_frames": "never",
           "fill_otp": true,
+          "match_port": false,
           "on_page_load": false
         },
         "save": {
@@ -424,6 +427,7 @@
           "copy_otp": true,
           "cross_origin_frames": "never",
           "fill_otp": true,
+          "match_port": false,
           "on_page_load": false
         }
       }

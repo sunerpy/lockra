@@ -484,6 +484,7 @@
         "copy_otp": false,
         "cross_origin_frames": "ask",
         "fill_otp": true,
+        "match_port": true,
         "on_page_load": false
       }
     }

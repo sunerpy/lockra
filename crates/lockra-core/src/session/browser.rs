@@ -408,7 +408,7 @@ impl Core {
         let (vault, _) = active(st, session, false)?;
         let never_fill = listed(&vault.data, SiteRuleKind::NeverFill, &frame.frame) || listed(&vault.data, SiteRuleKind::NeverFill, &frame.top);
         let never_save = listed(&vault.data, SiteRuleKind::NeverSave, &frame.frame) || listed(&vault.data, SiteRuleKind::NeverSave, &frame.top);
-        let (level, found) = matches(&vault.data, &frame.frame);
+        let (level, found) = matches(&vault.data, &frame.frame, policy(vault).match_port);
         let summaries: Vec<ItemSummary> =
             found.iter().filter_map(|(id, downgrade)| vault.data.items.iter().find(|i| i.id == *id).map(|i| summary(i, *downgrade, true))).collect();
         let save = (request.purpose == QueryPurpose::Save).then(|| advice(&vault.data, &found, never_save, &request.username, &request.password));
@@ -597,7 +597,7 @@ impl Core {
             if listed(&vault.data, SiteRuleKind::NeverSave, &frame.frame) {
                 return Err(Refusal::NeverSave);
             }
-            let (_, found) = matches(&vault.data, &frame.frame);
+            let (_, found) = matches(&vault.data, &frame.frame, policy(vault).match_port);
             if !found.iter().any(|(id, _)| *id == request.item_id) {
                 return Err(Refusal::NoMatch);
             }
@@ -719,7 +719,8 @@ impl Core {
         let mut guard = self.lock();
         let st = &mut *guard;
         let (vault, _) = active(st, session, false)?;
-        let matching: Vec<(Uuid, bool)> = top.as_ref().map(|top| matches(&vault.data, top).1).unwrap_or_default();
+        let ports = policy(vault).match_port;
+        let matching: Vec<(Uuid, bool)> = top.as_ref().map(|top| matches(&vault.data, top, ports).1).unwrap_or_default();
         let found: Vec<ItemSummary> = if text.is_empty() {
             Vec::new()
         } else {
@@ -888,7 +889,7 @@ impl Core {
         if cross && policy.frames() == FrameRule::Never {
             return Err(Refusal::CrossOrigin);
         }
-        let (_, found) = matches(data, &frame.frame);
+        let (_, found) = matches(data, &frame.frame, policy.match_port);
         let next_step = request.trigger == Trigger::NextStep;
         let (item_id, downgrade) = match request.item_id {
             Some(id) => found.iter().copied().find(|(found, _)| *found == id).ok_or(Refusal::NoMatch)?,

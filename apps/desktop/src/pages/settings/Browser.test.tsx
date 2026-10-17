@@ -310,6 +310,29 @@ describe("Settings › 浏览器", () => {
     expect(pane.getByRole("radio", { name: "从不填充" })).toHaveAttribute("aria-checked", "true");
   });
 
+  it("matches the port too once asked, both ways without proof", async () => {
+    const backend = core({ settings: { run_in_background: true } });
+    await backend.browserEnable(["chrome"]);
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const ports = await pane.findByRole("switch", { name: "匹配端口" });
+    expect(ports).not.toBeChecked();
+    expect(pane.getByText(/同一地址不同端口上的登录项分开填充/)).toBeInTheDocument();
+    await user.click(ports);
+    expect(backend.calls.at(-1)).toEqual({
+      command: "browser_set_policy",
+      policy: expect.objectContaining({ match_port: true }),
+    });
+    expect(await pane.findByRole("switch", { name: "匹配端口" })).toBeChecked();
+    await user.click(ports);
+    expect(backend.calls.at(-1)).toEqual({
+      command: "browser_set_policy",
+      policy: expect.objectContaining({ match_port: false }),
+    });
+    expect(screen.queryByTestId("verify-dialog")).not.toBeInTheDocument();
+  });
+
   it("turns filling as pages load on after its risks and the proof", async () => {
     const backend = core({ settings: { run_in_background: true } });
     await backend.browserEnable(["chrome"]);

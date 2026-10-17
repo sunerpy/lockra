@@ -1100,6 +1100,9 @@ export const zhCN = {
           "填入密码后替你提交表单；登录项关联了验证码时，填入验证码后才提交。只要求用户名的一步不会自动提交。",
         confirmFill: "填充前确认",
         confirmFillHelp: "每次填充前先在网页里确认一次。",
+        matchPort: "匹配端口",
+        matchPortHelp:
+          "网址的端口也要一致：同一地址不同端口上的登录项分开填充。没写端口的网址只匹配默认端口。",
         frames: "其他网站框架里的登录框",
         framesHelp: "登录框在另一个网站的框架里时：从不填充，或先在 Lockra 里询问。",
         frame: { never: "从不填充", ask: "先询问" },

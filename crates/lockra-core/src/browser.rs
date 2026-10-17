@@ -173,6 +173,10 @@ pub struct BrowserPolicy {
     /// Fill as a page loads, without a click (the risky one: docs/security.md).
     #[serde(default)]
     pub on_page_load: bool,
+    /// The port counts too: a login saved for another port of the site (or for none, where the
+    /// page has one) is not offered there, so each port of an address has its own logins.
+    #[serde(default)]
+    pub match_port: bool,
 }
 
 fn yes() -> bool {
@@ -188,6 +192,7 @@ impl Default for BrowserPolicy {
             confirm_fill: false,
             cross_origin_frames: Lenient::Known(FrameRule::Never),
             on_page_load: false,
+            match_port: false,
         }
     }
 }
@@ -1031,11 +1036,11 @@ pub(crate) fn cross_origin(frame: &WebUrl, top: &WebUrl, chain: &[WebUrl]) -> bo
 }
 
 /// The best matches for `page` among the offered logins, the likeliest first: favourites, then the
-/// most recently used, then by title.
-pub(crate) fn matches(data: &VaultData, page: &WebUrl) -> (Option<MatchLevel>, Vec<(Uuid, bool)>) {
+/// most recently used, then by title. `ports`: the policy's [`BrowserPolicy::match_port`].
+pub(crate) fn matches(data: &VaultData, page: &WebUrl, ports: bool) -> (Option<MatchLevel>, Vec<(Uuid, bool)>) {
     let equivalents = equivalents(data);
     let items = data.items.iter().filter(|i| offered(i)).map(|i| (i.id, i.urls.iter().map(|u| SavedUrl { url: &u.url, matching: rule(u.rule()) })));
-    let Some(best) = lockra_autofill::best_matches(page, items, &equivalents) else { return (None, Vec::new()) };
+    let Some(best) = lockra_autofill::best_matches(page, items, &equivalents, ports) else { return (None, Vec::new()) };
     let mut found: Vec<(Uuid, bool)> = best.items.iter().map(|m| (m.item, m.downgrade)).collect();
     found.sort_by_cached_key(|(id, _)| {
         let item = data.items.iter().find(|i| i.id == *id);

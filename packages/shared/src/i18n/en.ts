@@ -1134,6 +1134,9 @@ export const en: Messages = {
           "Submit the form once the password is filled, or the code when the login has a linked one. A step that asks for the user name alone is not submitted.",
         confirmFill: "Confirm before filling",
         confirmFillHelp: "Confirm in the page each time before filling.",
+        matchPort: "Match the port",
+        matchPortHelp:
+          "The port must match too: logins for different ports of one address are filled apart. A URL saved without a port matches the default port only.",
         frames: "Sign-in forms in frames of other sites",
         framesHelp:
           "When the sign-in form is in a frame of another site: never fill it, or ask in Lockra first.",

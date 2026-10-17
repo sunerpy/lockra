@@ -127,7 +127,8 @@ An address typed without `https://` or `http://` is read as `https://`. Lockra a
 domains that share their sign-ins, from a list it ships with, and matches them as one domain. When
 several logins match a page, the extension offers only those that match it most closely: an exact
 address before a beginning or a regular expression, those before a host, and a host before a
-domain.
+domain. <StatusTag status="building" /> In the next version, **Match the port** in Settings ›
+Browser makes the domain rule compare the port too ([Matching the port](/passwords/browser#matching-the-port)).
 
 ## Protection levels
 
