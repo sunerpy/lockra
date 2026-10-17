@@ -473,7 +473,7 @@ impl Core {
                 if frame.cross_origin() {
                     return Err(Refusal::CrossOrigin);
                 }
-                let (_, found) = matches(&vault.data, &frame.frame);
+                let (_, found) = matches(&vault.data, &frame.frame, policy(vault).match_port);
                 if !found.iter().any(|(id, _)| *id == request.item_id) {
                     return Err(Refusal::NoMatch);
                 }
@@ -614,7 +614,7 @@ impl Core {
         if frame.cross_origin() {
             return Err(Refusal::CrossOrigin);
         }
-        let (_, found) = matches(data, &frame.frame);
+        let (_, found) = matches(data, &frame.frame, policy(vault).match_port);
         if !found.iter().any(|(id, _)| *id == request.item_id) {
             return Err(Refusal::NoMatch);
         }
