@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0](https://github.com/sunerpy/lockra/compare/v0.10.1...v0.11.0) (2026-10-17)
+
+
+### Features
+
+* **extension:** 扩展随 Lockra 自动更新，版本落后时在弹窗和设置里提示 ([#166](https://github.com/sunerpy/lockra/issues/166)) ([27fae8a](https://github.com/sunerpy/lockra/commit/27fae8ab134b5bab2c76ecabeb72cdc08fe6e6fe))
+* **sync:** 开始同步时默认用自己的存储，推荐自建中继，并写明外泄后的处理 ([#167](https://github.com/sunerpy/lockra/issues/167)) ([cc87809](https://github.com/sunerpy/lockra/commit/cc87809400425da33470e87b7acefcbefb6fdce4))
+
 ## [0.10.1](https://github.com/sunerpy/lockra/compare/v0.10.0...v0.10.1) (2026-10-17)
 
 
