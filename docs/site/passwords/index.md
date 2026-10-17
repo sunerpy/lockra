@@ -90,7 +90,7 @@ opens it for a login you have. Only the title is required.
   in the key…** takes the key the site shows. The new account is linked as soon as it is added; a
   QR code or an image with several accounts is imported on the codes page instead. After the
   extension fills the password, the linked account's code goes into the page's code field.
-  **Change…** and **Unlink** change it later. <StatusTag status="building" /> In the next version,
+  **Change…** and **Unlink** change it later. <StatusTag status="available" /> From version 0.12.0,
   the login's pane on the right does the same without the form: **Link a code…** in its
   **Code** row, and beside a linked code **Change the code** and **Unlink the code**.
 - **Notes**: treated as a secret, so a login being edited shows them only after you choose
@@ -127,7 +127,7 @@ An address typed without `https://` or `http://` is read as `https://`. Lockra a
 domains that share their sign-ins, from a list it ships with, and matches them as one domain. When
 several logins match a page, the extension offers only those that match it most closely: an exact
 address before a beginning or a regular expression, those before a host, and a host before a
-domain. <StatusTag status="building" /> In the next version, **Match the port** in Settings ›
+domain. <StatusTag status="available" /> From version 0.12.0, **Match the port** in Settings ›
 Browser makes the domain rule compare the port too ([Matching the port](/passwords/browser#matching-the-port)).
 
 ## Protection levels
