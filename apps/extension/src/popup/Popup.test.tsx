@@ -32,6 +32,7 @@ const POLICY = {
   confirm_fill: false,
   cross_origin_frames: "never",
   on_page_load: false,
+  match_port: false,
 };
 
 function state(change: Partial<PopupState> = {}): PopupState {

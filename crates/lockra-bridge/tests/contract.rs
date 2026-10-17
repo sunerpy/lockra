@@ -491,7 +491,8 @@ fn commands() -> Vec<Value> {
         json!({"command": "browser_resume"}),
         json!({"command": "browser_activity_clear"}),
         json!({"command": "browser_set_policy", "policy": {
-            "fill_otp": true, "copy_otp": false, "auto_submit": false, "confirm_fill": true, "cross_origin_frames": "ask", "on_page_load": false
+            "fill_otp": true, "copy_otp": false, "auto_submit": false, "confirm_fill": true, "cross_origin_frames": "ask", "on_page_load": false,
+            "match_port": true
         }, "password": "a new password"}),
     ]
 }

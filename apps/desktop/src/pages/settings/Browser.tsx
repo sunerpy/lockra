@@ -469,24 +469,19 @@ function PausedBanner({ paired }: { paired: PairedView }) {
   );
 }
 
-type PolicySwitch = "fill_otp" | "copy_otp" | "auto_submit" | "confirm_fill";
+type PolicySwitch = "fill_otp" | "copy_otp" | "auto_submit" | "confirm_fill" | "match_port";
+type SwitchWords = "fillOtp" | "copyOtp" | "autoSubmit" | "confirmFill" | "matchPort";
 type PolicyWords =
-  | "fillOtp"
-  | "fillOtpHelp"
-  | "copyOtp"
-  | "copyOtpHelp"
-  | "autoSubmit"
-  | "autoSubmitHelp"
-  | "confirmFill"
-  | "confirmFillHelp"
+  | SwitchWords
+  | `${SwitchWords}Help`
   | "frames"
   | "framesHelp"
   | "onPageLoad"
   | "onPageLoadHelp";
 
-/** The six choices of what the paired extensions may do. A change that lets them do more asks for
+/** The seven choices of what the paired extensions may do. A change that lets them do more asks for
  *  proof first (the core would refuse it without); filling as pages load shows its risks before
- *  that. */
+ *  that. Matching the port only narrows what they get, either way without proof. */
 function Policy({ policy }: { policy: BrowserPolicy }) {
   const t = useT();
   const { backend } = useBackend();
@@ -503,7 +498,7 @@ function Policy({ policy }: { policy: BrowserPolicy }) {
     );
   };
   const p = (key: PolicyWords) => t(`settings.browser.policy.${key}`);
-  const row = (key: PolicySwitch, words: "fillOtp" | "copyOtp" | "autoSubmit" | "confirmFill") => (
+  const row = (key: PolicySwitch, words: SwitchWords) => (
     <StatusRow label={p(words)} help={p(`${words}Help`)}>
       <Toggle
         checked={policy[key]}
@@ -519,6 +514,7 @@ function Policy({ policy }: { policy: BrowserPolicy }) {
         {row("copy_otp", "copyOtp")}
         {row("auto_submit", "autoSubmit")}
         {row("confirm_fill", "confirmFill")}
+        {row("match_port", "matchPort")}
         <StatusRow label={p("frames")} help={p("framesHelp")}>
           <Segmented
             size="sm"

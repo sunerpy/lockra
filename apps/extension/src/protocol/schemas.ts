@@ -187,6 +187,8 @@ export const policySchema = z.object({
   confirm_fill: z.boolean().default(false),
   cross_origin_frames: z.string().default("never"),
   on_page_load: z.boolean().default(false),
+  /** Lockra matches the port too (its decision; an older Lockra sends none). */
+  match_port: z.boolean().default(false),
 });
 export type Policy = z.infer<typeof policySchema>;
 

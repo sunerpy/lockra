@@ -23,6 +23,8 @@ fn the_policy_reads_leniently_and_tells_a_riskier_one() {
     let careful = BrowserPolicy { confirm_fill: true, fill_otp: false, ..base.clone() };
     assert!(careful.riskier(&base), "no confirmation, codes filled again");
     assert!(!careful.riskier(&BrowserPolicy { copy_otp: true, ..careful.clone() }), "copying the code is no more than the user gets anyway");
+    let ports = BrowserPolicy { match_port: true, ..base.clone() };
+    assert!(!base.riskier(&ports) && !ports.riskier(&base), "the port narrows the matches, and without it they are the default's");
 }
 
 #[test]
@@ -91,11 +93,11 @@ fn matches_offer_the_likeliest_login_first() {
     let recent = login("c recent", false, Some(9), Protection::Fill);
     let pinned = login("z pinned", true, None, Protection::Confirm);
     let never = login("a never", false, None, Protection::NoExtension);
-    let (level, found) = matches(&data, &url("https://www.example.com/"));
+    let (level, found) = matches(&data, &url("https://www.example.com/"), false);
     assert_eq!(level, Some(MatchLevel::Domain));
     assert_eq!(found.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [pinned, recent, old]);
     assert!(!found.iter().any(|(id, _)| *id == never));
-    assert_eq!(matches(&data, &url("https://example.org/")), (None, Vec::new()));
+    assert_eq!(matches(&data, &url("https://example.org/"), false), (None, Vec::new()));
 }
 
 #[test]

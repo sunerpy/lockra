@@ -225,6 +225,8 @@ describe("a session", () => {
           confirm_fill: false,
           cross_origin_frames: "never",
           on_page_load: false,
+          // Not in this answer (an older Lockra's): off.
+          match_port: false,
         },
         items: 3,
         paused: false,

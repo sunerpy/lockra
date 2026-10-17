@@ -63,8 +63,10 @@ describe("the policy", () => {
     expect(riskierPolicy(base, { ...base, cross_origin_frames: "ask" })).toBe(true);
   });
 
-  it("not for what lets them do less, nor for copying the code", () => {
+  it("not for what lets them do less, nor for copying the code or matching the port", () => {
     expect(riskierPolicy(base, { ...base, fill_otp: false })).toBe(false);
+    expect(riskierPolicy(base, { ...base, match_port: true })).toBe(false);
+    expect(riskierPolicy({ ...base, match_port: true }, base)).toBe(false);
     expect(riskierPolicy(base, { ...base, confirm_fill: true })).toBe(false);
     expect(riskierPolicy({ ...base, copy_otp: false }, base)).toBe(false);
     expect(riskierPolicy({ ...base, on_page_load: true }, base)).toBe(false);

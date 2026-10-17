@@ -285,6 +285,16 @@ turning on **Fill in codes**, **Submit after filling** or **Fill as pages load**
 device only. Each login can set **Fill as the page loads**, **Submit after filling** and **Fill the
 code** for itself ([Protection levels](/passwords/#protection-levels)).
 
+### Matching the port
+
+<StatusTag status="building" /> In the next version, **Settings › Browser › Autofill** also has
+**Match the port**, off by default. With it on, a login is offered only where the port matches
+too, so the ports of one address keep their own logins: a NAS at `http://192.168.1.10:5000` and a
+router at `http://192.168.1.10`. An address saved without a port matches the scheme's default port
+only (`https://example.com` is not offered on `https://example.com:8443`). The **Host**, **Starts
+with** and **Exact** rules compare the port already, and a **Regex** matches as written. Turning it
+on or off asks for nothing: it only narrows what the extension gets.
+
 ### Filling as pages load
 
 **Fill as pages load** fills a login into a matching page as it opens, without a click. Turning it

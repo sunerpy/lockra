@@ -784,6 +784,8 @@ export const browserPolicySchema = z.object({
   confirm_fill: z.boolean(),
   cross_origin_frames: frameRuleSchema,
   on_page_load: z.boolean(),
+  /** The port counts too: each port of an address has its own logins. */
+  match_port: z.boolean(),
 });
 export type BrowserPolicy = z.infer<typeof browserPolicySchema>;
 

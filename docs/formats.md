@@ -536,9 +536,10 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   ends). As the vault locks, every session ends and the connection hears `{"op": "state",
 "state": "locked"}`.
 - **The policy** (`local.browser.policy`, never in `settings.json`): `fill_otp` and `copy_otp`
-  (on), `auto_submit`, `confirm_fill`, `on_page_load` (off) and `cross_origin_frames` (`never` or
-  `ask`; a value of a later version reads as `never`). A change that lets the extensions do more
-  asks for the master password or the biometric check. `settings.json`'s `browser_integration`
+  (on), `auto_submit`, `confirm_fill`, `on_page_load`, `match_port` (off) and `cross_origin_frames`
+  (`never` or `ask`; a value of a later version reads as `never`). `match_port` makes the domain
+  rule compare the port as well (the scheme's default port is none). A change that lets the
+  extensions do more asks for the master password or the biometric check; `match_port` never does. `settings.json`'s `browser_integration`
   only says whether the shell listens and keeps the browsers' manifests; only the shell changes
   it.
 
