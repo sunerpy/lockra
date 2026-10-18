@@ -1,7 +1,8 @@
 // The content script's work in one frame. It reports what the page shows (a focused field's kind, a
 // submitted form, a first step's user name, a code field) and fills what the background sends; it
 // reads no address (the background takes them from the browser) and decides nothing. It listens to
-// no `window` message and runs only in its isolated world. Pages are scanned on `focusin`; a
+// no `window` message and runs only in its isolated world. Pages are scanned on `focusin`, and once
+// as it starts, for the field the page focused before it listened (`autofocus`); a
 // MutationObserver, at most every 500 ms, runs only while there is something to watch (a typed
 // password, a code field to come, an open menu) and is disconnected otherwise.
 import type {
@@ -124,6 +125,10 @@ export class ContentAgent {
   private features = false;
   private menu: FrameHost | null = null;
   private anchor: HTMLInputElement | null = null;
+  /** The field whose focus the background is being told of: once is enough. */
+  private asking: HTMLInputElement | null = null;
+  /** The fills the background sent, counted: whether a fill as the page loads put anything in. */
+  private fills = 0;
   /** The user moved into the list with an arrow (or the shortcut opened it): Enter is ours. */
   private engaged = false;
   private prompt: FrameHost | null = null;
@@ -209,17 +214,33 @@ export class ContentAgent {
     on(win, "pagehide", () => this.closeAll(), false);
     this.watcher.start();
     if (answer.prompt) this.openPrompt(answer.prompt);
+    // The start may hand the page to a fill of its own: the code of the login just filled, the
+    // password of the step whose user name was, a fill as the page loads.
+    let handed = false;
     if (answer.otp) {
       this.otpUntil = this.options.now() + OTP_FOR_MS;
-      this.lookForOtp();
+      handed = this.lookForOtp();
     }
     if (answer.nextStep) {
       this.stepUntil = this.options.now() + STEP_FOR_MS;
-      this.lookForStep();
+      handed = this.lookForStep() || handed;
     }
+    const fills = this.fills;
     if (answer.pageLoad && findLoginForms(doc, this.options.view).length > 0)
       await this.send({ kind: "content.page_load" });
+    if (!handed && this.fills === fills) this.focusedBefore();
     this.watch();
+  }
+
+  /** The field the page focused before this script listened (`autofocus`, a script as the page
+   *  loaded, all before document_idle and the background's answer): no focusin comes for it, so
+   *  it counts as focused now. In a frame, only while the focus is in the frame: a frame keeps its
+   *  field after the focus went to another. */
+  private focusedBefore(): void {
+    const { doc, win } = this.options;
+    const field = deepActive(doc);
+    if (!isFillable(field) || (win !== win.top && !doc.hasFocus())) return;
+    void this.focused(field, false);
   }
 
   stop(): void {
@@ -256,7 +277,7 @@ export class ContentAgent {
   }
 
   private async focused(field: HTMLInputElement, again: boolean): Promise<void> {
-    if (!again && this.anchor === field && this.menu) return;
+    if (!again && (this.asking === field || (this.anchor === field && this.menu))) return;
     const scan = scanField(field, this.options.view);
     // A sign-up form's generator belongs under its new password, not its user name.
     if (scan.kind === "none" || (scan.kind === "signup" && !scan.newPasswords.includes(field))) {
@@ -265,7 +286,9 @@ export class ContentAgent {
     }
     this.watch();
     const message = this.focusMessage(scan, again);
+    this.asking = field;
     const answer = await this.send(message);
+    if (this.asking === field) this.asking = null;
     const token = tokenOf(answer);
     if (deepActive(this.options.doc) !== field) return;
     if (token) {
@@ -475,6 +498,7 @@ export class ContentAgent {
     const scan = field ? scanField(field, view) : findLoginForms(this.options.doc, view)[0];
     if (!scan) return { filled: 0, password: false, code: false };
     const result = fillForm(scan, values, view);
+    if (result.filled > 0) this.fills += 1;
     const now = this.options.now();
     if (result.password) this.stepUntil = 0;
     // A code's page asks for no password after it.
@@ -504,27 +528,29 @@ export class ContentAgent {
 
   // ---- watching the page ------------------------------------------------------------------------
 
-  private lookForOtp(): void {
+  /** Whether the page shows the code field now (the background is asked for the code). */
+  private lookForOtp(): boolean {
     if (this.options.now() >= this.otpUntil) {
       this.otpUntil = 0;
-      return;
+      return false;
     }
-    if (findOtp(this.options.doc, this.options.view)) {
-      this.otpUntil = 0;
-      void this.send({ kind: "content.otp" });
-    }
+    if (!findOtp(this.options.doc, this.options.view)) return false;
+    this.otpUntil = 0;
+    void this.send({ kind: "content.otp" });
+    return true;
   }
 
-  /** The next step of a sign-in: a form with a password shows (asked for once). */
-  private lookForStep(): void {
+  /** The next step of a sign-in: whether a form with a password shows now (the background is
+   *  asked to fill it, once). */
+  private lookForStep(): boolean {
     if (this.options.now() >= this.stepUntil) {
       this.stepUntil = 0;
-      return;
+      return false;
     }
-    if (findLoginForms(this.options.doc, this.options.view).length > 0) {
-      this.stepUntil = 0;
-      void this.send({ kind: "content.next_step" });
-    }
+    if (findLoginForms(this.options.doc, this.options.view).length === 0) return false;
+    this.stepUntil = 0;
+    void this.send({ kind: "content.next_step" });
+    return true;
   }
 
   /** What the observer still has to watch for. */

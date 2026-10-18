@@ -153,6 +153,10 @@ field, Lockra's menu opens above the field instead, or under it when there is no
 list is open, the arrow keys and Esc go to it: Esc closes it, and the arrow keys then move in
 Lockra's menu.
 
+<StatusTag status="building" /> Some sign-in pages put the cursor in their field by themselves as
+they open (a router's, a NAS's or qBittorrent's, for example). The menu opens there too, without
+a click elsewhere and back.
+
 <StatusTag status="available" /> From version 0.12.0, a menu of two logins or more has a search box
 at its top: click into it and type part of a login's title, user name or email address, and the
 list keeps the logins that hold it; the arrow keys choose, Enter fills, Esc empties the box and
