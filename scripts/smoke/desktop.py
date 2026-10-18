@@ -415,6 +415,30 @@ class Smoke:
         self.settings(quick_access_shortcut=None, run_in_background=False)
         until("no shortcut", lambda: quick() == {"shortcut": None, "error": None})
 
+    def login_entry(self):
+        """Settings › 通用 › 登录时启动 Lockra writes the desktop's own autostart entry, which starts
+        this program with `--autostart` (the run's XDG_CONFIG_HOME keeps it in the run's folder);
+        the shell script starts Lockra from it afterwards, as the desktop would at login."""
+        web = self.web
+        entry = os.path.join(self.env["XDG_CONFIG_HOME"], "autostart", "lockra-autostart.desktop")
+        self.focus()
+        self.x("key", "ctrl+comma")
+        switch = web.wait('[data-testid="launch-at-login"] [role="switch"]')
+        checked = lambda: web.run("return document.querySelector('[data-testid=\"launch-at-login\"] [role=\"switch\"]')?.getAttribute('aria-checked')")  # noqa: E731
+        if checked() == "true":
+            sys.exit("smoke: Lockra already started at login before it was asked to")
+        web.click(switch)
+        until("the login entry written", lambda: os.path.isfile(entry))
+        with open(entry, encoding="utf-8") as f:
+            text = f.read()
+        # The entry names the binary as the system resolves it (`current_exe`).
+        if f"\nExec={os.path.realpath(self.args.app)} --autostart\n" not in text:
+            sys.exit(f"smoke: the login entry does not start this program: {text}")
+        until("the switch on", lambda: checked() == "true")
+        self.x("key", "Escape")
+        web.gone('[data-testid="settings-content"]')
+        print("smoke: 登录时启动 Lockra wrote the desktop's autostart entry for this program")
+
     def settings(self, **patch):
         state = self.web.invoke({"command": "app_state"})
         self.web.invoke({"command": "settings_set", "settings": {**state["settings"], **patch}})
@@ -555,6 +579,7 @@ class Smoke:
         print("smoke: a login's password, copied from the list, is on the X clipboard")
         self.browser_channel()
         self.quick_search()
+        self.login_entry()
         self.nav("验证码")
         self.page("codes")
         for width, height in SIZES:

@@ -1549,6 +1549,8 @@ export const SHELL_COMMAND_NAMES = [
   "browser_extension_reveal",
   "browser_extension_download",
   "quick_access_done",
+  "autostart_get",
+  "autostart_set",
 ] as const;
 
 /** The phone shell's own Tauri commands (lockra-bridge `PHONE_COMMANDS`). */

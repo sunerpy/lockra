@@ -62,3 +62,17 @@ Lockra is locked.
 
 Closing the window quits Lockra, unless **Settings › Browser › Keep running after the window
 closes** is on: then the window hides and Lockra stays in the tray.
+
+## Starting at login
+
+<StatusTag status="building" /> In the next version, **Settings › General › Start Lockra at login**
+starts Lockra when you sign in to the computer, so the browser extension and the quick search are
+ready. It is the system's own entry, for you alone: a value under
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows (Task Manager's startup apps list it),
+a LaunchAgent in `~/Library/LaunchAgents` on macOS (**System Settings › General › Login Items**
+lists it), an autostart entry in `~/.config/autostart` on Linux. Turned off in Task Manager or in
+the desktop's startup applications, the switch reads as off too; turned off under macOS's Login
+Items, Lockra no longer starts, though the switch stays on. With **Settings › Browser › Keep
+running after the window closes** on, Lockra started at login stays in the tray and opens no window;
+otherwise it opens the window. Each start writes an entry that is on again, so it follows Lockra
+when the program moves (an AppImage, say).

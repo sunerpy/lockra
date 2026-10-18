@@ -8,6 +8,7 @@
 //! drives the real command layer on `tauri::test::MockRuntime` without a window.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+pub mod autostart;
 pub mod background;
 pub mod biometrics;
 pub mod browser;
@@ -56,7 +57,7 @@ pub const DEV_BIOMETRIC_ENV: &str = "LOCKRA_DEV_BIOMETRIC";
 pub const MAIN_WINDOW: &str = "main";
 
 /// The shell's Tauri commands, in registration order (lockra-bridge `SHELL_COMMANDS`).
-pub const COMMANDS: [&str; 21] = [
+pub const COMMANDS: [&str; 23] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -78,6 +79,8 @@ pub const COMMANDS: [&str; 21] = [
     "browser_extension_reveal",
     "browser_extension_download",
     "quick_access_done",
+    "autostart_get",
+    "autostart_set",
 ];
 
 /// `true` only when a debug build was explicitly asked for the in-memory keychain.
@@ -123,6 +126,9 @@ pub struct ShellOptions {
     /// Register the quick search's shortcut with the system (off in the mock-runtime tests, which
     /// then report every shortcut unavailable, as a Wayland desktop does).
     pub global_shortcuts: bool,
+    /// Where the login entry goes (`run`: this user's, `autostart::Autostart::current`); none keeps
+    /// none, as the mock-runtime tests do unless they give their own folders.
+    pub autostart: Option<autostart::Autostart>,
 }
 
 impl Default for ShellOptions {
@@ -140,6 +146,7 @@ impl Default for ShellOptions {
             browser_socket: None,
             tray: true,
             global_shortcuts: true,
+            autostart: None,
         }
     }
 }
@@ -472,9 +479,9 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             // `lockra-desktop --palette` (bound in the desktop where apps get no global shortcut):
             // the window with the command palette.
             quick_access::Start::Palette => quick_access::summon(app),
-            // Started again for the browser (the host's `start_app`): Lockra runs already, and
-            // the window stays as it is.
-            quick_access::Start::Browser => {}
+            // Started again for the browser (the host's `start_app`), or at login: Lockra runs
+            // already, and the window stays as it is.
+            quick_access::Start::Browser | quick_access::Start::Login => {}
             quick_access::Start::Window => background::show_main(app),
         }))
     } else {
@@ -504,7 +511,9 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             browser::service::browser_extension_copy,
             browser::service::browser_extension_reveal,
             browser::service::browser_extension_download,
-            quick_access::quick_access_done
+            quick_access::quick_access_done,
+            autostart::autostart_get,
+            autostart::autostart_set
         ])
         .setup(move |app| {
             let data_dir = match options.data_dir.clone() {
@@ -538,6 +547,15 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
             let core = tauri::async_runtime::block_on(async move { Core::start(config, ports) });
             app.manage(core.clone());
             app.manage(quick_access::QuickAccess::new(options.global_shortcuts));
+            // The login entry, written again where it is on: the program may have moved.
+            if let Some(entry) = options.autostart.clone() {
+                tauri::async_runtime::spawn_blocking(move || {
+                    if let Err(error) = entry.refresh() {
+                        tracing::warn!(%error, "the login entry could not be written again");
+                    }
+                });
+            }
+            app.manage(autostart::AutostartState(options.autostart.clone()));
             let service = browser::service::BrowserService::new(socket);
             app.manage(service.clone());
             tauri::async_runtime::spawn(browser::service::resume(core.clone(), service));
@@ -558,11 +576,14 @@ pub fn build_app<R: Runtime>(builder: tauri::Builder<R>, options: ShellOptions) 
                 watch_close(&window, core.clone());
                 watch_drops(&window, core);
                 // Declared invisible so it never flashes white before the theme is applied. Started
-                // for the browser while Lockra runs in the background, it stays in the tray;
-                // started with `--palette`, the quick search asks the core for the palette (which
-                // the vault, locked at a start, keeps shut: the unlock screen shows).
+                // for the browser or at login while Lockra runs in the background, it stays in the
+                // tray; started with `--palette`, the quick search asks the core for the palette
+                // (which the vault, locked at a start, keeps shut: the unlock screen shows).
                 let start = quick_access::start_reason(&std::env::args_os().collect::<Vec<_>>());
-                if !(start == quick_access::Start::Browser && run_in_background) {
+                let tray_only = matches!(start, quick_access::Start::Browser | quick_access::Start::Login);
+                if tray_only && run_in_background {
+                    tracing::info!(?start, "started in the tray, the window hidden");
+                } else {
                     let _ = window.show();
                     let _ = window.set_focus();
                 }
@@ -598,7 +619,14 @@ pub fn run() {
     if host {
         std::process::exit(browser::host::run_host());
     }
-    let options = ShellOptions { plugin_updates: true, ..ShellOptions::default() };
+    let autostart = match autostart::Autostart::current() {
+        Ok(entry) => Some(entry),
+        Err(error) => {
+            tracing::warn!(%error, "no login entry on this system");
+            None
+        }
+    };
+    let options = ShellOptions { plugin_updates: true, autostart, ..ShellOptions::default() };
     #[cfg_attr(not(windows), allow(unused_mut, reason = "only Windows adjusts the context"))]
     let mut context = tauri::generate_context!();
     // Windows: the update's installer runs silently when this copy came from the NSIS installer,

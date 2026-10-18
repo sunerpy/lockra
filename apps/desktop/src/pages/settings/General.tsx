@@ -14,17 +14,19 @@ import {
   ShortcutRecorder,
   StatusRow,
   Toggle,
+  useBackend,
   useT,
   useUiState,
 } from "@lockra/ui";
+import { useEffect, useState } from "react";
 import { useDispatch } from "../../app/dispatch";
 import { useUpdateSettings } from "../../app/settings";
 import { UpdateControls } from "../../features/update/UpdateControls";
 
 /** Settings › General: the interface language, the order of the codes and the group pinned at the
  *  top (this device's, kept in the vault), the quick search's shortcut where password management is
- *  offered, and automatic updates with the updater's status and its one action (as Voltip's 通用
- *  pane has them). */
+ *  offered, starting at login, and automatic updates with the updater's status and its one action
+ *  (as Voltip's 通用 pane has them). */
 export function General() {
   const t = useT();
   const { settings, update: updater, entries, pinned_group: pinned, features } = useUiState();
@@ -65,6 +67,7 @@ export function General() {
           />
         </StatusRow>
         {features.passwords && <QuickAccessRow />}
+        <LaunchAtLoginRow />
         <StatusRow
           label={t("settings.general.autoUpdate")}
           help={t("settings.general.autoUpdateHelp")}
@@ -81,6 +84,59 @@ export function General() {
         </div>
       </SettingsRows>
     </SettingsPane>
+  );
+}
+
+/** 登录时启动 Lockra: the system's own login entry (Windows' Run value, a macOS LaunchAgent, an XDG
+ *  autostart entry), read from the shell as the pane opens, so what the user turned off in the
+ *  system's own list shows as off; no row where the build keeps none. Such a start stays in the
+ *  tray while Lockra runs in the background (src-tauri/src/autostart.rs). */
+function LaunchAtLoginRow() {
+  const t = useT();
+  const { backend } = useBackend();
+  const { features } = useUiState();
+  const [on, setOn] = useState<boolean | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    backend.launchAtLogin().then(
+      (value) => live && setOn(value),
+      () => live && setOn(null),
+    );
+    return () => {
+      live = false;
+    };
+  }, [backend]);
+  if (on === null) return null;
+  const turn = async (next: boolean) => {
+    setFailed(false);
+    try {
+      setOn(await backend.setLaunchAtLogin(next));
+    } catch {
+      setFailed(true);
+    }
+  };
+  const label = t("settings.general.launchAtLogin");
+  return (
+    <StatusRow
+      label={label}
+      help={
+        <>
+          {t(
+            features.passwords
+              ? "settings.general.launchAtLoginHelp"
+              : "settings.general.launchAtLoginHelpPlain",
+          )}
+          {failed && (
+            <span className="mt-2 block text-danger" data-testid="launch-at-login-error">
+              {t("settings.general.launchAtLoginFailed")}
+            </span>
+          )}
+        </>
+      }
+      data-testid="launch-at-login">
+      <Toggle checked={on} onChange={(next) => void turn(next)} ariaLabel={label} />
+    </StatusRow>
   );
 }
 
