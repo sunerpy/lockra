@@ -86,6 +86,11 @@ export interface Backend {
   /** The extension's self-install package of this version in the system's browser, for loading by
    *  hand. `null` once a browser opened it, else its address, to show (none opened it). */
   browserExtensionDownload(): Promise<string | null>;
+  /** Whether Lockra starts at login (the desktop's): the system's own entry, read each time;
+   *  `null` where this build keeps none. */
+  launchAtLogin(): Promise<boolean | null>;
+  /** Start Lockra at login, or no longer: whether it now does. */
+  setLaunchAtLogin(on: boolean): Promise<boolean>;
   /** The command palette the quick search opened (`open_palette`) is closed (the desktop's):
    *  after a copy from it (`copied`), the window goes back where it was, hidden again if the quick
    *  search had brought it up. */

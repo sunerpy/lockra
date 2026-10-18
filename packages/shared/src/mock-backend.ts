@@ -136,6 +136,8 @@ export interface MockOptions {
   extensionFolder?: ExtensionFolder | null;
   /** A browser opens the extension's package (the default), or none does. */
   extensionDownloadOpens?: boolean;
+  /** Lockra starts at login (default off); `null`: a build that keeps no login entry (the phone's). */
+  launchAtLogin?: boolean | null;
 }
 
 /** A login of the mock: its view and its secrets. */
@@ -855,6 +857,7 @@ export class MockBackend implements Backend {
   private manifests = new Set<BrowserId>();
   private extensionFolder: ExtensionFolder | null;
   private extensionDownloadOpens: boolean;
+  private launchesAtLogin: boolean | null;
   /** How often the folder's path went to the clipboard, the file manager showed it and a browser
    *  was asked for the package, for tests. */
   extensionCopies = 0;
@@ -883,6 +886,7 @@ export class MockBackend implements Backend {
     this.passwords = options.passwords ?? false;
     this.items = options.items ?? [];
     this.extensionDownloadOpens = options.extensionDownloadOpens ?? true;
+    this.launchesAtLogin = options.launchAtLogin === undefined ? false : options.launchAtLogin;
     this.extensionFolder =
       options.extensionFolder === undefined
         ? { path: MOCK_EXTENSION_FOLDER, version: MOCK_APP_VERSION, ready: true }
@@ -1217,6 +1221,17 @@ export class MockBackend implements Backend {
   async browserStatus(): Promise<BrowserStatus[]> {
     this.requireBrowserShell();
     return this.browserStatuses();
+  }
+
+  async launchAtLogin(): Promise<boolean | null> {
+    return this.state.platform === "android" ? null : this.launchesAtLogin;
+  }
+
+  async setLaunchAtLogin(on: boolean): Promise<boolean> {
+    if (this.state.platform === "android" || this.launchesAtLogin === null)
+      throw new LockraError("io_failed");
+    this.launchesAtLogin = on;
+    return on;
   }
 
   async browserExtension(): Promise<ExtensionFolder | null> {

@@ -12,6 +12,8 @@ use lockra_core::KdfCost;
 use lockra_core::fakes::{FakeClipboard, FakeTransport, FakeUpdater};
 use lockra_core::ports::{MemorySecretStore, SyncTransport, Updater};
 use lockra_core::ui::{BiometricKind, InstallMethod, Notice, UiEvent};
+use lockra_desktop_lib::autostart::Autostart;
+use lockra_desktop_lib::browser::manifest::System;
 use lockra_desktop_lib::{COMMANDS, ShellOptions, build_app, dev_biometric_requested, dev_memory_store_requested, quick_access};
 use serde_json::{Value, json};
 use tauri::ipc::{CallbackFn, InvokeBody};
@@ -56,6 +58,15 @@ fn shell_on(updater: Option<Arc<dyn Updater>>, sync: Option<Arc<dyn SyncTranspor
         browser_socket: Some(dir.path().join("run").join("browser.sock")),
         tray: false,
         global_shortcuts: false,
+        // A login entry in the test's own folders (the XDG kind, files alone, on every system).
+        autostart: Some(Autostart {
+            system: System::Linux,
+            home: dir.path().join("home"),
+            config: dir.path().join("xdg"),
+            program: "/opt/lockra/lockra-desktop".into(),
+            #[cfg(windows)]
+            registry_root: None,
+        }),
     };
     let mut app = build_app(mock_builder(), options).build(mock_context(noop_assets())).unwrap();
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default()).build().unwrap();
@@ -353,4 +364,16 @@ fn only_a_debug_build_may_stand_in_for_touch_id_or_windows_hello() {
     assert_eq!(dev_biometric_requested(Some("windows_hello"), false), None);
     assert_eq!(dev_biometric_requested(Some("face"), true), None);
     assert_eq!(dev_biometric_requested(None, true), None);
+}
+
+#[test]
+fn starting_at_login_is_turned_on_and_off_in_the_system_s_own_entry() {
+    let shell = shell();
+    assert_eq!(shell.invoke("autostart_get", json!({})).unwrap(), json!(false));
+    assert_eq!(shell.invoke("autostart_set", json!({ "on": true })).unwrap(), json!(true));
+    let entry = std::fs::read_to_string(shell._dir.path().join("xdg/autostart/lockra-autostart.desktop")).unwrap();
+    assert!(entry.contains("\nExec=/opt/lockra/lockra-desktop --autostart\n"), "{entry}");
+    assert_eq!(shell.invoke("autostart_get", json!({})).unwrap(), json!(true));
+    assert_eq!(shell.invoke("autostart_set", json!({ "on": false })).unwrap(), json!(false));
+    assert!(!shell._dir.path().join("xdg/autostart/lockra-autostart.desktop").exists());
 }

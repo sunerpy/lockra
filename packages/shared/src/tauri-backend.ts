@@ -245,6 +245,17 @@ export class TauriBackend implements Backend {
       .parse(await this.call("browser_extension_download"));
   }
 
+  async launchAtLogin(): Promise<boolean | null> {
+    return z
+      .boolean()
+      .nullable()
+      .parse(await this.call("autostart_get"));
+  }
+
+  async setLaunchAtLogin(on: boolean): Promise<boolean> {
+    return z.boolean().parse(await this.call("autostart_set", { on }));
+  }
+
   async quickAccessDone(copied: boolean): Promise<void> {
     await this.call("quick_access_done", { copied });
   }
