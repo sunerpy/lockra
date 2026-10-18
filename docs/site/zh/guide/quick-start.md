@@ -44,4 +44,4 @@ Lockra 在电脑上运行时，托盘中有它的挂锁图标：Windows 上位�
 
 ## 登录时启动
 
-<StatusTag status="building" /> 下一个版本起，「设置 › 通用 › 登录时启动 Lockra」会在你登录电脑后自动运行 Lockra，浏览器扩展和快捷搜索随时可用。它用的是系统自带的启动项，只对当前用户生效：Windows 上是 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 下的一项（任务管理器的「启动应用」中能看到）；macOS 上是 `~/Library/LaunchAgents` 中的一个 LaunchAgent（「系统设置 › 通用 › 登录项」中会列出）；Linux 上是 `~/.config/autostart` 中的自动启动项。在任务管理器或桌面环境的「启动应用程序」中关闭后，这个开关也显示为关闭；在 macOS 的「登录项」中关闭后，Lockra 不再自动运行，但这个开关仍显示为开启。开启「设置 › 浏览器 › 关闭窗口后继续运行」时，登录后 Lockra 只在托盘中运行，不打开窗口；未开启时会打开窗口。每次启动时，Lockra 都会重写已开启的启动项，程序位置改变后（例如移动了 AppImage）它仍然有效。
+<StatusTag status="available" /> 自 0.13.0 版起，「设置 › 通用 › 登录时启动 Lockra」会在你登录电脑后自动运行 Lockra，浏览器扩展和快捷搜索随时可用。它用的是系统自带的启动项，只对当前用户生效：Windows 上是 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 下的一项（任务管理器的「启动应用」中能看到）；macOS 上是 `~/Library/LaunchAgents` 中的一个 LaunchAgent（「系统设置 › 通用 › 登录项」中会列出）；Linux 上是 `~/.config/autostart` 中的自动启动项。在任务管理器或桌面环境的「启动应用程序」中关闭后，这个开关也显示为关闭；在 macOS 的「登录项」中关闭后，Lockra 不再自动运行，但这个开关仍显示为开启。开启「设置 › 浏览器 › 关闭窗口后继续运行」时，登录后 Lockra 只在托盘中运行，不打开窗口；未开启时会打开窗口。每次启动时，Lockra 都会重写已开启的启动项，程序位置改变后（例如移动了 AppImage）它仍然有效。
