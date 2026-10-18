@@ -65,7 +65,7 @@ closes** is on: then the window hides and Lockra stays in the tray.
 
 ## Starting at login
 
-<StatusTag status="building" /> In the next version, **Settings › General › Start Lockra at login**
+<StatusTag status="available" /> From version 0.13.0, **Settings › General › Start Lockra at login**
 starts Lockra when you sign in to the computer, so the browser extension and the quick search are
 ready. It is the system's own entry, for you alone: a value under
 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` on Windows (Task Manager's startup apps list it),

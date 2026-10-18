@@ -120,7 +120,8 @@ made-up site; a sharper version plays on the [website](https://firlab.app/lockra
 - **Interface**: eight themes (Clear sky by default, which follows the system's light or dark
   mode), eight accents, a list or cards, Chinese and English, a command palette (`Ctrl K`) and
   keyboard shortcuts throughout. On a computer, a tray icon (from 0.10.0) opens the window, the
-  quick search, the settings and the update check, and locks the vault.
+  quick search, the settings and the update check, and locks the vault; from 0.13.0 Lockra can
+  start at login, in the tray while it runs in the background.
 
 ## Screenshots
 

@@ -364,7 +364,7 @@ macOS so does Lockra's icon in the Dock; its menu has **Open Lockra**, **Quick s
 ([Quick search from anywhere](/passwords/#quick-search-from-anywhere)), **Lock**, **Settings…**,
 **Check for updates…** and **Quit Lockra**. A pairing or a fill that waits for you brings the
 window up by itself. With the setting off, closing the window quits Lockra, as before.
-<StatusTag status="building" /> In the next version, with **Start Lockra at login** on as well
+<StatusTag status="available" /> From version 0.13.0, with **Start Lockra at login** on as well
 ([Starting at login](/guide/quick-start#starting-at-login)), Lockra is there for the extension from
 the moment you sign in, in the tray.
 
