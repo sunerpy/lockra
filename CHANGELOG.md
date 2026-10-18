@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.13.0](https://github.com/sunerpy/lockra/compare/v0.12.0...v0.13.0) (2026-10-18)
+
+
+### Features
+
+* **desktop:** 新增「登录时启动 Lockra」，用系统自带的启动项，后台运行时只留在托盘 ([#181](https://github.com/sunerpy/lockra/issues/181)) ([8f7756a](https://github.com/sunerpy/lockra/commit/8f7756a5ec49fc320584628809b314fb6ea6e189))
+
+
+### Bug Fixes
+
+* **mobile:** 离开应用时由原生层锁定保险库，不再只靠 WebView 的页面事件 ([#179](https://github.com/sunerpy/lockra/issues/179)) ([9540432](https://github.com/sunerpy/lockra/commit/9540432b572e27df0ba01c3e5fde60ac8b39dfd2))
+
 ## [0.12.0](https://github.com/sunerpy/lockra/compare/v0.11.1...v0.12.0) (2026-10-17)
 
 
