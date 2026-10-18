@@ -6,8 +6,8 @@ The real app (tauri-driver) gets a vault, two logins (login.test with a linked c
 the browser integration on; the browser (chromedriver or geckodriver) loads the development build of
 the extension, with site access granted up front (a copy whose manifest asks for <all_urls>
 outright: the request flow and its prompt are the unit tests' and the manual matrix's). Then:
-pairing, the code compared on both sides and approved in the app; filling from the inline menu with
-the keyboard; the linked code on the next page, in one field and in six; the extension's shortcut
+pairing, the code compared on both sides and approved in the app; the menu on a field the page
+focused itself as it loaded (`autofocus`); filling from the inline menu with the keyboard; the linked code on the next page, in one field and in six; the extension's shortcut
 on a sign-in in two pages (a real X key, which no WebDriver key reaches), the password page filled
 by itself as the fill's next step; the policy's limits (an
 HTTP page for an HTTPS login, a frame of another site); the pages that try to hijack a click (made
@@ -334,6 +334,18 @@ class Smoke:
         until("the popup to say Lockra is unlocked", lambda: self.popup_state() == "Unlocked", 60)
         print(f"smoke: paired; both sides showed {code}")
 
+    def autofocus(self):
+        """A sign-in page that focuses its user name field itself as it loads (`autofocus`, as
+        qBittorrent's does), before the content script runs: the menu opens with no click and no
+        focus of the test's."""
+        self.web.go(self.url("login.test", "autofocus.html"))
+        until("the page's own focus on its user name field", lambda: self.web.run("return document.activeElement?.id") == "username", 15)
+        until("the inline menu on the field the page focused", self.web.menu_open, 15)
+        self.settle()
+        self.web.keys(ESCAPE)
+        until("the menu to close", lambda: not self.web.menu_open(), 10)
+        print("smoke: a field the page focused itself got the menu, with no click")
+
     def fill_from_menu(self):
         """The login page: the field's focus opens the menu, ↓ and Enter fill the login."""
         self.web.go(self.url("login.test", "login.html"))
@@ -452,10 +464,10 @@ class Smoke:
             nonlocal since
             if self.web.menu_open():
                 return True
-            # The content script may start after the field was focused (it runs at document_idle and
-            # asks the background first): after a second with no menu at all, focus it again, as a
-            # user clicking once more would. A menu on its way is left alone (another focus would
-            # make another).
+            # The content script takes a field focused before it started as focused (the autofocus
+            # step checks that alone); a menu that still has not come after a second gets the field
+            # focused again, as a user clicking once more would. A menu on its way is left alone
+            # (another focus would make another).
             if time.monotonic() - since > 1.0 and not self.web.run("return !!document.querySelector('[popover]:popover-open')"):
                 self.web.run("document.activeElement?.blur(); document.querySelector(arguments[0]).focus()", selector)
                 since = time.monotonic()
@@ -745,6 +757,7 @@ class Smoke:
             self.start_app()
             self.start_browser()
             self.pair()
+            self.autofocus()
             self.fill_from_menu()
             self.otp_follows()
             self.otp_after_switch()

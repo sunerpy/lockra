@@ -39,9 +39,19 @@ function setup(
   start: Partial<StartAnswer> = {},
   focusToken: string | null = "a".repeat(32),
   focus?: (message: Extract<ContentMessage, { kind: "content.focus" }>) => unknown,
+  more: {
+    /** The frame's window (the page's own by default). */
+    win?: Window;
+    /** What the background does for a fill as the page loads, before it answers. */
+    pageLoad?: (deliver: (message: unknown) => Promise<unknown> | undefined) => Promise<unknown>;
+  } = {},
 ) {
   const sent: ContentMessage[] = [];
   let listener: ((message: unknown) => Promise<unknown> | undefined) | null = null;
+  const deliver = (message: unknown) => {
+    if (!listener) throw new Error("no listener");
+    return listener(message);
+  };
   const runtime: Runtime = {
     send: async (message) => {
       sent.push(message);
@@ -49,6 +59,7 @@ function setup(
         return { features: true, otp: false, pageLoad: false, prompt: null, ...start };
       if (message.kind === "content.focus")
         return focus ? focus(message) : { token: message.form === "otp" ? null : focusToken };
+      if (message.kind === "content.page_load") await more.pageLoad?.(deliver);
       return null;
     },
     listen: (handler) => {
@@ -58,7 +69,7 @@ function setup(
   };
   const agent = new ContentAgent({
     doc: document,
-    win: window,
+    win: more.win ?? window,
     runtime,
     view,
     now: () => now,
@@ -66,14 +77,7 @@ function setup(
     trusted: () => true,
   });
   agents.push(agent);
-  return {
-    agent,
-    sent,
-    deliver: (message: unknown) => {
-      if (!listener) throw new Error("no listener");
-      return listener(message);
-    },
-  };
+  return { agent, sent, deliver };
 }
 
 function input(id: string): HTMLInputElement {
@@ -141,6 +145,96 @@ describe("the inline menu", () => {
     await vi.waitFor(() => expect(hosts()).toHaveLength(0));
     expect(sent.at(-1)).toEqual({ kind: "content.closed", token: "a".repeat(32) });
     agent.stop();
+  });
+
+  it("regression: opens on a field the page focused before the script listened (autofocus)", async () => {
+    // qBittorrent's sign-in (2026-10-18): `autofocus` on the user name, focused before the
+    // script runs (document_idle) and asks the background; no focusin comes after.
+    document.body.innerHTML = LOGIN;
+    input("user").focus();
+    const { agent, sent } = setup();
+    await agent.start();
+    await vi.waitFor(() => expect(hosts()).toHaveLength(1));
+    expect(sent.filter((m) => m.kind === "content.focus")).toEqual([
+      { kind: "content.focus", form: "login" },
+    ]);
+    agent.stop();
+  });
+
+  it("leaves a field focused before it started to the fill the start hands it to", async () => {
+    // The code of the login just filled goes in by itself: a menu would fill it a second time.
+    document.body.innerHTML = `<input id="code" autocomplete="one-time-code">`;
+    input("code").focus();
+    const otp = setup({ otp: true });
+    await otp.agent.start();
+    expect(otp.sent.some((m) => m.kind === "content.otp")).toBe(true);
+    expect(otp.sent.some((m) => m.kind === "content.focus")).toBe(false);
+    otp.agent.stop();
+    // The password of the step whose user name was filled goes in by itself too.
+    document.body.innerHTML = LOGIN;
+    input("pass").focus();
+    const step = setup({ nextStep: true });
+    await step.agent.start();
+    expect(step.sent.some((m) => m.kind === "content.next_step")).toBe(true);
+    expect(step.sent.some((m) => m.kind === "content.focus")).toBe(false);
+    step.agent.stop();
+  });
+
+  it("opens on a field focused before it started once a fill as the page loads put nothing in", async () => {
+    const values = { username: "alice", password: "s3cret", fields: [], otp: null, submit: false };
+    for (const fills of [true, false]) {
+      document.body.innerHTML = LOGIN;
+      input("user").focus();
+      const { agent, sent } = setup({ pageLoad: true }, "a".repeat(32), undefined, {
+        pageLoad: async (deliver) => (fills ? deliver({ kind: "fill", values }) : null),
+      });
+      await agent.start();
+      expect(sent.some((m) => m.kind === "content.page_load")).toBe(true);
+      expect(input("user").value).toBe(fills ? "alice" : "");
+      expect(sent.some((m) => m.kind === "content.focus")).toBe(!fills);
+      agent.stop();
+    }
+  });
+
+  it("asks once for a field whose focus the background is still answering", async () => {
+    // The field focused during a fill as the page loads, then found focused after it.
+    document.body.innerHTML = LOGIN;
+    let answer: (value: unknown) => void = () => undefined;
+    const { agent, sent } = setup(
+      { pageLoad: true },
+      null,
+      () => new Promise((r) => (answer = r)),
+      {
+        pageLoad: async () => input("user").focus(),
+      },
+    );
+    await agent.start();
+    expect(sent.filter((m) => m.kind === "content.focus")).toHaveLength(1);
+    answer({ token: "d".repeat(32) });
+    await vi.waitFor(() => expect(hosts()).toHaveLength(1));
+    agent.stop();
+  });
+
+  it("in a frame, opens on the field focused before it started only while the focus is in the frame", async () => {
+    // A frame keeps its focused field after the focus has gone to another frame.
+    const frame = new Proxy(window, {
+      get: (target, key) => {
+        if (key === "top") return {};
+        const value: unknown = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    for (const focus of [false, true]) {
+      document.body.innerHTML = LOGIN;
+      input("user").focus();
+      const hasFocus = vi.spyOn(document, "hasFocus").mockReturnValue(focus);
+      const { agent, sent } = setup({}, "c".repeat(32), undefined, { win: frame });
+      await agent.start();
+      expect(sent[0]).toEqual({ kind: "content.start", top: false });
+      expect(sent.some((m) => m.kind === "content.focus")).toBe(focus);
+      agent.stop();
+      hasFocus.mockRestore();
+    }
   });
 
   it("shows the field's mark alone when the background says so, and opens the menu from it", async () => {
