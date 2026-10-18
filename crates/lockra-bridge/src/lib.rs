@@ -537,7 +537,7 @@ pub const COMMANDS: [&str; 74] = [
 /// (its status, its path on the clipboard, the file manager showing it, the release's package in the
 /// browser), and the end of a quick
 /// search (the window goes back where it was).
-pub const SHELL_COMMANDS: [&str; 21] = [
+pub const SHELL_COMMANDS: [&str; 23] = [
     "lockra_dispatch",
     "codes_subscribe",
     "codes_unsubscribe",
@@ -559,6 +559,8 @@ pub const SHELL_COMMANDS: [&str; 21] = [
     "browser_extension_reveal",
     "browser_extension_download",
     "quick_access_done",
+    "autostart_get",
+    "autostart_set",
 ];
 
 /// The Tauri commands of the phone shell: the dispatcher, the code stream, and the actions that

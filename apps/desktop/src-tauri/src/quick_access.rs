@@ -33,6 +33,8 @@ pub enum Start {
     /// Lockra for the browser extension (`--from-browser`): a running Lockra keeps its window as it
     /// is, and a new one stays in the tray while it runs in the background.
     Browser,
+    /// Lockra at login (`--autostart`, src/autostart.rs): as for the browser.
+    Login,
 }
 
 /// What `args` (the program's own first) ask of Lockra; the palette when both flags are given.
@@ -42,6 +44,8 @@ pub fn start_reason<S: AsRef<OsStr>>(args: &[S]) -> Start {
         Start::Palette
     } else if given(browser::FROM_BROWSER) {
         Start::Browser
+    } else if given(crate::autostart::AUTOSTART) {
+        Start::Login
     } else {
         Start::Window
     }
@@ -288,6 +292,8 @@ mod tests {
     fn a_start_asks_for_the_palette_the_browser_or_the_window() {
         assert_eq!(start_reason(&["lockra-desktop"]), Start::Window);
         assert_eq!(start_reason(&["lockra-desktop", "--palette"]), Start::Palette);
+        assert_eq!(start_reason(&["lockra-desktop", "--autostart"]), Start::Login);
+        assert_eq!(start_reason(&["lockra-desktop", "--autostart", "--palette"]), Start::Palette);
         assert_eq!(start_reason(&["/usr/bin/lockra-desktop", "--from-browser"]), Start::Browser);
         assert_eq!(start_reason(&["lockra-desktop", "--from-browser", "--palette"]), Start::Palette);
         // The program's own path is not a flag, and nothing else is one either.

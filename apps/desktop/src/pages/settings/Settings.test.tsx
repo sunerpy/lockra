@@ -44,6 +44,38 @@ describe("SettingsDialog", () => {
     expect(document.documentElement.lang).toBe("en-US");
   });
 
+  it("starts Lockra at login, as the system's own entry says", async () => {
+    const { user, backend } = renderApp({ mock: { launchAtLogin: false } });
+    const set = vi.spyOn(backend, "setLaunchAtLogin");
+    await ready();
+    const dialog = await openSettings(user);
+    const toggle = await dialog.findByRole("switch", { name: "登录时启动 Lockra" });
+    expect(toggle).not.toBeChecked();
+    expect(dialog.getByText(/登录电脑后自动运行 Lockra/)).toBeInTheDocument();
+    await user.click(toggle);
+    expect(set).toHaveBeenLastCalledWith(true);
+    expect(await dialog.findByRole("switch", { name: "登录时启动 Lockra" })).toBeChecked();
+    await user.click(toggle);
+    expect(set).toHaveBeenLastCalledWith(false);
+    expect(await dialog.findByRole("switch", { name: "登录时启动 Lockra" })).not.toBeChecked();
+  });
+
+  it("offers no login start where the build keeps no entry, and says when the system refused", async () => {
+    const first = renderApp({ mock: { launchAtLogin: null } });
+    await ready();
+    const dialog = await openSettings(first.user);
+    expect(dialog.getByRole("radio", { name: "最近使用" })).toBeInTheDocument();
+    expect(dialog.queryByRole("switch", { name: "登录时启动 Lockra" })).not.toBeInTheDocument();
+    first.unmount();
+    const second = renderApp({ mock: { launchAtLogin: false } });
+    vi.spyOn(second.backend, "setLaunchAtLogin").mockRejectedValue(new Error("io_failed"));
+    await ready();
+    const pane = await openSettings(second.user);
+    await second.user.click(await pane.findByRole("switch", { name: "登录时启动 Lockra" }));
+    expect(await pane.findByTestId("launch-at-login-error")).toBeInTheDocument();
+    expect(pane.getByRole("switch", { name: "登录时启动 Lockra" })).not.toBeChecked();
+  });
+
   it("pins a group at the top of the codes, and the page turns to it", async () => {
     const { user, backend } = renderApp();
     await ready();

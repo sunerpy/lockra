@@ -107,6 +107,29 @@ kill "$bus_pid" 2>/dev/null || true
 wait "$bus_pid" 2>/dev/null || true
 bus_pid=""
 unset DBUS_SESSION_BUS_ADDRESS
+# Started at login: the entry the session turned on, run as the desktop runs it, while Lockra runs
+# in the background. It stays in the tray: the app says so once it decided, and shows no window.
+entry="$work/config/autostart/lockra-autostart.desktop"
+[ -f "$entry" ] || { echo "smoke: no login entry at $entry"; exit 1; }
+login=$(sed -n 's/^Exec=//p' "$entry")
+settings="$work/config/dev.lockra.desktop/settings.json"
+background() {
+  python3 -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s["run_in_background"]=sys.argv[2]=="on"; json.dump(s, open(p,"w"))' "$settings" "$1"
+}
+background on
+eval "$login" >"$work/login.log" 2>&1 &
+login_pid=$!
+# shellcheck disable=SC2016 # the log's path is the inner shell's $1
+if ! timeout 60 sh -c 'until grep -q "started in the tray, the window hidden" "$1"; do sleep 0.5; done' _ "$work/login.log"; then
+  echo "smoke: the login start did not stay in the tray"; tail -20 "$work/login.log"; exit 1
+fi
+if xdotool search --onlyvisible --pid "$login_pid" --name '^Lockra$' >/dev/null 2>&1; then
+  echo "smoke: the login start showed its window"; exit 1
+fi
+kill "$login_pid"
+wait "$login_pid" 2>/dev/null || true
+background off
+echo "smoke: the login entry started Lockra in the tray, with no window"
 "$app" >"$work/app.log" 2>&1 &
 app_pid=$!
 if ! timeout 60 sh -c "until xdotool search --onlyvisible --pid $app_pid --name '^Lockra\$' >/dev/null 2>&1; do sleep 0.5; done"; then

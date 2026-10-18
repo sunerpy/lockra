@@ -964,6 +964,12 @@ export const en: Messages = {
       autoUpdate: "Automatic updates",
       autoUpdateHelp:
         "Lockra looks for an update 10 seconds after start and downloads it in the background; it installs when Lockra restarts. Off: Lockra goes online only when you choose Check for updates.",
+      launchAtLogin: "Start Lockra at login",
+      launchAtLoginHelp:
+        "Lockra starts when you sign in to the computer, so the browser extension and the quick search are ready. With Settings › Browser › Keep running after the window closes on, it stays in the tray and opens no window.",
+      launchAtLoginHelpPlain:
+        "Lockra starts when you sign in to the computer, and opens its window.",
+      launchAtLoginFailed: "The system's login entry could not be written.",
       quickAccess: {
         label: "Quick search",
         field: "Quick search shortcut",
