@@ -98,6 +98,27 @@ export LOCKRA_RELAY_ALLOWED_SPACES="$space=$access"
 中继会在开始监听前退出，避免误服务或覆盖文件。这里限制的是同步空间，不是其中的单台设备：同一空间
 中的设备仍共用一个访问令牌。
 
+### 用注册码登记新的同步空间
+
+<StatusTag status="building" /> 只想让你同意的同步空间使用中继，又不想每次都复制文件、重启中继时，请设置 `LOCKRA_RELAY_REGISTRATION=code` 并重启一次中继。此后新的同步空间都需要注册码，注册码在服务器上生成：
+
+```sh
+sudo lockra-relay new-code --data /var/lib/lockra-relay --note "Anna 的手机"
+# 使用 Docker 时：docker compose -f deploy/relay/compose.yaml exec relay lockra-relay new-code --note "Anna 的手机"
+```
+
+命令只显示一次注册码，例如 `ABCD-EFGH-IJKL-MNOP-QRST-UVWX`。把它发给要建立同步空间的人，由对方在第一台设备上填入中继地址下方的「注册码（可选）」（[经 Lockra 中继同步](/zh/backup/sync#经-lockra-中继同步)）。一个注册码只能登记一个同步空间，7 天后失效（用 `--expires 12h` 或 `--expires 30d` 修改，最长 365 天）。加入这个同步空间的设备不需要注册码。
+
+| 命令                         | 作用                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `lockra-relay codes`         | 列出尚未使用的注册码。                                                   |
+| `lockra-relay drop-code ID`  | 作废一个注册码，ID 见 `codes` 的输出。                                   |
+| `lockra-relay spaces`        | 列出同步空间和它们最后一次使用的时间，以及磁盘上中继没有提供的同步空间。 |
+| `lockra-relay admit 空间ID`  | 不用注册码，直接提供磁盘上的某个同步空间，例如以前的同步空间。           |
+| `lockra-relay revoke 空间ID` | 停止提供某个同步空间，它的文件仍留在磁盘上。                             |
+
+每个命令都和 `new-code` 一样使用 `--data`（使用 Docker 时，通过 `docker compose … exec relay` 运行）。命令通过中继数据文件夹中的一个套接字与运行中的中继通信，只有中继的用户和 root 能打开它，不经过网络。中继只保存注册码的哈希：拿到数据文件夹也得不到注册码。原来开放注册的中继改用注册码后，已有的同步空间在你 `admit` 之前不再提供；`LOCKRA_RELAY_ALLOWED_SPACES` 中列出的同步空间不需要注册码，照常提供。
+
 ## 中继保存的内容
 
 - **只有加密的文件。** 每个同步空间一个文件夹，其中是每台设备的加密文件，以及同步空间中设备用来证明身份的那个值的指纹。账号、设备名称、恢复密钥和主密码都不会到达中继。

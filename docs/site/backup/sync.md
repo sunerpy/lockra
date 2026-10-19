@@ -266,6 +266,15 @@ none of them.
 2. Check **This device's name**, enter the master password, and choose **Start syncing**.
 3. Save the recovery key **Settings › Sync** reminds you of, as for any storage.
 
+<StatusTag status="building" /> When the relay serves registered sync spaces only
+([Registering new sync spaces by code](/backup/relay#registering-new-sync-spaces-by-code)), step 1
+also needs the code the relay's administrator gave you, in **Registration code (optional)** under
+the relay's address. Without it, the sync fails with "This relay serves registered sync spaces
+only"; with one that is wrong, used or expired, with "The relay did not take this registration
+code". The code is needed only to set up a sync space on this relay, or to move one to it with
+**Change storage settings**: this device keeps it encrypted with the storage settings, never shows
+it again, and puts it in no invitation or pairing link, so the devices that join need none.
+
 The invitation of such a space, which is also its pairing link, holds the relay's address and the
 space's keys. To add a phone, show the
 invitation on the computer (**Invite another device**) and scan its QR code on the phone

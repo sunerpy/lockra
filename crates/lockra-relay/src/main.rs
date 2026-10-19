@@ -17,6 +17,15 @@ async fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+        Ok(Command::Admin(command)) => {
+            match lockra_relay::admin_request(&command.data_dir, &command.request).and_then(|answer| lockra_relay::render_answer(&answer)) {
+                Ok(text) => print!("{text}"),
+                Err(message) => {
+                    eprintln!("lockra-relay: {message}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
         Err(message) => {
             eprintln!("lockra-relay: {message}\nTry 'lockra-relay --help'.");
             return ExitCode::from(2);

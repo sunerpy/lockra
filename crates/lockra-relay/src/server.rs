@@ -1,5 +1,5 @@
-//! Accepting connections, serving them over HTTP/1.1, and the hourly upkeep (idle spaces, rates,
-//! counts); stopping lets the requests in flight finish first.
+//! Accepting connections, serving them over HTTP/1.1, the admin socket's commands, and the hourly
+//! upkeep (idle spaces, rates, counts); stopping lets the requests in flight finish first.
 
 use std::future::Future;
 use std::io;
@@ -14,9 +14,10 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Semaphore, watch};
 use tokio::task::{JoinHandle, JoinSet};
 
+use crate::admin::{self, AdminAnswer, AdminRequest};
 use crate::api::{self, App};
 use crate::config::Config;
-use crate::store::Store;
+use crate::store::{ROOT, Store};
 
 /// How long a client may take to send a request's head.
 const HEADER_TIMEOUT: Duration = Duration::from_secs(20);
@@ -28,8 +29,10 @@ const UPKEEP_EVERY: Duration = Duration::from_secs(3600);
 /// A relay that is serving.
 pub struct Relay {
     addr: SocketAddr,
+    app: Arc<App>,
     stop: watch::Sender<bool>,
     task: JoinHandle<()>,
+    admin: Option<JoinHandle<()>>,
 }
 
 impl Relay {
@@ -41,12 +44,25 @@ impl Relay {
         })
         .await
         .map_err(io::Error::other)??;
+        #[cfg(unix)]
+        let socket = {
+            let path = config.data_dir.join(ROOT).join(admin::SOCKET);
+            (admin::socket::bind(&path)?, path)
+        };
+        #[cfg(not(unix))]
+        if store.gate().name() == "code" {
+            tracing::warn!("no admin socket on this system: codes can be made only on Linux or macOS");
+        }
         let listener = TcpListener::bind(config.bind).await?;
         let addr = listener.local_addr()?;
         let app = Arc::new(App::new(store, &config));
         let (stop, stopped) = watch::channel(false);
-        let task = tokio::spawn(serve(listener, app, stopped));
-        Ok(Self { addr, stop, task })
+        #[cfg(unix)]
+        let admin = Some(tokio::spawn(admin::socket::serve(socket.0, socket.1, Arc::clone(&app), stopped.clone())));
+        #[cfg(not(unix))]
+        let admin = None;
+        let task = tokio::spawn(serve(listener, Arc::clone(&app), stopped));
+        Ok(Self { addr, app, stop, task, admin })
     }
 
     /// Where it listens.
@@ -54,17 +70,26 @@ impl Relay {
         self.addr
     }
 
+    /// What the admin socket would answer `request` (for this process's own use and tests).
+    pub async fn admin(&self, request: AdminRequest) -> AdminAnswer {
+        admin::answer(&self.app, request).await
+    }
+
     /// Stop accepting, let the requests in flight finish (for [`GRACE`] at most), and return.
     pub async fn stop(self) {
         let _ = self.stop.send(true);
         let _ = self.task.await;
+        if let Some(admin) = self.admin {
+            let _ = admin.await;
+        }
     }
 }
 
 /// Serve with `config` until `shutdown` completes.
 pub async fn run(config: Config, shutdown: impl Future<Output = ()>) -> io::Result<()> {
+    let registration = config.admission.name();
     let relay = Relay::start(config).await?;
-    tracing::info!(addr = %relay.addr(), version = api::VERSION, "lockra-relay is serving");
+    tracing::info!(addr = %relay.addr(), version = api::VERSION, registration, "lockra-relay is serving");
     shutdown.await;
     tracing::info!("lockra-relay is stopping");
     relay.stop().await;
@@ -215,6 +240,68 @@ mod tests {
         // Closed (or reset) without a byte of an answer.
         assert!(matches!(read, Ok(0) | Err(_)), "{read:?}");
         drop(first);
+        relay.stop().await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn the_admin_socket_answers_the_commands_and_belongs_to_one_relay() {
+        use std::os::unix::fs::PermissionsExt as _;
+
+        use crate::admin::{AdminAnswer, AdminRequest, request};
+
+        let dir = tempfile::tempdir().unwrap();
+        let code = Config { admission: crate::Admission::Code(Box::default()), ..config(dir.path()) };
+        let relay = Relay::start(code.clone()).await.unwrap();
+        let socket = dir.path().join(ROOT).join(admin::SOCKET);
+        assert_eq!(std::fs::metadata(&socket).unwrap().permissions().mode() & 0o777, 0o600);
+        // A second relay on the same directory is refused while the first serves it.
+        let error = Relay::start(Config { bind: "127.0.0.1:0".parse().unwrap(), ..code.clone() }).await.err().unwrap();
+        assert_eq!(error.kind(), io::ErrorKind::AddrInUse);
+
+        let dir_path = dir.path().to_owned();
+        let ask = move |r: AdminRequest| {
+            let dir = dir_path.clone();
+            async move { tokio::task::spawn_blocking(move || request(&dir, &r)).await.unwrap().unwrap() }
+        };
+        let AdminAnswer::Code { code: text, id, .. } = ask(AdminRequest::NewCode { note: "phone".into(), expires_secs: 3600 }).await else { panic!("no code") };
+        let AdminAnswer::Codes { codes } = ask(AdminRequest::Codes).await else { panic!("no codes") };
+        assert_eq!(codes.iter().map(|c| (c.id.as_str(), c.note.as_str())).collect::<Vec<_>>(), [(id.as_str(), "phone")]);
+
+        // The code admits a space over HTTP.
+        let space = uuid::Uuid::new_v4();
+        let token = data_encoding::BASE64URL_NOPAD.encode(&[7; 32]);
+        let put = format!(
+            "PUT /v1/spaces/{space}/devices/0123456789abcdef0123456789abcdef.lks HTTP/1.1\r\nHost: relay\r\nAuthorization: Bearer {token}\r\nLockra-Registration: {text}\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello"
+        );
+        assert!(exchange(relay.addr(), &put).await.starts_with("HTTP/1.1 200 OK"));
+        let AdminAnswer::Spaces { registration, spaces, unserved } = ask(AdminRequest::Spaces).await else { panic!("no spaces") };
+        assert_eq!(registration, "code");
+        assert_eq!(spaces.iter().map(|s| (s.id, s.note.as_str(), s.served, s.devices, s.bytes)).collect::<Vec<_>>(), [(space, "phone", true, 1, 5)]);
+        assert!(unserved.is_empty() && spaces[0].last_used.is_some() && spaces[0].admitted_at.is_some());
+
+        assert_eq!(ask(AdminRequest::Revoke { space }).await, AdminAnswer::Done);
+        let AdminAnswer::Spaces { spaces, unserved, .. } = ask(AdminRequest::Spaces).await else { panic!("no spaces") };
+        assert!(spaces.is_empty());
+        assert_eq!(unserved.iter().map(|s| s.id).collect::<Vec<_>>(), [space]);
+        assert_eq!(ask(AdminRequest::Admit { space, note: "back".into() }).await, AdminAnswer::Done);
+        assert!(matches!(ask(AdminRequest::DropCode { id: "00000000".into() }).await, AdminAnswer::Refused { .. }));
+        // The same through the relay's own handle.
+        assert!(matches!(relay.admin(AdminRequest::Spaces).await, AdminAnswer::Spaces { spaces, .. } if spaces.len() == 1));
+
+        // A line that is not a command is answered, not acted on.
+        let mut raw = tokio::net::UnixStream::connect(&socket).await.unwrap();
+        raw.write_all(b"{\"op\":\"format_the_disk\"}\n").await.unwrap();
+        let mut answer = String::new();
+        raw.read_to_string(&mut answer).await.unwrap();
+        assert!(answer.contains("refused"), "{answer}");
+
+        relay.stop().await;
+        assert!(!socket.exists(), "the socket goes with the relay");
+        // A socket left behind by a relay that did not stop cleanly is replaced.
+        drop(std::os::unix::net::UnixListener::bind(&socket).unwrap());
+        let relay = Relay::start(code).await.unwrap();
+        assert!(matches!(ask(AdminRequest::Codes).await, AdminAnswer::Codes { .. }));
         relay.stop().await;
     }
 

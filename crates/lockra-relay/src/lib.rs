@@ -12,18 +12,23 @@
 //!
 //! One process, the snapshots in a directory, a limit on every resource a client can spend, and no
 //! log of who asked for what. Serve it behind HTTPS (a load balancer or a reverse proxy): Lockra
-//! talks to relays over HTTPS only.
+//! talks to relays over HTTPS only. Which spaces it serves is `--registration`'s: any, a list, or
+//! the list and those a registration code admitted (`admission`), managed over an admin socket in
+//! the data directory (`admin`).
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
+mod admin;
+mod admission;
 mod api;
 mod config;
 mod limit;
 mod server;
 mod store;
 
-pub use api::VERSION;
-pub use config::{Admission, Command, Config, HELP, IpNet, Limits};
+pub use admin::{AdminAnswer, AdminRequest, CodeInfo, SpaceInfo, UnservedInfo, render as render_answer, request as admin_request};
+pub use api::{REGISTRATION_HEADER, VERSION};
+pub use config::{AdminCommand, Admission, Command, Config, HELP, IpNet, Limits};
 pub use server::{Relay, run};
 
 /// Log to standard error, at `RUST_LOG`'s levels (`info` by default); in colour on a terminal only

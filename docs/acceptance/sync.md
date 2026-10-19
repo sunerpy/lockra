@@ -184,6 +184,48 @@ Run here, 2026-10-19:
   Screenshots in `screens/sync/`: `sync-relay-create-light` (the test relay's address), `sync-relay-invite-light` (the relay space's invitation), `sync-relay-join-light` (device
   D's welcome screen), `sync-relay-on-light` (device C with both devices).
 
+## Relay registration codes
+
+Automated:
+
+- `crates/lockra-relay`: a code admits one space once, until it expires, whatever its case and
+  separators; the admission file survives a restart, keeps codes as hashes, stops the relay when it
+  cannot be read, and changes nothing when it cannot be written; listed spaces need no code and
+  cannot be admitted or revoked by command; over HTTP, `registration_required` without a code,
+  `registration_code_invalid` with a wrong, used or expired one, the code ignored once the space is
+  admitted, and code tries counted against the new-space rate; a space admitted or revoked by
+  command, its files served again when admitted again; the admin socket (mode 0600, refused to a
+  second relay on the same directory, a stale one replaced, a line that is no command refused); the
+  commands' arguments, help and output.
+- `crates/lockra-sync`: the relay settings keep the code (read without it from 0.14 and before), show
+  it nowhere, and an invitation, plain or sealed, carries none.
+- `crates/lockra-remote/tests/relay.rs`, on a relay with code registration started in the test: no
+  code and a wrong code told apart, the administrator's code typed in lower case with spaces admits
+  the space, another device reads it with no code, the used code admits no other space, and a
+  revoked space asks for a code again.
+- `crates/lockra-core/src/tests/sync.rs`: the code reaches the relay and no view; the phone joining
+  from the invitation asks without one; new storage settings carry a new code. Bridge fixtures: a
+  `sync_create` on a relay with a code, the two new error codes; web: the form's field, sent only
+  when typed.
+
+Run here, 2026-10-20:
+
+- `make smoke-sync` with the relay started as `--registration code` and a code made by
+  `lockra-relay new-code` over the admin socket. Device C is refused without the code ("这个中继只接受登记过的同步空间"),
+  then sets up the space with it; the relay's admission file holds the space with the SHA-256 of its
+  token and no code left, and no relay file holds the code as typed or without its dashes. Device D
+  joins from the pairing link with no code.
+
+  ```text
+  smoke-sync: C was refused without a code, then set up a space with one (1 snapshot, nothing readable, the code used up)
+  smoke-sync: C copied the pairing link of its relay space (no code) and kept it
+  smoke-sync: D joined from C's pairing link under its own password, got C's accounts, and added one
+  smoke-sync: C has D's new account through the relay, and lists both devices
+  smoke-sync: passed
+  ```
+
+  `sync-relay-create-light` now shows the form with the code entered after the refusal.
+
 - A deployed relay can be checked with
   `LOCKRA_IT_RELAY_URL=https://relay.example.com cargo test -p lockra-remote --test relay a_live_relay`:
   two devices sync, another token is denied, the watch hears a write of the other device, and the

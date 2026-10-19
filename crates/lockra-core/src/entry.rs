@@ -1100,7 +1100,7 @@ mod tests {
         entry.stamp = data.tick(1);
         data.entries.push(entry);
         data.local_mut().view.collapsed_groups = vec!["Work".into()];
-        let storage = lockra_sync::StorageConfig::Relay { url: "https://relay.example.com".into() };
+        let storage = lockra_sync::StorageConfig::relay("https://relay.example.com");
         let sync_key = lockra_sync::SyncKey::generate().unwrap();
         let keys = lockra_sync::SpaceKeys::generate(sync_key.space_id()).unwrap();
         data.local_mut().sync = Some(SyncLocal::new(storage, &keys, &sync_key, "Laptop".into(), b"keyring"));

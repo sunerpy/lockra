@@ -421,6 +421,8 @@ export const ERROR_CODES = [
   "sync_insecure",
   "sync_network",
   "sync_denied",
+  "sync_registration_required",
+  "sync_registration_refused",
   "sync_storage_failed",
   "sync_too_large",
   "sync_space_not_found",
@@ -536,7 +538,13 @@ export const storageConfigSchema = z.discriminatedUnion("kind", [
     password: z.string(),
   }),
   z.object({ kind: z.literal("folder") }),
-  z.object({ kind: z.literal("relay"), url: z.string() }),
+  /** A relay; the registration code its administrator gave, for a relay that admits a new space
+   *  only with one (never shown again: the core keeps it with the settings). */
+  z.object({
+    kind: z.literal("relay"),
+    url: z.string(),
+    registration_code: z.string().max(64).optional(),
+  }),
 ]);
 export type StorageConfig = z.infer<typeof storageConfigSchema>;
 export type StorageKind = StorageConfig["kind"];

@@ -51,7 +51,7 @@ fn passwords(h: &Harness) -> Vec<String> {
 /// A desktop that set up a space on a relay and a phone that joined it, both synced once.
 pub(super) async fn two_devices() -> (Harness, Harness) {
     let transport = Arc::new(FakeTransport::default());
-    let storage = StorageConfig::Relay { url: "https://relay.example.com".into() };
+    let storage = StorageConfig::relay("https://relay.example.com");
     let desktop = harness_on(FakeUpdater::default(), Arc::clone(&transport) as Arc<dyn SyncTransport>);
     desktop.core.create_vault(pw(MASTER)).await.unwrap();
     let created = desktop.core.sync_create(storage.clone(), pw(MASTER), "Desktop".into()).await.unwrap();

@@ -12,8 +12,11 @@ Wants=network-online.target
 ExecStart=/usr/local/bin/lockra-relay
 Environment=LOCKRA_RELAY_BIND=127.0.0.1:8090
 Environment=LOCKRA_RELAY_DATA=/var/lib/lockra-relay
-# Private mode: uncomment both, replacing the example with the space directory's name and the
-# lowercase SHA-256 in its access file. Several SPACE_ID=ACCESS_SHA256 pairs are comma-separated.
+# A new sync space with a registration code only: uncomment, restart, then make one with
+#   sudo lockra-relay new-code --data /var/lib/lockra-relay --note "my phone"
+# Environment=LOCKRA_RELAY_REGISTRATION=code
+# Private mode instead: registration closed, and the spaces listed as the space directory's name
+# and the lowercase SHA-256 in its access file. Several SPACE_ID=ACCESS_SHA256 pairs are comma-separated.
 # Environment=LOCKRA_RELAY_REGISTRATION=closed
 # Environment="LOCKRA_RELAY_ALLOWED_SPACES=123e4567-e89b-42d3-a456-426614174000=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 # The proxy that ends TLS, when it is on this machine.

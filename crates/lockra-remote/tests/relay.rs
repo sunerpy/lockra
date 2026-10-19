@@ -10,7 +10,7 @@ mod common;
 use std::time::Duration;
 
 use common::two_devices_sync_with;
-use lockra_relay::{Admission, Config, Limits, Relay};
+use lockra_relay::{AdminAnswer, AdminRequest, Admission, Config, Limits, Relay};
 use lockra_remote::{SpaceAccess, StorageConfig, Watch, open, watch};
 use lockra_sync::{PutCondition, SyncError, SyncKey, device_path, devices_dir};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -19,13 +19,51 @@ const TAG: &str = "0123456789abcdef0123456789abcdef";
 const OTHER: &str = "fedcba9876543210fedcba9876543210";
 
 async fn relay(dir: &std::path::Path, limits: Limits) -> Relay {
-    Relay::start(Config { bind: "127.0.0.1:0".parse().unwrap(), data_dir: dir.to_owned(), trusted_proxies: Vec::new(), admission: Admission::Open, limits })
-        .await
-        .unwrap()
+    relay_with(dir, limits, Admission::Open).await
+}
+
+async fn relay_with(dir: &std::path::Path, limits: Limits, admission: Admission) -> Relay {
+    Relay::start(Config { bind: "127.0.0.1:0".parse().unwrap(), data_dir: dir.to_owned(), trusted_proxies: Vec::new(), admission, limits }).await.unwrap()
+}
+
+fn coded(url: &str, code: &str) -> StorageConfig {
+    StorageConfig::Relay { url: url.into(), registration_code: Some(code.to_owned().into()) }
+}
+
+#[tokio::test]
+async fn a_relay_with_code_registration_admits_a_space_with_its_code() {
+    let dir = tempfile::tempdir().unwrap();
+    let relay = relay_with(dir.path(), Limits::default(), Admission::Code(Box::default())).await;
+    let url = format!("http://{}", relay.addr());
+    let key = SyncKey::generate().unwrap();
+    let access = SpaceAccess::of(&key);
+    let (devices, path) = (devices_dir("", key.space_id()), device_path("", key.space_id(), TAG));
+    // Without a code, and with one the relay did not make: told apart, nothing kept.
+    let plain = open(&StorageConfig::relay(url.clone()), &access).unwrap();
+    assert_eq!(plain.list(&devices).await.err(), Some(SyncError::RegistrationRequired));
+    let wrong = open(&coded(&url, "AAAA-AAAA-AAAA-AAAA-AAAA-AAAA"), &access).unwrap();
+    assert_eq!(wrong.put(&path, b"x".to_vec(), PutCondition::Always).await.err(), Some(SyncError::RegistrationRefused));
+    assert_eq!(wrong.get(&path).await.err(), Some(SyncError::RegistrationRefused));
+    assert_eq!(wrong.delete(&path).await.err(), Some(SyncError::RegistrationRefused));
+
+    // The administrator's code, typed in lower case with spaces: the space is admitted.
+    let AdminAnswer::Code { code, .. } = relay.admin(AdminRequest::NewCode { note: "test".into(), expires_secs: 3600 }).await else { panic!("no code") };
+    let first = open(&coded(&url, &code.replace('-', " ").to_lowercase()), &access).unwrap();
+    first.put(&path, b"one".to_vec(), PutCondition::IfAbsent).await.unwrap();
+    // Another device of the space needs no code; the code admits no other space.
+    assert_eq!(plain.get(&path).await.unwrap().map(|(bytes, _)| bytes), Some(b"one".to_vec()));
+    assert_eq!(first.list(&devices).await.unwrap().len(), 1);
+    let stranger = SyncKey::generate().unwrap();
+    let other = open(&coded(&url, &code), &SpaceAccess::of(&stranger)).unwrap();
+    assert_eq!(other.list(&devices_dir("", stranger.space_id())).await.err(), Some(SyncError::RegistrationRefused));
+    // Revoked: the space asks for a code again.
+    assert_eq!(relay.admin(AdminRequest::Revoke { space: key.space_id() }).await, AdminAnswer::Done);
+    assert_eq!(plain.list(&devices).await.err(), Some(SyncError::RegistrationRequired));
+    relay.stop().await;
 }
 
 fn config(relay: &Relay) -> StorageConfig {
-    StorageConfig::Relay { url: format!("http://{}", relay.addr()) }
+    StorageConfig::relay(format!("http://{}", relay.addr()))
 }
 
 #[tokio::test]
@@ -112,14 +150,14 @@ async fn an_address_without_a_relay_or_without_anything_fails_plainly() {
     let key = SyncKey::generate().unwrap();
     let access = SpaceAccess::of(&key);
     // A server, but no relay under this path.
-    let elsewhere = StorageConfig::Relay { url: format!("http://{}/not-here/", relay.addr()) };
+    let elsewhere = StorageConfig::relay(format!("http://{}/not-here/", relay.addr()));
     assert!(matches!(open(&elsewhere, &access).unwrap().list(&devices_dir("", key.space_id())).await, Err(SyncError::Storage(_))));
     relay.stop().await;
     // Nothing listening any more.
-    let gone = StorageConfig::Relay { url: format!("http://{}", relay_addr_closed().await) };
+    let gone = StorageConfig::relay(format!("http://{}", relay_addr_closed().await));
     assert!(matches!(open(&gone, &access).unwrap().list(&devices_dir("", key.space_id())).await, Err(SyncError::Network(_))));
     // An address that is not one is refused before any request.
-    assert!(open(&StorageConfig::Relay { url: "http://relay.example.com".into() }, &access).is_err());
+    assert!(open(&StorageConfig::relay("http://relay.example.com"), &access).is_err());
 }
 
 /// A port on this computer that nothing listens on.
@@ -152,7 +190,7 @@ async fn a_relay_sending_more_than_any_snapshot_is_not_read() {
     let access = SpaceAccess::of(&key);
     // It declares more than a device reads: refused before the body.
     let url = fake("HTTP/1.1 200 OK\r\nContent-Length: 17000000\r\nConnection: close\r\n\r\n", Vec::new()).await;
-    let store = open(&StorageConfig::Relay { url }, &access).unwrap();
+    let store = open(&StorageConfig::relay(url), &access).unwrap();
     assert_eq!(store.get(&device_path("", key.space_id(), TAG)).await.err(), Some(SyncError::Corrupted));
     // A listing without a length that goes on past any listing's size.
     let chunked = {
@@ -167,11 +205,11 @@ async fn a_relay_sending_more_than_any_snapshot_is_not_read() {
         body
     };
     let url = fake("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n", chunked).await;
-    let store = open(&StorageConfig::Relay { url }, &access).unwrap();
+    let store = open(&StorageConfig::relay(url), &access).unwrap();
     assert_eq!(store.list(&devices_dir("", key.space_id())).await.err(), Some(SyncError::Corrupted));
     // Not a listing at all.
     let url = fake("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\n", b"hello".to_vec()).await;
-    let store = open(&StorageConfig::Relay { url }, &access).unwrap();
+    let store = open(&StorageConfig::relay(url), &access).unwrap();
     assert!(matches!(store.list(&devices_dir("", key.space_id())).await, Err(SyncError::Storage(_))));
 }
 
@@ -224,7 +262,7 @@ async fn a_live_relay_syncs_two_devices_and_tells_of_a_change() {
         eprintln!("relay: LOCKRA_IT_RELAY_URL is not set, the live relay is skipped");
         return;
     };
-    let config = StorageConfig::Relay { url };
+    let config = StorageConfig::relay(url);
     config.validate().unwrap();
     let key = SyncKey::generate().unwrap();
     let access = SpaceAccess::of(&key);

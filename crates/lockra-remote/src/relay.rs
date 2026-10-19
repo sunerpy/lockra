@@ -1,7 +1,9 @@
 //! A Lockra relay as a sync space's storage (docs/formats.md §9, "The relay"; docs/relay.md): the
 //! relay's HTTP API over the same HTTPS client as S3 and WebDAV, with the space's access token
-//! (lockra-sync's [`SpaceAccess`], derived from the sync key) as a bearer token. A relay holds a
-//! write's condition, so this device's own writes catch a copied vault at once, as on S3.
+//! (lockra-sync's [`SpaceAccess`], derived from the sync key) as a bearer token, and the
+//! registration code of the settings, if any, for a relay that admits a new space only with one
+//! (`Lockra-Registration`; an admitted space's relay ignores it). A relay holds a write's
+//! condition, so this device's own writes catch a copied vault at once, as on S3.
 //!
 //! [`RelayWatch`] waits on the relay for the space to change (a listing the relay holds back until
 //! a snapshot is written or removed), so that a run follows within a moment rather than at the
@@ -34,12 +36,17 @@ const QUIET: Duration = Duration::from_secs(30);
 const MIN_INTERVAL: Duration = Duration::from_secs(1);
 /// A listing of a relay's largest space is a few kilobytes.
 const MAX_LISTING_BYTES: u64 = 1024 * 1024;
+/// A refusal's body: `{"error": "<code>"}`.
+const MAX_REFUSAL_BYTES: u64 = 4096;
+/// The header that carries a registration code (lockra-relay's `REGISTRATION_HEADER`).
+const REGISTRATION: &str = "lockra-registration";
 
 /// A sync space's storage on a Lockra relay, ready for requests.
 pub struct RelayStore {
     client: Client,
     base: Url,
     token: Zeroizing<String>,
+    registration: Option<Zeroizing<String>>,
 }
 
 impl fmt::Debug for RelayStore {
@@ -69,7 +76,17 @@ impl RelayStore {
             let path = format!("{}/", base.path());
             base.set_path(&path);
         }
-        Ok(Self { client: http_client()?, base, token: Zeroizing::new(access.relay_token().to_owned()) })
+        Ok(Self { client: http_client()?, base, token: Zeroizing::new(access.relay_token().to_owned()), registration: None })
+    }
+
+    /// The same relay asked with the registration code `code` too (its letters and digits, in
+    /// capitals: the hyphens and spaces it was shown or typed with go).
+    #[must_use]
+    pub fn with_registration(mut self, code: Option<&str>) -> Self {
+        self.registration = code
+            .map(|code| Zeroizing::new(code.chars().filter(char::is_ascii_alphanumeric).map(|c| c.to_ascii_uppercase()).collect::<String>()))
+            .filter(|letters| !letters.is_empty());
+        self
     }
 
     /// The API's address for space `id`'s device `name` (the listing for an empty name).
@@ -87,8 +104,17 @@ impl RelayStore {
         self.url(id, name)
     }
 
+    /// `request` with the space's token, and the registration code when there is one.
+    fn authorized(&self, request: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        let request = request.bearer_auth(self.token.as_str());
+        match &self.registration {
+            Some(code) => request.header(REGISTRATION, code.as_str()),
+            None => request,
+        }
+    }
+
     fn get_request(&self, url: Url) -> reqwest::RequestBuilder {
-        self.client.get(url).bearer_auth(self.token.as_str())
+        self.authorized(self.client.get(url))
     }
 }
 
@@ -111,6 +137,24 @@ fn refused(status: StatusCode) -> SyncError {
         StatusCode::REQUEST_TIMEOUT | StatusCode::TOO_MANY_REQUESTS => SyncError::Network(format!("the relay answered {status}")),
         status if status.is_server_error() => SyncError::Network(format!("the relay answered {status}")),
         status => SyncError::Storage(format!("the relay answered {status}")),
+    }
+}
+
+/// A relay's refusal as [`refused`] tells it, a 403 by the reason in its body: a registration code
+/// is needed, or the one given is not taken; otherwise another token is the space's.
+async fn refusal(response: Response) -> SyncError {
+    #[derive(Deserialize)]
+    struct Body {
+        error: String,
+    }
+    if response.status() != StatusCode::FORBIDDEN {
+        return refused(response.status());
+    }
+    let body = bounded_body(response, MAX_REFUSAL_BYTES).await.unwrap_or_default();
+    match serde_json::from_slice::<Body>(&body).map(|body| body.error).as_deref() {
+        Ok("registration_required") => SyncError::RegistrationRequired,
+        Ok("registration_code_invalid") => SyncError::RegistrationRefused,
+        _ => SyncError::Denied,
     }
 }
 
@@ -148,7 +192,7 @@ impl RemoteStore for RelayStore {
         Box::pin(async move {
             let response = send(self.get_request(self.locate(dir, true)?)).await?;
             if !response.status().is_success() {
-                return Err(refused(response.status()));
+                return Err(refusal(response).await);
             }
             let body = bounded_body(response, MAX_LISTING_BYTES).await?;
             let listing: Listing = serde_json::from_slice(&body).map_err(|_| SyncError::Storage("not a Lockra relay's listing".into()))?;
@@ -161,7 +205,7 @@ impl RemoteStore for RelayStore {
             let response = send(self.get_request(self.locate(path, false)?)).await?;
             match response.status() {
                 StatusCode::NOT_FOUND => return Ok(None),
-                status if !status.is_success() => return Err(refused(status)),
+                status if !status.is_success() => return Err(refusal(response).await),
                 _ => {}
             }
             // A larger object than any snapshot is not read, and neither is more than the size the
@@ -179,7 +223,7 @@ impl RemoteStore for RelayStore {
     fn put<'a>(&'a self, path: &'a str, bytes: Vec<u8>, condition: PutCondition) -> RemoteFuture<'a, Option<String>> {
         Box::pin(async move {
             let size = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
-            let request = self.client.put(self.locate(path, false)?).bearer_auth(self.token.as_str()).body(bytes);
+            let request = self.authorized(self.client.put(self.locate(path, false)?)).body(bytes);
             let request = match &condition {
                 PutCondition::Always => request,
                 PutCondition::IfAbsent => request.header(IF_NONE_MATCH, "*"),
@@ -189,7 +233,7 @@ impl RemoteStore for RelayStore {
             match response.status() {
                 // Past the relay's limit: the size goes with it, for Settings › Sync to tell.
                 StatusCode::PAYLOAD_TOO_LARGE => return Err(SyncError::TooLarge(size)),
-                status if !status.is_success() => return Err(refused(status)),
+                status if !status.is_success() => return Err(refusal(response).await),
                 _ => {}
             }
             Ok(etag_of(&response))
@@ -198,11 +242,11 @@ impl RemoteStore for RelayStore {
 
     fn delete<'a>(&'a self, path: &'a str) -> RemoteFuture<'a, ()> {
         Box::pin(async move {
-            let response = send(self.client.delete(self.locate(path, false)?).bearer_auth(self.token.as_str())).await?;
+            let response = send(self.authorized(self.client.delete(self.locate(path, false)?))).await?;
             match response.status() {
                 StatusCode::NOT_FOUND => Ok(()),
                 status if status.is_success() => Ok(()),
-                status => Err(refused(status)),
+                _ => Err(refusal(response).await),
             }
         })
     }
@@ -299,6 +343,11 @@ mod tests {
         assert!(store.locate(&object, true).is_err());
         assert!(format!("{store:?}").contains("relay.example.com") && !format!("{store:?}").contains(access.relay_token()));
         assert!(RelayStore::open("not an address", &access).is_err());
+        // A registration code goes as its letters and digits, in capitals; nothing of one is no code.
+        let store = store.with_registration(Some(" abcd-efgh ijkl "));
+        assert_eq!(store.registration.as_deref().map(String::as_str), Some("ABCDEFGHIJKL"));
+        assert!(!format!("{store:?}").contains("ABCD"));
+        assert!(store.with_registration(Some(" - ")).registration.is_none());
     }
 
     #[test]

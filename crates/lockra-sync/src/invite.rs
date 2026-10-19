@@ -95,10 +95,11 @@ impl Invite {
         Self::from_json(&json)
     }
 
-    /// What the text carries: never a folder.
+    /// What the text carries: never a folder, nor a relay's registration code (the space is
+    /// admitted already).
     fn wire(&self) -> Wire {
         Wire {
-            storage: self.storage.clone().filter(|storage| !storage.is_folder()),
+            storage: self.storage.as_ref().filter(|storage| !storage.is_folder()).map(StorageConfig::without_registration),
             sync_key: self.sync_key.to_text(),
             data_key: self.keys.as_ref().map(SpaceKeys::data_key_text),
         }
@@ -246,7 +247,7 @@ mod tests {
 
     #[test]
     fn an_invitation_to_a_relay_carries_its_address_and_the_sync_key() {
-        let relay = invite_to(Some(StorageConfig::Relay { url: "https://relay.example.com".into() }));
+        let relay = invite_to(Some(StorageConfig::relay("https://relay.example.com")));
         let text = relay.to_text();
         let json = json_of(&text);
         assert_eq!(json["storage"], serde_json::json!({ "kind": "relay", "url": "https://relay.example.com" }));
@@ -255,6 +256,14 @@ mod tests {
         assert!(back == relay);
         // Sealed for sending as well.
         let (shared, code) = relay.to_shared_text(KdfCost::FAST_INSECURE).unwrap();
+        assert!(Invite::from_any_text(&shared, Some(&code)).unwrap() == relay);
+        // The registration code that admitted the space stays with the device that had it.
+        let mut coded = relay.clone();
+        coded.storage = Some(StorageConfig::Relay { url: "https://relay.example.com".into(), registration_code: Some(Zeroizing::new("ABCD-EFGH".into())) });
+        let text = coded.to_text();
+        assert_eq!(json_of(&text)["storage"], serde_json::json!({ "kind": "relay", "url": "https://relay.example.com" }));
+        assert!(Invite::from_text(&text).unwrap() == relay);
+        let (shared, code) = coded.to_shared_text(KdfCost::FAST_INSECURE).unwrap();
         assert!(Invite::from_any_text(&shared, Some(&code)).unwrap() == relay);
     }
 

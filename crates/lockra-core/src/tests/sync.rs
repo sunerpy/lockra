@@ -30,7 +30,7 @@ fn webdav() -> StorageConfig {
 }
 
 fn relay() -> StorageConfig {
-    StorageConfig::Relay { url: "https://relay.example.com".into() }
+    StorageConfig::relay("https://relay.example.com")
 }
 
 fn manual(storage: StorageConfig, sync_key: &str) -> JoinSource {
@@ -1240,6 +1240,31 @@ async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktop
     // Locked: watched no longer.
     desktop.core.lock_vault();
     assert_eq!(transport.watching(&relay()), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_relays_registration_code_reaches_the_relay_alone() {
+    let transport = Arc::new(FakeTransport::default());
+    let coded = |code: &str| StorageConfig::Relay { url: "https://relay.example.com".into(), registration_code: Some(Zeroizing::new(code.into())) };
+    let (desktop, _) = first_device(&transport, coded("ABCD-EFGH")).await;
+    // The relay is asked with it; the interface is shown the address alone.
+    assert_eq!(transport.relay_code(&relay()), Some(Some("ABCD-EFGH".into())));
+    assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://relay.example.com".into() });
+    // Another device is handed the address and the sync key: the space is admitted already.
+    let invite = desktop.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    assert_eq!(lockra_sync::Invite::from_text(&invite.invite).unwrap().storage, Some(relay()));
+    let phone = device(&transport);
+    phone
+        .core
+        .sync_join(JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None }, Some(pw(MASTER)), "Phone".into(), None, None)
+        .await
+        .unwrap();
+    settle().await;
+    assert_eq!(transport.relay_code(&relay()), Some(None), "the phone asks without a code");
+    // The storage settings again, with another code: the next requests carry it.
+    desktop.core.sync_set_storage(coded("IJKL-MNOP"), Some(pw(MASTER)), None).await.unwrap();
+    assert_eq!(transport.relay_code(&relay()), Some(Some("IJKL-MNOP".into())));
+    assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://relay.example.com".into() });
 }
 
 #[tokio::test(start_paused = true)]

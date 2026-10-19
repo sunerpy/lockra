@@ -116,6 +116,10 @@ pub enum ErrorCode {
     SyncNetwork,
     /// The storage refused the credentials or the request.
     SyncDenied,
+    /// The relay admits a new space only with a registration code from its administrator.
+    SyncRegistrationRequired,
+    /// The relay refused the registration code: unknown, used or expired.
+    SyncRegistrationRefused,
     /// The storage answered with an error (a missing bucket or folder, a full disk).
     SyncStorageFailed,
     /// The storage refused this device's snapshot as larger than it keeps (a relay's limit).

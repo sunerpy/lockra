@@ -122,6 +122,37 @@ configured hash. A missing or malformed allowlist, or a different hash in an all
 stops the relay before it listens. This admits spaces, not individual devices within one space;
 they share one access token.
 
+### Registering new sync spaces by code
+
+<StatusTag status="building" /> To let only the sync spaces you approve onto your relay, without
+copying files or restarting it for each one, set `LOCKRA_RELAY_REGISTRATION=code` and restart the
+relay once. From then on a new sync space needs a registration code, which you make on the server:
+
+```sh
+sudo lockra-relay new-code --data /var/lib/lockra-relay --note "Anna's phone"
+# With Docker: docker compose -f deploy/relay/compose.yaml exec relay lockra-relay new-code --note "Anna's phone"
+```
+
+The command prints the code once, for example `ABCD-EFGH-IJKL-MNOP-QRST-UVWX`. Send it to the person
+setting up the sync space; on their first device it goes in **Registration code (optional)** under
+the relay's address ([Through a Lockra relay](/backup/sync#through-a-lockra-relay)). A code admits
+one sync space and expires after 7 days (`--expires 12h` or `--expires 30d` to change that, at most
+365 days). The devices that join the space need no code.
+
+| Command                        | What it does                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `lockra-relay codes`           | The codes not used yet.                                                                     |
+| `lockra-relay drop-code ID`    | Cancel a code, by the id `codes` shows.                                                     |
+| `lockra-relay spaces`          | The sync spaces, with when they were last used, and those on disk the relay does not serve. |
+| `lockra-relay admit SPACE_ID`  | Serve a sync space on disk without a code, for example one from before.                     |
+| `lockra-relay revoke SPACE_ID` | Stop serving a sync space; its files stay on disk.                                          |
+
+Each command takes `--data` like `new-code` (with Docker, run it with `docker compose … exec relay`).
+They reach the running relay through a socket in its data folder that only the relay's user and
+root can open, never over the network. The relay keeps a code as a hash: the data folder alone does
+not give it away. Switching a relay that was open to codes leaves its sync spaces unserved until you
+`admit` yours; spaces listed in `LOCKRA_RELAY_ALLOWED_SPACES` stay served without a code.
+
 ## What it keeps
 
 - **Encrypted files and nothing else.** One folder per space, with each device's encrypted file

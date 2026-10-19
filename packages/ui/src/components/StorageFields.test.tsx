@@ -99,6 +99,12 @@ describe("StorageFields", () => {
       preset: "relay-custom",
       url: "https://relay.example.com",
     });
+    // The registration code a relay's administrator gave, typed under the address.
+    const code = screen.getByLabelText("注册码（可选）");
+    expect(code).toHaveAttribute("autocomplete", "off");
+    expect(screen.getByText(/加入已有的同步空间不用填/)).toBeInTheDocument();
+    await user.type(code, "ABCD-EFGH");
+    expect(form).toMatchObject({ kind: "relay", registrationCode: "ABCD-EFGH" });
     // WebDAV does not keep the relay's address.
     await user.click(screen.getByRole("radio", { name: "WebDAV" }));
     expect(form).toMatchObject({ kind: "webdav", url: "" });

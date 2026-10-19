@@ -238,6 +238,7 @@
       "password": "a new password",
       "storage": {
         "kind": "relay",
+        "registration_code": "ABCD-EFGH-IJKL-MNOP-QRST-UVWX",
         "url": "https://relay.example.com"
       }
     },

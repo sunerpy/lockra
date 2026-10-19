@@ -46,6 +46,12 @@
       "code": "sync_invite_needs_storage"
     },
     {
+      "code": "sync_registration_required"
+    },
+    {
+      "code": "sync_registration_refused"
+    },
+    {
       "code": "import_key_file_invalid"
     },
     {

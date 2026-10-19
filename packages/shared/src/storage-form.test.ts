@@ -63,6 +63,28 @@ describe("the sync storage form", () => {
     expect(storageComplete({ ...dav, password: "pw" })).toBe(true);
   });
 
+  it("sends a relay's registration code only when one is typed", () => {
+    const relay = {
+      ...emptyStorageForm(),
+      kind: "relay" as const,
+      url: " https://relay.example.com ",
+    };
+    expect(storageConfig(relay)).toEqual({ kind: "relay", url: "https://relay.example.com" });
+    expect(storageConfig({ ...relay, registrationCode: "  " })).toEqual({
+      kind: "relay",
+      url: "https://relay.example.com",
+    });
+    expect(storageConfig({ ...relay, registrationCode: " abcd-efgh " })).toEqual({
+      kind: "relay",
+      url: "https://relay.example.com",
+      registration_code: "abcd-efgh",
+    });
+    // A space's settings start without it: it is typed in again, like a secret.
+    expect(
+      storageFormFrom({ kind: "relay", url: "https://relay.example.com" }).registrationCode,
+    ).toBe("");
+  });
+
   it("sums a relay up as its host, and a folder as its path", () => {
     expect(storageSummary({ kind: "relay", url: "https://relay.example.com" })).toBe(
       "relay.example.com",

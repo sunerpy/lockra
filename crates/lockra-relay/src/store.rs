@@ -5,6 +5,7 @@
 //! a temporary file and moved into place, so a reader sees the old snapshot or the new one, never
 //! half of one. The index (sizes, etags, the token's hash, the last use) is rebuilt from the files
 //! when the relay starts. A space is created by its first write, bound to the token that wrote it.
+//! Which spaces may be read in, written or created at all is the [`Gate`]'s (`--registration`).
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -21,9 +22,11 @@ use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 use uuid::Uuid;
 
+use crate::admission::{Gate, Redeemed};
 use crate::config::{Admission, Limits, MAX_OBJECT_BYTES_CEILING};
 
-const ROOT: &str = "lockra-relay-v1";
+/// The relay's directory in the data directory: the spaces, the admission file, the admin socket.
+pub(crate) const ROOT: &str = "lockra-relay-v1";
 const ACCESS: &str = "access";
 const DEVICES: &str = "devices";
 const TEMP_SUFFIX: &str = ".tmp";
@@ -128,8 +131,17 @@ pub fn empty_revision() -> String {
 pub struct Store {
     root: PathBuf,
     limits: Limits,
-    admission: Admission,
+    gate: Arc<Gate>,
     index: Mutex<Index>,
+}
+
+/// What the relay keeps of a space it serves, for `lockra-relay spaces`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Served {
+    pub devices: usize,
+    pub bytes: u64,
+    /// When a device last reached it.
+    pub touched: SystemTime,
 }
 
 struct Index {
@@ -194,10 +206,12 @@ impl Space {
 }
 
 impl Store {
-    /// The spaces kept in `data_dir`, read in (and made, the first time).
+    /// The spaces kept in `data_dir`, read in (and made, the first time): those `admission` lets
+    /// the relay serve.
     pub fn open(data_dir: &Path, limits: Limits, admission: Admission) -> io::Result<Self> {
         let root = data_dir.join(ROOT).join("spaces");
         fs::create_dir_all(&root)?;
+        let gate = Arc::new(Gate::open(&data_dir.join(ROOT), admission)?);
         let mut spaces = HashMap::new();
         let mut bytes = 0;
         for entry in fs::read_dir(&root)? {
@@ -206,24 +220,140 @@ impl Store {
                 tracing::warn!(entry = ?entry.file_name(), "not a space; left alone");
                 continue;
             };
-            if !admission.includes(id) {
+            if !gate.includes(id) {
                 continue;
             }
             match load_space(&entry.path())? {
-                Some(space) if admission.allows(id, &space.access.hash()) => {
+                Some(space) if gate.allows(id, &space.access.hash()) => {
                     bytes += space.state.lock().bytes;
                     spaces.insert(id, Arc::new(space));
                 }
                 Some(_) => {
                     return Err(io::Error::new(io::ErrorKind::InvalidData, "an allowed space's access hash does not match its configured hash"));
                 }
-                None if !admission.is_open() => {
+                None if !gate.is_open() => {
                     return Err(io::Error::new(io::ErrorKind::InvalidData, "an allowed space has no readable access hash"));
                 }
                 None => tracing::warn!("a space without a readable access file; left alone"),
             }
         }
-        Ok(Self { root, limits, admission, index: Mutex::new(Index { spaces, bytes }) })
+        Ok(Self { root, limits, gate, index: Mutex::new(Index { spaces, bytes }) })
+    }
+
+    /// Which spaces the relay serves.
+    pub(crate) fn gate(&self) -> &Arc<Gate> {
+        &self.gate
+    }
+
+    /// Admit space `id`, bound to `access`, with the registration code `code`; a space admitted
+    /// so whose files are still on disk (revoked once, or kept from before the codes) is served
+    /// with them again.
+    pub(crate) async fn redeem(&self, id: Uuid, access: &Access, code: String) -> Result<Redeemed, StoreError> {
+        let (gate, hash) = (Arc::clone(&self.gate), access.hash());
+        let redeemed = tokio::task::spawn_blocking(move || gate.redeem(id, &hash, &code, crate::admission::now()))
+            .await
+            .unwrap_or_else(|e| Err(io::Error::other(e)))
+            .map_err(StoreError::Io)?;
+        if redeemed == Redeemed::Admitted {
+            self.read_in(id, access).await.map_err(StoreError::Io)?;
+        }
+        Ok(redeemed)
+    }
+
+    /// Serve space `id`, which is on disk, without a code (`lockra-relay admit`).
+    pub(crate) async fn admit(&self, id: Uuid, note: String) -> Result<(), String> {
+        if self.exists(id) {
+            return Err(format!("space {id} is served already"));
+        }
+        let dir = self.root.join(id.hyphenated().to_string());
+        let loaded = tokio::task::spawn_blocking(move || load_space(&dir)).await.unwrap_or_else(|e| Err(io::Error::other(e)));
+        let space = match loaded {
+            Ok(Some(space)) => space,
+            Ok(None) => return Err(format!("no space {id} with a readable access file on disk")),
+            Err(e) => return Err(format!("space {id} could not be read: {e}")),
+        };
+        let (gate, hash) = (Arc::clone(&self.gate), space.access.hash());
+        tokio::task::spawn_blocking(move || gate.admit(id, &hash, note, crate::admission::now())).await.unwrap_or_else(|e| Err(e.to_string()))?;
+        self.insert(id, space);
+        Ok(())
+    }
+
+    /// Stop serving space `id` (`lockra-relay revoke`): its files stay on disk.
+    pub(crate) async fn revoke(&self, id: Uuid) -> Result<(), String> {
+        let gate = Arc::clone(&self.gate);
+        tokio::task::spawn_blocking(move || gate.revoke(id, crate::admission::now())).await.unwrap_or_else(|e| Err(e.to_string()))?;
+        let removed = self.index.lock().spaces.remove(&id);
+        if let Some(space) = removed {
+            let bytes = {
+                let mut state = space.state.lock();
+                state.gone = true;
+                state.bytes
+            };
+            let mut index = self.index.lock();
+            index.bytes = index.bytes.saturating_sub(bytes);
+        }
+        Ok(())
+    }
+
+    /// The spaces the relay serves.
+    pub(crate) fn served_ids(&self) -> Vec<Uuid> {
+        let mut ids: Vec<Uuid> = self.index.lock().spaces.keys().copied().collect();
+        ids.sort();
+        ids
+    }
+
+    /// What the relay keeps of space `id`, when it serves it.
+    pub(crate) fn served(&self, id: Uuid) -> Option<Served> {
+        let space = self.index.lock().spaces.get(&id).cloned()?;
+        let state = space.state.lock();
+        Some(Served { devices: state.objects.len(), bytes: state.bytes, touched: state.touched })
+    }
+
+    /// The spaces on disk the relay does not serve, with when a device last reached each.
+    pub(crate) async fn unserved(&self) -> io::Result<Vec<(Uuid, SystemTime)>> {
+        let served: std::collections::HashSet<Uuid> = self.index.lock().spaces.keys().copied().collect();
+        let root = self.root.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut unserved = Vec::new();
+            for entry in fs::read_dir(&root)? {
+                let entry = entry?;
+                let Some(id) = entry.file_name().to_str().and_then(space_id) else { continue };
+                if !served.contains(&id) && entry.file_type()?.is_dir() {
+                    unserved.push((id, modified(&entry.path().join(ACCESS))));
+                }
+            }
+            unserved.sort();
+            Ok(unserved)
+        })
+        .await
+        .unwrap_or_else(|e| Err(io::Error::other(e)))
+    }
+
+    /// Read space `id` in from disk unless it is served already, when its files are `access`'s
+    /// (others are replaced by the space's first write).
+    async fn read_in(&self, id: Uuid, access: &Access) -> io::Result<()> {
+        if self.exists(id) {
+            return Ok(());
+        }
+        let dir = self.root.join(id.hyphenated().to_string());
+        let loaded = tokio::task::spawn_blocking(move || load_space(&dir)).await.unwrap_or_else(|e| Err(io::Error::other(e)));
+        match loaded {
+            Ok(Some(space)) if space.access.matches(access) => self.insert(id, space),
+            Ok(_) => {}
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e),
+        }
+        Ok(())
+    }
+
+    /// Serve `space`, read in, as `id` (unless another request made it meanwhile).
+    fn insert(&self, id: Uuid, space: Space) {
+        let mut index = self.index.lock();
+        if index.spaces.contains_key(&id) {
+            return;
+        }
+        index.bytes += space.state.lock().bytes;
+        index.spaces.insert(id, Arc::new(space));
     }
 
     /// The spaces kept.
@@ -403,7 +533,7 @@ impl Store {
 
     /// Space `id`, when `access` is its token's; `None` when the relay does not keep it.
     fn space(&self, id: Uuid, access: &Access) -> Result<Option<Arc<Space>>, StoreError> {
-        if !self.admission.allows(id, &access.hash()) {
+        if !self.gate.allows(id, &access.hash()) {
             return Err(StoreError::Forbidden);
         }
         match self.index.lock().spaces.get(&id) {
@@ -415,7 +545,7 @@ impl Store {
 
     /// Space `id` for a write: made, bound to `access`, when the relay does not keep it yet.
     fn space_for_write(&self, id: Uuid, access: &Access) -> Result<Arc<Space>, StoreError> {
-        if !self.admission.allows(id, &access.hash()) {
+        if !self.gate.allows(id, &access.hash()) {
             return Err(StoreError::Forbidden);
         }
         let mut index = self.index.lock();
@@ -540,7 +670,7 @@ fn read_bounded(path: &Path, max: u64) -> io::Result<Bytes> {
 }
 
 /// Write `bytes` to `path` through a temporary file beside it, on disk before it takes the name.
-fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let (Some(dir), Some(name)) = (path.parent(), path.file_name().and_then(|n| n.to_str())) else {
         return Err(io::Error::other("no place to write"));
     };
@@ -705,6 +835,63 @@ mod tests {
         assert!(matches!(private.put(allowed, &token(9), A, Bytes::from_static(b"wrong"), Condition::Always).await, Err(StoreError::Forbidden)));
         private.put(allowed, &access, A, Bytes::from_static(b"restored"), Condition::Always).await.unwrap();
         assert_eq!(fs::read_to_string(allowed_dir.join(ACCESS)).unwrap(), HEXLOWER.encode(&access.0));
+    }
+
+    #[tokio::test]
+    async fn code_registration_serves_admitted_spaces_and_takes_back_their_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mine, stranger, later) = (id(), id(), id());
+        {
+            // Made while the relay was open: nobody admitted them.
+            let open = Store::open(dir.path(), limits(), Admission::Open).unwrap();
+            open.put(mine, &token(1), A, Bytes::from_static(b"mine"), Condition::Always).await.unwrap();
+            open.put(stranger, &token(2), A, Bytes::from_static(b"theirs"), Condition::Always).await.unwrap();
+        }
+        let store = Store::open(dir.path(), limits(), Admission::Code(Box::default())).unwrap();
+        assert_eq!((store.spaces(), store.bytes()), (0, 0));
+        assert!(matches!(store.list(mine, &token(1)).await, Err(StoreError::Forbidden)));
+        let unserved = store.unserved().await.unwrap();
+        let mut both = vec![mine, stranger];
+        both.sort();
+        assert_eq!(unserved.iter().map(|(id, _)| *id).collect::<Vec<_>>(), both);
+        assert!(unserved.iter().all(|(_, used)| *used > SystemTime::UNIX_EPOCH));
+
+        // A code admits a space whose files are on disk: they are served again, as they were.
+        let made = store.gate().new_code(String::new(), 3600, crate::admission::now()).unwrap();
+        assert_eq!(store.redeem(mine, &token(1), made.code.clone()).await.unwrap(), Redeemed::Admitted);
+        assert_eq!(store.get(mine, &token(1), A).await.unwrap().unwrap().0.as_ref(), b"mine");
+        assert_eq!(store.served(mine).map(|s| (s.devices, s.bytes)), Some((1, 4)));
+        assert_eq!(store.served_ids(), [mine]);
+        assert_eq!(store.redeem(stranger, &token(2), made.code).await.unwrap(), Redeemed::BadCode);
+
+        // Admitted by command, from its files; then revoked: not served, the files stay.
+        assert!(store.admit(mine, String::new()).await.unwrap_err().contains("served already"));
+        assert!(store.admit(later, String::new()).await.unwrap_err().contains("no space"));
+        store.admit(stranger, "kept from before".into()).await.unwrap();
+        assert_eq!(store.get(stranger, &token(2), A).await.unwrap().unwrap().0.as_ref(), b"theirs");
+        assert_eq!(store.bytes(), 10);
+        store.revoke(stranger).await.unwrap();
+        assert!(store.revoke(stranger).await.unwrap_err().contains("not admitted"));
+        assert!(matches!(store.get(stranger, &token(2), A).await, Err(StoreError::Forbidden)));
+        assert_eq!((store.spaces(), store.bytes()), (1, 4));
+        assert!(dir.path().join(ROOT).join("spaces").join(stranger.to_string()).join(DEVICES).join(A).exists());
+        drop(store);
+
+        // After a restart, the admitted space is read in, the revoked one is not.
+        let store = Store::open(dir.path(), limits(), Admission::Code(Box::default())).unwrap();
+        assert_eq!(store.served_ids(), [mine]);
+        // Its files lost: the space is made again by its own token's write only.
+        fs::remove_dir_all(dir.path().join(ROOT).join("spaces").join(mine.to_string())).unwrap();
+        let store = Store::open(dir.path(), limits(), Admission::Code(Box::default())).unwrap();
+        assert!(matches!(store.put(mine, &token(9), A, Bytes::from_static(b"x"), Condition::Always).await, Err(StoreError::Forbidden)));
+        store.put(mine, &token(1), A, Bytes::from_static(b"again"), Condition::Always).await.unwrap();
+        // Files of another token under an admitted id are not read in; the first write replaces them.
+        let other = id();
+        Store::open(dir.path(), limits(), Admission::Open).unwrap().put(other, &token(3), A, Bytes::from_static(b"old"), Condition::Always).await.unwrap();
+        let store = Store::open(dir.path(), limits(), Admission::Code(Box::default())).unwrap();
+        let made = store.gate().new_code(String::new(), 3600, crate::admission::now()).unwrap();
+        assert_eq!(store.redeem(other, &token(4), made.code).await.unwrap(), Redeemed::Admitted);
+        assert!(store.get(other, &token(4), A).await.unwrap().is_none());
     }
 
     #[tokio::test]
