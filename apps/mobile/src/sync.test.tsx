@@ -148,13 +148,11 @@ describe("sync on the phone", () => {
     await user.click(screen.getByTestId("sync-join-open"));
     const form = within(await screen.findByTestId("sync-join"));
     // What the desktop's code holds: the relay's address and the sync key.
-    backend.setScan(
-      `lockra-invite:1:${btoa("mock-relay-invite|https://lockra-relay.onethinker.top\n:1")}`,
-    );
+    backend.setScan(`lockra-invite:1:${btoa("mock-relay-invite|https://relay.example.com\n:1")}`);
     await user.type(form.getByLabelText("这台设备的主密码"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "扫码加入" }));
     expect(await screen.findByTestId("sync-status")).toHaveTextContent("已同步");
-    expect(screen.getByText("Lockra 中继 · lockra-relay.onethinker.top")).toBeInTheDocument();
+    expect(screen.getByText("Lockra 中继 · relay.example.com")).toBeInTheDocument();
     // The phone's own invitation: its QR code and the pairing link a computer pastes, with the
     // warning that the link hands the space over for good; no code.
     await user.click(screen.getByTestId("sync-invite-open"));

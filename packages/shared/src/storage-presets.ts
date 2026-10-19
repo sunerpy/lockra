@@ -6,7 +6,6 @@ import type { StorageKind, StorageView } from "./schema";
 import type { StorageForm } from "./storage-form";
 
 export type PresetId =
-  | "relay-hosted"
   | "relay-custom"
   | "aws"
   | "aws-cn"
@@ -21,9 +20,6 @@ export type PresetId =
   | "synology"
   | "webdav-custom"
   | "folder";
-
-/** The relay Lockra runs (docs/relay.md): a space on it needs no storage of one's own. */
-export const BUILT_IN_RELAY = "https://lockra-relay.onethinker.top";
 
 /** What a preset asks for besides the credentials and the folder. */
 export type PresetField = "endpoint" | "region" | "account" | "url" | "host" | "pathStyle";
@@ -145,10 +141,8 @@ const B2_REGIONS = [
 
 export const PRESETS: Readonly<Record<PresetId, Preset>> = {
   // A Lockra relay keeps the space's encrypted snapshots and opens none (docs/security.md, "The
-  // relay"): one the user runs, listed first, or Lockra's own, one server of the project's for
-  // trying sync out (the sync page recommends storage or a relay of one's own).
+  // relay"). The user runs it and enters its HTTPS address.
   "relay-custom": { id: "relay-custom", kind: "relay", fields: ["url"] },
-  "relay-hosted": { id: "relay-hosted", kind: "relay", fields: [], address: () => BUILT_IN_RELAY },
   aws: {
     id: "aws",
     kind: "s3",
@@ -262,8 +256,7 @@ export function customPreset(kind: StorageKind): PresetId {
   return kind === "s3" ? "s3-custom" : "webdav-custom";
 }
 
-/** The preset a kind starts with: the custom one, which asks for every field (a relay starts on
- *  one's own; Lockra's built-in relay is chosen by name). */
+/** The preset a kind starts with: the custom one, which asks for every field. */
 export function startPreset(kind: StorageKind): PresetId {
   return customPreset(kind);
 }
@@ -324,10 +317,7 @@ export function detectPreset(
 ): Pick<StorageForm, "preset" | "account" | "host"> & { region?: string } {
   const none = { account: "", host: "" };
   if (view.kind === "folder") return { preset: "folder", ...none };
-  if (view.kind === "relay") {
-    const builtIn = view.url.trim().replace(/\/+$/, "") === BUILT_IN_RELAY;
-    return { preset: builtIn ? "relay-hosted" : "relay-custom", ...none };
-  }
+  if (view.kind === "relay") return { preset: "relay-custom", ...none };
   if (view.kind === "s3") {
     const endpoint = view.endpoint.trim().replace(/\/+$/, "");
     const matchers: [PresetId, RegExp][] = [

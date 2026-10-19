@@ -442,7 +442,7 @@ fn commands() -> Vec<Value> {
         json!({"command": "update_check"}),
         json!({"command": "update_install"}),
         // On a Lockra relay: its address alone (the space's access comes from the sync key).
-        json!({"command": "sync_create", "storage": {"kind": "relay", "url": "https://lockra-relay.onethinker.top"}, "password": "a new password", "device_name": "Desktop"}),
+        json!({"command": "sync_create", "storage": {"kind": "relay", "url": "https://relay.example.com"}, "password": "a new password", "device_name": "Desktop"}),
         // With this device's own way to the space (needed when the invitation holds the sync key
         // alone: a space in another computer's folder).
         json!({
@@ -728,7 +728,7 @@ fn sync_fixtures() {
     folder.storage = StorageView::Folder { path: "C:\\Users\\me\\OneDrive\\Lockra".into() };
     views.push(SyncView { space: Some(folder) });
     let mut relay = sync_space(SyncStatus::Synced { at_ms: T0 });
-    relay.storage = StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() };
+    relay.storage = StorageView::Relay { url: "https://relay.example.com".into() };
     // A snapshot past three quarters of the relay's limit, and a phone still on 0.9.
     relay.snapshot_warning = Some(SnapshotWarningView { bytes: 3_460_000, limit: 4 * 1024 * 1024 });
     relay.devices[1].app_version = None;

@@ -76,7 +76,7 @@ describe("Settings › Sync", () => {
     expect(document.body.textContent).not.toContain(MOCK_STORAGE_SECRET);
   });
 
-  it("starts on storage of one's own, and sets up a space on Lockra's built-in relay chosen by name", async () => {
+  it("starts on storage of one's own and sets up a self-hosted relay", async () => {
     const { user, backend } = renderApp();
     await ready();
     const pane = await openSync(user);
@@ -87,20 +87,15 @@ describe("Settings › Sync", () => {
     expect(form.getByRole("radio", { name: "WebDAV" })).toBeChecked();
     expect(form.getByRole("button", { name: "开始同步" })).toBeDisabled();
     await user.click(form.getByRole("radio", { name: "Lockra 中继" }));
-    expect(form.getByTestId("storage-provider")).toHaveValue("relay-custom");
-    // The built-in relay, chosen by name, with what it means.
-    await user.selectOptions(form.getByTestId("storage-provider"), "relay-hosted");
-    expect(form.getByTestId("storage-address")).toHaveTextContent(
-      "https://lockra-relay.onethinker.top",
-    );
-    expect(form.getByTestId("storage-preset-hint")).toHaveTextContent("长期使用请自建中继");
+    expect(form.queryByTestId("storage-provider")).not.toBeInTheDocument();
+    await user.type(form.getByLabelText("中继地址"), "https://relay.example.com");
     await user.type(form.getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(form.getByRole("button", { name: "开始同步" }));
     expect(await pane.findByTestId("sync-storage")).toHaveTextContent(
-      "Lockra 中继 · lockra-relay.onethinker.top",
+      "Lockra 中继 · relay.example.com",
     );
     expect(backend.calls.find((c) => c.command === "sync_create")).toMatchObject({
-      storage: { kind: "relay", url: "https://lockra-relay.onethinker.top" },
+      storage: { kind: "relay", url: "https://relay.example.com" },
     });
     // The invitation: its QR code and the pairing link beside it, with the warning that the link
     // hands the space over for good.

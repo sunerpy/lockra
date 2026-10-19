@@ -20,7 +20,7 @@ drive keeps in sync, and everything they put there is encrypted before it leaves
   on the same computer.
 - Or, on a computer, a folder that a cloud drive's app keeps in sync, with no credentials at all
   (below, [Through a cloud drive folder](#through-a-cloud-drive-folder)).
-- Or nothing at all: Lockra's built-in relay, or a relay of your own (below,
+- Or a relay you run, with no bucket or WebDAV account (below,
   [Through a Lockra relay](#through-a-lockra-relay)).
 
 ### By provider
@@ -52,19 +52,14 @@ Every kind of storage gets the same encrypted files, and none can open them
 that one sees, and how long it stays. Lockra recommends storage of your own or a relay of your own,
 so that your sync depends on no server you did not choose:
 
-| Where                                                                    | Who runs it                                 | Sees besides the encrypted files                                 | How long it stays                                       |
-| ------------------------------------------------------------------------ | ------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
-| Storage of your own: a WebDAV folder, an S3 bucket, a cloud drive folder | your provider, or you                       | what the provider sees of any file: sizes, times, your addresses | as long as your account there                           |
-| A relay of your own ([Running your own relay](/backup/relay))            | you                                         | nothing that anyone else sees                                    | as long as you run it                                   |
-| Lockra's built-in relay                                                  | the Lockra project, on one server, for free | when your devices sync and from which addresses                  | no promise: it can be unavailable for a while, or close |
+| Where                                                                    | Who runs it           | Sees besides the encrypted files                                 | How long it stays             |
+| ------------------------------------------------------------------------ | --------------------- | ---------------------------------------------------------------- | ----------------------------- |
+| Storage of your own: a WebDAV folder, an S3 bucket, a cloud drive folder | your provider, or you | what the provider sees of any file: sizes, times, your addresses | as long as your account there |
+| A relay you run ([Running your own relay](/backup/relay))                | you                   | nothing that anyone else sees                                    | as long as you run it         |
 
-The built-in relay needs nothing set up, which makes it the quickest way to try sync out. Wherever
-the space is, your devices keep every account: a storage that goes away stops sync, not your
-vaults.
-
-<StatusTag status="available" /> From version 0.11.1, the storage form starts on **WebDAV**, and
-**Lockra relay** on **A relay of your own**; **Lockra's built-in relay** is chosen as the provider
-by name.
+Wherever the space is, your devices keep every account: storage that goes away stops sync, not your
+vaults. <StatusTag status="available" /> From version 0.11.1, the storage form starts on
+**WebDAV**; choosing **Lockra relay** asks for the HTTPS address of the relay you run.
 
 ## Starting to sync
 
@@ -195,7 +190,7 @@ version refuses theirs: update every device first.
 
 <StatusTag status="available" /> Available from version 0.8.4.
 
-A sync space on a Lockra relay (the built-in relay or one of your own) adds a device with one
+A sync space on a Lockra relay adds a device with one
 pairing link, and no code:
 
 1. On a device that syncs, open **Settings › Sync › Invite another device** and enter the master
@@ -260,15 +255,14 @@ keeps the accounts, and shows sync as off.
 
 <StatusTag status="available" /> Available from version 0.8.1.
 
-A relay is a server that keeps a sync space's encrypted files, for devices that have no storage of
-their own. Lockra runs one, the built-in relay, and you can run your own
-([Running your own relay](/backup/relay)). To the devices it is one more kind of storage: they
-write the same encrypted files there as anywhere else, and the relay can open none of them.
+A relay is a server you run to keep a sync space's encrypted files, for devices that have no S3
+bucket or WebDAV account ([Running your own relay](/backup/relay)). To the devices it is one more
+kind of storage: they write the same encrypted files there as anywhere else, and the relay can open
+none of them.
 
 1. On the first device, open **Settings › Sync** and choose **Start syncing**. Under **Storage**,
-   choose **Lockra relay**: the provider starts on **A relay of your own**; enter its **Relay
-   address**, which starts with `https://`. To try sync out on Lockra's built-in relay instead,
-   choose **Lockra's built-in relay** as the provider, with nothing to fill in.
+   choose **Lockra relay** and enter the **Relay address** of the server you run, which starts with
+   `https://`.
 2. Check **This device's name**, enter the master password, and choose **Start syncing**.
 3. Save the recovery key **Settings › Sync** reminds you of, as for any storage.
 
@@ -279,8 +273,7 @@ invitation on the computer (**Invite another device**) and scan its QR code on t
 screen): the phone needs no storage settings, only a master password. **Copy the
 pairing link** and pasting it works too, on a phone or a computer, with no code
 ([Pairing links](#pairing-links)). Without
-another device at hand, choose **Recovery key**, choose **Lockra relay** with the provider the
-space is on, and enter the recovery key.
+another device at hand, choose **Recovery key**, choose **Lockra relay**, enter its address, and enter the recovery key.
 
 While the vault is unlocked, a device keeps one request waiting at the relay, which answers it when
 another device writes: the change arrives about a second later. Besides, a device syncs at the
@@ -300,17 +293,14 @@ What the relay can see:
   the recovery key, from which the recovery key cannot be recovered; the relay keeps only a fingerprint of
   that value and refuses every request without it. Someone who learns where a space lives on the
   relay can neither read nor change it.
-- **The relay can be unavailable.** It can also delete a space, like any storage: the devices keep
-  every account, and write the space again on their next sync. The built-in relay is one server
-  the Lockra project runs for free, with no promise of service: it is there to try sync out. For a
-  space you rely on, run a relay of your own or use storage of your own
-  ([Choosing where to sync](#choosing-where-to-sync)).
+- **The relay can be unavailable.** Its operator can also delete a space, like any storage: the
+  devices keep every account and write the space again on their next sync.
 
-The built-in relay keeps a space for 400 days after a device last reached it, holds at most 64
-devices and 32 MiB per space, and limits the requests each network address makes. When it is full,
-a run fails with "The storage answered with an error"; when it asks a device to slow down, with
-"The storage could not be reached"; the next run tries again. What the built-in relay keeps is on
-the [Privacy](/privacy#the-built-in-relay) page.
+By default `lockra-relay` keeps an idle space for 400 days, allows 64 devices and 32 MiB per space,
+and limits requests from each network address; its operator can change these limits. When it is
+full, a run fails with "The storage answered with an error"; when it asks a device to slow down,
+with "The storage could not be reached"; the next run tries again. See
+[Privacy](/privacy#a-relay-you-run) for what reaches the relay.
 
 A relay keeps at most 4 MiB of each device's sync data (a relay of your own can be set otherwise,
 [Running your own relay](/backup/relay)). When this device's sync data passes 3 MiB, three quarters

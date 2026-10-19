@@ -256,7 +256,7 @@
     "space": {
       "storage": {
         "kind": "relay",
-        "url": "https://lockra-relay.onethinker.top"
+        "url": "https://relay.example.com"
       },
       "device_name": "Desktop",
       "devices": [

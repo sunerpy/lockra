@@ -33,8 +33,8 @@ or WebDAV folder you set up and reads the other devices' files from there, and c
 storage sees encrypted files, their sizes in steps of 4 KiB, the number of devices and when they
 write; never an account, a secret or a device name ([Sync between devices](/backup/sync)).
 
-On a Lockra relay (from version 0.8.1), the devices write and read the same encrypted files there
-instead; what the built-in relay receives and keeps is below.
+On a Lockra relay you run (from version 0.8.1), the devices write and read the same encrypted files
+there instead; what that relay receives and keeps is below.
 
 There is no Lockra account, no crash report and no telemetry. Fonts, images and icons ship inside
 the app. Accounts and logins leave the device only when you export them, save a backup to a place
@@ -55,34 +55,23 @@ Lockra keeps a list of what the extensions did, with the time, the browser and t
 only: it is cleared as the vault locks. Turning browser integration off removes the connection
 files.
 
-## The built-in relay
+## A relay you run
 
 <StatusTag status="available" /> Available from version 0.8.1.
 
-When you choose **Lockra's built-in relay** for sync, each device sends its encrypted files to the
-relay Lockra runs and reads the other devices' files from there. The relay is run by Lockra's
-developer, on a server in AWS's Seoul region (South Korea).
+When you configure a Lockra relay, each device sends its encrypted files to the server at the HTTPS
+address you entered and reads the other devices' files from there.
 
-- **What it receives**: the encrypted files, as the devices made them; an identifier of the space
-  and of each device, computed from the space's keys, from which a device cannot be recognised in
-  another space; the value the devices identify themselves with, of which it keeps only a
-  fingerprint; and the network address each request comes from.
-- **What it cannot see**: your accounts, their secrets, the device names, the recovery key and the
-  master passwords. The files stay encrypted on the relay; neither the relay nor Lockra's developer
-  can open them.
-- **If the server is taken, or Lockra is made to hand over what it holds**: there is nothing to give
-  but what is listed above, the encrypted files, the identifiers and the fingerprint; the disk holds
-  no network address. The files are as unreadable off the relay as on it: the keys that open them
-  are on your devices only.
-- **How long**: a space is deleted with its files 400 days after a device last reached it.
-  Removing a device in **Settings › Sync** deletes its file at once.
-- **Network addresses**: kept in the relay's memory only, to limit the requests from each address,
-  and never written to disk. The relay logs no request, and the load balancer in front of it keeps
-  no access logs.
-- **No sharing**: nothing the relay holds is shared or sold. AWS hosts the server.
-- **No promise of service**: the built-in relay is one server, run for free, for trying sync out;
-  it can be unavailable for a while, or close. For a space you rely on, use storage of your own or
-  a relay of your own ([Choosing where to sync](/backup/sync#choosing-where-to-sync)).
+- **What it receives**: the encrypted files, as the devices made them; opaque identifiers of the
+  space and its devices; the access token, of which `lockra-relay` keeps only a fingerprint; and the
+  network address each request comes from.
+- **What it cannot see**: your accounts, their secrets, device names, recovery key and master
+  passwords. The files stay encrypted on the relay and its operator cannot open them.
+- **Data at rest**: taking the server's disk yields encrypted files, identifiers and the access-token
+  fingerprint. `lockra-relay` writes no network address or request log to its data directory.
+- **Retention and network logs**: the relay removes an idle space after its configured period. It
+  keeps addresses in memory for rate limits; the reverse proxy or load balancer logs whatever its
+  operator configures.
 
 ## On Android
 

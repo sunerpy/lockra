@@ -1,6 +1,6 @@
 # 自建中继
 
-本页介绍如何运行你自己的 Lockra 中继，让设备通过你掌控的服务器同步，而不经过 Lockra 内置中继。
+本页介绍如何运行 Lockra 中继，让设备通过你掌控的服务器同步。
 
 <StatusTag status="available" /> 自 0.8.1 版起提供。
 
@@ -74,11 +74,29 @@ lockra-relay --bind 0.0.0.0:8090 --trust-proxy 10.0.0.0/16 --data /var/lib/lockr
 
 ## 连接你的设备
 
-在第一台设备上，打开「设置 › 同步」，选择「开始同步」，选择「Lockra 中继」（服务商默认为「自建中继」），并在「中继地址」中填写中继的地址，例如 `https://relay.example.com`。邀请码和配对链接中包含这个地址，因此其他设备扫描二维码或粘贴配对链接即可加入，与使用内置中继时相同。已经在其他存储上同步的同步空间，可以在每台设备上通过「修改存储设置」迁移到你的中继。
+在第一台设备上，打开「设置 › 同步」，选择「开始同步」，再选择「Lockra 中继」，并在「中继地址」中填写中继的地址，例如 `https://relay.example.com`。邀请码和配对链接中包含这个地址，因此其他设备扫描二维码或粘贴配对链接即可加入。已经在其他存储上同步的同步空间，可以在每台设备上通过「修改存储设置」迁移到你的中继。
 
 ## 设置
 
 默认设置适合家庭或小型团队：每台设备的文件最大 4 MiB，每个同步空间最多 64 台设备、32 MiB，总计 4 GiB，每个网络地址每分钟 120 次请求，设备最后一次访问同步空间 400 天后删除该空间。`lockra-relay --help` 会列出全部设置，每项设置也可以用环境变量指定；[中继的文档](https://github.com/sunerpy/lockra/blob/main/docs/relay.md)（英文）逐项说明了它们。
+
+### 关闭新空间注册
+
+只想让已经使用的同步空间访问中继时，请同时设置 `LOCKRA_RELAY_REGISTRATION=closed` 和
+`LOCKRA_RELAY_ALLOWED_SPACES`。后者的每一项依次是同步空间目录的 UUID、`=` 和该目录
+`access` 文件里的小写 SHA-256；多项以英文逗号分隔：
+
+```sh
+space=123e4567-e89b-42d3-a456-426614174000
+access=$(sudo cat "/var/lib/lockra-relay/lockra-relay-v1/spaces/$space/access")
+export LOCKRA_RELAY_REGISTRATION=closed
+export LOCKRA_RELAY_ALLOWED_SPACES="$space=$access"
+```
+
+其他同步空间的请求都会被拒绝。未列出的目录仍留在磁盘上，但不会对外提供；允许的空间即使目录丢失，
+也只有能提供匹配令牌的原设备可以重新建立。允许列表缺失、格式错误，或允许目录中的指纹不一致时，
+中继会在开始监听前退出，避免误服务或覆盖文件。这里限制的是同步空间，不是其中的单台设备：同一空间
+中的设备仍共用一个访问令牌。
 
 ## 中继保存的内容
 

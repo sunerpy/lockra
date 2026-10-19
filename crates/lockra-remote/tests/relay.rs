@@ -1,6 +1,6 @@
 //! A sync space on a real relay (lockra-relay, started in the test on this computer): what the
 //! sync engine relies on, two devices syncing through it, the access token, the watch. With
-//! `LOCKRA_IT_RELAY_URL` (the built-in relay, or one of one's own), the last test does the same
+//! `LOCKRA_IT_RELAY_URL`, the last test does the same
 //! through that relay, over the network, and removes what it wrote.
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -10,7 +10,7 @@ mod common;
 use std::time::Duration;
 
 use common::two_devices_sync_with;
-use lockra_relay::{Config, Limits, Relay};
+use lockra_relay::{Admission, Config, Limits, Relay};
 use lockra_remote::{SpaceAccess, StorageConfig, Watch, open, watch};
 use lockra_sync::{PutCondition, SyncError, SyncKey, device_path, devices_dir};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -19,7 +19,9 @@ const TAG: &str = "0123456789abcdef0123456789abcdef";
 const OTHER: &str = "fedcba9876543210fedcba9876543210";
 
 async fn relay(dir: &std::path::Path, limits: Limits) -> Relay {
-    Relay::start(Config { bind: "127.0.0.1:0".parse().unwrap(), data_dir: dir.to_owned(), trusted_proxies: Vec::new(), limits }).await.unwrap()
+    Relay::start(Config { bind: "127.0.0.1:0".parse().unwrap(), data_dir: dir.to_owned(), trusted_proxies: Vec::new(), admission: Admission::Open, limits })
+        .await
+        .unwrap()
 }
 
 fn config(relay: &Relay) -> StorageConfig {

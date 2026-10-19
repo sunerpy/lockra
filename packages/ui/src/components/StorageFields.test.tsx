@@ -1,5 +1,4 @@
 import {
-  BUILT_IN_RELAY,
   type ErrorCode,
   LockraError,
   type StorageForm,
@@ -11,7 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { StorageFields } from "./StorageFields";
 
-/** An empty S3 form (a new one starts on Lockra's relay). */
+/** An empty S3 form. */
 const s3 = () => withPreset(emptyStorageForm(), { kind: "s3" });
 
 function Form({
@@ -92,7 +91,7 @@ describe("StorageFields", () => {
     expect(screen.getByLabelText("WebDAV 地址")).toHaveValue("");
     // A relay: one's own, its address typed.
     await user.click(screen.getByRole("radio", { name: "Lockra 中继" }));
-    expect(screen.getByTestId("storage-provider")).toHaveValue("relay-custom");
+    expect(screen.queryByTestId("storage-provider")).not.toBeInTheDocument();
     expect(screen.getByText(/推荐自建中继/)).toBeInTheDocument();
     await user.type(screen.getByLabelText("中继地址"), "https://relay.example.com");
     expect(form).toMatchObject({
@@ -100,14 +99,6 @@ describe("StorageFields", () => {
       preset: "relay-custom",
       url: "https://relay.example.com",
     });
-    // Lockra's built-in relay, chosen by name: nothing to type, and what it means said.
-    await user.selectOptions(screen.getByTestId("storage-provider"), "relay-hosted");
-    expect(screen.getByTestId("storage-address")).toHaveTextContent(BUILT_IN_RELAY);
-    const hint = screen.getByTestId("storage-preset-hint");
-    expect(hint).toHaveTextContent("打不开其中任何一个");
-    expect(hint).toHaveTextContent("可能暂时不可用或停止服务");
-    expect(hint).toHaveTextContent("长期使用请自建中继或用你自己的存储");
-    expect(screen.queryByLabelText("中继地址")).not.toBeInTheDocument();
     // WebDAV does not keep the relay's address.
     await user.click(screen.getByRole("radio", { name: "WebDAV" }));
     expect(form).toMatchObject({ kind: "webdav", url: "" });

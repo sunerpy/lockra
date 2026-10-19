@@ -246,10 +246,10 @@ mod tests {
 
     #[test]
     fn an_invitation_to_a_relay_carries_its_address_and_the_sync_key() {
-        let relay = invite_to(Some(StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() }));
+        let relay = invite_to(Some(StorageConfig::Relay { url: "https://relay.example.com".into() }));
         let text = relay.to_text();
         let json = json_of(&text);
-        assert_eq!(json["storage"], serde_json::json!({ "kind": "relay", "url": "https://lockra-relay.onethinker.top" }));
+        assert_eq!(json["storage"], serde_json::json!({ "kind": "relay", "url": "https://relay.example.com" }));
         assert_eq!(json.as_object().unwrap().len(), 3);
         let back = Invite::from_text(&text).unwrap();
         assert!(back == relay);

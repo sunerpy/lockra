@@ -36,9 +36,8 @@ Lockra 是一个两步验证器，也是密码管理器，支持 Windows、macOS
   Lockra 请求，每一次填充都由 Lockra 决定。
 - **多端支持**：同一个应用覆盖 Windows、macOS、Linux（x64 与 ARM64）和 Android 8 及以上，界面设计一致，
   提供八套主题和中英文界面。iPhone 与 iPad 版在计划中。
-- **多端同步**：在你自己的存储上（S3 兼容存储桶、WebDAV 文件夹，或在电脑之间经网盘同步文件夹），或经 Lockra
-  中继（自建中继，或用内置中继试用），端到端加密地同步，每台设备上的账号保持一致。内容在离开设备之前就已加密，
-  存储或中继里只有密文。
+- **多端同步**：在你自己的存储上（S3 兼容存储桶、WebDAV 文件夹，或在电脑之间经网盘同步文件夹），或经你自建的
+  Lockra 中继，端到端加密地同步，每台设备上的账号保持一致。内容在离开设备之前就已加密，存储或中继里只有密文。
 - **扫码配对**：手机扫描电脑上的二维码即可加入，也可以粘贴配对链接或邀请码；所有设备都丢失时，可以用恢复密钥
   找回同步空间。
 - **无需账号**：无需注册，没有遥测，也没有能读取验证码或密码的服务器。账号可以从 Google 身份验证器或 Microsoft
@@ -142,10 +141,9 @@ Android 应用：验证码页、添加账号和同步，以及手机上的登录
 
 ## 同步中继
 
-从 0.8.1 起，没有自己存储的设备可以通过 Lockra 中继同步。内置中继无需任何设置，适合试用同步：它是免费运行的
-一台服务器，不作服务保证，长期依赖的同步空间请自建中继或使用你自己的存储。自建中继时，每个版本都提供
-Linux 版 `lockra-relay`（x64 与 ARM64）及其 systemd 服务；`deploy/relay/` 中还有一个 Docker Compose 文件，
-在中继前面运行 Caddy 并自动配置 HTTPS：
+从 0.8.1 起，没有 S3 存储桶或 WebDAV 账号的设备可以通过自己运行的 Lockra 中继同步。每个版本都提供 Linux 版
+`lockra-relay`（x64 与 ARM64）及其 systemd 服务；`deploy/relay/` 中还有一个 Docker Compose 文件，在中继前面
+运行 Caddy 并自动配置 HTTPS：
 
 ```bash
 RELAY_HOST=relay.example.com docker compose -f deploy/relay/compose.yaml up -d

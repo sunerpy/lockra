@@ -333,8 +333,7 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
 
 ## Sync
 
-- **Off unless set up.** Sync stays off until the user sets up a space: on a Lockra relay (the
-  built-in one, which Lockra runs, or one of the user's own; "The relay" below), on an
+- **Off unless set up.** Sync stays off until the user sets up a space: on a Lockra relay the user runs ("The relay" below), on an
   S3-compatible bucket or a WebDAV folder of their own, or, on a computer, in a folder their cloud
   drive's client keeps in sync. With a space, Lockra contacts that storage only while the vault is
   unlocked: at unlock, 3 s after a change, every minute while
@@ -447,8 +446,7 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
 
 ### The relay
 
-A relay (`docs/relay.md`) is storage that Lockra or the user runs: the built-in one at
-`https://lockra-relay.onethinker.top`, or anyone's own `lockra-relay`. It holds what any storage
+A relay (`docs/relay.md`) is storage the user runs with `lockra-relay`. It holds what any storage
 holds, the space's snapshots as the devices sealed them, and is trusted with no more.
 
 - **It cannot read the space.** The snapshots are encrypted under the space's data key, which never
@@ -459,18 +457,22 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   whenever it opens the relay and stores it nowhere; the relay keeps only the token's SHA-256.
   Whoever takes the relay's disk, or the relay itself, holds ciphertext and hashes, as an S3 bucket's
   operator would, and so does anyone its operator is made to hand them to: nothing on it opens
-  without the sync key, which the relay never sees, and the built-in relay's disk holds no client
+  without the sync key, which the relay never sees. The relay's data directory holds no client
   address.
 - **What it sees.** The space's id (derived one way from the sync key), its devices' tags (keyed
   hashes, which link no device across spaces), the snapshots' sizes in 4 KiB steps, when they
-  change, and the addresses that ask. The built-in relay keeps the addresses in memory only, for
-  its rates; it writes no log of requests, and its load balancer keeps no access or connection
-  logs. A relay of one's own logs what its operator makes it log.
+  change, and the addresses that ask. `lockra-relay` keeps addresses in memory only for its rates
+  and writes no request log; a reverse proxy or load balancer logs what its operator configures.
 - **Only the space's devices change it.** A space is bound to the token of its first write; a
   request with another token is refused, so someone who learns a space's id (from a URL in a log,
   say) can neither read nor change it. The relay itself can delete, withhold or roll back
   snapshots, like any storage: the devices refuse an older snapshot than one seen, keep every
   account when the space goes, and write their snapshots again.
+- **A relay can close registration.** With a configured allowlist, it serves only exact pairs of
+  space id and SHA-256 of the space access token. It keeps no extra secret: an allowed space can be
+  recreated after storage loss only by a device with the matching token, while unlisted directories
+  stay untouched and unavailable. This restricts spaces, not devices within one space, which share
+  that token; it also cannot constrain an operator or attacker who already controls the relay disk.
 - **Limits.** The relay refuses more than it keeps (snapshot size, devices per space, bytes per
   space and in all, spaces) and more than a client may ask (requests per client address and per
   space, new spaces per address): one client cannot exhaust it for the others. A space no device
@@ -532,12 +534,9 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   to it. A new space stops only what comes next: whoever held the space may have read every
   account already, so the logins' passwords and the codes' secrets (each site's two-step setup)
   are to be changed too. The app says so where it shows an invitation or a pairing link.
-- A relay, the built-in one included, sees when and from which addresses a space's devices sync,
-  and its operator can make the space unavailable; the built-in relay is a single server the
-  project runs for free, with no promise of service, and can be down or close. For a space that
-  must not depend on Lockra's server, run a relay of your own or use storage of your own: the
-  app recommends them (the storage form starts on WebDAV, a relay on one of one's own, and the
-  built-in relay is chosen by name, for trying sync out).
+- A relay sees when and from which addresses a space's devices sync, and its operator can make
+  the space unavailable. Run it and its backups as infrastructure you control, or use storage of
+  your own; the storage form starts on WebDAV, and a relay always asks for its HTTPS address.
 - On Android, the sync trusts the certificate authorities the system ships (its Conscrypt
   module's since Android 14, the system image's before): one the user turned off in the system's
   settings is still trusted by the sync, and Android's blocklist of distrusted certificates is not

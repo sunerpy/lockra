@@ -30,7 +30,7 @@ fn webdav() -> StorageConfig {
 }
 
 fn relay() -> StorageConfig {
-    StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() }
+    StorageConfig::Relay { url: "https://relay.example.com".into() }
 }
 
 fn manual(storage: StorageConfig, sync_key: &str) -> JoinSource {
@@ -1206,7 +1206,7 @@ async fn a_relay_is_shown_the_spaces_access_and_the_phone_joins_from_the_desktop
     // The relay was shown the token the sync key gives, never the key.
     let access = lockra_sync::SpaceAccess::of(&lockra_sync::SyncKey::from_text(&sync_key).unwrap());
     assert_eq!(transport.relay_token(&relay()).as_deref(), Some(access.relay_token()));
-    assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
+    assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://relay.example.com".into() });
     assert_eq!(transport.watching(&relay()), 1, "a relay tells of changes");
 
     // The phone scans the desktop's code: the relay's address and the sync key, nothing more.
@@ -1324,7 +1324,7 @@ async fn a_relay_space_copies_its_pairing_link_as_it_is_and_the_clipboard_forget
         .unwrap();
     settle().await;
     assert_eq!(issuers(&computer), ["GitHub"]);
-    assert_eq!(space(&computer).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
+    assert_eq!(space(&computer).storage, StorageView::Relay { url: "https://relay.example.com".into() });
 
     // Nothing to copy while locked, nor without a space.
     phone.core.lock_vault();
@@ -1344,7 +1344,7 @@ async fn a_space_moves_to_a_relay_that_keeps_nothing_of_it_yet() {
     // A relay keeps the space under its own id: taken, and the next run writes the space there.
     desktop.core.sync_set_storage(relay(), Some(pw(MASTER)), None).await.unwrap();
     settle().await;
-    assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://lockra-relay.onethinker.top".into() });
+    assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://relay.example.com".into() });
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
     assert_eq!(transport.store(&relay()).paths().len(), 1);
     // A phone joins it there with the sync key.

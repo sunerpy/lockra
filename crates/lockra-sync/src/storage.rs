@@ -52,12 +52,12 @@ pub enum StorageConfig {
         #[serde(default)]
         path: PathBuf,
     },
-    /// A Lockra relay (lockra-relay, docs/relay.md): the built-in one, or one the user runs. It
+    /// A Lockra relay the user runs (lockra-relay, docs/relay.md). It
     /// keeps the snapshots like any storage and opens none of them. The space's access token comes
     /// from the sync key ([`crate::SpaceAccess`]), so the settings hold the address alone, and an
     /// invitation carries nothing more than the address and the sync key.
     Relay {
-        /// The relay's address, `https://lockra-relay.onethinker.top`.
+        /// The relay's address, `https://relay.example.com`.
         url: String,
     },
 }
@@ -241,7 +241,7 @@ mod tests {
     #[test]
     fn a_relay_is_an_https_address_alone() {
         let relay = |url: &str| StorageConfig::Relay { url: url.into() };
-        assert_eq!(relay("https://lockra-relay.onethinker.top").validate(), Ok(()));
+        assert_eq!(relay("https://relay.example.com").validate(), Ok(()));
         assert_eq!(relay("https://example.com/lockra/").validate(), Ok(()));
         assert_eq!(relay("http://127.0.0.1:8090").validate(), Ok(()));
         assert_eq!(relay("http://relay.example.com").validate(), Err(ConfigError::Insecure));
@@ -255,13 +255,13 @@ mod tests {
         ] {
             assert_eq!(relay(bad).validate(), Err(ConfigError::Address), "{bad}");
         }
-        let built_in = relay("https://lockra-relay.onethinker.top");
-        assert_eq!((built_in.prefix(), built_in.host().as_deref()), ("", Some("lockra-relay.onethinker.top")));
-        assert!(built_in.is_relay() && !built_in.is_folder() && !s3("https://s3.example.com").is_relay());
-        assert_eq!(format!("{built_in:?}"), "Relay { url: \"https://lockra-relay.onethinker.top\" }");
-        let json = serde_json::to_value(&built_in).unwrap();
-        assert_eq!(json, serde_json::json!({ "kind": "relay", "url": "https://lockra-relay.onethinker.top" }));
-        assert_eq!(serde_json::from_value::<StorageConfig>(json).unwrap(), built_in);
+        let relay_config = relay("https://relay.example.com");
+        assert_eq!((relay_config.prefix(), relay_config.host().as_deref()), ("", Some("relay.example.com")));
+        assert!(relay_config.is_relay() && !relay_config.is_folder() && !s3("https://s3.example.com").is_relay());
+        assert_eq!(format!("{relay_config:?}"), "Relay { url: \"https://relay.example.com\" }");
+        let json = serde_json::to_value(&relay_config).unwrap();
+        assert_eq!(json, serde_json::json!({ "kind": "relay", "url": "https://relay.example.com" }));
+        assert_eq!(serde_json::from_value::<StorageConfig>(json).unwrap(), relay_config);
     }
 
     #[test]

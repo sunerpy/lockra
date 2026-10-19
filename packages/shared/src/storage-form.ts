@@ -3,7 +3,7 @@
 // core never sends it back. A folder of the computer is chosen through the system's dialog every
 // time too: the form only shows it, and the core takes the one the dialog chose. A Lockra relay
 // needs its address alone. The form starts on storage of one's own, WebDAV, as the sync page
-// recommends: Lockra's built-in relay is one choice among the relays, for trying sync out.
+// recommends: a relay is one the user runs and addresses explicitly.
 import type { StorageConfig, StorageKind, StorageView } from "./schema";
 import {
   type PresetId,

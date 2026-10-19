@@ -160,14 +160,14 @@ Automated:
 - `crates/lockra-core/src/tests/sync.rs`: a relay space is opened with the space's access and
   watched while unlocked; a phone joins from the desktop's invitation with nothing but its master
   password; a space moves onto a relay that keeps nothing of it yet. Bridge fixtures for the relay
-  storage; web: the form starting on the built-in relay, a relay of one's own, a relay space's
+  storage; web: the form asking for the address of a relay of one's own, a relay space's
   invitation saying it holds the relay's address and the sync key (desktop and phone), the phone
   joining from a relay invitation.
 
-Run here, 2026-10-09:
+Run here, 2026-10-19:
 
 - `make smoke-sync` with its relay phases: two more copies of the real app and `lockra-relay` on
-  127.0.0.1. Device C finds the form on the built-in relay, sets up a space on a relay of its own
+  127.0.0.1. Device C enters the test relay's address, sets up a space on it
   and shows an invitation; the relay's folder holds one snapshot and an `access` file equal to the
   SHA-256 of the token computed apart in Python from the sync key, and none of the accounts, the
   device name, the sync key or the token. Device D joins from the sealed invitation and its code
@@ -181,19 +181,17 @@ Run here, 2026-10-09:
   smoke-sync: passed
   ```
 
-  Screenshots in `screens/sync/`: `sync-relay-create-light` (the built-in relay, nothing to fill
-  in), `sync-relay-invite-light` (the relay space's invitation), `sync-relay-join-light` (device
+  Screenshots in `screens/sync/`: `sync-relay-create-light` (the test relay's address), `sync-relay-invite-light` (the relay space's invitation), `sync-relay-join-light` (device
   D's welcome screen), `sync-relay-on-light` (device C with both devices).
 
-- The built-in relay at `https://lockra-relay.onethinker.top` (docs/relay.md):
-  `LOCKRA_IT_RELAY_URL=https://lockra-relay.onethinker.top cargo test -p lockra-remote --test relay a_live_relay`
-  passed through its load balancer: two devices synced, another token was denied, the watch heard a
-  write of the other device, and the test removed its snapshots. The relay's journal holds its start
-  and nothing of the requests.
+- A deployed relay can be checked with
+  `LOCKRA_IT_RELAY_URL=https://relay.example.com cargo test -p lockra-remote --test relay a_live_relay`:
+  two devices sync, another token is denied, the watch hears a write of the other device, and the
+  test removes its snapshots. The relay itself logs no request.
 
 To check on real devices:
 
-1. A computer on the built-in relay and the Android app: scanning the computer's invitation joins
+1. A computer and the Android app on the same self-hosted relay: scanning the computer's invitation joins
    the phone with nothing typed in but a master password; an account added on either shows on the
    other within seconds while both are unlocked.
 2. A vault on a relay opened with 0.8.0: the accounts are there and sync is off.
@@ -283,7 +281,7 @@ code beside **Copy the pairing link**, the warning that the link does not expire
 
 To check on real devices:
 
-1. The Android app on the built-in relay copies its pairing link; a computer pastes it into
+1. The Android app on a self-hosted relay copies its pairing link; a computer pastes it into
    **Join an existing sync** with nothing else but its own master password.
 2. A 0.8.3 computer pastes the pairing link of the new version and joins.
 

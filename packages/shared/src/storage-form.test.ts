@@ -64,8 +64,8 @@ describe("the sync storage form", () => {
   });
 
   it("sums a relay up as its host, and a folder as its path", () => {
-    expect(storageSummary({ kind: "relay", url: "https://lockra-relay.onethinker.top" })).toBe(
-      "lockra-relay.onethinker.top",
+    expect(storageSummary({ kind: "relay", url: "https://relay.example.com" })).toBe(
+      "relay.example.com",
     );
     expect(storageSummary({ kind: "relay", url: "not an address" })).toBe("not an address");
     expect(storageFormFrom({ kind: "folder", path: "/home/me/Dropbox/Lockra" })).toMatchObject({
