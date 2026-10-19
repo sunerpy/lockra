@@ -1233,7 +1233,7 @@ export const en: Messages = {
     off: {
       createTitle: "Start syncing from this device",
       createBody:
-        "Put the sync space on storage of your own (a WebDAV folder, an S3-compatible bucket, or a cloud drive's folder on a computer) or on a Lockra relay you run, so that sync depends on no one else's server. Lockra's built-in relay needs no storage of your own and is there for trying sync out. Then save the space's recovery key: if every device is lost, it recovers the space.",
+        "Put the sync space on storage of your own (a WebDAV folder, an S3-compatible bucket, or a cloud drive's folder on a computer) or on a Lockra relay you run, so that sync depends on no one else's server. Then save the space's recovery key: if every device is lost, it recovers the space.",
       createSubmit: "Start syncing",
       joinTitle: "Join an existing sync",
       joinBody:
@@ -1279,7 +1279,6 @@ export const en: Messages = {
         "HTTPS addresses only (plain HTTP only to this computer). The credentials are kept in the encrypted vault and never shown again.",
       provider: "Provider",
       presets: {
-        "relay-hosted": "Lockra's built-in relay",
         "relay-custom": "A relay of your own",
         aws: "AWS S3 (global regions)",
         "aws-cn": "AWS S3 (China regions)",
@@ -1296,10 +1295,8 @@ export const en: Messages = {
         folder: "A folder your cloud drive's app syncs",
       },
       presetHints: {
-        "relay-hosted":
-          "One free server run by the Lockra project; nothing to fill in, for trying sync out. It keeps the snapshots as the devices encrypted them and opens none of them, but it sees when devices sync and from which addresses, and it may be unavailable for a while or close. For lasting use, run a relay of your own or use storage of your own.",
         "relay-custom":
-          "A lockra-relay you run yourself, behind HTTPS. Like the built-in one, it keeps ciphertext only, and the space depends on your server alone.",
+          "A lockra-relay you run yourself, behind HTTPS. It keeps only the snapshots as the devices encrypted them and opens none of them; the space depends on your server alone.",
         aws: "For the China regions (Beijing, Ningxia), choose AWS S3 (China regions): their accounts and keys are separate.",
         "aws-cn":
           "Beijing (cn-north-1) or Ningxia (cn-northwest-1). Keys of the China regions do not work in the global regions.",

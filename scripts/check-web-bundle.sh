@@ -4,9 +4,8 @@
 # schema identifiers and the error-decoder links React and Tailwind leave in comments and
 # messages, none of which is ever fetched (the CSP would refuse it anyway). Besides those, the
 # sync storage presets (packages/shared/src/storage-presets.ts) carry the start of the addresses
-# they fill in and the built-in relay's address, exactly as listed: the core connects to the
-# storage from Rust, the webview never. The relay's address field shows a reserved example.com
-# address as its example.
+# they fill in, exactly as listed: the core connects to the storage from Rust, the webview never.
+# The relay's address field shows a reserved example.com address as its example.
 # Usage: scripts/check-web-bundle.sh   (builds apps/desktop first)
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -22,7 +21,7 @@ for marker in "MockBackend" "correct horse battery" "sampleEntries" "sampleItems
 done
 
 allowed='^https?://(www\.w3\.org/|json-schema\.org/|react\.dev/errors/|tailwindcss\.com$)'
-presets='^https://(s3\.|s3\.oss-|cos\.|dav\.jianguoyun\.com/dav/?|lockra-relay\.onethinker\.top|relay\.example\.com\.?)$'
+presets='^https://(s3\.|s3\.oss-|cos\.|dav\.jianguoyun\.com/dav/?|relay\.example\.com\.?)$'
 while IFS= read -r url; do
   if ! [[ $url =~ $allowed ]] && ! [[ $url =~ $presets ]]; then
     echo "check-web-bundle: unexpected URL in the bundle: $url"

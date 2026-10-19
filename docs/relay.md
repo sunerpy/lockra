@@ -1,10 +1,9 @@
 # The Lockra relay
 
-`lockra-relay` (crates/lockra-relay) keeps sync spaces for devices that have no storage of their
-own. Lockra runs one, the built-in relay at `https://lockra-relay.onethinker.top`; anyone can run
-another from the same binary. For a device it is one more kind of storage, beside an S3 bucket, a
-WebDAV folder and a cloud drive's folder (docs/formats.md §9): the same end-to-end encrypted
-snapshots, one per device, each written by its device only.
+`lockra-relay` (crates/lockra-relay) is a relay users run for their own devices when they do not
+want to use an S3 bucket or WebDAV account. For a device it is one more kind of storage, beside an
+S3 bucket, a WebDAV folder and a cloud drive's folder (docs/formats.md §9): the same end-to-end
+encrypted snapshots, one per device, each written by its device only.
 
 The relay opens none of them. The data key that seals the snapshots never leaves the devices, and
 neither does the sync key: a space's devices show the relay an access token derived from the sync
@@ -80,6 +79,31 @@ Each flag has an environment variable; a flag wins over the variable, and either
 Sizes are bytes, or a number with `K`, `M` or `G` (binary multiples). `lockra-relay --help` prints
 the same list. `RUST_LOG` sets the log level (`info` by default).
 
+### Closed registration
+
+A private relay can serve only spaces it already trusts, without keeping a recovery key or bearer
+token in its configuration. Copy each space id and the lowercase SHA-256 from its `access` file,
+then configure both settings:
+
+```sh
+space=123e4567-e89b-42d3-a456-426614174000
+access=$(sudo cat "/var/lib/lockra-relay/lockra-relay-v1/spaces/$space/access")
+LOCKRA_RELAY_REGISTRATION=closed \
+LOCKRA_RELAY_ALLOWED_SPACES="$space=$access" \
+lockra-relay --data /var/lib/lockra-relay
+```
+
+Several pairs are separated with commas. Closed registration rejects every LIST, GET, PUT and
+DELETE for another id or hash. An allowed space whose directory was lost can be recreated only by
+a device presenting the matching token. Existing unlisted directories are left untouched but are
+not loaded or served. The process refuses to start when the allowlist is empty or malformed, or
+when an allowed directory has an unreadable or different access hash; this avoids silently serving
+the wrong space or replacing its files.
+
+The allowlist authenticates a **space**, not each device: all devices in one space intentionally use
+the same access token. Put a path allowlist in the reverse proxy or load balancer too, and use a
+private VPN when individual physical devices must be independently admitted or revoked.
+
 The apps warn in Settings › Sync when a device's snapshot on a relay passes three quarters of the
 default `--max-object-bytes` (3 MiB; `lockra_core::RELAY_SNAPSHOT_LIMIT`): the relay does not tell
 its settings, so a relay set to keep more is warned of the same, and one set to keep less may refuse a
@@ -119,11 +143,3 @@ The relay's HTTP API is in docs/formats.md §9, "The relay": a listing, reads, w
 conditions, removals, and a listing that waits for a change, all under the space's access token.
 `GET /healthz` answers `ok`, and `GET /v1/` names the service, the API version and the relay's
 version.
-
-## The built-in relay
-
-Lockra's own relay answers at `https://lockra-relay.onethinker.top`: the release binary as a systemd
-service on a server in AWS's Seoul region, behind an application load balancer that ends TLS and
-keeps no access or connection logs. It runs with the defaults above. Whoever runs a relay can see
-what docs/security.md says a relay sees, and can make it unavailable; for a space that must not
-depend on Lockra's server, run a relay of your own, or use storage of your own.

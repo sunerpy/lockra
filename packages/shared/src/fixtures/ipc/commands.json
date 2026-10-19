@@ -238,7 +238,7 @@
       "password": "a new password",
       "storage": {
         "kind": "relay",
-        "url": "https://lockra-relay.onethinker.top"
+        "url": "https://relay.example.com"
       }
     },
     {

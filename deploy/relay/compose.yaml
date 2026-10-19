@@ -11,6 +11,9 @@ services:
     environment:
       # Caddy, the only one that reaches the relay, names the client (see the Caddyfile).
       LOCKRA_RELAY_TRUST_PROXY: 10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      # To close registration, uncomment both and copy the id and access SHA-256 from relay-data.
+      # LOCKRA_RELAY_REGISTRATION: closed
+      # LOCKRA_RELAY_ALLOWED_SPACES: 123e4567-e89b-42d3-a456-426614174000=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     volumes:
       - relay-data:/data
   caddy:

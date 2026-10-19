@@ -411,13 +411,9 @@ class Phase:
         self.open_sync()
         web.click(web.wait(css="[data-testid=sync-create-open]"))
         scope = "//*[@data-testid='sync-create']"
-        # The form starts on storage of one's own, and a relay on one's own: this smoke test's, on
-        # this computer. Lockra's built-in relay is chosen by name.
+        # The form starts on storage of one's own; a relay is this smoke test's, on this computer.
         web.wait(xpath=f"{scope}//*[@role='radio'][@aria-checked='true'][normalize-space()='WebDAV']")
         web.click(web.wait(xpath=f"{scope}//*[@role='radio'][normalize-space()='Lockra 中继']"))
-        provider = web.wait(xpath=f"{scope}//select[@data-testid='storage-provider']")
-        if web.run("return arguments[0].value", {ELEMENT: provider}) != "relay-custom":
-            sys.exit("smoke-sync: a relay does not start on one's own")
         self.fill("中继地址", self.args.relay, scope)
         self.fill("这台设备的名称", "台式机", scope)
         self.fill("主密码", PASSWORD, scope)

@@ -36,8 +36,8 @@ impl Relay {
     /// Read the spaces in, listen on `config.bind`, and serve until [`Relay::stop`].
     pub async fn start(config: Config) -> io::Result<Self> {
         let store = tokio::task::spawn_blocking({
-            let (dir, limits) = (config.data_dir.clone(), config.limits);
-            move || Store::open(&dir, limits)
+            let (dir, limits, admission) = (config.data_dir.clone(), config.limits, config.admission.clone());
+            move || Store::open(&dir, limits, admission)
         })
         .await
         .map_err(io::Error::other)??;
@@ -149,7 +149,13 @@ mod tests {
     use crate::config::Limits;
 
     fn config(dir: &std::path::Path) -> Config {
-        Config { bind: "127.0.0.1:0".parse().unwrap(), data_dir: dir.to_owned(), trusted_proxies: Vec::new(), limits: Limits::default() }
+        Config {
+            bind: "127.0.0.1:0".parse().unwrap(),
+            data_dir: dir.to_owned(),
+            trusted_proxies: Vec::new(),
+            admission: crate::Admission::Open,
+            limits: Limits::default(),
+        }
     }
 
     async fn exchange(addr: SocketAddr, request: &str) -> String {
@@ -216,7 +222,7 @@ mod tests {
     async fn the_upkeep_runs_every_hour_until_stopped() {
         let dir = tempfile::tempdir().unwrap();
         let config = config(dir.path());
-        let app = Arc::new(App::new(Store::open(dir.path(), config.limits).unwrap(), &config));
+        let app = Arc::new(App::new(Store::open(dir.path(), config.limits, config.admission.clone()).unwrap(), &config));
         let (stop, stopped) = watch::channel(false);
         let task = tokio::spawn(upkeep(Arc::clone(&app), stopped));
         tokio::time::sleep(UPKEEP_EVERY * 2 + Duration::from_secs(1)).await;

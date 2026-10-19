@@ -1,7 +1,7 @@
 # Running your own relay
 
-This page explains how to run a Lockra relay of your own, so that your devices sync through a
-server you control rather than Lockra's built-in relay.
+This page explains how to run a Lockra relay, so that your devices sync through a server you
+control.
 
 <StatusTag status="available" /> Available from version 0.8.1.
 
@@ -89,12 +89,10 @@ the same settings are the lines `LOCKRA_RELAY_BIND` and `LOCKRA_RELAY_TRUST_PROX
 
 ## Connecting your devices
 
-On the first device, open **Settings › Sync**, choose **Start syncing**, choose **Lockra relay**
-(its provider starts on **A relay of your own**), and enter the relay's address in **Relay
-address**, for example
+On the first device, open **Settings › Sync**, choose **Start syncing**, choose **Lockra relay** and enter the relay's address in **Relay address**, for example
 `https://relay.example.com`. The invitation and the pairing link carry the address, so the other
-devices join by scanning the QR code or pasting the pairing link, as with the built-in relay. A space that already syncs elsewhere moves to your relay
-with **Change storage settings** on each device.
+devices join by scanning the QR code or pasting the pairing link. A space that already syncs
+elsewhere moves to your relay with **Change storage settings** on each device.
 
 ## Settings
 
@@ -104,6 +102,25 @@ removed 400 days after a device last reached it. `lockra-relay --help` lists eve
 also as an environment variable;
 [the relay's documentation](https://github.com/sunerpy/lockra/blob/main/docs/relay.md) explains
 them.
+
+### Closing registration
+
+To reserve a relay for spaces you already use, set `LOCKRA_RELAY_REGISTRATION=closed` together with
+`LOCKRA_RELAY_ALLOWED_SPACES`. Each comma-separated entry is the space directory's UUID, `=`, and
+the lowercase SHA-256 in that directory's `access` file:
+
+```sh
+space=123e4567-e89b-42d3-a456-426614174000
+access=$(sudo cat "/var/lib/lockra-relay/lockra-relay-v1/spaces/$space/access")
+export LOCKRA_RELAY_REGISTRATION=closed
+export LOCKRA_RELAY_ALLOWED_SPACES="$space=$access"
+```
+
+Every other space is refused. Unlisted directories stay on disk but are not served. If an allowed
+space is lost, only its devices can recreate it because the presented token must still match the
+configured hash. A missing or malformed allowlist, or a different hash in an allowed directory,
+stops the relay before it listens. This admits spaces, not individual devices within one space;
+they share one access token.
 
 ## What it keeps
 

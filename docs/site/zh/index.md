@@ -24,7 +24,7 @@ home:
     - term: 支持平台
       text: Windows 10 和 11、macOS 11 及以上（Apple 芯片与 Intel）、Linux，均支持 x64 和 ARM64；以及 Android 8 及以上的 ARM64 手机。
     - term: 多端同步
-      text: 每台设备上的账号保持一致，经内置中继或你自己的存储端到端加密同步。
+      text: 每台设备上的账号保持一致，经你掌控的中继或存储端到端加密同步。
     - term: 你的账号
       text: 验证码和密码保存在每台设备的一个加密文件中。Lockra 为更新连接 GitHub，开启同步后还会连接你选择的中继或存储，除此之外不连接任何地方。
 
@@ -51,7 +51,7 @@ home:
             status: available
             link: /zh/backup/sync
           - title: 经 Lockra 中继同步
-            body: 自建的中继保存加密文件，无法打开其中任何一个；内置中继无需任何设置，适合试用同步。
+            body: 运行自己的中继来保存加密文件，而不把打开文件的密钥交给服务器。
             status: available
             link: /zh/backup/sync#经-lockra-中继同步
           - title: 手机扫码加入
@@ -273,7 +273,7 @@ home:
         detail: 每台设备把加密文件写入你设置的 Lockra 中继、存储桶或 WebDAV 文件夹。它们都无法读取任何账号、密钥或设备名称。
       - name: 网络
         value: 更新与你的同步
-        detail: 你检查更新时，或开启自动更新后每次启动时，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。Lockra 没有用户账户或遥测，内置中继只保存加密的文件，字体和图片都随应用提供。
+        detail: 你检查更新时，或开启自动更新后每次启动时，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。Lockra 没有用户账户或遥测，字体和图片都随应用提供。
       - name: 浏览器扩展
         value: 只连接本机的 Lockra
         detail: 它向同一台电脑上的 Lockra 请求，两者之间的连接经过加密；扩展不保存密码，也不经网络发送任何内容。
@@ -302,7 +302,7 @@ home:
 
 ## 多端同步
 
-Lockra 可以在 Windows、macOS、Linux 和 Android 上运行，同步让每台设备上的账号、登录项、分组和收藏保持一致。每台设备在共享的内容离开设备之前先完成加密；内置中继、自建中继、S3 兼容存储桶、WebDAV 文件夹，或电脑之间使用的网盘同步文件夹，保存的都只是密文。手机扫描电脑上的二维码即可加入，无需注册任何 Lockra 账号。
+Lockra 可以在 Windows、macOS、Linux 和 Android 上运行，同步让每台设备上的账号、登录项、分组和收藏保持一致。每台设备在共享的内容离开设备之前先完成加密；你运行的中继、S3 兼容存储桶、WebDAV 文件夹，或电脑之间使用的网盘同步文件夹，保存的都只是密文。手机扫描电脑上的二维码即可加入，无需注册任何 Lockra 账号。
 
 <ScreenFigure src="/screens/devices-zh-light.webp" dark="/screens/devices-zh-dark.webp" width="1440" height="900" alt="电脑和手机上的 Lockra，显示相同的账号和相同的验证码。" />
 

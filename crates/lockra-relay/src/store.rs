@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 use uuid::Uuid;
 
-use crate::config::{Limits, MAX_OBJECT_BYTES_CEILING};
+use crate::config::{Admission, Limits, MAX_OBJECT_BYTES_CEILING};
 
 const ROOT: &str = "lockra-relay-v1";
 const ACCESS: &str = "access";
@@ -40,6 +40,11 @@ impl Access {
         let mut hash = [0u8; 32];
         hash.copy_from_slice(&Sha256::digest(token));
         Self(hash)
+    }
+
+    /// The hash, for a closed relay's configuration and tests. It is not the bearer token.
+    pub(crate) fn hash(&self) -> [u8; 32] {
+        self.0
     }
 
     /// Whether `other` is the same token's: every byte compared, whatever the first difference.
@@ -123,6 +128,7 @@ pub fn empty_revision() -> String {
 pub struct Store {
     root: PathBuf,
     limits: Limits,
+    admission: Admission,
     index: Mutex<Index>,
 }
 
@@ -189,7 +195,7 @@ impl Space {
 
 impl Store {
     /// The spaces kept in `data_dir`, read in (and made, the first time).
-    pub fn open(data_dir: &Path, limits: Limits) -> io::Result<Self> {
+    pub fn open(data_dir: &Path, limits: Limits, admission: Admission) -> io::Result<Self> {
         let root = data_dir.join(ROOT).join("spaces");
         fs::create_dir_all(&root)?;
         let mut spaces = HashMap::new();
@@ -200,15 +206,24 @@ impl Store {
                 tracing::warn!(entry = ?entry.file_name(), "not a space; left alone");
                 continue;
             };
+            if !admission.includes(id) {
+                continue;
+            }
             match load_space(&entry.path())? {
-                Some(space) => {
+                Some(space) if admission.allows(id, &space.access.hash()) => {
                     bytes += space.state.lock().bytes;
                     spaces.insert(id, Arc::new(space));
+                }
+                Some(_) => {
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "an allowed space's access hash does not match its configured hash"));
+                }
+                None if !admission.is_open() => {
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "an allowed space has no readable access hash"));
                 }
                 None => tracing::warn!("a space without a readable access file; left alone"),
             }
         }
-        Ok(Self { root, limits, index: Mutex::new(Index { spaces, bytes }) })
+        Ok(Self { root, limits, admission, index: Mutex::new(Index { spaces, bytes }) })
     }
 
     /// The spaces kept.
@@ -388,6 +403,9 @@ impl Store {
 
     /// Space `id`, when `access` is its token's; `None` when the relay does not keep it.
     fn space(&self, id: Uuid, access: &Access) -> Result<Option<Arc<Space>>, StoreError> {
+        if !self.admission.allows(id, &access.hash()) {
+            return Err(StoreError::Forbidden);
+        }
         match self.index.lock().spaces.get(&id) {
             Some(space) if space.access.matches(access) => Ok(Some(Arc::clone(space))),
             Some(_) => Err(StoreError::Forbidden),
@@ -397,6 +415,9 @@ impl Store {
 
     /// Space `id` for a write: made, bound to `access`, when the relay does not keep it yet.
     fn space_for_write(&self, id: Uuid, access: &Access) -> Result<Arc<Space>, StoreError> {
+        if !self.admission.allows(id, &access.hash()) {
+            return Err(StoreError::Forbidden);
+        }
         let mut index = self.index.lock();
         if let Some(space) = index.spaces.get(&id) {
             return if space.access.matches(access) { Ok(Arc::clone(space)) } else { Err(StoreError::Forbidden) };
@@ -583,7 +604,7 @@ mod tests {
     }
 
     fn store(dir: &Path) -> Store {
-        Store::open(dir, limits()).unwrap()
+        Store::open(dir, limits(), Admission::Open).unwrap()
     }
 
     #[test]
@@ -653,6 +674,58 @@ mod tests {
         assert!(matches!(store.delete(space, &other, A).await, Err(StoreError::Forbidden)));
         assert!(store.get(space, &token(1), A).await.unwrap().is_some());
         assert_eq!(format!("{:?}", token(1)), "Access(…)");
+    }
+
+    #[tokio::test]
+    async fn a_closed_relay_serves_only_the_allowed_space_and_access() {
+        let dir = tempfile::tempdir().unwrap();
+        let (allowed, other) = (id(), id());
+        let access = token(1);
+        {
+            let public = Store::open(dir.path(), limits(), Admission::Open).unwrap();
+            public.put(allowed, &access, A, Bytes::from_static(b"kept"), Condition::Always).await.unwrap();
+            public.put(other, &token(2), A, Bytes::from_static(b"left alone"), Condition::Always).await.unwrap();
+        }
+        let admission = Admission::Closed(Box::new(BTreeMap::from([(allowed, access.0)])));
+        let private = Store::open(dir.path(), limits(), admission.clone()).unwrap();
+        assert_eq!((private.spaces(), private.bytes()), (1, 4));
+        assert_eq!(private.get(allowed, &access, A).await.unwrap().unwrap().0.as_ref(), b"kept");
+        assert!(matches!(private.list(other, &token(2)).await, Err(StoreError::Forbidden)));
+        assert!(matches!(private.get(other, &token(2), A).await, Err(StoreError::Forbidden)));
+        assert!(matches!(private.put(other, &token(2), B, Bytes::from_static(b"x"), Condition::Always).await, Err(StoreError::Forbidden)));
+        assert!(matches!(private.delete(other, &token(2), A).await, Err(StoreError::Forbidden)));
+        let other_dir = dir.path().join(ROOT).join("spaces").join(other.to_string());
+        assert!(other_dir.join(DEVICES).join(A).exists(), "an unserved space is not deleted");
+        drop(private);
+
+        // The configured hash, rather than a free capacity slot, controls recreation after data loss.
+        let allowed_dir = dir.path().join(ROOT).join("spaces").join(allowed.to_string());
+        fs::remove_dir_all(&allowed_dir).unwrap();
+        let private = Store::open(dir.path(), limits(), admission).unwrap();
+        assert!(matches!(private.put(allowed, &token(9), A, Bytes::from_static(b"wrong"), Condition::Always).await, Err(StoreError::Forbidden)));
+        private.put(allowed, &access, A, Bytes::from_static(b"restored"), Condition::Always).await.unwrap();
+        assert_eq!(fs::read_to_string(allowed_dir.join(ACCESS)).unwrap(), HEXLOWER.encode(&access.0));
+    }
+
+    #[tokio::test]
+    async fn a_closed_relay_fails_before_serving_an_allowed_space_with_bad_access() {
+        let dir = tempfile::tempdir().unwrap();
+        let space = id();
+        let access = token(1);
+        {
+            let public = Store::open(dir.path(), limits(), Admission::Open).unwrap();
+            public.put(space, &access, A, Bytes::from_static(b"kept"), Condition::Always).await.unwrap();
+        }
+        let spaces = dir.path().join(ROOT).join("spaces");
+        let snapshot = spaces.join(space.to_string()).join(DEVICES).join(A);
+        let wrong = Admission::Closed(Box::new(BTreeMap::from([(space, token(2).0)])));
+        assert_eq!(Store::open(dir.path(), limits(), wrong).err().expect("a mismatched hash is refused").kind(), io::ErrorKind::InvalidData);
+        assert!(snapshot.exists(), "a mismatch changes nothing on disk");
+
+        fs::write(spaces.join(space.to_string()).join(ACCESS), b"not hex").unwrap();
+        let correct = Admission::Closed(Box::new(BTreeMap::from([(space, access.0)])));
+        assert_eq!(Store::open(dir.path(), limits(), correct).err().expect("an unreadable hash is refused").kind(), io::ErrorKind::InvalidData);
+        assert!(snapshot.exists(), "an unreadable access file changes nothing on disk");
     }
 
     #[tokio::test]
@@ -755,7 +828,7 @@ mod tests {
     #[tokio::test]
     async fn idle_spaces_go_and_the_others_stay() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(dir.path(), Limits { idle: Duration::from_secs(60), ..limits() }).unwrap();
+        let store = Store::open(dir.path(), Limits { idle: Duration::from_secs(60), ..limits() }, Admission::Open).unwrap();
         let (old, fresh, access) = (id(), id(), token(1));
         store.put(old, &access, A, Bytes::from_static(b"one"), Condition::Always).await.unwrap();
         store.put(fresh, &access, A, Bytes::from_static(b"two"), Condition::Always).await.unwrap();

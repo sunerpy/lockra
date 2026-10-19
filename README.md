@@ -44,7 +44,7 @@ passwords and the extension are new in 0.10.0.
   with the same design, eight themes, and Chinese and English. An iPhone and iPad app is planned.
 - **The same accounts everywhere**: end-to-end encrypted sync on storage of your own (an
   S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder) or through a
-  Lockra relay: one you run, or the built-in one to try sync out. Each device encrypts before
+  Lockra relay that you run yourself. Each device encrypts before
   anything leaves it, so the storage or relay holds ciphertext only.
 - **Pairing by QR code**: a phone joins by scanning the computer's QR code, or by pasting its
   pairing link or invitation; a recovery key brings the space back if every device is lost.
@@ -175,12 +175,10 @@ title bar ([updates](https://firlab.app/lockra/guide/updates)).
 
 ## Sync relay
 
-From 0.8.1, devices without storage of their own sync through a Lockra relay. The built-in relay
-needs nothing set up and is there to try sync out: it is one server, run for free, with no promise
-of service, so for a space you rely on, run your own or use storage of your own. To run your own,
-every release carries `lockra-relay` for Linux (x64 and
-ARM64) with a systemd unit, and `deploy/relay/` also has a Docker Compose file that puts Caddy and
-its automatic HTTPS in front of it:
+From 0.8.1, devices without an S3 bucket or WebDAV account can sync through a Lockra relay they
+run themselves. Every release carries `lockra-relay` for Linux (x64 and ARM64) with a systemd unit,
+and `deploy/relay/` also has a Docker Compose file that puts Caddy and its automatic HTTPS in front
+of it:
 
 ```bash
 RELAY_HOST=relay.example.com docker compose -f deploy/relay/compose.yaml up -d

@@ -23,7 +23,7 @@ mod server;
 mod store;
 
 pub use api::VERSION;
-pub use config::{Command, Config, HELP, IpNet, Limits};
+pub use config::{Admission, Command, Config, HELP, IpNet, Limits};
 pub use server::{Relay, run};
 
 /// Log to standard error, at `RUST_LOG`'s levels (`info` by default); in colour on a terminal only

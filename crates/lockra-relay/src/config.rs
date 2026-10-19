@@ -1,23 +1,75 @@
 //! What a relay listens on, where it keeps the spaces, and what a client may spend: flags first,
 //! then `LOCKRA_RELAY_*` environment variables, then the defaults (`lockra-relay --help`).
 
+use std::collections::BTreeMap;
+use std::fmt;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use data_encoding::HEXLOWER;
+use uuid::Uuid;
+
 /// The relay's settings.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
-    /// The address and port it listens on: behind a proxy that terminates TLS (the hosted relay's
-    /// load balancer, a Caddy or nginx of one's own), or this computer only.
+    /// The address and port it listens on: behind a proxy that terminates TLS (a relay's load balancer, a Caddy or nginx of one's own), or this computer only.
     pub bind: SocketAddr,
     /// Where the spaces are kept.
     pub data_dir: PathBuf,
     /// The proxies whose `X-Forwarded-For` names the client (for the per-client limits); a request
     /// from anywhere else is the client itself.
     pub trusted_proxies: Vec<IpNet>,
+    /// Which spaces may use the relay: open registration, or exact space and access-hash pairs.
+    pub admission: Admission,
     /// What the clients may spend.
     pub limits: Limits,
+}
+
+/// Which sync spaces the relay serves. A closed relay compares the SHA-256 of the presented access
+/// token with the configured hash; neither the token nor the sync key is configured here.
+#[derive(Clone, PartialEq, Eq, Default)]
+pub enum Admission {
+    /// Any first write may create a space, as in the public relay protocol.
+    #[default]
+    Open,
+    /// Only these exact `space id -> SHA-256(access token)` pairs may read, write or recreate a
+    /// space. The map is non-empty when parsed from the command line.
+    Closed(Box<BTreeMap<Uuid, [u8; 32]>>),
+}
+
+impl Admission {
+    /// Whether `id` may be served at all. Open registration accepts every canonical id.
+    pub(crate) fn includes(&self, id: Uuid) -> bool {
+        match self {
+            Self::Open => true,
+            Self::Closed(spaces) => spaces.contains_key(&id),
+        }
+    }
+
+    /// Whether `access_hash` is the configured access-token hash for `id`. The comparison examines
+    /// every byte; a space id is public, while the token remains a 256-bit secret.
+    pub(crate) fn allows(&self, id: Uuid, access_hash: &[u8; 32]) -> bool {
+        match self {
+            Self::Open => true,
+            Self::Closed(spaces) => {
+                spaces.get(&id).is_some_and(|expected| expected.iter().zip(access_hash).fold(0u8, |different, (a, b)| different | (a ^ b)) == 0)
+            }
+        }
+    }
+
+    pub(crate) fn is_open(&self) -> bool {
+        matches!(self, Self::Open)
+    }
+}
+
+impl fmt::Debug for Admission {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Open => f.write_str("Open"),
+            Self::Closed(spaces) => write!(f, "Closed({} spaces)", spaces.len()),
+        }
+    }
 }
 
 /// What the clients may spend, so that one cannot exhaust the relay for the others.
@@ -144,6 +196,9 @@ Options (each also as an environment variable):
   --data DIR                    LOCKRA_RELAY_DATA                  keep the spaces here (./lockra-relay-data)
   --trust-proxy RANGES          LOCKRA_RELAY_TRUST_PROXY           proxies whose X-Forwarded-For names the client,
                                                                    comma-separated (none)
+  --registration MODE           LOCKRA_RELAY_REGISTRATION          new-space registration: open or closed (open)
+  --allowed-spaces LIST         LOCKRA_RELAY_ALLOWED_SPACES        with closed registration: comma-separated
+                                                                   SPACE_ID=ACCESS_SHA256 pairs
   --max-object-bytes SIZE       LOCKRA_RELAY_MAX_OBJECT_BYTES      largest snapshot (4M, at most 16M)
   --max-space-bytes SIZE        LOCKRA_RELAY_MAX_SPACE_BYTES       one space's snapshots together (32M)
   --max-objects N               LOCKRA_RELAY_MAX_OBJECTS           devices in one space (64)
@@ -168,6 +223,8 @@ const OPTIONS: &[(&str, &str)] = &[
     ("--bind", "LOCKRA_RELAY_BIND"),
     ("--data", "LOCKRA_RELAY_DATA"),
     ("--trust-proxy", "LOCKRA_RELAY_TRUST_PROXY"),
+    ("--registration", "LOCKRA_RELAY_REGISTRATION"),
+    ("--allowed-spaces", "LOCKRA_RELAY_ALLOWED_SPACES"),
     ("--max-object-bytes", "LOCKRA_RELAY_MAX_OBJECT_BYTES"),
     ("--max-space-bytes", "LOCKRA_RELAY_MAX_SPACE_BYTES"),
     ("--max-objects", "LOCKRA_RELAY_MAX_OBJECTS"),
@@ -237,8 +294,40 @@ impl Command {
             .map(|ranges| ranges.split(',').filter(|r| !r.trim().is_empty()).map(IpNet::parse).collect::<Result<Vec<_>, _>>())
             .transpose()?
             .unwrap_or_default();
+        let admission = admission(value("--registration"), value("--allowed-spaces"))?;
         let data_dir = PathBuf::from(value("--data").unwrap_or_else(|| "lockra-relay-data".into()));
-        Ok(Self::Run(Config { bind, data_dir, trusted_proxies, limits }))
+        Ok(Self::Run(Config { bind, data_dir, trusted_proxies, admission, limits }))
+    }
+}
+
+fn admission(registration: Option<String>, allowed: Option<String>) -> Result<Admission, String> {
+    match registration.as_deref().map(str::trim).unwrap_or("open") {
+        "open" if allowed.is_some() => Err("--allowed-spaces is only valid with --registration closed".into()),
+        "open" => Ok(Admission::Open),
+        "closed" => {
+            let text = allowed.ok_or("--registration closed needs --allowed-spaces")?;
+            let mut spaces = BTreeMap::new();
+            for item in text.split(',') {
+                let (id, hash) = item.trim().split_once('=').ok_or_else(|| format!("not SPACE_ID=ACCESS_SHA256 in --allowed-spaces: {item}"))?;
+                let id = Uuid::try_parse(id)
+                    .ok()
+                    .filter(|parsed| parsed.hyphenated().to_string() == id)
+                    .ok_or_else(|| format!("not a canonical space id in --allowed-spaces: {id}"))?;
+                let decoded = HEXLOWER
+                    .decode(hash.as_bytes())
+                    .ok()
+                    .and_then(|bytes| <[u8; 32]>::try_from(bytes.as_slice()).ok())
+                    .ok_or_else(|| format!("not a lowercase 64-digit access SHA-256 in --allowed-spaces for {id}"))?;
+                if spaces.insert(id, decoded).is_some() {
+                    return Err(format!("space {id} appears more than once in --allowed-spaces"));
+                }
+            }
+            if spaces.is_empty() {
+                return Err("--registration closed needs at least one allowed space".into());
+            }
+            Ok(Admission::Closed(Box::new(spaces)))
+        }
+        other => Err(format!("--registration must be open or closed, not {other}")),
     }
 }
 
@@ -290,6 +379,7 @@ mod tests {
         assert!(config.trusted_proxies.is_empty());
         assert_eq!(config.limits, Limits::default());
         assert_eq!(config.limits.idle, Duration::from_secs(400 * DAY));
+        assert_eq!(config.admission, Admission::Open);
     }
 
     #[test]
@@ -310,6 +400,43 @@ mod tests {
         assert_eq!(config.trusted_proxies.len(), 2);
         // The last of a repeated flag.
         assert_eq!(run(&["--max-objects", "3", "--max-objects", "4"], &[]).unwrap().limits.max_objects, 4);
+    }
+
+    #[test]
+    fn closed_registration_needs_an_exact_nonempty_allowlist() {
+        let id = Uuid::parse_str("123e4567-e89b-42d3-a456-426614174000").unwrap();
+        let first = format!("{id}={}", "11".repeat(32));
+        let second_id = Uuid::parse_str("123e4567-e89b-42d3-a456-426614174001").unwrap();
+        let both = format!("{first},{second_id}={}", "22".repeat(32));
+        let config = run(&["--registration", "closed", "--allowed-spaces", &both], &[]).unwrap();
+        assert!(config.admission.allows(id, &[0x11; 32]));
+        assert!(config.admission.allows(second_id, &[0x22; 32]));
+        assert!(!config.admission.allows(id, &[0x22; 32]));
+        assert!(!config.admission.allows(Uuid::new_v4(), &[0x11; 32]));
+        assert_eq!(format!("{:?}", config.admission), "Closed(2 spaces)");
+
+        let from_env = run(&[], &[("LOCKRA_RELAY_REGISTRATION", "closed"), ("LOCKRA_RELAY_ALLOWED_SPACES", &first)]).unwrap();
+        assert!(from_env.admission.allows(id, &[0x11; 32]));
+        // A flag still wins over the environment.
+        assert_eq!(
+            run(&["--registration", "open"], &[("LOCKRA_RELAY_REGISTRATION", "closed"), ("LOCKRA_RELAY_ALLOWED_SPACES", &first)]).unwrap_err(),
+            "--allowed-spaces is only valid with --registration closed"
+        );
+
+        assert_eq!(run(&["--registration", "closed"], &[]).unwrap_err(), "--registration closed needs --allowed-spaces");
+        assert_eq!(run(&["--allowed-spaces", &first], &[]).unwrap_err(), "--allowed-spaces is only valid with --registration closed");
+        assert!(run(&["--registration", "private", "--allowed-spaces", &first], &[]).unwrap_err().contains("open or closed"));
+        for bad in [
+            "",
+            "not-a-space=1111111111111111111111111111111111111111111111111111111111111111",
+            "123E4567-E89B-42D3-A456-426614174000=1111111111111111111111111111111111111111111111111111111111111111",
+            "123e4567-e89b-42d3-a456-426614174000=short",
+            "123e4567-e89b-42d3-a456-426614174000=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        ] {
+            assert!(run(&["--registration", "closed", "--allowed-spaces", bad], &[]).is_err(), "{bad}");
+        }
+        let duplicate = format!("{first},{first}");
+        assert!(run(&["--registration", "closed", "--allowed-spaces", &duplicate], &[]).unwrap_err().contains("more than once"));
     }
 
     #[test]

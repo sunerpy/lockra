@@ -1,4 +1,4 @@
-// A sync storage's fields: a Lockra relay (the built-in one or one's own), S3-compatible or WebDAV
+// A sync storage's fields: a Lockra relay the user runs, S3-compatible or WebDAV
 // (the desktop's Settings › Sync and the phone's sync pages), or on the desktop a folder a cloud
 // drive keeps in sync; the form's logic is @lockra/shared's storage-form and storage-presets.
 import {
@@ -141,7 +141,6 @@ export function StorageFields({
     return (
       <div className="flex flex-col gap-3" data-testid="storage-fields">
         {kindSwitch}
-        {providers}
         {has("url") ? (
           <Input
             size={size}

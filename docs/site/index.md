@@ -24,7 +24,7 @@ home:
     - term: Runs on
       text: Windows 10 and 11, macOS 11 or later (Apple silicon and Intel) and Linux, on x64 and ARM64, and ARM64 phones with Android 8 or later.
     - term: In sync
-      text: The same accounts on every device, end-to-end encrypted, through the built-in relay or storage of your own.
+      text: The same accounts on every device, end-to-end encrypted, through a relay or storage you control.
     - term: Your accounts
       text: Codes and passwords in one encrypted file on each device. Lockra connects to GitHub for updates and, once you turn on sync, to the relay or storage you chose; to nothing else.
 
@@ -51,7 +51,7 @@ home:
             status: available
             link: /backup/sync
           - title: Sync through a Lockra relay
-            body: A relay you run yourself keeps the encrypted files and opens none of them; the built-in relay needs nothing set up, to try sync out.
+            body: Run your own relay to keep the encrypted files without giving the server the keys that open them.
             status: available
             link: /backup/sync#through-a-lockra-relay
           - title: A phone joins by scanning
@@ -273,7 +273,7 @@ home:
         detail: Each device writes encrypted files to the Lockra relay, bucket or WebDAV folder you set up. None of them can read an account, a secret or a device name.
       - name: The network
         value: Updates and your sync
-        detail: Lockra asks GitHub for the newest version when you check, or at start if you turn on automatic updates; nothing from your accounts goes with it. There is no Lockra account or telemetry, the built-in relay keeps encrypted files only, and fonts and images ship with the app.
+        detail: Lockra asks GitHub for the newest version when you check, or at start if you turn on automatic updates; nothing from your accounts goes with it. There is no Lockra account or telemetry, and fonts and images ship with the app.
       - name: The browser extension
         value: Lockra on this computer only
         detail: It asks Lockra on the same computer, over a connection encrypted between the two, keeps no passwords and sends nothing over the network.
@@ -302,7 +302,7 @@ From version 0.10.0, Lockra keeps your logins beside the codes, in the same vaul
 
 ## Every device, in sync
 
-Lockra runs on Windows, macOS, Linux and Android, and sync keeps the same accounts, logins, groups and pinned accounts on all of them. Each device encrypts what it shares before it leaves; the built-in relay, a relay you run, an S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder keeps only that ciphertext. A phone joins by scanning the computer's QR code, and there is no Lockra account to create.
+Lockra runs on Windows, macOS, Linux and Android, and sync keeps the same accounts, logins, groups and pinned accounts on all of them. Each device encrypts what it shares before it leaves; a relay you run, an S3-compatible bucket, a WebDAV folder or, between computers, a cloud drive folder keeps only that ciphertext. A phone joins by scanning the computer's QR code, and there is no Lockra account to create.
 
 <ScreenFigure src="/screens/devices-en-light.webp" dark="/screens/devices-en-dark.webp" width="1440" height="900" alt="Lockra on a computer and on a phone, showing the same accounts with the same codes." />
 

@@ -337,6 +337,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     use http::Method;
@@ -351,14 +352,19 @@ mod tests {
         BASE64URL_NOPAD.encode(&[n; 32])
     }
 
-    fn app_with(dir: &std::path::Path, limits: Limits, trusted: &[&str]) -> App {
+    fn app_with_admission(dir: &std::path::Path, limits: Limits, trusted: &[&str], admission: crate::Admission) -> App {
         let config = Config {
             bind: "127.0.0.1:0".parse().unwrap(),
             data_dir: PathBuf::from(dir),
             trusted_proxies: trusted.iter().map(|t| IpNet::parse(t).unwrap()).collect(),
+            admission,
             limits,
         };
-        App::new(Store::open(dir, limits).unwrap(), &config)
+        App::new(Store::open(dir, limits, config.admission.clone()).unwrap(), &config)
+    }
+
+    fn app_with(dir: &std::path::Path, limits: Limits, trusted: &[&str]) -> App {
+        app_with_admission(dir, limits, trusted, crate::Admission::Open)
     }
 
     fn app(dir: &std::path::Path) -> App {
@@ -501,6 +507,29 @@ mod tests {
         ] {
             assert_eq!(request.token(Some(token(2))).on(&app).await.0, StatusCode::FORBIDDEN);
         }
+    }
+
+    #[tokio::test]
+    async fn closed_registration_refuses_every_unlisted_space_over_http() {
+        let dir = tempfile::tempdir().unwrap();
+        let (allowed, other) = (space(), space());
+        let allowed_id = Uuid::parse_str(&allowed).unwrap();
+        let access = Access::of_token(&[1; 32]).hash();
+        let admission = crate::Admission::Closed(Box::new(BTreeMap::from([(allowed_id, access)])));
+        let app = app_with_admission(dir.path(), Limits { max_object_bytes: 64, max_wait: Duration::from_secs(2), ..Limits::default() }, &[], admission);
+        assert_eq!(call(Method::GET, devices(&allowed)).on(&app).await.0, StatusCode::OK);
+        assert_eq!(call(Method::PUT, object(&allowed, A)).body(b"sealed").on(&app).await.0, StatusCode::OK);
+        assert_eq!(call(Method::GET, object(&allowed, A)).on(&app).await.0, StatusCode::OK);
+        assert_eq!(call(Method::GET, devices(&allowed)).token(Some(token(2))).on(&app).await.0, StatusCode::FORBIDDEN);
+        for request in [
+            call(Method::GET, devices(&other)),
+            call(Method::GET, object(&other, A)),
+            call(Method::PUT, object(&other, A)).body(b"sealed"),
+            call(Method::DELETE, object(&other, A)),
+        ] {
+            assert_eq!(request.on(&app).await.0, StatusCode::FORBIDDEN);
+        }
+        assert!(!app.store.exists(Uuid::parse_str(&other).unwrap()));
     }
 
     #[tokio::test]

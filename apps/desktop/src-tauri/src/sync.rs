@@ -49,7 +49,7 @@ mod tests {
             "a cloud drive's folder opens, and writes without conditions"
         );
         assert!(Storages.open(&StorageConfig::Folder { path: "relative".into() }, &access).is_err());
-        let relay = StorageConfig::Relay { url: "https://lockra-relay.onethinker.top".into() };
+        let relay = StorageConfig::Relay { url: "https://relay.example.com".into() };
         assert!(matches!(Storages.open(&relay, &access), Ok(storage) if storage.conditional_puts()), "a relay opens, and holds conditions");
         assert!(Storages.open(&StorageConfig::Relay { url: "http://relay.example.com".into() }, &access).is_err());
         // Nothing to watch on WebDAV.

@@ -839,10 +839,10 @@ describe("MockBackend", () => {
       "ftp://relay.example.com",
     ])
       expect(await errorCode(create({ kind: "relay", url }))).toBe("sync_config_invalid");
-    await create({ kind: "relay", url: " https://lockra-relay.onethinker.top " });
+    await create({ kind: "relay", url: " https://relay.example.com " });
     expect((await desktop.getState()).sync.space?.storage).toEqual({
       kind: "relay",
-      url: "https://lockra-relay.onethinker.top",
+      url: "https://relay.example.com",
     });
     const invite = await desktop.dispatch({ command: "sync_invite", password: MOCK_PASSWORD });
     expect(invite.includes_storage).toBe(true);
@@ -858,7 +858,7 @@ describe("MockBackend", () => {
     ).toBe(true);
     expect((await phone.getState()).sync.space?.storage).toEqual({
       kind: "relay",
-      url: "https://lockra-relay.onethinker.top",
+      url: "https://relay.example.com",
     });
     const tablet = new MockBackend({ phase: "no_vault" });
     await tablet.dispatch({
@@ -889,7 +889,7 @@ describe("MockBackend", () => {
   });
 
   it("puts a relay space's pairing link on the clipboard as it is, and no other", async () => {
-    const relay = { kind: "relay", url: "https://lockra-relay.onethinker.top" } as const;
+    const relay = { kind: "relay", url: "https://relay.example.com" } as const;
     const backend = new MockBackend({
       entries: sampleEntries(),
       sync: mockSyncSpace({ storage: relay }),
@@ -898,7 +898,7 @@ describe("MockBackend", () => {
     const copy = (text: string) => backend.dispatch({ command: "sync_invite_copy", text });
     expect(invite.shared).toBeNull();
     // Another relay's link, or anything else, is not this space's.
-    const elsewhere = `lockra-invite:1:${btoa("mock-relay-invite|https://relay.example.com\n:1")}`;
+    const elsewhere = `lockra-invite:1:${btoa("mock-relay-invite|https://relay.other.example.com\n:1")}`;
     for (const text of ["a note to self", elsewhere])
       expect(await errorCode(copy(text))).toBe("sync_invite_invalid");
     expect(backend.clipboardText).toBeUndefined();
