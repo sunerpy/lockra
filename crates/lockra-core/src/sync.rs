@@ -208,7 +208,7 @@ pub(crate) fn storage_view(storage: &StorageConfig) -> StorageView {
         },
         StorageConfig::Webdav { url, prefix, username, .. } => StorageView::Webdav { url: url.clone(), prefix: prefix.clone(), username: username.clone() },
         StorageConfig::Folder { path } => StorageView::Folder { path: path.display().to_string() },
-        StorageConfig::Relay { url } => StorageView::Relay { url: url.clone() },
+        StorageConfig::Relay { url, .. } => StorageView::Relay { url: url.clone() },
     }
 }
 
@@ -423,6 +423,8 @@ pub(crate) fn sync_error(error: &SyncError) -> CoreError {
     CoreError::from(match error {
         SyncError::Network(_) => ErrorCode::SyncNetwork,
         SyncError::Denied => ErrorCode::SyncDenied,
+        SyncError::RegistrationRequired => ErrorCode::SyncRegistrationRequired,
+        SyncError::RegistrationRefused => ErrorCode::SyncRegistrationRefused,
         SyncError::Conflict | SyncError::Storage(_) | SyncError::DeviceClash => ErrorCode::SyncStorageFailed,
         SyncError::TooLarge(_) => ErrorCode::SyncTooLarge,
         SyncError::NotLockra | SyncError::Corrupted | SyncError::Misplaced => ErrorCode::SyncDataCorrupted,
@@ -562,7 +564,7 @@ mod tests {
         };
         let size = u64::try_from(lockra_sync::seal_snapshot(&keys, &tag, &snapshot).unwrap().len()).unwrap();
         assert!(size < RELAY_SNAPSHOT_LIMIT, "2000 logins take {size} bytes");
-        let relay = StorageConfig::Relay { url: "https://relay.example.com".into() };
+        let relay = StorageConfig::relay("https://relay.example.com");
         assert_eq!(snapshot_warning(&relay, Some(size)), Some(SnapshotWarningView { bytes: size, limit: RELAY_SNAPSHOT_LIMIT }));
     }
 
@@ -574,7 +576,7 @@ mod tests {
 
     #[test]
     fn only_a_relay_space_warns_and_only_past_three_quarters_of_its_limit() {
-        let relay = StorageConfig::Relay { url: "https://relay.example.com".into() };
+        let relay = StorageConfig::relay("https://relay.example.com");
         let three_quarters = RELAY_SNAPSHOT_LIMIT / 4 * 3;
         assert_eq!(snapshot_warning(&relay, Some(three_quarters)), None);
         assert_eq!(snapshot_warning(&relay, Some(three_quarters + 1)), Some(SnapshotWarningView { bytes: three_quarters + 1, limit: RELAY_SNAPSHOT_LIMIT }));
@@ -587,7 +589,7 @@ mod tests {
     #[test]
     fn the_devices_say_the_version_they_write_with_and_whether_they_keep_passwords() {
         let keys = SpaceKeys::generate(Uuid::new_v4()).unwrap();
-        let storage = StorageConfig::Relay { url: "https://relay.example.com".into() };
+        let storage = StorageConfig::relay("https://relay.example.com");
         let mut local = SyncLocal::new(storage, &keys, &SyncKey::generate().unwrap(), "Desktop".into(), b"keyring");
         let seen = |name: &str, app_version: Option<&str>, reader| lockra_sync::Seen {
             seq: 1,
@@ -739,6 +741,8 @@ mod tests {
         let cases = [
             (SyncError::Network("x".into()), ErrorCode::SyncNetwork),
             (SyncError::Denied, ErrorCode::SyncDenied),
+            (SyncError::RegistrationRequired, ErrorCode::SyncRegistrationRequired),
+            (SyncError::RegistrationRefused, ErrorCode::SyncRegistrationRefused),
             (SyncError::Conflict, ErrorCode::SyncStorageFailed),
             (SyncError::Storage("x".into()), ErrorCode::SyncStorageFailed),
             (SyncError::DeviceClash, ErrorCode::SyncStorageFailed),

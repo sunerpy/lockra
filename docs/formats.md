@@ -450,6 +450,21 @@ GET    <relay>/v1/                                              {service: "lockr
   ikm = sync key, info `lockra-relay v1 access token`). The relay keeps the SHA-256 of those 32
   bytes (hex, in the space's `access` file); a space's first write binds it. Another token is refused (403), a
   missing or malformed one asks for one (401). Nothing else of the sync key reaches the relay.
+- **Registration.** A closed relay serves only its listed spaces (403 `forbidden` for others). A
+  relay with code registration answers a space it does not know with 403 `registration_required`,
+  unless the request carries `Lockra-Registration: <code>`: a registration code, 15 random bytes
+  shown as 24 letters of RFC 4648 Base32 in six groups of four (`ABCD-EFGH-…`; case, spaces and
+  dashes do not matter). A code the relay made, not used and not expired, admits the space with the
+  request's token (the request is then served); any other is 403 `registration_code_invalid`. An
+  admitted space's requests need no code, and one they carry is ignored. The device sends the code
+  of its storage settings (`{kind: "relay", url, registration_code}` in the vault's local part)
+  with every request; an invitation's storage never has one.
+- **The relay's admission file**, `<data>/lockra-relay-v1/admission.json`, with code registration:
+  `{version: 1, spaces: {<space id>: {access, note?, admitted_at, code?}}, codes: {<id>: {hash,
+note?, created_at, expires_at}}}`: an admitted space's token hash (hex), the administrator's note,
+  when (Unix seconds), and the id of the code that admitted it; a code not used yet as the hex
+  SHA-256 of its 15 bytes, its id being the first 8 hex digits of that hash. Only the relay process
+  writes it, through a temporary file renamed into place; one it cannot read stops it at start.
 - **The listing** is `{"objects": [{"name", "size", "etag"}]}`, the snapshots by name. Its `ETag`
   is the listing's revision, a hash of the names and etags. `If-None-Match: <revision>` answers
   `304` while nothing changed; with `?wait=<seconds>` too, the relay holds the `304` back until a

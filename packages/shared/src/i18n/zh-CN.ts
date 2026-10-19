@@ -1208,6 +1208,9 @@ export const zhCN = {
         "快照在设备上加密后经中继同步，中继只看到密文。推荐自建中继：同步空间由你自己掌控。",
       relayUrl: "中继地址",
       relayUrlHint: "以 https:// 开头，例如 https://relay.example.com。自建中继的方法见文档。",
+      registrationCode: "注册码（可选）",
+      registrationCodeHint:
+        "中继只接受登记过的同步空间时，由中继的管理员提供；只在新建同步空间或迁移到这个中继时需要，加入已有的同步空间不用填。",
       s3: "S3 兼容",
       webdav: "WebDAV",
       folder: "网盘文件夹",
@@ -1491,6 +1494,10 @@ export const zhCN = {
     sync_insecure: "只能通过 HTTPS 连接存储（本机地址除外）",
     sync_network: "无法连接存储服务",
     sync_denied: "存储服务拒绝访问，请检查访问密钥或密码",
+    sync_registration_required:
+      "这个中继只接受登记过的同步空间：请向中继的管理员索取注册码，填在中继地址下方",
+    sync_registration_refused:
+      "中继没有接受这个注册码：它无效、已用过或已过期，请向中继的管理员索取新的注册码",
     sync_storage_failed: "存储服务返回错误，请检查存储桶或文件夹是否存在",
     sync_too_large: "这台设备的同步数据超过了存储允许的大小",
     sync_space_not_found: "这个存储里没有这个同步空间",

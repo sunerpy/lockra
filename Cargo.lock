@@ -3199,6 +3199,7 @@ version = "0.0.0"
 dependencies = [
  "bytes",
  "data-encoding",
+ "getrandom 0.3.4",
  "http",
  "http-body-util",
  "hyper",

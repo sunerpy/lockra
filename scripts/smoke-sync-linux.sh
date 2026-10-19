@@ -4,7 +4,8 @@
 # scripts/smoke/sync.py drives each start over WebDriver: device A sets up the space, device B
 # joins it with the sync key and changes the accounts, device A takes the changes in and refuses an
 # older snapshot of B's put back on the storage. Then two more devices sync through lockra-relay on
-# 127.0.0.1: C sets up a space on it and shows an invitation, D joins from the invitation and its
+# 127.0.0.1, which registers new spaces by code: C is refused without one, sets up a space with the
+# code `lockra-relay new-code` made, and shows an invitation; D joins from the invitation and its
 # code alone, and C takes D's change in. Each device has its own data and config folders; they run
 # one after the other. Screenshots go to the given folder. Every wait is a condition with a
 # deadline.
@@ -71,10 +72,14 @@ docker run -d --name "$s3" -p "127.0.0.1:$s3_port:7070" -e ROOT_ACCESS_KEY_ID="$
 timeout 60 sh -c "until [ \"\$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$s3_port/)\" != 000 ]; do sleep 0.5; done" ||
   { docker logs "$s3" | tail -n 20; exit 1; }
 
-"$root/target/debug/lockra-relay" --bind "127.0.0.1:$relay_port" --data "$work/relay" >"$work/relay.log" 2>&1 &
+"$root/target/debug/lockra-relay" --bind "127.0.0.1:$relay_port" --data "$work/relay" --registration code >"$work/relay.log" 2>&1 &
 relay_pid=$!
 timeout 30 sh -c "until curl -sf http://127.0.0.1:$relay_port/healthz >/dev/null; do sleep 0.5; done" ||
   { cat "$work/relay.log"; exit 1; }
+# The administrator's registration code for device C's space (the first line the command prints).
+"$root/target/debug/lockra-relay" new-code --data "$work/relay" --note "smoke device C" >"$work/relay-code.txt"
+relay_code=$(head -n 1 "$work/relay-code.txt")
+[ -n "$relay_code" ] || { echo "smoke-sync: lockra-relay new-code printed no code"; exit 1; }
 
 Xvfb "$display" -screen 0 1440x900x24 -nolisten tcp >/dev/null 2>&1 &
 xvfb_pid=$!
@@ -95,7 +100,7 @@ phase() {
   fi
   python3 scripts/smoke/sync.py --phase "$name" --driver "http://127.0.0.1:$port" --app "$app" --out "$out" \
     --work "$work" --s3 "http://127.0.0.1:$s3_port" --s3-user "$user" --secret-file "$work/s3-secret" \
-    --relay "http://127.0.0.1:$relay_port" --relay-data "$work/relay"
+    --relay "http://127.0.0.1:$relay_port" --relay-data "$work/relay" --relay-code "$relay_code"
   kill "$driver_pid" 2>/dev/null || true
   wait "$driver_pid" 2>/dev/null || true
   driver_pid=""

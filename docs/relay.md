@@ -104,6 +104,41 @@ The allowlist authenticates a **space**, not each device: all devices in one spa
 the same access token. Put a path allowlist in the reverse proxy or load balancer too, and use a
 private VPN when individual physical devices must be independently admitted or revoked.
 
+### Registration codes
+
+Code registration (`LOCKRA_RELAY_REGISTRATION=code`) admits a new space only with a registration
+code you made: no window of open registration, no access file to copy, no restart per space. Each
+code is used once and expires (after 7 days unless `--expires` says otherwise):
+
+```sh
+sudo lockra-relay new-code --data /var/lib/lockra-relay --note "Anna's phone"
+# Docker: docker compose -f deploy/relay/compose.yaml exec relay lockra-relay new-code --note "Anna's phone"
+```
+
+The command prints the code (`ABCD-EFGH-IJKL-MNOP-QRST-UVWX`) once. In Lockra, it goes in the
+**Registration code** field under the relay's address, when a space is set up on the relay or moved
+to it; the first request of the space carries it, and the relay keeps the space from then on.
+Devices that join the space need no code, and no invitation carries one.
+
+The other commands, for the relay serving `--data` (`LOCKRA_RELAY_DATA`), run as its user or root:
+
+| Command                         | What it does                                                            |
+| ------------------------------- | ----------------------------------------------------------------------- |
+| `new-code [--note] [--expires]` | A code: `12h`, `7d`, or days alone, at most `365d`.                     |
+| `codes`                         | The codes not used yet, with their ids and notes.                       |
+| `drop-code ID`                  | Cancel a code.                                                          |
+| `spaces`                        | The spaces: admitted ones with their use, and those on disk unserved.   |
+| `admit SPACE_ID [--note]`       | Serve a space on disk without a code (one kept from open registration). |
+| `revoke SPACE_ID`               | Stop serving a space; its files stay until you remove them.             |
+
+They talk to the running relay over `<data>/lockra-relay-v1/admin.sock`, which only the relay's
+user and root can open; the relay is the only one that writes the admission file
+(`<data>/lockra-relay-v1/admission.json`). `--allowed-spaces` still lists spaces with code
+registration: they are served as with closed registration, and no command changes them. Switching an
+open relay to codes leaves its spaces unserved until you `admit` yours (`spaces` lists them with
+when they were last used); a space admitted again, or by a code later, is served with its files.
+Tries with a wrong code count against `--spaces-per-hour` of the client's address.
+
 The apps warn in Settings › Sync when a device's snapshot on a relay passes three quarters of the
 default `--max-object-bytes` (3 MiB; `lockra_core::RELAY_SNAPSHOT_LIMIT`): the relay does not tell
 its settings, so a relay set to keep more is warned of the same, and one set to keep less may refuse a
@@ -120,6 +155,8 @@ the only one in front (deploy/relay/Caddyfile does).
 ```
 <data>/lockra-relay-v1/spaces/<space id>/access               SHA-256 of the access token's 32 bytes, hex
 <data>/lockra-relay-v1/spaces/<space id>/devices/<tag>.lks    a device's snapshot, as the device sealed it
+<data>/lockra-relay-v1/admission.json                         code registration: admitted spaces, codes not used yet (hashed)
+<data>/lockra-relay-v1/admin.sock                             the commands' socket, while the relay runs
 ```
 
 A space is made by its first write, bound to the token that wrote it; a request with another token
@@ -140,6 +177,7 @@ in flight finish first (10 seconds at most).
 ## The API
 
 The relay's HTTP API is in docs/formats.md §9, "The relay": a listing, reads, writes with
-conditions, removals, and a listing that waits for a change, all under the space's access token.
+conditions, removals, and a listing that waits for a change, all under the space's access token,
+with a registration code in `Lockra-Registration` where code registration asks for one.
 `GET /healthz` answers `ok`, and `GET /v1/` names the service, the API version and the relay's
 version.

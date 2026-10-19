@@ -10,6 +10,12 @@ pub enum SyncError {
     /// The storage refused the credentials or the request (401, 403).
     #[error("the storage refused the request")]
     Denied,
+    /// A relay that admits a new space only with a registration code asked for one.
+    #[error("the relay admits this space only with a registration code")]
+    RegistrationRequired,
+    /// A relay refused the registration code: unknown, used or expired.
+    #[error("the relay refused the registration code")]
+    RegistrationRefused,
     /// A conditional write lost against another writer (412).
     #[error("the object was changed by another writer")]
     Conflict,

@@ -61,7 +61,7 @@ pub fn watch(config: &StorageConfig, access: &SpaceAccess, dir: &str, changed: B
             let place = dir.trim_end_matches('/').split('/').filter(|s| !s.is_empty()).fold(path.clone(), |place, segment| place.join(segment));
             FolderWatch::start(&place, changed).map(|w| Some(Watch::Folder(w)))
         }
-        StorageConfig::Relay { url } => RelayWatch::start(url, access, dir, changed).map(|w| Some(Watch::Relay(w))),
+        StorageConfig::Relay { url, .. } => RelayWatch::start(url, access, dir, changed).map(|w| Some(Watch::Relay(w))),
         StorageConfig::S3 { .. } | StorageConfig::Webdav { .. } => Ok(None),
     }
 }

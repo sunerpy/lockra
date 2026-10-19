@@ -441,8 +441,12 @@ fn commands() -> Vec<Value> {
         json!({"command": "activity"}),
         json!({"command": "update_check"}),
         json!({"command": "update_install"}),
-        // On a Lockra relay: its address alone (the space's access comes from the sync key).
-        json!({"command": "sync_create", "storage": {"kind": "relay", "url": "https://relay.example.com"}, "password": "a new password", "device_name": "Desktop"}),
+        // On a Lockra relay: its address (the space's access comes from the sync key), and the
+        // registration code its administrator gave, for a relay that admits a new space only so.
+        json!({
+            "command": "sync_create", "storage": {"kind": "relay", "url": "https://relay.example.com", "registration_code": "ABCD-EFGH-IJKL-MNOP-QRST-UVWX"},
+            "password": "a new password", "device_name": "Desktop"
+        }),
         // With this device's own way to the space (needed when the invitation holds the sync key
         // alone: a space in another computer's folder).
         json!({
@@ -767,6 +771,8 @@ fn response_fixtures() {
         ErrorCode::ExportAcknowledgeNeeded.into(),
         ErrorCode::SyncWrongCredentials.into(),
         ErrorCode::SyncInviteNeedsStorage.into(),
+        ErrorCode::SyncRegistrationRequired.into(),
+        ErrorCode::SyncRegistrationRefused.into(),
         ErrorCode::ImportKeyFileInvalid.into(),
         ErrorCode::SeveralAccounts.into(),
         ErrorCode::FeatureUnavailable.into(),

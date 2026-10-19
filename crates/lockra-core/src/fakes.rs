@@ -311,6 +311,8 @@ pub struct FakeTransport {
     /// Each relay's access token, as the first device to open it showed it: another is refused,
     /// as a relay refuses a token its space was not created with.
     relay_tokens: Mutex<BTreeMap<String, String>>,
+    /// The registration code each relay was last opened with (`None`: without one).
+    relay_codes: Mutex<BTreeMap<String, Option<String>>>,
 }
 
 struct FakeWatch {
@@ -362,12 +364,18 @@ impl FakeTransport {
         self.relay_tokens.lock().get(&Self::address(config).0).cloned()
     }
 
+    /// The registration code the relay `config` names was last opened with; `None` when it was
+    /// never opened.
+    pub fn relay_code(&self, config: &StorageConfig) -> Option<Option<String>> {
+        self.relay_codes.lock().get(&Self::address(config).0).cloned()
+    }
+
     fn address(config: &StorageConfig) -> (String, bool) {
         match config {
             StorageConfig::S3 { endpoint, bucket, .. } => (format!("s3:{endpoint}/{bucket}"), true),
             StorageConfig::Webdav { url, .. } => (format!("dav:{url}"), false),
             StorageConfig::Folder { path } => (format!("folder:{}", path.display()), false),
-            StorageConfig::Relay { url } => (format!("relay:{url}"), true),
+            StorageConfig::Relay { url, .. } => (format!("relay:{url}"), true),
         }
     }
 }
@@ -383,7 +391,8 @@ impl SyncTransport for FakeTransport {
         if secret.is_some_and(|secret| secret.as_str() != Self::SECRET) {
             return Ok(Arc::new(Refusing));
         }
-        if config.is_relay() {
+        if let StorageConfig::Relay { registration_code, .. } = config {
+            self.relay_codes.lock().insert(Self::address(config).0, registration_code.as_ref().map(|code| code.to_string()));
             let mut tokens = self.relay_tokens.lock();
             let bound = tokens.entry(Self::address(config).0).or_insert_with(|| access.relay_token().to_owned());
             if bound != access.relay_token() {

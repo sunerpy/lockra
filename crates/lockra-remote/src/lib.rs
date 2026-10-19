@@ -44,7 +44,9 @@ pub fn open(config: &StorageConfig, access: &SpaceAccess) -> Result<Arc<dyn Remo
     config.validate().map_err(|e| SyncError::Storage(format!("{e:?}")))?;
     match config {
         StorageConfig::Folder { path } => Ok(Arc::new(FolderStore::new(path))),
-        StorageConfig::Relay { url } => Ok(Arc::new(RelayStore::open(url, access)?)),
+        StorageConfig::Relay { url, registration_code } => {
+            Ok(Arc::new(RelayStore::open(url, access)?.with_registration(registration_code.as_deref().map(String::as_str))))
+        }
         StorageConfig::S3 { .. } | StorageConfig::Webdav { .. } => Ok(Arc::new(Storage::open(config)?)),
     }
 }

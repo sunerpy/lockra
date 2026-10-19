@@ -473,6 +473,19 @@ holds, the space's snapshots as the devices sealed them, and is trusted with no 
   recreated after storage loss only by a device with the matching token, while unlisted directories
   stay untouched and unavailable. This restricts spaces, not devices within one space, which share
   that token; it also cannot constrain an operator or attacker who already controls the relay disk.
+- **Or register new spaces by code.** With code registration a new space needs a registration code
+  the relay made for its administrator (`lockra-relay new-code`): 120 random bits, used once,
+  expiring (7 days by default), kept by the relay as their SHA-256 alone. The first request of a
+  space the relay does not know carries one (`Lockra-Registration`); the relay then keeps the
+  space's id with its token's hash, as it keeps a listed space, and ignores the code afterwards. A
+  code guessed or replayed admits nothing: tries count against the new-space rate of the client's
+  address, a used or expired code is refused, and a space already admitted keeps its token. The
+  commands reach the relay only through a Unix socket in its data directory, which only its user
+  and root can open; nothing of them is on the network. The device keeps the code with the storage
+  settings in the vault's encrypted local part, never shows it again, and leaves it out of every
+  invitation: the space is admitted by then. A leaked code admits at most one space, until it
+  expires or the administrator drops it (`lockra-relay drop-code`); `lockra-relay revoke` stops
+  serving a space.
 - **Limits.** The relay refuses more than it keeps (snapshot size, devices per space, bytes per
   space and in all, spaces) and more than a client may ask (requests per client address and per
   space, new spaces per address): one client cannot exhaust it for the others. A space no device

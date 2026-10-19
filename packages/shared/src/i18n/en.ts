@@ -1247,6 +1247,9 @@ export const en: Messages = {
       relayUrl: "Relay address",
       relayUrlHint:
         "Starts with https://, for example https://relay.example.com. The docs explain how to run one.",
+      registrationCode: "Registration code (optional)",
+      registrationCodeHint:
+        "From the relay's administrator, when the relay serves registered sync spaces only. Needed only to set up a sync space on this relay or move one to it; joining an existing sync space needs none.",
       s3: "S3-compatible",
       webdav: "WebDAV",
       folder: "Cloud drive folder",
@@ -1550,6 +1553,10 @@ export const en: Messages = {
     sync_insecure: "The storage must be reached over HTTPS (plain HTTP only to this computer)",
     sync_network: "The storage could not be reached",
     sync_denied: "The storage refused access; check the access key or password",
+    sync_registration_required:
+      "This relay serves registered sync spaces only: ask its administrator for a registration code and enter it under the relay's address",
+    sync_registration_refused:
+      "The relay did not take this registration code: it is wrong, used or expired. Ask the relay's administrator for a new one",
     sync_storage_failed:
       "The storage answered with an error; check that the bucket or folder exists",
     sync_too_large: "This device's sync data is larger than the storage accepts",

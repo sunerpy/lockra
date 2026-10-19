@@ -17,11 +17,13 @@ one phase per app start:
 
 Then the same through a Lockra relay (lockra-relay on 127.0.0.1, its data folder read back):
 
-  r1 device C: the storage form starts on WebDAV and a relay on one's own; C sets up a space on this
-     test's relay, and shows an invitation: its QR code and "Copy the pairing link", which puts
-     the plain invitation on the X clipboard (kept for device D); no "Can't scan?" and no code. The
-     relay holds one snapshot, nothing readable, and the SHA-256 of the access token derived from
-     the sync key (computed here apart), never the sync key.
+  r1 device C: the storage form starts on WebDAV and a relay on one's own; this test's relay
+     registers new spaces by code, so C is refused without one, then sets up a space with the code
+     `lockra-relay new-code` made, and shows an invitation: its QR code and "Copy the pairing link",
+     which puts the plain invitation on the X clipboard (kept for device D); no "Can't scan?" and no
+     code. The relay holds one snapshot, nothing readable, the SHA-256 of the access token derived
+     from the sync key (computed here apart), never the sync key, and in its admission file the
+     space admitted with that hash and the code used up (kept as a hash, never as typed).
   r2 device D, no vault: the welcome screen's "join sync" with C's pairing link alone (no code, no
      storage settings) under a master password of D's own; C's accounts arrive; D adds one, and
      its vault opens with its own password.
@@ -37,6 +39,7 @@ import hashlib
 import hmac
 import json
 import os
+import stat
 import subprocess
 import sys
 import time
@@ -148,11 +151,13 @@ class Phase:
         self.s3 = S3(args.s3, args.s3_user, self.secret)
 
     def relay_files(self):
-        """Every file the relay keeps, by its path under the data folder."""
+        """Every file the relay keeps, by its path under the data folder (not its admin socket)."""
         files = {}
         for folder, _, names in os.walk(self.args.relay_data):
             for name in names:
                 path = os.path.join(folder, name)
+                if not stat.S_ISREG(os.lstat(path).st_mode):
+                    continue
                 with open(path, "rb") as f:
                     files[os.path.relpath(path, self.args.relay_data)] = f.read()
         return files
@@ -417,6 +422,12 @@ class Phase:
         self.fill("中继地址", self.args.relay, scope)
         self.fill("这台设备的名称", "台式机", scope)
         self.fill("主密码", PASSWORD, scope)
+        # Without the registration code, this relay admits no new space, and says so; the form
+        # empties the master password after a refusal, as after any.
+        web.click(self.button("开始同步", scope))
+        web.wait(xpath=f"{scope}//*[contains(normalize-space(), '这个中继只接受登记过的同步空间')]")
+        self.fill("注册码（可选）", self.args.relay_code, scope)
+        self.fill("主密码", PASSWORD, scope)
         self.shot("sync-relay-create-light")
         before = int(time.time() * 1000)
         web.click(self.button("开始同步", scope))
@@ -424,22 +435,27 @@ class Phase:
         self.kept_recovery_key()
         space = self.synced_after(before)
         if space["storage"] != {"kind": "relay", "url": self.args.relay}:
-            sys.exit(f"smoke-sync: C's storage reads {space['storage']}")
+            sys.exit(f"smoke-sync: C's storage reads {space['storage']} (the registration code is never shown)")
 
         raw_key, space_id, token = relay_access(key)
         bearer = base64.urlsafe_b64encode(token).rstrip(b"=")
         files = self.relay_files()
         base = f"lockra-relay-v1/spaces/{space_id}"
         snapshots = [p for p in files if p.startswith(f"{base}/devices/") and p.endswith(".lks")]
-        if sorted(files) != sorted([f"{base}/access", *snapshots]) or len(snapshots) != 1:
+        admission = "lockra-relay-v1/admission.json"
+        if sorted(files) != sorted([admission, f"{base}/access", *snapshots]) or len(snapshots) != 1:
             sys.exit(f"smoke-sync: the relay keeps {sorted(files)}")
         if files[f"{base}/access"].decode().strip() != hashlib.sha256(token).hexdigest():
             sys.exit("smoke-sync: the relay's access file is not the SHA-256 of the access token")
+        admitted = json.loads(files[admission])
+        if admitted.get("codes") or admitted["spaces"].get(str(space_id), {}).get("access") != hashlib.sha256(token).hexdigest():
+            sys.exit(f"smoke-sync: the relay's admission file reads {admitted}")
+        code = self.args.relay_code
         for path, body in files.items():
-            for clear in [b"GitHub", b"octocat", b"JBSWY3DPEHPK3PXP", "台式机".encode(), key.encode(), raw_key, token, bearer]:
+            for clear in [b"GitHub", b"octocat", b"JBSWY3DPEHPK3PXP", "台式机".encode(), key.encode(), raw_key, token, bearer, code.encode(), code.replace("-", "").encode()]:
                 if clear in body:
                     sys.exit(f"smoke-sync: {clear[:12]!r}… is readable in the relay's {path}")
-        print("smoke-sync: C set up a space on its relay (1 snapshot, nothing readable, only the token's SHA-256)")
+        print("smoke-sync: C was refused without a code, then set up a space with one (1 snapshot, nothing readable, the code used up)")
 
         web.click(web.wait(css="[data-testid=sync-invite-open]"))
         dialog = "//*[@role='dialog']"
@@ -532,7 +548,7 @@ class Phase:
 
 def main():
     parser = argparse.ArgumentParser()
-    for name in ["phase", "driver", "app", "out", "work", "s3", "s3-user", "secret-file", "relay", "relay-data"]:
+    for name in ["phase", "driver", "app", "out", "work", "s3", "s3-user", "secret-file", "relay", "relay-data", "relay-code"]:
         parser.add_argument(f"--{name}", required=True)
     args = parser.parse_args()
     phase = Phase(args)

@@ -12,7 +12,10 @@
 //! ```
 //!
 //! Every `/v1/spaces` request carries `Authorization: Bearer <token>`, the space's access token: 32
-//! bytes in unpadded Base64url. The first write of a space binds it to its token.
+//! bytes in unpadded Base64url. The first write of a space binds it to its token. With code
+//! registration, a request of a space the relay does not know carries `Lockra-Registration: <code>`
+//! too, a registration code, which admits it (403 `registration_required` without one, 403
+//! `registration_code_invalid` with one that is unknown, used or expired).
 
 use std::convert::Infallible;
 use std::error::Error as StdError;
@@ -28,9 +31,13 @@ use http_body_util::{BodyExt as _, Full, LengthLimitError, Limited};
 use hyper::body::Body;
 use uuid::Uuid;
 
+use crate::admission::{Redeemed, Verdict};
 use crate::config::{Config, IpNet, Limits, canonical};
 use crate::limit::{Rate, client_key};
 use crate::store::{Access, Condition, Listing, Store, StoreError, empty_revision, is_object_name, space_id};
+
+/// The header that carries a registration code (code registration).
+pub const REGISTRATION_HEADER: &str = "lockra-registration";
 
 /// How long a client may take to send a snapshot.
 const BODY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -116,6 +123,25 @@ where
     };
     if !app.per_space.allow(&id, now) {
         return limited(app);
+    }
+    match app.store.gate().verdict(id, &access.hash()) {
+        Verdict::Allowed => {}
+        Verdict::Forbidden => return error(StatusCode::FORBIDDEN, "forbidden"),
+        Verdict::Unknown => {
+            let Some(code) = request.headers().get(REGISTRATION_HEADER).and_then(|v| v.to_str().ok()).map(str::to_owned) else {
+                return error(StatusCode::FORBIDDEN, "registration_required");
+            };
+            // A code is tried as often as a client may make spaces: guessing one gets nowhere.
+            if !app.new_spaces.allow(&client, now) {
+                return limited(app);
+            }
+            match app.store.redeem(id, &access, code).await {
+                Ok(Redeemed::Admitted) => {}
+                Ok(Redeemed::Forbidden) => return error(StatusCode::FORBIDDEN, "forbidden"),
+                Ok(Redeemed::BadCode) => return error(StatusCode::FORBIDDEN, "registration_code_invalid"),
+                Err(e) => return store_error(e),
+            }
+        }
     }
     if object.is_empty() {
         return match method.as_str() {
@@ -530,6 +556,51 @@ mod tests {
             assert_eq!(request.on(&app).await.0, StatusCode::FORBIDDEN);
         }
         assert!(!app.store.exists(Uuid::parse_str(&other).unwrap()));
+    }
+
+    #[tokio::test]
+    async fn code_registration_admits_a_new_space_with_a_code_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let listed = space();
+        let listed_access = Access::of_token(&[5; 32]).hash();
+        let admission = crate::Admission::Code(Box::new(BTreeMap::from([(Uuid::parse_str(&listed).unwrap(), listed_access)])));
+        let limits = Limits { max_object_bytes: 64, spaces_per_hour: 6, ..Limits::default() };
+        let app = app_with_admission(dir.path(), limits, &[], admission);
+        let (id, other) = (space(), space());
+        let (status, _, body) = call(Method::GET, devices(&id)).on(&app).await;
+        assert_eq!((status, json_of(&body)), (StatusCode::FORBIDDEN, serde_json::json!({ "error": "registration_required" })));
+        let (status, _, body) = call(Method::PUT, object(&id, A)).header(REGISTRATION_HEADER, "AAAA-AAAA-AAAA-AAAA-AAAA-AAAA").body(b"x").on(&app).await;
+        assert_eq!((status, json_of(&body)), (StatusCode::FORBIDDEN, serde_json::json!({ "error": "registration_code_invalid" })));
+        assert!(!app.store.exists(Uuid::parse_str(&id).unwrap()));
+
+        let made = app.store.gate().new_code("phone".into(), 3600, crate::admission::now()).unwrap();
+        // The first request with the code admits the space; the code is used up.
+        assert_eq!(call(Method::GET, devices(&id)).header(REGISTRATION_HEADER, made.code.to_lowercase()).on(&app).await.0, StatusCode::OK);
+        assert_eq!(call(Method::PUT, object(&id, A)).body(b"sealed").on(&app).await.0, StatusCode::OK);
+        assert_eq!(call(Method::PUT, object(&id, B)).header(REGISTRATION_HEADER, "ignored now").body(b"too").on(&app).await.0, StatusCode::OK);
+        assert_eq!(call(Method::GET, devices(&id)).token(Some(token(2))).on(&app).await.0, StatusCode::FORBIDDEN);
+        let (status, _, body) = call(Method::GET, devices(&other)).token(Some(token(3))).header(REGISTRATION_HEADER, made.code.clone()).on(&app).await;
+        assert_eq!((status, json_of(&body)), (StatusCode::FORBIDDEN, serde_json::json!({ "error": "registration_code_invalid" })));
+        // A listed space needs no code; another token is refused.
+        assert_eq!(call(Method::PUT, object(&listed, A)).token(Some(token(5))).body(b"x").on(&app).await.0, StatusCode::OK);
+        assert_eq!(call(Method::GET, devices(&listed)).on(&app).await.0, StatusCode::FORBIDDEN);
+        // Codes are tried no more often than spaces are made (six an hour here): two codes and three
+        // new spaces so far, so one more try and then no more.
+        assert_eq!(call(Method::GET, devices(&other)).token(Some(token(3))).header(REGISTRATION_HEADER, "x").on(&app).await.0, StatusCode::FORBIDDEN);
+        assert_eq!(call(Method::GET, devices(&other)).token(Some(token(3))).header(REGISTRATION_HEADER, "x").on(&app).await.0, StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn an_admission_that_cannot_be_written_fails_the_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = app_with_admission(dir.path(), Limits::default(), &[], crate::Admission::Code(Box::default()));
+        let made = app.store.gate().new_code(String::new(), 3600, crate::admission::now()).unwrap();
+        // The admission file's directory taken away: the code stays unused.
+        let root = dir.path().join(crate::store::ROOT);
+        std::fs::rename(&root, dir.path().join("moved")).unwrap();
+        let (status, _, body) = call(Method::GET, devices(&space())).header(REGISTRATION_HEADER, made.code.clone()).on(&app).await;
+        assert_eq!((status, json_of(&body)), (StatusCode::INTERNAL_SERVER_ERROR, serde_json::json!({ "error": "internal" })));
+        assert_eq!(app.store.gate().codes(crate::admission::now()).len(), 1);
     }
 
     #[tokio::test]

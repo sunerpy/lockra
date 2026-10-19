@@ -2,8 +2,9 @@
 // ones they start from. The secret (S3 secret key, WebDAV password) is typed in every time: the
 // core never sends it back. A folder of the computer is chosen through the system's dialog every
 // time too: the form only shows it, and the core takes the one the dialog chose. A Lockra relay
-// needs its address alone. The form starts on storage of one's own, WebDAV, as the sync page
-// recommends: a relay is one the user runs and addresses explicitly.
+// needs its address, and a registration code where its administrator gave one (typed in every
+// time too). The form starts on storage of one's own, WebDAV, as the sync page recommends: a relay
+// is one the user runs and addresses explicitly.
 import type { StorageConfig, StorageKind, StorageView } from "./schema";
 import {
   type PresetId,
@@ -34,6 +35,8 @@ export interface StorageForm {
   prefix: string;
   /** The folder the dialog chose for this form (`pickSyncFolder`), as shown; "" until it did. */
   folder: string;
+  /** A relay's registration code, for a relay that admits a new space only with one. */
+  registrationCode: string;
 }
 
 /** A new form: on WebDAV, storage of one's own. */
@@ -54,6 +57,7 @@ export function emptyStorageForm(): StorageForm {
     password: "",
     prefix: "lockra",
     folder: "",
+    registrationCode: "",
   };
 }
 
@@ -91,7 +95,12 @@ export function storageFormFrom(view: StorageView): StorageForm {
 /** The settings the core receives (the core checks them again). */
 export function storageConfig(form: StorageForm): StorageConfig {
   if (form.kind === "folder") return { kind: "folder" };
-  if (form.kind === "relay") return { kind: "relay", url: form.url.trim() };
+  if (form.kind === "relay") {
+    const code = form.registrationCode.trim();
+    return code === ""
+      ? { kind: "relay", url: form.url.trim() }
+      : { kind: "relay", url: form.url.trim(), registration_code: code };
+  }
   return form.kind === "s3"
     ? {
         kind: "s3",

@@ -54,11 +54,17 @@ pub enum StorageConfig {
     },
     /// A Lockra relay the user runs (lockra-relay, docs/relay.md). It
     /// keeps the snapshots like any storage and opens none of them. The space's access token comes
-    /// from the sync key ([`crate::SpaceAccess`]), so the settings hold the address alone, and an
-    /// invitation carries nothing more than the address and the sync key.
+    /// from the sync key ([`crate::SpaceAccess`]), so the settings hold the address (and, for a
+    /// relay that registers new spaces by code, the code), and an invitation carries nothing more
+    /// than the address and the sync key.
     Relay {
         /// The relay's address, `https://relay.example.com`.
         url: String,
+        /// The registration code the relay's administrator gave (`lockra-relay new-code`), for a
+        /// relay that admits a new space only with one: the space's first request carries it, and
+        /// the relay ignores it once the space is admitted. Never in an invitation, never shown.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        registration_code: Option<Zeroizing<String>>,
     },
 }
 
@@ -75,7 +81,8 @@ impl fmt::Debug for StorageConfig {
                 .finish_non_exhaustive(),
             Self::Webdav { url, prefix, .. } => f.debug_struct("Webdav").field("url", url).field("prefix", prefix).finish_non_exhaustive(),
             Self::Folder { path } => f.debug_struct("Folder").field("path", path).finish(),
-            Self::Relay { url } => f.debug_struct("Relay").field("url", url).finish(),
+            Self::Relay { url, registration_code: None } => f.debug_struct("Relay").field("url", url).finish(),
+            Self::Relay { url, registration_code: Some(_) } => f.debug_struct("Relay").field("url", url).finish_non_exhaustive(),
         }
     }
 }
@@ -93,6 +100,20 @@ pub enum ConfigError {
 }
 
 impl StorageConfig {
+    /// A relay at `url`, with no registration code.
+    pub fn relay(url: impl Into<String>) -> Self {
+        Self::Relay { url: url.into(), registration_code: None }
+    }
+
+    /// The same settings without a relay's registration code: what another device is handed (it
+    /// joins a space already admitted).
+    pub fn without_registration(&self) -> Self {
+        match self {
+            Self::Relay { url, .. } => Self::relay(url.clone()),
+            other => other.clone(),
+        }
+    }
+
     /// The folder inside the storage the space lives under (none in a folder of this computer,
     /// which is the place, nor on a relay, which keeps each space under its id).
     pub fn prefix(&self) -> &str {
@@ -106,7 +127,7 @@ impl StorageConfig {
     pub fn host(&self) -> Option<String> {
         let address = match self {
             Self::S3 { endpoint, .. } => endpoint,
-            Self::Webdav { url, .. } | Self::Relay { url } => url,
+            Self::Webdav { url, .. } | Self::Relay { url, .. } => url,
             Self::Folder { .. } => return None,
         };
         Url::parse(address.trim()).ok().and_then(|u| u.host_str().map(str::to_owned))
@@ -131,8 +152,8 @@ impl StorageConfig {
                 (endpoint, vec![region.as_str(), bucket.as_str(), access_key_id.as_str(), secret_access_key.as_str()])
             }
             Self::Webdav { url, username, password, .. } => (url, vec![username.as_str(), password.as_str()]),
-            Self::Relay { url } if url.trim().is_empty() => return Err(ConfigError::Missing),
-            Self::Relay { url } => {
+            Self::Relay { url, .. } if url.trim().is_empty() => return Err(ConfigError::Missing),
+            Self::Relay { url, .. } => {
                 let parsed = Url::parse(url.trim()).map_err(|_| ConfigError::Address)?;
                 if parsed.query().is_some() || parsed.fragment().is_some() {
                     return Err(ConfigError::Address);
@@ -240,7 +261,7 @@ mod tests {
 
     #[test]
     fn a_relay_is_an_https_address_alone() {
-        let relay = |url: &str| StorageConfig::Relay { url: url.into() };
+        let relay = |url: &str| StorageConfig::relay(url);
         assert_eq!(relay("https://relay.example.com").validate(), Ok(()));
         assert_eq!(relay("https://example.com/lockra/").validate(), Ok(()));
         assert_eq!(relay("http://127.0.0.1:8090").validate(), Ok(()));
@@ -262,6 +283,24 @@ mod tests {
         let json = serde_json::to_value(&relay_config).unwrap();
         assert_eq!(json, serde_json::json!({ "kind": "relay", "url": "https://relay.example.com" }));
         assert_eq!(serde_json::from_value::<StorageConfig>(json).unwrap(), relay_config);
+    }
+
+    #[test]
+    fn a_relays_registration_code_is_kept_but_never_shown_or_handed_on() {
+        let coded =
+            StorageConfig::Relay { url: "https://relay.example.com".into(), registration_code: Some(Zeroizing::new("ABCD-EFGH-IJKL-MNOP-QRST-UVWX".into())) };
+        assert_eq!(coded.validate(), Ok(()));
+        let debug = format!("{coded:?}");
+        assert_eq!(debug, "Relay { url: \"https://relay.example.com\", .. }");
+        // In the vault's local part with the code; settings of 0.14 and before have none.
+        let json = serde_json::to_value(&coded).unwrap();
+        assert_eq!(json, serde_json::json!({ "kind": "relay", "url": "https://relay.example.com", "registration_code": "ABCD-EFGH-IJKL-MNOP-QRST-UVWX" }));
+        assert_eq!(serde_json::from_value::<StorageConfig>(json).unwrap(), coded);
+        let old: StorageConfig = serde_json::from_value(serde_json::json!({ "kind": "relay", "url": "https://relay.example.com" })).unwrap();
+        assert_eq!(old, StorageConfig::relay("https://relay.example.com"));
+        assert_eq!(coded.without_registration(), old);
+        let dav = webdav("https://dav.example.com");
+        assert_eq!(dav.without_registration(), dav);
     }
 
     #[test]

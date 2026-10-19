@@ -158,6 +158,19 @@ export function StorageFields({
             {t("sync.storage.address")}: <span className="font-mono text-fg-muted">{form.url}</span>
           </p>
         )}
+        <Input
+          size={size}
+          label={t("sync.storage.registrationCode")}
+          value={form.registrationCode}
+          onChange={(e) => change({ registrationCode: e.target.value })}
+          placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX"
+          help={t("sync.storage.registrationCodeHint")}
+          mono
+          spellCheck={false}
+          autoComplete="off"
+          autoCapitalize="characters"
+          data-testid="storage-relay-code"
+        />
       </div>
     );
   }

@@ -72,6 +72,10 @@ address you entered and reads the other devices' files from there.
 - **Retention and network logs**: the relay removes an idle space after its configured period. It
   keeps addresses in memory for rate limits; the reverse proxy or load balancer logs whatever its
   operator configures.
+- <StatusTag status="building" /> **Registration code**: for a relay that serves registered sync
+  spaces only, the code you enter goes to the relay with the requests; the relay keeps only its
+  hash and takes it once. The code stays encrypted with the storage settings on the device you
+  entered it on, and goes to no other device.
 
 ## On Android
 
