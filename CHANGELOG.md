@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/sunerpy/lockra/compare/v0.13.1...v0.14.0) (2026-10-19)
+
+
+### Features
+
+* **relay:** 增加私有空间准入并移除内置中继 ([342b680](https://github.com/sunerpy/lockra/commit/342b6800efee86f51b65786937d79eb38391dedf))
+
 ## [0.13.1](https://github.com/sunerpy/lockra/compare/v0.13.0...v0.13.1) (2026-10-18)
 
 
