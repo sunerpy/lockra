@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/sunerpy/lockra/compare/v0.14.0...v0.15.0) (2026-10-19)
+
+
+### Features
+
+* **relay:** 新增注册码模式，新的同步空间凭管理员生成的一次性注册码登记 ([#188](https://github.com/sunerpy/lockra/issues/188)) ([ccbecf9](https://github.com/sunerpy/lockra/commit/ccbecf936c11802a0daec25e1c367c1b85f3d141))
+
 ## [0.14.0](https://github.com/sunerpy/lockra/compare/v0.13.1...v0.14.0) (2026-10-19)
 
 
