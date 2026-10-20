@@ -123,26 +123,36 @@ left_screen() {
 }
 # The centre of the node labelled with one of the words: the text or description equal to it,
 # else containing it. Only its part above $tap_bottom counts: a node cut off there is not on the
-# screen yet (reveal scrolls it up).
+# screen yet. 2 when the node meant is there but not on the screen (reveal scrolls it up): a node
+# that only contains the word never stands in for one equal to it (CI, 2026-10-21: 「Start syncing」
+# at the bottom edge, and the page's title 「Start syncing from this device」 above it).
 centre() {
   python3 - "$out/ui.xml" "${tap_bottom:-1000000}" "$@" <<'PY'
 import re, sys, xml.etree.ElementTree as ET
 path, bottom, *words = sys.argv[1:]
 bottom = int(bottom)
-nodes = []
+exact, partial = [], []
 for node in ET.parse(path).getroot().iter("node"):
+    text, desc = (node.get("text") or "").strip(), (node.get("content-desc") or "").strip()
+    equal = any(w in (text, desc) for w in words)
+    if not equal and not any(w in text or w in desc for w in words):
+        continue
+    spot = None
     m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
     if m:
         x1, y1, x2, y2 = map(int, m.groups())
         y2 = min(y2, bottom)
         # At least 8 px of it to tap: a sliver at the edge is no target.
         if x2 > x1 and y2 - y1 >= 8:
-            nodes.append(((node.get("text") or "").strip(), (node.get("content-desc") or "").strip(), (x1 + x2) // 2, (y1 + y2) // 2))
-for exact in (True, False):
-    for text, desc, x, y in nodes:
-        if any((w in (text, desc)) if exact else (w in text or w in desc) for w in words):
-            print(x, y)
+            spot = ((x1 + x2) // 2, (y1 + y2) // 2)
+    (exact if equal else partial).append(spot)
+for group in (exact, partial):
+    if group:
+        spot = next((s for s in group if s), None)
+        if spot:
+            print(*spot)
             sys.exit(0)
+        sys.exit(2)
 sys.exit(1)
 PY
 }
