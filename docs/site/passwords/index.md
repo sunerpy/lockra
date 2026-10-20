@@ -130,7 +130,7 @@ address before a beginning or a regular expression, those before a host, and a h
 domain. <StatusTag status="available" /> From version 0.12.0, **Match the port** in Settings ›
 Browser makes the domain rule compare the port too ([Matching the port](/passwords/browser#matching-the-port)).
 
-<StatusTag status="building" /> **Match the full host** in **Settings › Browser** makes the
+<StatusTag status="available" /> From version 0.16.0, **Match the full host** in **Settings › Browser** makes the
 **Domain** rule match as **Host** does, on the host and port of the saved address only, so that the
 hosts of one site keep their own logins. **Matching** in its site lists has single sites match by
 **Full host** or by **Domain** whatever that setting says, their subdomains with them
