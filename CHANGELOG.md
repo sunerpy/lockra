@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/sunerpy/lockra/compare/v0.15.0...v0.16.0) (2026-10-20)
+
+
+### Features
+
+* **extension:** 识别隐藏输入的验证码框，支持按完整域名匹配与关联验证码 ([#191](https://github.com/sunerpy/lockra/issues/191)) ([e490a0a](https://github.com/sunerpy/lockra/commit/e490a0ac1608ceff556996e2a91bb2c213f9f786))
+
 ## [0.15.0](https://github.com/sunerpy/lockra/compare/v0.14.0...v0.15.0) (2026-10-19)
 
 
