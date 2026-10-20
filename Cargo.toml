@@ -95,7 +95,7 @@ percent-encoding = "=2.3.2"
 proptest = "=1.11.0"
 # The Public Suffix List compiled to code (crates/lockra-autofill: registrable domains, URL matching).
 # A new version comes out whenever the list changes; take the latest before each release.
-psl = "=2.1.241"
+psl = "=2.1.243"
 # The sync storage's HTTP client, the versions tauri-plugin-updater already brings: rustls on ring.
 reqwest = { version = "=0.13.5", default-features = false, features = [
   "rustls-no-provider",
