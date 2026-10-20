@@ -85,15 +85,29 @@ pub struct BestMatches<K> {
     pub items: Vec<ItemMatch<K>>,
 }
 
+/// How the Domain rule compares a saved URL with the page (the user's choices, Settings › Browser).
+/// The other rules mean what they say in every scope.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum DomainScope {
+    /// The same registrable domain, or a domain the equivalent-domain lists share it with; the
+    /// port does not count. The default.
+    #[default]
+    Site,
+    /// As [`DomainScope::Site`], and the port counts too: a saved URL of another port, or of none
+    /// where the page has one, is no match (the scheme's default port is none).
+    SitePort,
+    /// The same host and port, as [`Matching::Host`] compares them, at its level: another host of
+    /// the site (`www.example.com` for `example.com`) is no match, nor is an equivalent domain.
+    Host,
+}
+
 /// The most a [`Matching::Regex`] pattern may compile to, and the most memory its search may
 /// cache. Ample for URL patterns (`^https://([a-z0-9-]+\.)*example\.com/` takes a few KiB);
 /// past that a pattern never matches.
 const REGEX_SIZE_LIMIT: usize = 1 << 20;
 
-/// How `saved` matches `page`, or `None`. `ports`: the port counts at the domain level too (the
-/// user's choice, Settings › Browser), so a saved URL of another port, or of none where the page
-/// has one, is no match; the scheme's default port is none, as for [`Matching::Host`].
-pub fn match_url(page: &WebUrl, saved: SavedUrl<'_>, equivalents: &EquivalentDomains, ports: bool) -> Option<UrlMatch> {
+/// How `saved` matches `page`, or `None`. `scope`: how far a [`Matching::Domain`] URL reaches.
+pub fn match_url(page: &WebUrl, saved: SavedUrl<'_>, equivalents: &EquivalentDomains, scope: DomainScope) -> Option<UrlMatch> {
     match saved.matching {
         Matching::Never => return None,
         // A blank pattern would match every page; it is an empty field, not a wish.
@@ -107,11 +121,16 @@ pub fn match_url(page: &WebUrl, saved: SavedUrl<'_>, equivalents: &EquivalentDom
         _ => {}
     }
     let url = WebUrl::parse_saved(saved.url)?;
-    let level = match saved.matching {
-        Matching::Domain if (url.same_site(page) || equivalents.allows(&url, page)) && (!ports || url.port() == page.port()) => MatchLevel::Domain,
-        Matching::Host if url.host() == page.host() && url.port() == page.port() => MatchLevel::Host,
-        Matching::StartsWith if page.as_str().starts_with(url.as_str()) => MatchLevel::Pattern,
-        Matching::Exact if url.as_str() == page.as_str() => MatchLevel::Exact,
+    let same_host = url.host() == page.host() && url.port() == page.port();
+    let same_site = || url.same_site(page) || equivalents.allows(&url, page);
+    let level = match (saved.matching, scope) {
+        // In the host scope the domain rule asks what the host rule asks, and reaches its level.
+        (Matching::Domain, DomainScope::Host) if same_host => MatchLevel::Host,
+        (Matching::Domain, DomainScope::Site) if same_site() => MatchLevel::Domain,
+        (Matching::Domain, DomainScope::SitePort) if same_site() && url.port() == page.port() => MatchLevel::Domain,
+        (Matching::Host, _) if same_host => MatchLevel::Host,
+        (Matching::StartsWith, _) if page.as_str().starts_with(url.as_str()) => MatchLevel::Pattern,
+        (Matching::Exact, _) if url.as_str() == page.as_str() => MatchLevel::Exact,
         _ => return None,
     };
     Some(UrlMatch { level, downgrade: url.is_https() && !page.is_https() })
@@ -119,8 +138,13 @@ pub fn match_url(page: &WebUrl, saved: SavedUrl<'_>, equivalents: &EquivalentDom
 
 /// The items whose saved URLs reach the best level any of them reaches on `page`, each with the
 /// URL that got it there; `None` when no saved URL matches. `items` pairs the caller's key with
-/// the item's saved URLs; `ports` as for [`match_url`].
-pub fn best_matches<'a, K, U>(page: &WebUrl, items: impl IntoIterator<Item = (K, U)>, equivalents: &EquivalentDomains, ports: bool) -> Option<BestMatches<K>>
+/// the item's saved URLs; `scope` as for [`match_url`].
+pub fn best_matches<'a, K, U>(
+    page: &WebUrl,
+    items: impl IntoIterator<Item = (K, U)>,
+    equivalents: &EquivalentDomains,
+    scope: DomainScope,
+) -> Option<BestMatches<K>>
 where
     U: IntoIterator<Item = SavedUrl<'a>>,
 {
@@ -129,7 +153,7 @@ where
         // The item's closest URL; at the same level one without a downgrade, then the first.
         let mut closest: Option<(usize, UrlMatch)> = None;
         for (index, saved) in urls.into_iter().enumerate() {
-            let Some(found) = match_url(page, saved, equivalents, ports) else { continue };
+            let Some(found) = match_url(page, saved, equivalents, scope) else { continue };
             let closer = closest.is_none_or(|(_, held)| (found.level, !found.downgrade) > (held.level, !held.downgrade));
             if closer {
                 closest = Some((index, found));
@@ -159,7 +183,7 @@ mod tests {
     }
 
     fn found(page_url: &str, saved: &str, matching: Matching) -> Option<UrlMatch> {
-        match_url(&page(page_url), SavedUrl { url: saved, matching }, &EquivalentDomains::default(), false)
+        match_url(&page(page_url), SavedUrl { url: saved, matching }, &EquivalentDomains::default(), DomainScope::Site)
     }
 
     #[test]
@@ -208,7 +232,7 @@ mod tests {
     #[test]
     fn with_ports_the_domain_rule_wants_the_page_s_port_too() {
         let ports = |page_url: &str, saved: &str, matching: Matching| {
-            match_url(&page(page_url), SavedUrl { url: saved, matching }, &EquivalentDomains::default(), true).map(|found| found.level)
+            match_url(&page(page_url), SavedUrl { url: saved, matching }, &EquivalentDomains::default(), DomainScope::SitePort).map(|found| found.level)
         };
         use Matching::{Domain, Exact, Host, Regex, StartsWith};
         // One address, a login per port.
@@ -223,8 +247,8 @@ mod tests {
         // Equivalent domains too.
         let user = EquivalentDomains::new([["example.com", "example.net"]]);
         let saved = SavedUrl { url: "https://example.com:8443/", matching: Domain };
-        assert_eq!(match_url(&page("https://example.net:8443/"), saved, &user, true).map(|found| found.level), Some(MatchLevel::Domain));
-        assert_eq!(match_url(&page("https://example.net/"), saved, &user, true), None);
+        assert_eq!(match_url(&page("https://example.net:8443/"), saved, &user, DomainScope::SitePort).map(|found| found.level), Some(MatchLevel::Domain));
+        assert_eq!(match_url(&page("https://example.net/"), saved, &user, DomainScope::SitePort), None);
         // The other rules are as they were: the host rule and the URLs' text already have the port.
         assert_eq!(ports("https://example.com:8443/", "example.com:8443", Host), Some(MatchLevel::Host));
         assert_eq!(ports("https://example.com:8443/", "example.com", Host), None);
@@ -239,10 +263,62 @@ mod tests {
             ("router", urls(&[("http://192.168.1.10/", Domain)])),
             ("both", urls(&[("http://192.168.1.10:8080/", Domain), ("http://192.168.1.10:5000/", Domain)])),
         ];
-        let best = best_matches(&page("http://192.168.1.10:5000/login"), items.clone(), &EquivalentDomains::default(), true).unwrap();
+        let best = best_matches(&page("http://192.168.1.10:5000/login"), items.clone(), &EquivalentDomains::default(), DomainScope::SitePort).unwrap();
         assert_eq!(best.items, [ItemMatch { item: "nas", url: 0, downgrade: false }, ItemMatch { item: "both", url: 1, downgrade: false }]);
-        let best = best_matches(&page("http://192.168.1.10/"), items, &EquivalentDomains::default(), true).unwrap();
+        let best = best_matches(&page("http://192.168.1.10/"), items, &EquivalentDomains::default(), DomainScope::SitePort).unwrap();
         assert_eq!(best.items, [ItemMatch { item: "router", url: 0, downgrade: false }]);
+    }
+
+    #[test]
+    fn in_the_host_scope_the_domain_rule_wants_the_page_s_host() {
+        let host = |page_url: &str, saved: &str, matching: Matching| {
+            match_url(&page(page_url), SavedUrl { url: saved, matching }, &EquivalentDomains::default(), DomainScope::Host).map(|found| found.level)
+        };
+        use Matching::{Domain, Exact, Host, Never, Regex, StartsWith};
+        // A company's domain: each host its own logins, matched as the host rule matches them.
+        assert_eq!(host("https://git.example.cn/users/sign_in", "https://git.example.cn/", Domain), Some(MatchLevel::Host));
+        assert_eq!(host("https://wiki.example.cn/", "https://git.example.cn/", Domain), None, "a sibling subdomain");
+        assert_eq!(host("https://git.example.cn/", "example.cn", Domain), None, "the parent domain");
+        // www and the bare host are two hosts.
+        assert_eq!(host("https://www.example.com/", "example.com", Domain), None);
+        assert_eq!(host("https://example.com/", "https://www.example.com/login", Domain), None);
+        assert_eq!(host("https://EXAMPLE.com./a", "example.com", Domain), Some(MatchLevel::Host));
+        // The port counts, the scheme's default port being none.
+        assert_eq!(host("https://example.com:8443/", "example.com", Domain), None);
+        assert_eq!(host("https://example.com:8443/", "example.com:8443", Domain), Some(MatchLevel::Host));
+        assert_eq!(host("http://example.com:80/", "https://example.com:443/", Domain), Some(MatchLevel::Host));
+        assert_eq!(host("http://192.168.1.10:8080/", "http://192.168.1.10:5000/", Domain), None);
+        // An http page for an https URL is a downgrade still.
+        let saved = SavedUrl { url: "https://example.com/", matching: Domain };
+        assert_eq!(
+            match_url(&page("http://example.com/"), saved, &EquivalentDomains::default(), DomainScope::Host),
+            Some(UrlMatch { level: MatchLevel::Host, downgrade: true })
+        );
+        // Equivalent domains do not apply, the user's nor the bundled ones.
+        let user = EquivalentDomains::new([["example.com", "example.net"]]);
+        assert_eq!(match_url(&page("https://example.net/"), saved, &user, DomainScope::Host), None);
+        assert_eq!(match_url(&page("https://example.net/"), saved, &user, DomainScope::Site).map(|found| found.level), Some(MatchLevel::Domain));
+        assert_eq!(host("https://www.airbnb.co.uk/", "airbnb.com", Domain), None);
+        // The other rules are as they were.
+        assert_eq!(host("https://login.example.com/", "login.example.com", Host), Some(MatchLevel::Host));
+        assert_eq!(host("https://login.example.com/", "example.com", Host), None);
+        assert_eq!(host("https://login.example.com/a", "https://login.example.com/", StartsWith), Some(MatchLevel::Pattern));
+        assert_eq!(host("https://login.example.com/", "https://login.example.com/", Exact), Some(MatchLevel::Exact));
+        assert_eq!(host("https://login.example.com/", r"example\.com", Regex), Some(MatchLevel::Pattern));
+        assert_eq!(host("https://login.example.com/", "https://login.example.com/", Never), None);
+        // And the best level is chosen among what is left: the company's hosts no longer share
+        // their logins, which the site scope offers on each of them.
+        let items = vec![
+            ("git", urls(&[("https://git.example.cn/", Domain)])),
+            ("wiki", urls(&[("https://wiki.example.cn/", Domain)])),
+            ("company", urls(&[("example.cn", Domain)])),
+        ];
+        let best = best_matches(&page("https://git.example.cn/users/sign_in"), items.clone(), &EquivalentDomains::default(), DomainScope::Host).unwrap();
+        assert_eq!(best.level, MatchLevel::Host);
+        assert_eq!(best.items, [ItemMatch { item: "git", url: 0, downgrade: false }]);
+        let best = best_matches(&page("https://git.example.cn/users/sign_in"), items, &EquivalentDomains::default(), DomainScope::Site).unwrap();
+        assert_eq!((best.level, best.items.len()), (MatchLevel::Domain, 3));
+        assert_eq!(DomainScope::default(), DomainScope::Site);
     }
 
     #[test]
@@ -342,7 +418,7 @@ mod tests {
     fn equivalent_domains_count_as_the_domain_level() {
         let user = EquivalentDomains::new([["example.com", "example.net"]]);
         let check = |page_url: &str, saved: &str, matching: Matching, equivalents: &EquivalentDomains| {
-            match_url(&page(page_url), SavedUrl { url: saved, matching }, equivalents, false)
+            match_url(&page(page_url), SavedUrl { url: saved, matching }, equivalents, DomainScope::Site)
         };
         assert_eq!(check("https://www.airbnb.co.uk/", "airbnb.com", Matching::Domain, &user), Some(UrlMatch { level: MatchLevel::Domain, downgrade: false }));
         assert_eq!(
@@ -368,7 +444,7 @@ mod tests {
             ("host too", urls(&[("example.net", Matching::Domain), ("login.example.com", Matching::Host)])),
             ("never", urls(&[("https://login.example.com/", Matching::Never)])),
         ];
-        let best = best_matches(&page("https://login.example.com/signin"), items, &EquivalentDomains::default(), false).unwrap();
+        let best = best_matches(&page("https://login.example.com/signin"), items, &EquivalentDomains::default(), DomainScope::Site).unwrap();
         assert_eq!(best.level, MatchLevel::Host);
         assert_eq!(best.items, [ItemMatch { item: "host", url: 0, downgrade: false }, ItemMatch { item: "host too", url: 1, downgrade: false }]);
 
@@ -377,7 +453,7 @@ mod tests {
             ("exact", urls(&[("https://login.example.com/signin", Matching::Exact)])),
             ("starts", urls(&[("https://login.example.com/sign", Matching::StartsWith)])),
         ];
-        let best = best_matches(&page("https://login.example.com/signin"), exact, &EquivalentDomains::default(), false).unwrap();
+        let best = best_matches(&page("https://login.example.com/signin"), exact, &EquivalentDomains::default(), DomainScope::Site).unwrap();
         assert_eq!(best.level, MatchLevel::Exact);
         assert_eq!(best.items, [ItemMatch { item: "exact", url: 0, downgrade: false }]);
 
@@ -386,7 +462,7 @@ mod tests {
             ("starts", urls(&[("https://login.example.com/", Matching::StartsWith)])),
             ("domain", urls(&[("example.com", Matching::Domain)])),
         ];
-        let best = best_matches(&page("https://login.example.com/signin"), patterns, &EquivalentDomains::default(), false).unwrap();
+        let best = best_matches(&page("https://login.example.com/signin"), patterns, &EquivalentDomains::default(), DomainScope::Site).unwrap();
         assert_eq!(best.level, MatchLevel::Pattern);
         assert_eq!(best.items.iter().map(|found| found.item).collect::<Vec<_>>(), ["regex", "starts"]);
     }
@@ -397,17 +473,17 @@ mod tests {
             7,
             urls(&[("https://example.com", Matching::Domain), ("http://example.com", Matching::Domain), ("https://example.com/b", Matching::Domain)]),
         )];
-        let best = best_matches(&page("http://www.example.com/"), items, &EquivalentDomains::default(), false).unwrap();
+        let best = best_matches(&page("http://www.example.com/"), items, &EquivalentDomains::default(), DomainScope::Site).unwrap();
         assert_eq!(best.items, [ItemMatch { item: 7, url: 1, downgrade: false }]);
         let only_https = vec![(7, urls(&[("https://example.com", Matching::Domain), ("https://example.com/b", Matching::Domain)]))];
-        let best = best_matches(&page("http://www.example.com/"), only_https, &EquivalentDomains::default(), false).unwrap();
+        let best = best_matches(&page("http://www.example.com/"), only_https, &EquivalentDomains::default(), DomainScope::Site).unwrap();
         assert_eq!(best.items, [ItemMatch { item: 7, url: 0, downgrade: true }]);
     }
 
     #[test]
     fn nothing_matches_nothing() {
         let items = vec![("a", urls(&[("example.net", Matching::Domain)])), ("b", urls(&[])), ("c", urls(&[("example.com", Matching::Never)]))];
-        assert_eq!(best_matches(&page("https://example.com/"), items, &EquivalentDomains::default(), false), None);
-        assert_eq!(best_matches::<u8, Vec<SavedUrl<'_>>>(&page("https://example.com/"), [], &EquivalentDomains::default(), false), None);
+        assert_eq!(best_matches(&page("https://example.com/"), items, &EquivalentDomains::default(), DomainScope::Site), None);
+        assert_eq!(best_matches::<u8, Vec<SavedUrl<'_>>>(&page("https://example.com/"), [], &EquivalentDomains::default(), DomainScope::Site), None);
     }
 }

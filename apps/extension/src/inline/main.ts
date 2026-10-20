@@ -15,6 +15,7 @@ new InlinePage({
   token: location.hash.slice(1),
   t: extensionTranslator(locale),
   connect: () => inlinePort(api),
+  reload: () => api.runtime.reload(),
   IntersectionObserver: globalThis.IntersectionObserver,
   ResizeObserver: globalThis.ResizeObserver,
 }).start();

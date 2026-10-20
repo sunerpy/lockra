@@ -14,6 +14,7 @@ export const ICONS = {
   lock: "M6 11h12v9H6zM9 11V7a3 3 0 0 1 6 0v4",
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4",
   trash: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6",
+  key: "M15 3a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM9.5 14.5 3 21M6 18l2 2M4 20l2 2",
 } as const;
 
 export type IconName = keyof typeof ICONS;

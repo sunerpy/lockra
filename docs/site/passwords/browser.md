@@ -82,6 +82,16 @@ to load Lockra's folder instead. **Settings › Browser** shows each paired exte
 marks one older than Lockra **Update available**. Firefox keeps no unpacked extension, so none of
 this applies there.
 
+### When the extension needs a reload
+
+<StatusTag status="building" /> The browser may go on running the extension's older background
+after its folder changed, while the popup, the options page and the menus read the new files as
+they open: some of their buttons would then do nothing. The popup and the options page say so and
+offer **Reload the extension**, and the menu by a field shows "Lockra's extension needs a reload"
+with the same button instead. After the reload, reload the pages that are already open. From
+then on the extension also takes a new copy of the same version by itself, as Lockra starts again
+with it; the note stays for a background that cannot.
+
 ## Turning on browser integration
 
 1. In Lockra, open **Settings › Browser** and turn on **Browser integration**. Lockra writes a
@@ -151,7 +161,8 @@ end of the field opens it again. Where the browser may list the passwords it kee
 field, Lockra's menu opens above the field instead, or under it when there is no room above
 ([The browser's own password manager](#the-browser-s-own-password-manager)). While the browser's
 list is open, the arrow keys and Esc go to it: Esc closes it, and the arrow keys then move in
-Lockra's menu.
+Lockra's menu. <StatusTag status="building" /> With no room above, the menu opens beside the field,
+and under it only when there is no room beside it either ([Beside the field](#beside-the-field)).
 
 <StatusTag status="available" /> From version 0.13.1, when a sign-in page puts the cursor in its
 field by itself as it opens (a router's, a NAS's or qBittorrent's, for example), the menu opens
@@ -231,6 +242,17 @@ code goes in there too. And when no login was filled in that tab in the last fiv
 first steps were typed, or the time is up), choosing the code field opens the menu with the site's
 logins that have a linked code: choose one, and its code goes in.
 
+### A code field that hides the code
+
+<StatusTag status="building" /> Some single sign-on pages ask for the code in a step of its own, in
+a field that hides what you type, as a password field does. Lockra takes such a field for a code
+field when the page marks it for one-time codes, or when its name says so (`OTP` or
+`dynamicPassword`, for example, or 动态口令 on a Chinese page) and it is the only field to type in
+on its form; a password field beside a user name, or one the page marks as a password, stays a
+password field. It then works as the code fields above: the code goes in once the login's
+password was filled, and **Fill the code** in the popup fills it too. What such a form sends is a
+code, so Lockra offers no save or update for it.
+
 ## Saving and updating passwords
 
 With site access, the extension notices a form you submit:
@@ -253,6 +275,30 @@ With site access, the extension notices a form you submit:
 
 Nothing is offered on a site of the **Never offer to save** list, or for a login that is saved
 already.
+
+### Checking the password before saving
+
+<StatusTag status="building" /> The password in **Save to Lockra?** can be changed before you save
+it, as the title, the user name and the group can: what a page sends as a password is not always
+yours. **Update the password in Lockra?** shows the new password too, hidden until you choose
+**Show password**, and it can be changed there as well. **Save** and **Update** need a password.
+
+### A code sent as a password
+
+<StatusTag status="building" /> Some sign-in steps take the code in a field Lockra cannot tell from
+a password field. When what a form sent looks like a one-time code (six to eight digits), the
+prompt says "This looks like a one-time code, not a password." and offers **It is a code**, which
+saves nothing. When the login Lockra filled for the site in that tab in the last five minutes, or
+the login to update, has no linked code, it also offers **Link a code…**: Lockra comes to the front
+and shows that login on its Passwords page with the code picker open, and you choose the code there
+([Adding and editing a login](/passwords/#adding-and-editing-a-login)). From then on that step
+asks to save nothing (see below), and with its field focused, **Fill the code** in the popup puts
+the code in: a code the user asks for goes into a password field that stands alone in its form, as
+long as the page does not name it a password. When a dialog is open in Lockra, it stays as it is,
+and Lockra only shows a notice that the browser asked.
+
+Lockra offers no save or update at all when what the form sent is the code of an account linked to
+one of the site's logins: its current code, or the one before or after it.
 
 ## Site access
 
@@ -288,12 +334,22 @@ popup) has, under **The browser's own features**:
   field and the browser's list under it; with no room above, the menu opens under the field. In
   Firefox, once Lockra has taken over its passwords, Firefox lists none and the menu opens under the
   field. Turn it off once the browser keeps no passwords, to have the menu under the field.
+  <StatusTag status="building" /> With no room above, the menu opens beside the field first
+  ([Beside the field](#beside-the-field)).
 - **Open Lockra's menu when a field is clicked**, on by default: off, the menu opens only from
   Lockra's mark at the end of the field.
 
 When a policy of the browser, or another password manager's extension, holds these settings, the
 page says the switch is not in effect. Firefox lets an extension turn off the saving of passwords
 alone.
+
+### Beside the field
+
+<StatusTag status="building" /> With **Keep clear of the browser's own password list** on, Lockra's
+menu opens beside the field when there is no room for it above: on the left of the field, or, when
+the left has no room either, on the right, past the browser's list; its top is level with the
+field's as far as the window allows. Only with no room on either side does it open under the
+field, over the browser's list.
 
 ## What the extension may do
 
@@ -324,6 +380,35 @@ only (`https://example.com` is not offered on `https://example.com:8443`). The *
 with** and **Exact** rules compare the port already, and a **Regex** matches as written. Turning it
 on or off asks for nothing: it only narrows what the extension gets.
 
+### Matching the full host
+
+<StatusTag status="building" /> **Settings › Browser › Autofill** also has **Match the full host**,
+off by default. Off, a login whose address uses the **Domain** rule is offered on every host of its
+site: one saved for `git.example.com` shows on `wiki.example.com` and on `example.com` too. On, the
+**Domain** rule matches as **Host** does, on the host and port of the saved address only, and the
+domains Lockra knows to share their sign-ins no longer count as one. A login saved as
+`example.com` is then not offered on `www.example.com`: give it the address you sign in on, or let
+that site match by its domain (below). Logins whose addresses use **Host**, **Starts with**,
+**Exact**, **Regex** or **Never** match as they did. The setting is kept on this device only, and
+turning it on or off asks for nothing.
+
+Single sites can match their own way, whatever the setting says:
+
+- **Settings › Browser › Site lists** has a third card, **Matching**, for them. **Add a site…**
+  asks for the site and how it matches, **Full host** unless you choose **Domain**; each row shows
+  the site and its way. A site's subdomains match the same way unless one has a rule of its own:
+  the rule of the longest name wins, so `git.example.com` on **Domain** goes before `example.com`
+  on **Full host**. A site matches one way only: adding it again the other way replaces its rule.
+  On **Domain**, the port counts as **Match the port** says; on **Full host**, it always does. These
+  rules are kept in the vault and sync to your other devices with the site lists; an earlier
+  version of Lockra keeps them but does not apply them.
+- The extension's popup shows **Match the full host** under the site's name, with a line saying
+  which logins it lists: those saved for the page's host, or those of every subdomain of the site.
+  Its switch sets how the page's whole site matches (`example.com` for a page of
+  `git.example.com`), its subdomains with it: Lockra adds the site to **Matching** when what you
+  choose differs from the setting, and takes its rule away when they agree. Rules for the page's host and for its parent domains within the site go with it; rules for
+  the site's other hosts stay. The switch is not shown on a site of the **Never fill** list.
+
 ### Filling as pages load
 
 **Fill as pages load** fills a login into a matching page as it opens, without a click. Turning it
@@ -347,6 +432,10 @@ Even then, codes are never filled and forms never submitted. It needs site acces
 extension offers no save or update prompt, and **Never fill**, where it fills nothing. **Add a
 site…** adds one; a site covers its subdomains. The lists are kept in the vault and sync to your
 other devices.
+
+<StatusTag status="building" /> Under the two lists, a third card, **Matching**, holds the sites
+that match their own way, by **Full host** or by **Domain**
+([Matching the full host](#matching-the-full-host)).
 
 ## Recent activity
 
@@ -396,6 +485,9 @@ window otherwise.
   menu for you: a click counts only when the menu has been visible, uncovered and still for at least
   300 milliseconds.
 - **No say in the rules.** The extension cannot unlock Lockra, and cannot let itself do more:
-  only **Settings › Browser** in Lockra can.
+  only **Settings › Browser** in Lockra can. <StatusTag status="building" /> The one exception is
+  the popup's **Match the full host** switch: it picks the full host or the domain for the page's
+  site without proof, since matching by the domain is Lockra's default and never gives the
+  extension more logins than the default does, and no page can work the popup.
 
 What it cannot protect against is in [How Lockra protects your accounts](/security/#what-lockra-cannot-protect-against).

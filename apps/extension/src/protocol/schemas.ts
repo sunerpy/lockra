@@ -152,9 +152,13 @@ export const opSchema = z.discriminatedUnion("op", [
   /** The sign-up menu's copy: the app copies only a password it generated for this site. */
   z.object({ op: z.literal("copy_generated"), ...facts, password: z.string() }),
   z.object({ op: z.literal("site_rule"), kind: z.enum(["never_save", "never_fill"]), ...facts }),
+  /** The popup's switch: the frame's site matches by full host, or by registrable domain. */
+  z.object({ op: z.literal("site_matching"), ...facts, host: z.boolean() }),
   z.object({ op: z.literal("search"), text: z.string(), top_url: z.string() }),
   /** A login the menu or the popup offered, deleted once the user agreed there. */
   z.object({ op: z.literal("delete"), item_id: id, ...facts }),
+  /** The site's login whose code the user links in Lockra (the save prompt took a code). */
+  z.object({ op: z.literal("link_code"), item_id: id, ...facts }),
 ]);
 export type Op = z.infer<typeof opSchema>;
 export type OpName = Op["op"];
@@ -197,6 +201,8 @@ export const policySchema = z.object({
   on_page_load: z.boolean().default(false),
   /** Lockra matches the port too (its decision; an older Lockra sends none). */
   match_port: z.boolean().default(false),
+  /** Lockra matches by full host by default (sites may differ: the query's `host_matching`). */
+  match_host: z.boolean().default(false),
 });
 export type Policy = z.infer<typeof policySchema>;
 
@@ -238,6 +244,9 @@ export const queryAnswerSchema = z.object({
   never_fill: z.boolean(),
   never_save: z.boolean(),
   cross_origin: z.boolean(),
+  /** The frame's site matches by full host (the policy's default, or the site's own rule); an
+   *  older Lockra sends none. */
+  host_matching: z.boolean().default(false),
   policy: policySchema,
   save: z.object({ action: z.enum(["none", "save", "update"]), item_id: id.nullable() }).nullable(),
 });
@@ -283,8 +292,10 @@ export const ANSWER_SCHEMAS = {
   generate: generateAnswerSchema,
   copy_generated: doneSchema,
   site_rule: doneSchema,
+  site_matching: doneSchema,
   search: foundSchema,
   delete: doneSchema,
+  link_code: doneSchema,
 } as const satisfies Record<OpName, z.ZodType>;
 export type AnswerOf<O extends OpName> = z.infer<(typeof ANSWER_SCHEMAS)[O]>;
 

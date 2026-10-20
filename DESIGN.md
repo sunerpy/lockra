@@ -302,13 +302,26 @@ Boards 06–12 of Penpot 「Lockra 密码管理」.
 - **Popup**: 360 × 540 in every state. A 52 px header (logo, the lamp and Lockra's state, the
   options), the content (only it scrolls), a 44 px footer (the fill shortcut's keys, a short hint
   that truncates, 「打开 Lockra」). The site's logins in one card, rows of 60 px, the first the
-  default (`nav-active`, ↵, a primary 填充). The other states are centred: a 56 px icon on the
-  theme's card, a 17 px title, a line, one action, a note.
+  default (`nav-active`, ↵, a primary 填充). Under the site's heading, unless it is on 禁止填充, a row
+  on `inset` (`rounded-6`): 按完整域名匹配 in 12 px, an 11 px `fg-subtle` line naming what it lists
+  (只列出 {host} 的登录项, or 列出 {site} 下所有子域的登录项) and a `Toggle`. The other states are
+  centred: a 56 px icon on the theme's card, a 17 px title, a line, one action, a note. A background
+  of another build than the page's puts a note under the header in place of the update note (on
+  `warning-soft` with a 3 px `warning` left edge, 11 px words, an outline 重新加载扩展), and the options
+  page shows it under 连接.
 - **Inline menu and prompts**: drawn in an extension frame on any page, so opaque (`surface`, not
   glass) with a 1 px border and `shadow-pop`: the menu 340 px wide (at least the field's), 6 px under
-  the field, `rounded-10`, rows of 52 px; the save and update prompts 360 px at the page's top
-  right, `rounded-14`. The shadow is the frame host's, in the page: the frame would cut it off at
-  its edge.
+  the field, `rounded-10`, rows of 52 px. Where the browser lists its own passwords under the field
+  the menu opens 6 px above it; with no room above, beside it, 6 px to its left or else to its right
+  past the browser's list (the field's width, at least 320 px), its top at the field's as far as
+  the window allows; under it only with room on neither side. The save and update prompts are
+  360 px at the page's top right, `rounded-14`; the password is an editable mono field with an
+  in-place 显示密码 / 隐藏密码 toggle (the update prompt shows it too), and the primary button is off
+  while it is empty. A submission of six to eight digits adds a note on `warning-soft` (`info` in
+  `warning`, 这看起来是验证码，不是密码。) with a ghost 这是验证码 and, for a login of the site that
+  has no linked code, the line naming it and an outline 关联验证码… with `key`. The shadow is the frame host's, in the page: the frame would
+  cut it off at its edge. A frame whose background is of another build shows only a 34 px header
+  (logo, Lockra, close), 「Lockra 扩展需要重新加载」 with its line, and a primary 重新加载扩展.
 
 ### Settings › 浏览器 and the requests that wait for the user
 
@@ -319,8 +332,11 @@ offers the browser extension.
   what turning it on brings and nothing else shows. On: 浏览器 (a `TileRow` per browser used here:
   已连接 `ok`, 清单已写入 `idle`, 未安装扩展 `off`, and 还没有写入连接文件 `warn` with 写入), 已配对的扩展
   (`TileRow`s with `puzzle`, the date paired and last used, 取消配对 in `text-danger`; a missing
-  site access adds an `alert` line in `warning-text`), 自动填充 (six `StatusRow`s, the frames rule a
-  small `Segmented`), 网站名单 (two cards side by side, `minmax(0, 1fr)` each, 36 px rows) and 最近活动
+  site access adds an `alert` line in `warning-text`), 自动填充 (eight `StatusRow`s: 填入验证码,
+  复制验证码, 填充后自动提交, 填充前确认, 匹配端口 and 按完整域名匹配 with a `Toggle`, the frames rule a small
+  `Segmented`, 页面加载时自动填充), 网站名单 (three cards, 36 px rows: 不提示保存 and 禁止填充 side by
+  side, `minmax(0, 1fr)` each, then 匹配方式 across both columns, a 12 px `fg-muted` line under its
+  title and each site's way, 完整域名 or 根域名, as a `Badge` before its remove button) and 最近活动
   (a dense `Table`: time in mono, browser, site in `fg-muted`, the event; a refusal in `danger` with
   `ban`, a pause with `pause` in `warning-text`; 「只保存在内存里，锁定时清空」 and 清空 beside the
   heading). A paused extension puts a `Banner warn bar` with 恢复 at the top of the pane.
@@ -328,7 +344,8 @@ offers the browser extension.
   asks once (440 px: 暂不, 开启后台运行). Filling as pages load first shows its risks (480 px: a
   warning banner, the six conditions, 「从不填验证码、从不自动提交」, 继续…; no checkbox, the owner's
   answer of 2026-10-14), then the proof dialog; so does any change that lets the extensions do more.
-  Adding a site (420 px) and unpairing (420 px, a `danger` button) are their own small dialogs.
+  Adding a site (420 px; for 匹配方式 a `Segmented` 完整域名 · 根域名 under the field, 完整域名 chosen)
+  and unpairing (420 px, a `danger` button) are their own small dialogs.
 - **The requests** (460 px, over anything open, the window brought up by the shell): a pairing
   shows the code in mono 40 / 600 on `inset`, a 14 px ring and the seconds left, then the browser
   and the extension's id, 「还有 N 个配对请求在排队」 while others wait; expired, the code turns to

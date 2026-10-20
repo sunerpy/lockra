@@ -88,9 +88,83 @@ function lengthOf(input: HTMLInputElement, attribute: "minlength" | "maxlength")
 }
 
 /** A single field that takes a whole one-time code. */
-function looksOtp(input: HTMLInputElement): boolean {
-  if (!isFillable(input) || isPassword(input)) return false;
+function looksOtp(input: HTMLInputElement, view: View): boolean {
+  if (!isFillable(input)) return false;
+  if (isPassword(input)) return maskedCode(input, view) && !anotherCode(input);
   return codeField(input) && !anotherCode(input);
+}
+
+/** A code's names, as single words, and as words that go together (`dynamicPassword`,
+ *  `one_time_code`), in Chinese as it is written. */
+const CODE_WORDS = new Set(["otp", "totp", "hotp", "mfa", "2fa", "tfa", "passcode", "otpcode"]);
+const CODE_PAIRS: readonly (readonly [string, readonly string[]])[] = [
+  ["dynamic", ["password", "pass", "pwd", "code", "token"]],
+  ["one", ["time"]],
+  ["two", ["factor"]],
+  ["verification", ["code"]],
+  ["security", ["code"]],
+  ["auth", ["code"]],
+];
+const CODE_TEXT = /动态密码|动态口令|动态码|一次性密码|令牌|验证码|身份验证器/;
+
+/** The words of a name: `dynamicPassword` → dynamic, password; `one_time-code` → one, time, code. */
+function words(text: string): string[] {
+  return text
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function namesCode(text: string): boolean {
+  if (CODE_TEXT.test(text)) return true;
+  const all = words(text);
+  return all.some(
+    (word, index) =>
+      CODE_WORDS.has(word) ||
+      CODE_PAIRS.some(([first, next]) => word === first && next.includes(all[index + 1] ?? "")),
+  );
+}
+
+/** A password-type field that takes a one-time code: some second steps mask the code as they would
+ *  a password (NDKEY's ADFS adapter: `type="password" name="OTP"`). The page's token says so, or
+ *  the field's own names do in so many words while it is the only field of its form to type in:
+ *  a sign-in's password field, beside its user name or named a password by the page, never reads
+ *  as one. */
+function maskedCode(input: HTMLInputElement, view: View): boolean {
+  const token = autocomplete(input);
+  if (token === "one-time-code") return true;
+  if (typeOf(input) !== "password" || /password/.test(token)) return false;
+  const own = [
+    input.id,
+    input.name,
+    input.getAttribute("aria-label"),
+    input.getAttribute("placeholder"),
+  ];
+  if (!own.some((text) => text && namesCode(text))) return false;
+  return standsAlone(input, view);
+}
+
+/** The only field of its form to type in: every other input of the form is the field itself, one
+ *  that takes nothing, one out of sight, or one of another form. */
+function standsAlone(input: HTMLInputElement, view: View): boolean {
+  const root = formOf(input);
+  return Array.from(root.querySelectorAll("input")).every(
+    (other) =>
+      other === input ||
+      !isFillable(other) ||
+      !view.visible(other) ||
+      (input.form !== null && other.form !== input.form),
+  );
+}
+
+/** Whether a code the user asked for may go into `input`, focused where Lockra tells no code
+ *  field: any field but a password field, and that one only alone in its form and named no
+ *  password by the page (a code step Lockra cannot tell from a password step, never a sign-in's
+ *  password field). */
+export function takesAskedCode(input: HTMLInputElement, view: View): boolean {
+  if (!isPassword(input)) return true;
+  return !/password/.test(autocomplete(input)) && standsAlone(input, view);
 }
 
 /** A field named as a code's takes one when it says how: a code's length, a numeric keyboard, a
@@ -236,7 +310,7 @@ function usernameOf(
       !isPassword(input) &&
       view.visible(input) &&
       typeOf(input) !== "search" &&
-      !looksOtp(input) &&
+      !looksOtp(input, view) &&
       (!first || before(input, first)),
   );
   const named = candidates.filter(userLike);
@@ -290,7 +364,7 @@ export function scanField(field: HTMLInputElement, view: View): FormScan {
   if (typeOf(field) === "search") return base;
   const group = otpGroup(field, view);
   if (group) return { ...base, kind: "otp", otp: group };
-  if (looksOtp(field)) return { ...base, kind: "otp", otp: [field] };
+  if (looksOtp(field, view)) return { ...base, kind: "otp", otp: [field] };
   const passwords = inputsOf(root, field).filter(
     (input) => isPassword(input) && view.visible(input),
   );
@@ -335,7 +409,7 @@ export function findOtp(doc: Document, view: View): HTMLInputElement[] | null {
   for (const input of inputs) {
     const group = otpGroup(input, view);
     if (group) return group;
-    if (looksOtp(input)) return [input];
+    if (looksOtp(input, view)) return [input];
   }
   return null;
 }

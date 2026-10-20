@@ -216,11 +216,17 @@ fn colour(wanted: f64) -> (&'static [u8], u32, bool) {
     (png, size, false)
 }
 
-/// Whether `notice` waits for the user in the window: a pairing to approve, a fill to confirm, an
-/// unlock the extension asked for (boards 17–19). Lockra may be hidden in the tray or behind the
-/// browser, so the window comes up with it.
+/// Whether `notice` waits for the user in the window: a pairing to approve, a fill to confirm, a
+/// code to link (the code picker), an unlock the extension asked for (boards 17–19). Lockra may be
+/// hidden in the tray or behind the browser, so the window comes up with it.
 pub fn brings_window_up(notice: &Notice) -> bool {
-    matches!(notice, Notice::BrowserPairRequested { .. } | Notice::BrowserConfirmRequested { .. } | Notice::BrowserUnlockRequested { .. })
+    matches!(
+        notice,
+        Notice::BrowserPairRequested { .. }
+            | Notice::BrowserConfirmRequested { .. }
+            | Notice::BrowserLinkCodeRequested { .. }
+            | Notice::BrowserUnlockRequested { .. }
+    )
 }
 
 /// Bring the window up: shown, not minimized, focused. Brought up this way, it stays up after a copy
@@ -459,6 +465,7 @@ mod tests {
         let browser = "chrome".to_owned();
         assert!(brings_window_up(&Notice::BrowserPairRequested { id, browser: browser.clone(), code: "123456".to_owned() }));
         assert!(brings_window_up(&Notice::BrowserConfirmRequested { id, browser: browser.clone(), title: "GitHub".to_owned() }));
+        assert!(brings_window_up(&Notice::BrowserLinkCodeRequested { item_id: id, browser: browser.clone(), title: "GitHub".to_owned() }));
         assert!(brings_window_up(&Notice::BrowserUnlockRequested { browser: browser.clone() }));
         // What only tells the user something stays a toast.
         assert!(!brings_window_up(&Notice::BrowserPaused { pairing: id, browser, label: String::new() }));

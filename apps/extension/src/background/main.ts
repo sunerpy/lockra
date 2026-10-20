@@ -24,6 +24,11 @@ new Controller({
   connection,
   clock: systemClock,
   extensionVersion,
-  update: new SelfUpdate({ api, loaded: extensionVersion, fetch: (url, init) => fetch(url, init) }),
+  update: new SelfUpdate({
+    api,
+    loaded: extensionVersion,
+    build: LOCKRA_BUILD,
+    fetch: (url, init) => fetch(url, init),
+  }),
 }).install();
 connection.start();

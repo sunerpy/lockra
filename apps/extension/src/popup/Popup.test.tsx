@@ -33,6 +33,7 @@ const POLICY = {
   cross_origin_frames: "never",
   on_page_load: false,
   match_port: false,
+  match_host: false,
 };
 
 function state(change: Partial<PopupState> = {}): PopupState {
@@ -57,6 +58,7 @@ function state(change: Partial<PopupState> = {}): PopupState {
     unlockAsked: false,
     pairedAt: 1_760_000_000_000,
     update: null,
+    build: LOCKRA_BUILD,
     ...change,
   };
 }
@@ -73,6 +75,7 @@ function setup(initial: PopupState | null = state(), extra: Partial<PageClient> 
     removeAccess: vi.fn(async () => true),
     openOptions: vi.fn(),
     close: vi.fn(),
+    reload: vi.fn(),
     copyText: vi.fn(async () => undefined),
     shortcuts: async () => ({ fill: "Ctrl+Shift+L", popup: "Ctrl+Shift+Y" }),
     browserFeatures: async () => ({ passwords: "browser", forms: "browser" }),
@@ -157,6 +160,50 @@ describe("the popup", () => {
     expect(screen.getByTestId("popup-update")).toHaveTextContent("重启 Lockra 后会再试");
     push({ kind: "state", state: state() });
     expect(screen.queryByTestId("popup-update")).not.toBeInTheDocument();
+  });
+
+  it("asks for a reload when the background is of another build or too old to say", () => {
+    // 2026-10-20, the user's Chrome ran a background two versions older than the popup's files:
+    // its delete and code buttons did nothing.
+    const { client, push } = setup(state({ build: undefined }));
+    expect(screen.getByTestId("popup-stale")).toHaveTextContent("扩展的后台还是旧版本");
+    expect(screen.queryByTestId("popup-update")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重新加载扩展" }));
+    expect(client.reload).toHaveBeenCalledTimes(1);
+    push({ kind: "state", state: state({ build: "an-older-build" }) });
+    expect(screen.getByTestId("popup-stale")).toBeInTheDocument();
+    // One that knows the new copy waits takes it once the window closes: it says so instead.
+    push({ kind: "state", state: state({ build: "an-older-build", update: "waiting" }) });
+    expect(screen.queryByTestId("popup-stale")).not.toBeInTheDocument();
+    expect(screen.getByTestId("popup-update")).toHaveTextContent("关闭这个窗口后扩展会自动更新");
+    push({ kind: "state", state: state() });
+    expect(screen.queryByTestId("popup-stale")).not.toBeInTheDocument();
+  });
+
+  it("switches the site between its registrable domain and the page's full host", () => {
+    // 2026-10-20, the user: a company domain lists every subdomain's logins; a switch in the popup.
+    const site = {
+      site: "example.cn",
+      items: [ITEM],
+      fillable: true,
+      neverFill: false,
+      crossOrigin: false,
+      host: "login.example.cn",
+      hostMatching: false,
+    };
+    const { sent, push } = setup(state({ site }));
+    const box = screen.getByTestId("popup-matching");
+    expect(box).toHaveTextContent("按完整域名匹配");
+    expect(box).toHaveTextContent("列出 example.cn 下所有子域的登录项");
+    fireEvent.click(screen.getByRole("switch", { name: "按完整域名匹配" }));
+    expect(sent.at(-1)).toEqual({ kind: "site_matching", host: true });
+    push({ kind: "state", state: state({ site: { ...site, items: [], hostMatching: true } }) });
+    // No login of the host: the switch stays, to go back.
+    expect(screen.getByTestId("popup-matching")).toHaveTextContent(
+      "只列出 login.example.cn 的登录项",
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "按完整域名匹配" }));
+    expect(sent.at(-1)).toEqual({ kind: "site_matching", host: false });
   });
 
   it("in Firefox, an older extension is updated on the add-ons page", () => {

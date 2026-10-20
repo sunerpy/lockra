@@ -6,7 +6,7 @@ import {
   pairedName,
   riskierPolicy,
 } from "./browser";
-import type { BrowserStatus, PairedView } from "./schema";
+import { type BrowserStatus, type PairedView, browserPolicySchema } from "./schema";
 
 const statuses: BrowserStatus[] = [
   { browser: "chrome", installed: true, manifest: true },
@@ -55,6 +55,11 @@ describe("browser rows", () => {
 describe("the policy", () => {
   const base = defaultBrowserPolicy();
 
+  it("starts as the core's: a policy it would send, matching by registrable domain", () => {
+    expect(browserPolicySchema.parse(base)).toEqual(base);
+    expect(base).toMatchObject({ match_port: false, match_host: false });
+  });
+
   it("asks for proof for what lets the extensions do more", () => {
     expect(riskierPolicy(base, { ...base, on_page_load: true })).toBe(true);
     expect(riskierPolicy(base, { ...base, auto_submit: true })).toBe(true);
@@ -63,10 +68,12 @@ describe("the policy", () => {
     expect(riskierPolicy(base, { ...base, cross_origin_frames: "ask" })).toBe(true);
   });
 
-  it("not for what lets them do less, nor for copying the code or matching the port", () => {
+  it("not for what lets them do less, nor for copying the code or matching the port or host", () => {
     expect(riskierPolicy(base, { ...base, fill_otp: false })).toBe(false);
     expect(riskierPolicy(base, { ...base, match_port: true })).toBe(false);
     expect(riskierPolicy({ ...base, match_port: true }, base)).toBe(false);
+    expect(riskierPolicy(base, { ...base, match_host: true })).toBe(false);
+    expect(riskierPolicy({ ...base, match_host: true }, base)).toBe(false);
     expect(riskierPolicy(base, { ...base, confirm_fill: true })).toBe(false);
     expect(riskierPolicy({ ...base, copy_otp: false }, base)).toBe(false);
     expect(riskierPolicy({ ...base, on_page_load: true }, base)).toBe(false);

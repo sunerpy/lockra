@@ -229,6 +229,54 @@ describe("one-time codes", () => {
     expect(findOtp(document, view)?.map((i) => i.id)).toEqual(["totp"]);
   });
 
+  it("are a password-type field that names a code and stands alone in its form", () => {
+    // NDKEY's ADFS adapter, the second step of a sign-in (the user's report, 2026-10-20): the code
+    // is masked as a password would be, named OTP, and the form has nothing else to type in.
+    page(`
+      <form method="post" id="loginForm">
+        <input id="authMethod" type="hidden" name="AuthMethod" value="DKEYMFAadapter">
+        <label for="challengeQuestionInput" class="block">Dynamic Password：</label>
+        <input id="dynamicPassword" name="OTP" type="password" value="" class="text" placeholder="Please input password">
+        <input id="submitButton" type="submit" name="submit" value="Submit">
+      </form>`);
+    const scan = scanField(input("dynamicPassword"), view);
+    expect(scan.kind).toBe("otp");
+    expect(scan.otp.map((i) => i.id)).toEqual(["dynamicPassword"]);
+    expect(scan.passwords).toEqual([]);
+    expect(findOtp(document, view)?.map((i) => i.id)).toEqual(["dynamicPassword"]);
+    // Not a sign-in form: no fill as the page loads, no password step.
+    expect(findLoginForms(document, view)).toEqual([]);
+    // Other masked codes, by their names or the page's token.
+    for (const field of [
+      `<input type="password" id="m" name="otpCode">`,
+      `<input type="password" id="m" name="passcode">`,
+      `<input type="password" id="m" name="one_time_password">`,
+      `<input type="password" id="m" name="token" placeholder="请输入动态口令">`,
+      `<input type="password" id="m" name="x" autocomplete="one-time-code">`,
+      `<input type="password" id="m" aria-label="MFA code">`,
+    ]) {
+      page(`<form>${field}<button>Verify</button></form>`);
+      expect([field, scanField(input("m"), view).kind]).toEqual([field, "otp"]);
+    }
+  });
+
+  it("are not a sign-in's own password field, whatever its name says", () => {
+    // Beside a user name it is the password of the form.
+    page(`<form><input id="user" name="username"><input type="password" id="p" name="otp"></form>`);
+    expect(scanField(input("p"), view).kind).toBe("login");
+    // The second step of a sign-in in two, and a field the page calls a password.
+    page(`<form><input type="password" id="p" name="password" placeholder="Password"></form>`);
+    expect(scanField(input("p"), view).kind).toBe("login");
+    page(`<form><input type="password" id="p" name="otp" autocomplete="current-password"></form>`);
+    expect(scanField(input("p"), view).kind).toBe("login");
+    // Words inside other words name no code (a `footprint` holds "otp").
+    page(`<form><input type="password" id="p" name="footprint"></form>`);
+    expect(scanField(input("p"), view).kind).toBe("login");
+    // A code sent by text message is not the authenticator's.
+    page(`<form><input type="password" id="p" name="smsOtp" placeholder="短信验证码"></form>`);
+    expect(scanField(input("p"), view).kind).not.toBe("otp");
+  });
+
   it("are put together from one box per digit", () => {
     page(`
       <form>
