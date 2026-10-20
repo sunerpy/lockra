@@ -39,6 +39,19 @@ export interface HostOptions {
 
 type Place = { anchor: HTMLElement; side?: MenuSide } | "corner";
 
+/** How wide the browser's own list under a field may be: at least the field, and Chrome's is
+ *  wider under a narrow one. */
+const BROWSER_LIST_WIDTH = 320;
+
+/** Where a menu `width` wide fits beside the field (its left edge): left of it, else right of it
+ *  past the browser's list; null when neither side has room. */
+function besideOf(anchor: DOMRect, width: number, viewportWidth: number): number | null {
+  const leftSide = anchor.left - GAP - width;
+  if (leftSide >= EDGE) return leftSide;
+  const rightSide = anchor.left + Math.max(anchor.width, BROWSER_LIST_WIDTH) + GAP;
+  return rightSide + width <= viewportWidth - EDGE ? rightSide : null;
+}
+
 export class FrameHost {
   readonly host: HTMLDivElement;
   /** The iframe, for the tests (the shadow root is closed to the page). */
@@ -121,16 +134,25 @@ export class FrameHost {
       const above = anchor.top - GAP - this.height;
       const roomBelow = below + this.height <= viewportHeight - EDGE;
       const roomAbove = above >= EDGE;
-      // The side asked for, the other one when only it has room; with room on neither, below,
-      // where the menu's first rows stay on screen.
-      top =
-        this.place.side === "above"
-          ? roomAbove
-            ? above
-            : below
-          : roomBelow || !roomAbove
-            ? below
-            : above;
+      const beside =
+        this.place.side === "above" && !roomAbove ? besideOf(anchor, width, viewportWidth) : null;
+      if (beside !== null) {
+        // Above, clear of the browser's own list under the field, is too small: beside the field,
+        // its top at the field's, as far as the window lets it.
+        left = beside;
+        top = Math.max(EDGE, Math.min(anchor.top, viewportHeight - EDGE - this.height));
+      } else {
+        // The side asked for, the other one when only it has room; with room on neither, below,
+        // where the menu's first rows stay on screen.
+        top =
+          this.place.side === "above"
+            ? roomAbove
+              ? above
+              : below
+            : roomBelow || !roomAbove
+              ? below
+              : above;
+      }
     }
     this.style(Math.round(left), Math.round(top), Math.round(width), Math.round(this.height));
     const rect = rectOf(this.host);

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use lockra_core::fakes::{FakeBiometrics, FakeClipboard, FakeClock, FakeKeychain, FakeTransport, FakeUpdater};
-use lockra_core::ui::{Features, Platform};
+use lockra_core::ui::{Features, Notice, Platform};
 use lockra_core::{
     ClientInfo, Core, CoreConfig, FillRequest, FrameFacts, ItemDraft, KdfCost, Matching, Ports, Protection, QueryRequest, Refusal, SearchRequest, SecretChange,
     UrlDraft,
@@ -369,7 +369,7 @@ async fn requests_reach_the_core_and_answers_carry_their_numbers() {
 
 #[tokio::test(start_paused = true)]
 async fn every_op_goes_through_to_the_core() {
-    use lockra_core::{CopyPart, GenerateRequest, GenerateSave, OtpRequest, SaveRequest, SiteRuleKind, SiteRuleRequest, UpdateRequest};
+    use lockra_core::{CopyPart, GenerateRequest, GenerateSave, OtpRequest, SaveRequest, SiteMatchingRequest, SiteRuleKind, SiteRuleRequest, UpdateRequest};
     let app = app().await;
     let mut extension = in_session(&app).await;
     let entry = app.core.add_uri("otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub").unwrap();
@@ -389,9 +389,19 @@ async fn every_op_goes_through_to_the_core() {
     assert!(matches!(made.result, Some(Answer::Generated(ref answer)) if answer.item_id.is_some()), "{made:?}");
     let rule = SiteRuleRequest { kind: Some(SiteRuleKind::NeverFill), facts: facts("https://new.example/") };
     assert_eq!(extension.request(Op::SiteRule(rule)).await.result, Some(Answer::Done {}));
+    let switch = SiteMatchingRequest { facts: facts("https://gist.github.com/"), host: true };
+    assert_eq!(extension.request(Op::SiteMatching(switch)).await.result, Some(Answer::Done {}));
+    let query = extension.request(Op::Query(QueryRequest { facts: facts("https://gist.github.com/"), ..QueryRequest::default() })).await;
+    assert!(matches!(query.result, Some(Answer::Query(ref answer)) if answer.host_matching && answer.items.is_empty()), "{query:?}");
     let found = extension.request(Op::Search(SearchRequest { text: "github".into(), top_url: "https://github.com/".into() })).await;
     assert!(matches!(found.result, Some(Answer::Found { ref items }) if items.len() == 1));
-    assert_eq!(app.core.state().site_rules.len(), 1);
+    assert_eq!(app.core.state().site_rules.len(), 2);
+    let mut events = app.core.subscribe();
+    let link = lockra_core::LinkCodeRequest { item_id: id, facts: facts("https://github.com/") };
+    assert_eq!(extension.request(Op::LinkCode(link)).await.result, Some(Answer::Done {}));
+    let asked = std::iter::from_fn(|| events.try_recv().ok())
+        .any(|event| matches!(event, UiEvent::Notice { notice: Notice::BrowserLinkCodeRequested { item_id, .. } } if item_id == id));
+    assert!(asked, "Lockra comes up on the login");
     let delete = lockra_core::DeleteRequest { item_id: id, facts: facts("https://github.com/") };
     assert_eq!(extension.request(Op::Delete(delete)).await.result, Some(Answer::Done {}));
     assert!(!app.core.items_list().unwrap().iter().any(|item| item.id == id));

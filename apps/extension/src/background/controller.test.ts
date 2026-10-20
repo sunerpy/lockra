@@ -212,6 +212,12 @@ describe("the inline menu", () => {
     };
     const frame = inlineFrame(context, answer.token, 5, 0, false);
     await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    // Every view says the background's build, which the frame compares with its own.
+    expect(frame.received.filter((m) => (m as { kind: string }).kind === "view")).toEqual(
+      frame.received
+        .filter((m) => (m as { kind: string }).kind === "view")
+        .map((m) => ({ ...(m as object), build: LOCKRA_BUILD })),
+    );
     // A token no content script handed out still gets nothing.
     const stranger = inlineFrame(context, "0".repeat(32), 6, 0, false);
     await vi.waitFor(() => expect(stranger.closed).toBe(true));
@@ -614,9 +620,16 @@ describe("saving what a form submitted", () => {
         password: "hunter2",
       }),
     );
+    // The password as the user corrected it in the prompt.
     frame.send({
       kind: "action",
-      action: { type: "save", title: "Example", username: "alice", group: "Work" },
+      action: {
+        type: "save",
+        title: "Example",
+        username: "alice",
+        password: "hunter3",
+        group: "Work",
+      },
       point: { x: 300, y: 200 },
       trusted: true,
     });
@@ -624,7 +637,7 @@ describe("saving what a form submitted", () => {
     expect(app.requests.at(-1)).toMatchObject({
       title: "Example",
       username: "alice",
-      password: "hunter2",
+      password: "hunter3",
       group: "Work",
       frame_url: "https://www.example.com/login",
     });
@@ -654,9 +667,15 @@ describe("saving what a form submitted", () => {
         view: "update",
         site: "example.com",
         item: { title: "GitHub", username: "octocat", downgrade: false },
+        password: "n3w",
       }),
     );
-    frame.send({ kind: "action", action: { type: "update" }, point: null, trusted: true });
+    frame.send({
+      kind: "action",
+      action: { type: "update", password: "n3w" },
+      point: null,
+      trusted: true,
+    });
     await vi.waitFor(() =>
       expect(app.requests.at(-1)).toMatchObject({ op: "update", item_id: ITEM, password: "n3w" }),
     );
@@ -684,6 +703,72 @@ describe("saving what a form submitted", () => {
     await vi.waitFor(() =>
       expect(app.requests.at(-1)).toMatchObject({ op: "site_rule", kind: "never_save" }),
     );
+  });
+
+  it("says when what was sent looks like a one-time code, and saves nothing when told it is one", async () => {
+    // 2026-10-20, the user: a code typed into a field the page masks as a password came back as
+    // a password to save or to update.
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    await browser.fromContent({
+      kind: "content.submitted",
+      username: "octocat",
+      password: "123456",
+      signup: false,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "prompt.open")).toBe(true));
+    const open = contentGot.find((m) => m.kind === "prompt.open") as { token: string };
+    const frame = inlineFrame(context, open.token);
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ view: "update", code: true }));
+    const before = app.requests.length;
+    frame.send({ kind: "action", action: { type: "code" }, point: null, trusted: true });
+    await vi.waitFor(() => expect(frame.closed).toBe(true));
+    expect(app.requests.slice(before).filter((r) => r.op === "update" || r.op === "save")).toEqual(
+      [],
+    );
+    // Forgotten: the next page shows no prompt.
+    expect(
+      ((await browser.fromContent({ kind: "content.start", top: true })) as { prompt: unknown })
+        .prompt,
+    ).toBeNull();
+  });
+
+  it("offers to link a code to the login filled moments before, which Lockra does", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.query = () =>
+      queryAnswer([summary(ITEM, { has_totp: false })], {
+        save: { action: "save", item_id: null },
+      });
+    app.handlers.link_code = () => ({});
+    // The sign-in's first page, filled from the menu.
+    await fillFromMenu(context);
+    await browser.fromContent({
+      kind: "content.submitted",
+      username: "",
+      password: "123456",
+      signup: false,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "prompt.open")).toBe(true));
+    const open = contentGot.findLast((m) => m.kind === "prompt.open") as { token: string };
+    const frame = inlineFrame(context, open.token);
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toMatchObject({
+        view: "save",
+        code: true,
+        link: { title: "GitHub" },
+      }),
+    );
+    frame.send({ kind: "action", action: { type: "link_code" }, point: null, trusted: true });
+    await vi.waitFor(() =>
+      expect(app.requests.at(-1)).toMatchObject({
+        op: "link_code",
+        item_id: ITEM,
+        frame_url: "https://www.example.com/login",
+      }),
+    );
+    await vi.waitFor(() => expect(frame.closed).toBe(true));
+    expect(app.requests.some((r) => r.op === "save")).toBe(false);
   });
 
   it("offers nothing when the app advises nothing", async () => {
@@ -1177,6 +1262,8 @@ describe("the popup", () => {
       extensionVersion: "0.10.0",
       shortcut: "Ctrl+Shift+L",
       pageAccess: false,
+      // The pages compare it with their own.
+      build: LOCKRA_BUILD,
     });
     expect(state?.site).toMatchObject({ site: "example.com", fillable: true });
     // The list stays in storage.session for the next opening, and goes as Lockra locks.
@@ -1328,6 +1415,36 @@ describe("the popup", () => {
       }),
     );
     expect(app.requests.filter((r) => r.op === "delete")).toHaveLength(1);
+  });
+
+  it("switches the page's site to its full host and shows its matches again", async () => {
+    const context = await setup();
+    const { browser, app } = context;
+    browser.probes.set(0, { focused: false, editable: true, framed: false });
+    let host = false;
+    app.handlers.site_matching = (request) => {
+      host = (request as { host: boolean }).host;
+      return {};
+    };
+    app.handlers.query = () =>
+      queryAnswer(host ? [summary(ITEM)] : [summary(ITEM), summary(ITEM2)], {
+        host_matching: host,
+      });
+    const { port, states } = popup(context);
+    port.send({ kind: "hello" });
+    await vi.waitFor(() => expect(states().at(-1)?.site).toMatchObject({ hostMatching: false }));
+    expect(states().at(-1)?.site?.host).toBe("www.example.com");
+    port.send({ kind: "site_matching", host: true });
+    await vi.waitFor(() =>
+      expect(states().at(-1)?.site).toMatchObject({
+        hostMatching: true,
+        items: [{ item_id: ITEM }],
+      }),
+    );
+    expect(app.requests.find((r) => r.op === "site_matching")).toMatchObject({
+      host: true,
+      frame_url: "https://www.example.com/login",
+    });
   });
 
   it("follows pairing, unlocking and starting Lockra", async () => {
@@ -1497,6 +1614,19 @@ describe("its own update", () => {
     await vi.waitFor(() => expect(states().at(-1)?.update).toBe("waiting"));
     expect(context.browser.reloads).toBe(0);
     port.disconnect();
+    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+  });
+
+  it("reads the folder again as Lockra comes back, of the same version or not", async () => {
+    // An install of the same version starts Lockra again with another copy in the folder (it
+    // writes the copy before it listens): nothing else would look until a page opens.
+    const context = await setup({ folder: "0.10.0" });
+    await context.app.quit();
+    await vi.waitFor(() => expect(context.connection.view.link).toBe("not_running"));
+    context.folder.version = "0.10.1";
+    context.app.running = true;
+    context.connection.ensure();
+    await vi.waitFor(() => expect(context.connection.view.app?.version).toBe("0.10.0"));
     await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
   });
 

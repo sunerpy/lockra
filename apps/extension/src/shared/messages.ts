@@ -164,8 +164,26 @@ export type InlineView =
   | { view: "delete"; site: string; item: MenuItem }
   | { view: "http"; site: string; item: MenuItem }
   | { view: "waiting"; item: MenuItem }
-  | { view: "save"; site: string; title: string; username: string; password: string }
-  | { view: "update"; site: string; item: MenuItem }
+  /** What a form sent, to save or to update: the password editable (it may not be what the page
+   *  sent it as); `code`: it looks like a one-time code typed into a field the page masks; `link`:
+   *  the site's login, without a code, whose code Lockra can link instead. */
+  | {
+      view: "save";
+      site: string;
+      title: string;
+      username: string;
+      password: string;
+      code?: boolean;
+      link?: MenuItem;
+    }
+  | {
+      view: "update";
+      site: string;
+      item: MenuItem;
+      password: string;
+      code?: boolean;
+      link?: MenuItem;
+    }
   /** A request the app refused (`refusal`, worded by the frame), or one that failed on the way. */
   | { view: "notice"; site: string; refusal: string };
 
@@ -181,8 +199,12 @@ export type InlineAction =
   | { type: "regenerate" }
   /** The sign-up menu's password on the clipboard, through Lockra. */
   | { type: "copy" }
-  | { type: "save"; title: string; username: string; group: string }
-  | { type: "update" }
+  | { type: "save"; title: string; username: string; password: string; group: string }
+  | { type: "update"; password: string }
+  /** What the form sent was a one-time code, not a password: nothing to save. */
+  | { type: "code" }
+  /** It was, and Lockra links a code to the site's login (the user picks it in Lockra). */
+  | { type: "link_code" }
   | { type: "dismiss" }
   | { type: "never" }
   | { type: "close" };
@@ -202,7 +224,11 @@ export type InlineToBackground =
   /** An arrow in the search box: the list's choice moves. */
   | { kind: "key"; key: "ArrowDown" | "ArrowUp" };
 
-export type BackgroundToInline = { kind: "view"; view: InlineView } | { kind: "close" };
+/** A view comes with the background's build (LOCKRA_BUILD): a frame of another build knows the
+ *  browser still runs an older background, which its buttons may ask for what it cannot do. */
+export type BackgroundToInline =
+  | { kind: "view"; view: InlineView; build?: string }
+  | { kind: "close" };
 
 // ---- the popup and the options page ----------------------------------------------------------
 
@@ -226,6 +252,10 @@ export interface SiteView {
   fillable: boolean;
   neverFill: boolean;
   crossOrigin: boolean;
+  /** The page's host, which the site's logins are compared with when it matches by full host. */
+  host?: string;
+  /** The site matches by full host (the popup's switch). */
+  hostMatching?: boolean;
 }
 
 /** The extension's own update, as the popup and the options page tell it
@@ -257,6 +287,9 @@ export interface PopupState {
   pairedAt: number | null;
   /** The extension's own update; null when there is nothing to tell. */
   update: UpdateNote | null;
+  /** The background's build (LOCKRA_BUILD); a page of another build asks for a reload. An older
+   *  background's state has none. */
+  build?: string;
 }
 
 export type PopupRequest =
@@ -273,6 +306,8 @@ export type PopupRequest =
   | { kind: "copy"; itemId: string; part: CopyPart }
   /** Delete the login, which the user agreed to in the popup. */
   | { kind: "delete"; itemId: string }
+  /** The page's site matches by full host (`host`), or by its registrable domain. */
+  | { kind: "site_matching"; host: boolean }
   | { kind: "access.changed" }
   | { kind: "unpair" }
   | { kind: "extensions" };

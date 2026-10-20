@@ -1187,6 +1187,73 @@ describe("MockBackend", () => {
     expect(await errorCode(backend.dispatch({ command: "items_list" }))).toBe("locked");
   });
 
+  it("matches a single site by its full host or by its domain, one way for each", async () => {
+    const backend = new MockBackend({ passwords: true, phase: "unlocked" });
+    const rules = async () =>
+      (await backend.getState()).site_rules.map((r) => [r.kind, ...r.domains]);
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "never_fill",
+      domains: ["git.example.com"],
+    });
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "match_host",
+      domains: [" Git.Example.com "],
+    });
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "match_host",
+      domains: ["git.example.com"],
+    });
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "match_domain",
+      domains: ["wiki.example.com"],
+    });
+    expect(await rules()).toEqual([
+      ["never_fill", "git.example.com"],
+      ["match_host", "git.example.com"],
+      ["match_domain", "wiki.example.com"],
+    ]);
+    // The other way for the same domain replaces it; a list of another kind stays.
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "match_domain",
+      domains: ["git.example.com"],
+    });
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "match_host",
+      domains: ["wiki.example.com"],
+    });
+    expect(await rules()).toEqual([
+      ["never_fill", "git.example.com"],
+      ["match_domain", "git.example.com"],
+      ["match_host", "wiki.example.com"],
+    ]);
+    // One domain a rule.
+    expect(
+      await errorCode(
+        backend.dispatch({
+          command: "site_rule_add",
+          kind: "match_host",
+          domains: ["a.example", "b.example"],
+        }),
+      ),
+    ).toBe("item_invalid");
+    // Matching the full host by default lets the extensions do nothing more, so no proof.
+    const policy = (await backend.getState()).browser.policy;
+    expect(policy.match_host).toBe(false);
+    await backend.dispatch({
+      command: "browser_set_policy",
+      policy: { ...policy, match_host: true },
+    });
+    expect((await backend.getState()).browser.policy.match_host).toBe(true);
+    await backend.dispatch({ command: "browser_set_policy", policy });
+    expect((await backend.getState()).browser.policy.match_host).toBe(false);
+  });
+
   it("answers nothing of password management while the build does not offer it", async () => {
     const backend = new MockBackend({ phase: "unlocked" });
     expect((await backend.getState()).features.passwords).toBe(false);
@@ -1363,6 +1430,21 @@ describe("MockBackend", () => {
     await backend.dispatch({ command: "vault_unlock", password: "correct horse battery" });
     const state = (await backend.getState()).browser;
     expect([state.pairing, state.paired.map((p) => p.connected)]).toEqual([[], [false]]);
+  });
+
+  it("brings an extension's request to link a code to a login, with the login's title", () => {
+    const adfs = mockItemView("ADFS");
+    const backend = new MockBackend({
+      phase: "unlocked",
+      passwords: true,
+      items: [{ view: adfs }],
+    });
+    const { notices } = recorder(backend);
+    backend.simulateLinkCodeRequest(adfs.id, "chrome");
+    expect(notices()).toEqual([
+      { type: "browser_link_code_requested", item_id: adfs.id, browser: "chrome", title: "ADFS" },
+    ]);
+    expect(() => backend.simulateLinkCodeRequest("gone", "chrome")).toThrow("item_not_found");
   });
 
   it("offers no browser extension on the phone or without password management", async () => {

@@ -65,6 +65,8 @@ const UPDATE_RETRY_MS = 5_000;
 const MAX_FRAME_HEIGHT = 560;
 /** From how many logins a list gets its search box. */
 const SEARCH_FROM = 2;
+/** What a one-time code looks like: six to eight digits. */
+const ONE_TIME_CODE = /^\d{6,8}$/;
 
 function menuItem(item: ItemSummary): MenuItem {
   return { title: item.title, username: item.username || item.email, downgrade: item.downgrade };
@@ -467,12 +469,22 @@ export class Controller {
     if (!outcome.ok || !outcome.value.save || outcome.value.save.action === "none") return null;
     const advice = outcome.value.save;
     const item = outcome.value.items.find((i) => i.item_id === advice.item_id) ?? null;
+    // A code sent as a password: the login it belongs to is the one to update, or the one filled
+    // in this tab moments before (the sign-in's first page); without a code of its own, Lockra
+    // can link one.
+    const filled = this.memory.filledItem(frame.tabId);
+    const owner =
+      advice.action === "update" && item
+        ? item
+        : (outcome.value.items.find((i) => i.item_id === filled) ?? null);
+    const link = ONE_TIME_CODE.test(password.trim()) && owner && !owner.has_totp ? owner : null;
     const submission: Submission = {
       username,
       password,
       frame,
       action: advice.action === "update" && item ? "update" : "save",
       item,
+      link,
       site: outcome.value.site,
     };
     this.memory.rememberSubmission(frame.tabId, submission);
@@ -491,15 +503,27 @@ export class Controller {
   }
 
   private openPrompt(submission: Submission, top: TrustedFrame): InlineFrame {
+    // A field the page masks as a password may have taken a one-time code (NDKEY's ADFS adapter):
+    // the prompt says so, and its user may take it for one.
+    const code = ONE_TIME_CODE.test(submission.password.trim())
+      ? { code: true, ...(submission.link ? { link: menuItem(submission.link) } : {}) }
+      : {};
     const view: InlineView =
       submission.action === "update" && submission.item
-        ? { view: "update", site: submission.site, item: menuItem(submission.item) }
+        ? {
+            view: "update",
+            site: submission.site,
+            item: menuItem(submission.item),
+            password: submission.password,
+            ...code,
+          }
         : {
             view: "save",
             site: submission.site,
             title: submission.site,
             username: submission.username,
             password: submission.password,
+            ...code,
           };
     return this.frames.open({
       kind: "prompt",
@@ -695,7 +719,7 @@ export class Controller {
       return;
     }
     frame.port = port;
-    port.postMessage({ kind: "view", view: frame.view });
+    port.postMessage({ kind: "view", view: frame.view, build: LOCKRA_BUILD });
   }
 
   private async verify(
@@ -721,7 +745,7 @@ export class Controller {
   private show(frame: InlineFrame, view: InlineView): void {
     frame.view = view;
     try {
-      frame.port?.postMessage({ kind: "view", view });
+      frame.port?.postMessage({ kind: "view", view, build: LOCKRA_BUILD });
     } catch {
       frame.port = null;
     }
@@ -792,6 +816,8 @@ export class Controller {
       case "update":
       case "dismiss":
       case "never":
+      case "code":
+      case "link_code":
         return this.answerPrompt(frame, action);
       case "close":
         await this.close(frame);
@@ -953,7 +979,10 @@ export class Controller {
 
   private async answerPrompt(
     frame: InlineFrame,
-    action: Extract<InlineAction, { type: "save" | "update" | "dismiss" | "never" }>,
+    action: Extract<
+      InlineAction,
+      { type: "save" | "update" | "dismiss" | "never" | "code" | "link_code" }
+    >,
   ): Promise<void> {
     const tabId = frame.frame.tabId;
     const submission = this.memory.submission(tabId);
@@ -963,24 +992,32 @@ export class Controller {
     }
     const facts = submission.frame.facts;
     let outcome: { ok: boolean; error?: string } = { ok: true };
-    if (action.type === "save") {
+    // The password as the user left it in the prompt: what the page sent, or their correction.
+    if (action.type === "save" && action.password !== "") {
       outcome = await this.connection.request({
         op: "save",
         ...facts,
         title: action.title.trim(),
         username: action.username,
-        password: submission.password,
+        password: action.password,
         group: action.group.trim() === "" ? null : action.group.trim(),
       });
-    } else if (action.type === "update" && submission.item) {
+    } else if (action.type === "update" && submission.item && action.password !== "") {
       outcome = await this.connection.request({
         op: "update",
         item_id: submission.item.item_id,
         ...facts,
-        password: submission.password,
+        password: action.password,
       });
     } else if (action.type === "never") {
       outcome = await this.connection.request({ op: "site_rule", kind: "never_save", ...facts });
+    } else if (action.type === "link_code" && submission.link) {
+      // Lockra comes up on the login with its code picker open: the user picks there.
+      outcome = await this.connection.request({
+        op: "link_code",
+        item_id: submission.link.item_id,
+        ...facts,
+      });
     }
     if (!outcome.ok) return this.notice(frame, outcome.error ?? "invalid");
     this.memory.dropSubmission(tabId);
@@ -1178,6 +1215,8 @@ export class Controller {
         return this.popupFillCode(port, context, message.itemId);
       case "delete":
         return this.popupDelete(port, context, message.itemId);
+      case "site_matching":
+        return this.popupSiteMatching(port, context, message.host);
       case "copy": {
         const outcome = await connection.request({
           op: "copy",
@@ -1246,6 +1285,8 @@ export class Controller {
       fillable: true,
       neverFill: answer.never_fill,
       crossOrigin: answer.cross_origin,
+      host: hostOf(frame.facts.frame_url),
+      hostMatching: answer.host_matching,
     };
     await this.api.storage.session
       .set({ [SNAPSHOT]: { url: tab.url, site: context.site } })
@@ -1347,6 +1388,16 @@ export class Controller {
     if (outcome.ok) await this.refreshSite(port, context);
   }
 
+  /** The page's site matches by full host, or by its registrable domain (the popup's switch): Lockra
+   *  keeps it as the site's rule, and the page's matches come again, the switch as Lockra has it
+   *  (a refusal leaves it as it was). */
+  private async popupSiteMatching(port: Port, context: PopupContext, host: boolean): Promise<void> {
+    const facts = await this.popupFrame(context);
+    if (facts !== null && facts !== "navigated")
+      await this.connection.request({ op: "site_matching", ...facts.facts, host });
+    await this.refreshSite(port, context);
+  }
+
   private screen(view: ConnectionView): Screen {
     switch (view.link) {
       case "connecting":
@@ -1389,6 +1440,7 @@ export class Controller {
       unlockAsked: this.unlockAsked && view.app?.state === "locked",
       pairedAt: record?.paired_at ?? null,
       update: this.deps.update.note(view.app?.version ?? null),
+      build: LOCKRA_BUILD,
     };
   }
 
@@ -1415,10 +1467,13 @@ export class Controller {
   private onView(view: ConnectionView): void {
     const opened = view.session === "open" && this.lastSession !== "open";
     this.lastSession = view.session;
+    // A new version of Lockra, or Lockra back after it was gone: an install of the same version
+    // starts it again with another copy in the folder (written before it listens), so the folder
+    // is read again either way.
     const appVersion = view.app?.version ?? null;
-    if (appVersion !== null && appVersion !== this.lastAppVersion) {
+    if (appVersion !== this.lastAppVersion) {
       this.lastAppVersion = appVersion;
-      void this.checkUpdate(true);
+      if (appVersion !== null) void this.checkUpdate(true);
     }
     if (view.app?.state !== "locked") this.unlockAsked = false;
     void this.postAll();

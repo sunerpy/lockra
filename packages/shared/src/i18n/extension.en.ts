@@ -20,6 +20,9 @@ export const extensionEn: typeof extensionZhCN = {
     noVault: "No vault",
   },
   popup: {
+    matchHost: "Match the full host",
+    matchHostOn: "Only the logins saved for {host}",
+    matchHostOff: "The logins of every subdomain of {site}",
     settings: "Extension settings",
     searchPlaceholder: "Search all logins…",
     matches: { one: "{n} match", other: "{n} matches" },
@@ -132,6 +135,9 @@ export const extensionEn: typeof extensionZhCN = {
       "This extension is {extension}, older than Lockra {app}. In Lockra's Settings › Browser, load the extension folder instead: from then on it updates with Lockra.",
     manualFirefox:
       "This extension is {extension}, older than Lockra {app}: update it on Firefox's add-ons page.",
+    stale:
+      "The extension's background is still an older one: some buttons will do nothing. Reload the extension, then reload the pages already open.",
+    reload: "Reload the extension",
   },
   access: {
     title: "Turn on Lockra in web pages",
@@ -168,6 +174,10 @@ export const extensionEn: typeof extensionZhCN = {
     cancel: "Cancel",
     confirmFooter: "↵ fill · Esc cancel",
     escFooter: "Esc cancel",
+    staleTitle: "Lockra's extension needs a reload",
+    staleBody:
+      "The extension's background is still an older one: this menu's buttons may do nothing. Reload the extension, then reload this page.",
+    staleReload: "Reload the extension",
     waitingTitle: "Confirm in Lockra",
     waitingBody: "This login asks for your check in Lockra first.",
     noticeTitle: "Lockra did not fill",
@@ -184,6 +194,11 @@ export const extensionEn: typeof extensionZhCN = {
     save: "Save",
     dismiss: "Not now",
     never: "Never for this site",
+    codeHint: "This looks like a one-time code, not a password.",
+    isCode: "It is a code",
+    linkCode: "Link a code…",
+    linkHint:
+      "Link a code to “{title}” in Lockra: this step then asks to save nothing, and Fill the code in the popup puts the code in this field.",
   },
   update: {
     title: "Update the password in Lockra?",
@@ -232,9 +247,9 @@ export const extensionEn: typeof extensionZhCN = {
       "The browser no longer suggests addresses and cards in forms. Lockra does not fill these: leave this off if you want the browser to.",
     avoidBrowserList: "Keep clear of the browser's own password list",
     avoidBrowserListHelp:
-      "Lockra's menu opens above the field, the browser's own list of passwords below it; when there is no room above, below. Once the browser keeps no passwords, turn this off to have the menu below the field.",
+      "Lockra's menu opens above the field, the browser's own list of passwords below it; when there is no room above, beside the field, and only when there is none beside it either, below. Once the browser keeps no passwords, turn this off to have the menu below the field.",
     avoidBrowserListHelpFirefox:
-      "While Firefox still lists the passwords it keeps, Lockra's menu opens above the field, or below when there is no room above. Once Lockra takes over the browser's passwords, Firefox lists none and the menu stays below.",
+      "While Firefox still lists the passwords it keeps, Lockra's menu opens above the field; when there is no room above, beside it, and only when there is none beside it either, below. Once Lockra takes over the browser's passwords, Firefox lists none and the menu stays below.",
     menuOnFocus: "Open Lockra's menu when a field is clicked",
     menuOnFocusHelp: "When off, it opens only from the Lockra mark at the end of the field.",
     about: "About",

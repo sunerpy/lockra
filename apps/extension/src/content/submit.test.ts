@@ -45,6 +45,22 @@ beforeEach(() => {
 });
 
 describe("a submitted sign-in", () => {
+  it("is not a code typed into a field the page masks as a password", () => {
+    // NDKEY's ADFS adapter (2026-10-20): its code field is a password field named OTP; what it
+    // sends is no password to save.
+    document.body.innerHTML = `<form id="f"><input id="code" name="OTP" type="password" placeholder="Please input password"><input type="submit" id="go" value="Submit"></form>`;
+    const { watcher, submitted } = watch();
+    type(input("code"), "123456");
+    input("go").click();
+    document
+      .getElementById("f")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    window.dispatchEvent(new Event("pagehide"));
+    expect(submitted).not.toHaveBeenCalled();
+    expect(watcher.watching).toBe(false);
+    watcher.stop();
+  });
+
   it("is reported on the form's submit event, with its user name and password", () => {
     document.body.innerHTML = `<form id="f"><input id="user" autocomplete="username"><input type="password" id="pass"></form>`;
     const { watcher, submitted } = watch();

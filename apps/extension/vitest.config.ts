@@ -7,6 +7,7 @@ export default defineConfig({
   define: {
     LOCKRA_TARGET: JSON.stringify("chromium"),
     LOCKRA_FRAME_LOOK: JSON.stringify(readFrameLook()),
+    LOCKRA_BUILD: JSON.stringify("build-of-the-tests"),
   },
   test: {
     // The DOM parts (content script, frames, popup, options) run on jsdom; the channel's tests

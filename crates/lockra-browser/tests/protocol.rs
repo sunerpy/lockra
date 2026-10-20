@@ -12,8 +12,8 @@ use lockra_browser::noise::{PAIRING_CODE_INFO, PAIRING_PATTERN, PROLOGUE, Respon
 use lockra_browser::protocol::{Answer, AppPlain, AppState, ClientPlain, Envelope, Kind, Op, Outgoing, Push, Request, Response};
 use lockra_core::{
     BrowserPolicy, ClientInfo, CopyGeneratedRequest, CopyRequest, DeleteRequest, FillAnswer, FillField, FillRequest, FrameFacts, GenerateAnswer,
-    GenerateRequest, GenerateSave, ItemSummary, OtpAnswer, OtpRequest, Protection, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SaveAction, SaveAdvice,
-    SaveRequest, SearchRequest, SiteRuleKind, SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
+    GenerateRequest, GenerateSave, ItemSummary, LinkCodeRequest, OtpAnswer, OtpRequest, Protection, QueryAnswer, QueryPurpose, QueryRequest, Refusal,
+    SaveAction, SaveAdvice, SaveRequest, SearchRequest, SiteMatchingRequest, SiteRuleKind, SiteRuleRequest, StatusAnswer, Trigger, UpdateRequest,
 };
 use serde_json::{Value, json};
 use uuid::Uuid;
@@ -122,8 +122,10 @@ fn requests() -> Vec<(&'static str, Request)> {
         ),
         ("copy_generated", r(14, Op::CopyGenerated(CopyGeneratedRequest { facts: facts(), password: Zeroizing::new("q7vx2mz9kd4w8p1r6t3y".into()) }))),
         ("site_rule", r(11, Op::SiteRule(SiteRuleRequest { kind: Some(SiteRuleKind::NeverSave), facts: facts() }))),
+        ("site_matching", r(17, Op::SiteMatching(SiteMatchingRequest { facts: facts(), host: true }))),
         ("search", r(12, Op::Search(SearchRequest { text: "exam".into(), top_url: "https://www.example.com/".into() }))),
         ("delete", r(16, Op::Delete(DeleteRequest { item_id: id(1), facts: facts() }))),
+        ("link_code", r(18, Op::LinkCode(LinkCodeRequest { item_id: id(1), facts: facts() }))),
     ]
 }
 
@@ -195,6 +197,7 @@ fn protocol_messages() {
                 never_fill: false,
                 never_save: false,
                 cross_origin: false,
+                host_matching: true,
                 policy: BrowserPolicy::default(),
                 save: None,
             })),
@@ -205,6 +208,7 @@ fn protocol_messages() {
                 never_fill: false,
                 never_save: false,
                 cross_origin: true,
+                host_matching: false,
                 policy: BrowserPolicy::default(),
                 save: Some(SaveAdvice { action: SaveAction::Update, item_id: Some(id(1)) }),
             })),

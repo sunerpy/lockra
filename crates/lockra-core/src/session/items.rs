@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use lockra_autofill::{GeneratorError, GeneratorOptions, OsRandom, bundled_password_rules, generate, strength};
+use lockra_autofill::{GeneratorError, GeneratorOptions, OsRandom, WebUrl, bundled_password_rules, generate, strength};
 use lockra_sync::{Hlc, Tombstone};
 use lockra_transfer::App;
 use tokio::time::Instant;
@@ -11,6 +11,8 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use super::{Core, PhaseState, Session, State, blocking, check_password, current_code, file_name, touch_items, unlocked, unlocked_mut, write_private};
+use crate::browser::{covering, host_rule, rule_host};
+use crate::entry::VaultData;
 use crate::error::{CoreResult, ErrorCode};
 use crate::export::items::{ItemsFile, ItemsFormat, encode, login_of};
 use crate::item::{Field, GeneratedPassword, Protection, Purpose, SiteRule, SiteRuleKind, VaultItem, random_write_id};
@@ -467,7 +469,9 @@ impl Core {
         Ok(ScoreView { score: strength.score, warning: strength.warning.map(|w| w.code().to_owned()) })
     }
 
-    /// Add a site rule (or widen the one about the same single domain).
+    /// Add a site rule (or widen the one about the same single domain). A `match_host` or
+    /// `match_domain` rule is about one domain, and the other kind's rule about it goes in the same
+    /// change: a domain matches one way.
     pub fn site_rule_add(&self, kind: SiteRuleKind, domains: &[String]) -> CoreResult<()> {
         self.add_site_rule(kind, domains, false)
     }
@@ -477,14 +481,27 @@ impl Core {
     pub(super) fn add_site_rule(&self, kind: SiteRuleKind, domains: &[String], quiet: bool) -> CoreResult<()> {
         self.passwords_on()?;
         let domains = clean_domains(domains)?;
-        if kind == SiteRuleKind::Equivalent && domains.len() < 2 {
+        let one_domain = kind.opposite().is_some();
+        if (kind == SiteRuleKind::Equivalent && domains.len() < 2) || (one_domain && domains.len() != 1) {
             return Err(ErrorCode::ItemInvalid.into());
         }
         let now = self.now_ms();
         {
             let mut st = self.lock();
             let session = unlocked_mut(&mut st)?;
-            let before = session.data.site_rules.clone();
+            let (rules, tombstones) = (session.data.site_rules.clone(), session.data.site_rule_tombstones.clone());
+            if let (Some(other), [domain]) = (kind.opposite(), domains.as_slice()) {
+                let gone: Vec<Uuid> = session
+                    .data
+                    .site_rules
+                    .iter()
+                    .filter(|r| r.kind == Lenient::Known(other) && r.domains.iter().any(|d| same_host(d, domain)))
+                    .map(|r| r.id)
+                    .collect();
+                for id in gone {
+                    remove_site_rule(&mut session.data, id, now);
+                }
+            }
             let id = rule_id(kind, &domains);
             let stamp = session.data.tick(now);
             let rule = SiteRule { id, kind: Lenient::Known(kind), domains, stamp, extra: Default::default() };
@@ -493,10 +510,67 @@ impl Core {
                 None => session.data.site_rules.push(rule),
             }
             let idle = st.last_activity;
-            self.save(&mut st, true, move |s| s.data.site_rules = before)?;
+            self.save(&mut st, true, move |s| {
+                s.data.site_rules = rules;
+                s.data.site_rule_tombstones = tombstones;
+            })?;
             if quiet {
                 st.last_activity = idle;
             }
+            touch_items(&mut st);
+        }
+        self.changed();
+        Ok(())
+    }
+
+    /// The browser extension's switch for `page`'s site, quiet as its other requests: pages there
+    /// match by the full host (`host`) or by the site. The `match_host` and `match_domain` rules
+    /// about the site, and about the domains of `page`'s host within it, go; a rule of the asked
+    /// kind about the site comes where what is left (a rule about a parent of the site, the
+    /// policy's default) says otherwise. So `page` matches as asked, and no rule is left that says
+    /// what the default does. One change, synced as the interface's own.
+    pub(super) fn set_site_matching(&self, page: &WebUrl, host: bool) -> CoreResult<()> {
+        self.passwords_on()?;
+        let now = self.now_ms();
+        let site = page.site();
+        let kind = if host { SiteRuleKind::MatchHost } else { SiteRuleKind::MatchDomain };
+        let wanted = SiteRule::single_id(kind, site);
+        {
+            let mut st = self.lock();
+            let session = unlocked_mut(&mut st)?;
+            // The rules about the site or a domain of the page's host below it.
+            let about_page = |rule: &SiteRule| {
+                matches!(rule.kind, Lenient::Known(SiteRuleKind::MatchHost | SiteRuleKind::MatchDomain))
+                    && rule.domains.iter().any(|d| covering(d, page.host()).is_some_and(|length| length >= site.len()))
+            };
+            let is_wanted = |rule: &SiteRule| rule.id == wanted && rule.kind == Lenient::Known(kind) && rule.domains.len() == 1 && rule.domains[0] == site;
+            let default = super::browser::policy(session).match_host;
+            let add = host_rule(session.data.site_rules.iter().filter(|r| !about_page(r)), page).unwrap_or(default) != host;
+            let gone: Vec<Uuid> = session.data.site_rules.iter().filter(|r| about_page(r) && !(add && is_wanted(r))).map(|r| r.id).collect();
+            let kept = add && session.data.site_rules.iter().any(is_wanted);
+            if gone.is_empty() && add == kept {
+                return Ok(());
+            }
+            let (rules, tombstones) = (session.data.site_rules.clone(), session.data.site_rule_tombstones.clone());
+            for id in gone {
+                remove_site_rule(&mut session.data, id, now);
+            }
+            if add && !kept {
+                let stamp = session.data.tick(now);
+                session.data.site_rules.push(SiteRule {
+                    id: wanted,
+                    kind: Lenient::Known(kind),
+                    domains: vec![site.to_owned()],
+                    stamp,
+                    extra: Default::default(),
+                });
+            }
+            let idle = st.last_activity;
+            self.save(&mut st, true, move |s| {
+                s.data.site_rules = rules;
+                s.data.site_rule_tombstones = tombstones;
+            })?;
+            st.last_activity = idle;
             touch_items(&mut st);
         }
         self.changed();
@@ -536,9 +610,7 @@ impl Core {
                 return Err(ErrorCode::ItemNotFound.into());
             }
             let (rules, tombstones) = (session.data.site_rules.clone(), session.data.site_rule_tombstones.clone());
-            let stamp = session.data.tick(now);
-            session.data.site_rules.retain(|r| r.id != id);
-            bury(&mut session.data.site_rule_tombstones, Tombstone { id, stamp, counter: None });
+            remove_site_rule(&mut session.data, id, now);
             self.save(&mut st, true, move |s| {
                 s.data.site_rules = rules;
                 s.data.site_rule_tombstones = tombstones;
@@ -678,5 +750,22 @@ fn bury(tombstones: &mut Vec<Tombstone>, tombstone: Tombstone) {
     match tombstones.iter_mut().find(|t| t.id == tombstone.id) {
         Some(own) => own.stamp = own.stamp.max(tombstone.stamp),
         None => tombstones.push(tombstone),
+    }
+}
+
+/// Take site rule `id` out of `data`, leaving a tombstone stamped at `now_ms` so that the removal
+/// syncs.
+fn remove_site_rule(data: &mut VaultData, id: Uuid, now_ms: u64) {
+    let stamp = data.tick(now_ms);
+    data.site_rules.retain(|r| r.id != id);
+    bury(&mut data.site_rule_tombstones, Tombstone { id, stamp, counter: None });
+}
+
+/// Whether two domains of site rules name one host (`例え.jp` and `xn--r8jz45g.jp`); text that
+/// names none is compared as written.
+fn same_host(a: &str, b: &str) -> bool {
+    match (rule_host(a), rule_host(b)) {
+        (Some(a), Some(b)) => a == b,
+        _ => a == b,
     }
 }

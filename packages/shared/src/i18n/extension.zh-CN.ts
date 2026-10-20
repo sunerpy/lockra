@@ -19,6 +19,9 @@ export const extensionZhCN = {
     noVault: "没有保险库",
   },
   popup: {
+    matchHost: "按完整域名匹配",
+    matchHostOn: "只列出 {host} 的登录项",
+    matchHostOff: "列出 {site} 下所有子域的登录项",
     settings: "扩展设置",
     searchPlaceholder: "搜索全部登录项…",
     matches: { one: "{n} 个匹配", other: "{n} 个匹配" },
@@ -126,6 +129,8 @@ export const extensionZhCN = {
       "这个扩展是 {extension}，比 Lockra {app} 旧。在 Lockra 的「设置 › 浏览器」里改为加载扩展文件夹，以后会随 Lockra 自动更新。",
     manualFirefox:
       "这个扩展是 {extension}，比 Lockra {app} 旧，请在 Firefox 的附加组件页里更新它。",
+    stale: "扩展的后台还是旧版本，有些按钮会没有反应。重新加载扩展后，再刷新已经打开的网页。",
+    reload: "重新加载扩展",
   },
   access: {
     title: "在网页中启用 Lockra",
@@ -162,6 +167,9 @@ export const extensionZhCN = {
     cancel: "取消",
     confirmFooter: "↵ 填充 · Esc 取消",
     escFooter: "Esc 取消",
+    staleTitle: "Lockra 扩展需要重新加载",
+    staleBody: "扩展的后台还是旧版本，这个菜单里的按钮可能没有反应。重新加载扩展后，刷新这个页面。",
+    staleReload: "重新加载扩展",
     waitingTitle: "在 Lockra 中确认",
     waitingBody: "这个登录项要先在 Lockra 里验证身份。",
     noticeTitle: "Lockra 没有填充",
@@ -178,6 +186,11 @@ export const extensionZhCN = {
     save: "保存",
     dismiss: "不保存",
     never: "此网站不再提示",
+    codeHint: "这看起来是验证码，不是密码。",
+    isCode: "这是验证码",
+    linkCode: "关联验证码…",
+    linkHint:
+      "在 Lockra 里给「{title}」关联验证码后，这一步不再提示保存，扩展弹窗中的「填入验证码」可以把验证码填进这个输入框。",
   },
   update: {
     title: "更新 Lockra 中的密码？",
@@ -225,9 +238,9 @@ export const extensionZhCN = {
       "浏览器不再在表单中提示地址和银行卡。Lockra 不填写这些内容，需要浏览器帮你填写时请保持关闭。",
     avoidBrowserList: "避开浏览器自己的密码列表",
     avoidBrowserListHelp:
-      "Lockra 的菜单开在输入框上方，浏览器自己的密码列表在下方；上方放不下时仍在下方。浏览器里不再保存密码后，可以关闭这个开关，让菜单回到下方。",
+      "Lockra 的菜单开在输入框上方，浏览器自己的密码列表在下方；上方放不下时开在输入框旁边，旁边也放不下时才在下方。浏览器里不再保存密码后，可以关闭这个开关，让菜单回到下方。",
     avoidBrowserListHelpFirefox:
-      "Firefox 仍会列出它保存的密码时，Lockra 的菜单开在输入框上方，上方放不下时仍在下方。接管浏览器的密码功能后，Firefox 不再列出密码，菜单留在下方。",
+      "Firefox 仍会列出它保存的密码时，Lockra 的菜单开在输入框上方，上方放不下时开在输入框旁边，旁边也放不下时才在下方。接管浏览器的密码功能后，Firefox 不再列出密码，菜单留在下方。",
     menuOnFocus: "点击输入框时打开 Lockra 菜单",
     menuOnFocusHelp: "关闭后，只在点击输入框末端的 Lockra 标志时打开。",
     about: "关于",

@@ -7,10 +7,10 @@ use std::time::Duration;
 use super::*;
 use crate::browser::{
     ActivityEvent, BrowserPolicy, ClientInfo, ConfirmAction, ConfirmReason, CopyGeneratedRequest, CopyRequest, DeleteRequest, FILLS_PER_MINUTE, FillRequest,
-    FrameFacts, FrameRule, GenerateRequest, GenerateSave, OtpRequest, QUERIES_PER_MINUTE, QueryPurpose, QueryRequest, Refusal, SITES_PER_TEN_MINUTES,
-    SaveAction, SaveRequest, SearchRequest, SessionId, SiteRuleRequest, Trigger, UpdateRequest,
+    FrameFacts, FrameRule, GenerateRequest, GenerateSave, LinkCodeRequest, OtpRequest, QUERIES_PER_MINUTE, QueryPurpose, QueryRequest, Refusal,
+    SITES_PER_TEN_MINUTES, SaveAction, SaveAdvice, SaveRequest, SearchRequest, SessionId, SiteMatchingRequest, SiteRuleRequest, Trigger, UpdateRequest,
 };
-use crate::item::{Matching, Protection, SiteRuleKind, Tri};
+use crate::item::{Matching, Protection, SiteRule, SiteRuleKind, Tri};
 use crate::logins::{CopyPart, ItemDraft, ItemPatch, RevealParts, SecretChange, UrlDraft};
 use crate::{AutofillChoice, Lenient};
 
@@ -233,6 +233,221 @@ async fn with_the_port_switch_each_port_of_an_address_has_its_own_logins() {
     assert_eq!(query("http://192.168.1.10:5000/").len(), 2);
 }
 
+/// The logins a query offers on `page`, its level, and whether the frame matches by its host.
+fn offered_on(h: &Harness, session: SessionId, page: &str) -> (Vec<Uuid>, Option<lockra_autofill::MatchLevel>, bool) {
+    let answer = h.core.browser_query(session, QueryRequest { facts: facts(page), ..QueryRequest::default() }).unwrap();
+    (answer.items.iter().map(|i| i.item_id).collect(), answer.level, answer.host_matching)
+}
+
+/// The site rules, as the interface lists them.
+fn site_rules(h: &Harness) -> Vec<(String, Vec<String>)> {
+    h.core.state().site_rules.into_iter().map(|r| (r.kind, r.domains)).collect()
+}
+
+fn rule_of(kind: &str, domain: &str) -> (String, Vec<String>) {
+    (kind.to_owned(), vec![domain.to_owned()])
+}
+
+#[tokio::test(start_paused = true)]
+async fn by_the_full_host_each_host_of_a_site_has_its_own_logins() {
+    // 2026-10-20: a company's domain offered every one of its eleven logins on each of its hosts.
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let entry = h.core.add_uri(&otpauth("GitLab", "dev", SECRET)).unwrap();
+    let git = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("GitLab", "dev", "https://git.example.cn/", Matching::Domain) }).unwrap();
+    let wiki = h.core.item_add(login("Wiki", "writer", "https://wiki.example.cn/", Matching::Domain)).unwrap();
+    let page = "https://git.example.cn/users/sign_in";
+    // By the site, the default: both logins on each host.
+    let (found, level, host) = offered_on(&h, session, page);
+    assert_eq!((found.len(), level, host), (2, Some(lockra_autofill::MatchLevel::Domain), false));
+    // By the full host, the policy's default now (without proof: it only narrows the matches).
+    let on = BrowserPolicy { match_host: true, ..h.core.state().browser.policy };
+    h.core.browser_set_policy(on.clone(), None, None).await.unwrap();
+    assert_eq!(offered_on(&h, session, page), (vec![git], Some(lockra_autofill::MatchLevel::Host), true));
+    assert_eq!(offered_on(&h, session, "https://wiki.example.cn/").0, [wiki]);
+    assert_eq!(offered_on(&h, session, "https://example.cn/"), (Vec::new(), None, true));
+    // The other requests go by the same matches: the fill, the code, the update, the deletion and
+    // the popup's search.
+    let named = FillRequest { item_id: Some(wiki), ..fill_at(page) };
+    assert_eq!(h.core.browser_fill(session, named).await, Err(Refusal::NoMatch));
+    assert_eq!(h.core.browser_fill(session, fill_at(page)).await.unwrap().item_id, git);
+    let code = OtpRequest { item_id: git, facts: facts("https://wiki.example.cn/"), trigger: Some(Trigger::Popup) };
+    assert_eq!(h.core.browser_otp(session, code), Err(Refusal::NoMatch));
+    let update = UpdateRequest { item_id: wiki, facts: facts(page), password: pw("n3w") };
+    assert_eq!(h.core.browser_update(session, update), Err(Refusal::NoMatch));
+    assert_eq!(h.core.browser_delete(session, DeleteRequest { item_id: wiki, facts: facts(page) }).await, Err(Refusal::NoMatch));
+    let found = h.core.browser_search(session, SearchRequest { text: "example.cn".into(), top_url: page.into() }).unwrap();
+    assert_eq!(found.iter().map(|i| (i.item_id, i.matches)).collect::<Vec<_>>(), [(git, true), (wiki, false)]);
+    // Kept in the vault, as the rest of the policy.
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert!(restarted.state().browser.policy.match_host);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_site_rule_chooses_how_its_domain_matches_whatever_the_default() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let git = h.core.item_add(login("GitLab", "dev", "https://git.example.cn/", Matching::Domain)).unwrap();
+    let wiki = h.core.item_add(login("Wiki", "writer", "https://wiki.example.cn/", Matching::Domain)).unwrap();
+    let shop = h.core.item_add(login("Shop", "me", "https://shop.example/", Matching::Domain)).unwrap();
+    let www = h.core.item_add(login("Shop (www)", "me", "https://www.shop.example/", Matching::Domain)).unwrap();
+    // The company's domain by the full host, every other site by the site still.
+    h.core.site_rule_add(SiteRuleKind::MatchHost, &["example.cn".into()]).unwrap();
+    assert_eq!(site_rules(&h), [rule_of("match_host", "example.cn")]);
+    assert_eq!(offered_on(&h, session, "https://git.example.cn/").0, [git]);
+    assert_eq!(offered_on(&h, session, "https://wiki.example.cn/").0, [wiki]);
+    assert_eq!(offered_on(&h, session, "https://www.shop.example/"), (vec![shop, www], Some(lockra_autofill::MatchLevel::Domain), false));
+    // Every site by the full host, and the shop's domain by the site again.
+    h.core.browser_set_policy(BrowserPolicy { match_host: true, ..h.core.state().browser.policy }, None, None).await.unwrap();
+    assert_eq!(offered_on(&h, session, "https://www.shop.example/"), (vec![www], Some(lockra_autofill::MatchLevel::Host), true));
+    h.core.site_rule_add(SiteRuleKind::MatchDomain, &["https://Shop.example/login".into()]).unwrap();
+    assert_eq!(offered_on(&h, session, "https://www.shop.example/"), (vec![shop, www], Some(lockra_autofill::MatchLevel::Domain), false));
+    assert!(!offered_on(&h, session, "https://shop.example/").2);
+    // The rule of the longest domain wins: a company by the full host, its Git server by the domain.
+    let sso = h.core.item_add(login("SSO", "me", "https://sso.company.com/", Matching::Domain)).unwrap();
+    let docs = h.core.item_add(login("Docs", "me", "https://docs.company.com/", Matching::Domain)).unwrap();
+    h.core.browser_set_policy(BrowserPolicy { match_host: false, ..h.core.state().browser.policy }, None, None).await.unwrap();
+    h.core.site_rule_add(SiteRuleKind::MatchHost, &["company.com".into()]).unwrap();
+    h.core.site_rule_add(SiteRuleKind::MatchDomain, &["git.company.com".into()]).unwrap();
+    let (found, level, host) = offered_on(&h, session, "https://git.company.com/login");
+    assert_eq!((found.len(), level, host), (2, Some(lockra_autofill::MatchLevel::Domain), false));
+    assert!(found.contains(&sso) && found.contains(&docs));
+    assert_eq!(offered_on(&h, session, "https://docs.company.com/"), (vec![docs], Some(lockra_autofill::MatchLevel::Host), true));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_domain_matches_one_way_and_adding_the_other_removes_the_first() {
+    let h = Harness::unlocked().await;
+    h.core.site_rule_add(SiteRuleKind::MatchHost, &["Company.com.".into()]).unwrap();
+    assert_eq!(site_rules(&h), [rule_of("match_host", "company.com")]);
+    // The other way: the first rule goes in the same change, its deletion kept to sync.
+    h.core.site_rule_add(SiteRuleKind::MatchDomain, &["company.com".into()]).unwrap();
+    assert_eq!(site_rules(&h), [rule_of("match_domain", "company.com")]);
+    let removed = SiteRule::single_id(SiteRuleKind::MatchHost, "company.com");
+    assert!(h.core.data().site_rule_tombstones.iter().any(|t| t.id == removed));
+    h.core.site_rule_add(SiteRuleKind::MatchHost, &["company.com".into()]).unwrap();
+    assert_eq!(site_rules(&h), [rule_of("match_host", "company.com")]);
+    // Another domain, or another kind about the same one, stays.
+    h.core.site_rule_add(SiteRuleKind::NeverSave, &["company.com".into()]).unwrap();
+    h.core.site_rule_add(SiteRuleKind::MatchDomain, &["git.company.com".into()]).unwrap();
+    assert_eq!(site_rules(&h), [rule_of("match_host", "company.com"), rule_of("never_save", "company.com"), rule_of("match_domain", "git.company.com")]);
+    // One domain a rule.
+    assert_eq!(code_err(h.core.site_rule_add(SiteRuleKind::MatchHost, &["a.example".into(), "b.example".into()])), ErrorCode::ItemInvalid);
+    assert_eq!(code_err(h.core.site_rule_add(SiteRuleKind::MatchDomain, &[])), ErrorCode::ItemInvalid);
+    assert_eq!(site_rules(&h).len(), 3);
+    // Kept, and the ids are the shared ones, as for the lists.
+    let restarted = h.restart();
+    restarted.unlock(pw(MASTER)).await.unwrap();
+    assert!(restarted.state().site_rules.iter().any(|r| r.id == SiteRule::single_id(SiteRuleKind::MatchDomain, "git.company.com")));
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_popup_switches_how_the_frame_s_site_matches_and_leaves_no_rule_that_says_the_default() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let git = h.core.item_add(login("GitLab", "dev", "https://git.example.cn/", Matching::Domain)).unwrap();
+    h.core.item_add(login("Wiki", "writer", "https://wiki.example.cn/", Matching::Domain)).unwrap();
+    let page = "https://git.example.cn/users/sign_in";
+    let switch = |host| h.core.browser_site_matching(session, SiteMatchingRequest { facts: facts(page), host });
+    // By the full host on this site: one rule, for the site, which its other hosts follow too.
+    switch(true).unwrap();
+    assert_eq!(site_rules(&h), [rule_of("match_host", "example.cn")]);
+    assert_eq!(offered_on(&h, session, page), (vec![git], Some(lockra_autofill::MatchLevel::Host), true));
+    assert!(offered_on(&h, session, "https://wiki.example.cn/").2);
+    switch(true).unwrap();
+    assert_eq!(site_rules(&h), [rule_of("match_host", "example.cn")], "asked again: as it was");
+    // Back to the site, which is the default: no rule left, its removal kept to sync.
+    switch(false).unwrap();
+    assert!(site_rules(&h).is_empty());
+    assert_eq!(offered_on(&h, session, page).0.len(), 2);
+    assert!(h.core.data().site_rule_tombstones.iter().any(|t| t.id == SiteRule::single_id(SiteRuleKind::MatchHost, "example.cn")));
+    // With the default by the full host, the switch's rule says the other way.
+    h.core.browser_set_policy(BrowserPolicy { match_host: true, ..h.core.state().browser.policy }, None, None).await.unwrap();
+    assert!(offered_on(&h, session, page).2);
+    switch(false).unwrap();
+    assert_eq!(site_rules(&h), [rule_of("match_domain", "example.cn")]);
+    assert!(!offered_on(&h, session, page).2);
+    switch(true).unwrap();
+    assert!(site_rules(&h).is_empty());
+    // A rule about the frame's own host goes too, so the switch says what this page does; a rule
+    // about another host of the site stays.
+    h.core.site_rule_add(SiteRuleKind::MatchDomain, &["git.example.cn".into()]).unwrap();
+    h.core.site_rule_add(SiteRuleKind::MatchDomain, &["wiki.example.cn".into()]).unwrap();
+    assert!(!offered_on(&h, session, page).2);
+    switch(true).unwrap();
+    assert!(offered_on(&h, session, page).2);
+    assert_eq!(site_rules(&h), [rule_of("match_domain", "wiki.example.cn")]);
+    // Only in the page itself or a frame of its own site, and for a page at all.
+    let framed = FrameFacts { frame_url: page.into(), top_url: "https://evil.example/".into(), frame_chain: Vec::new() };
+    assert_eq!(h.core.browser_site_matching(session, SiteMatchingRequest { facts: framed, host: false }), Err(Refusal::CrossOrigin));
+    let nested = FrameFacts { frame_url: page.into(), top_url: page.into(), frame_chain: vec!["https://ads.example/".into()] };
+    assert_eq!(h.core.browser_site_matching(session, SiteMatchingRequest { facts: nested, host: false }), Err(Refusal::CrossOrigin));
+    assert_eq!(h.core.browser_site_matching(session, SiteMatchingRequest { facts: facts("about:blank"), host: false }), Err(Refusal::Invalid));
+    assert_eq!(site_rules(&h), [rule_of("match_domain", "wiki.example.cn")], "nothing changed");
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_switch_counts_as_a_query_and_waits_while_paused_or_locked() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let switch = SiteMatchingRequest { facts: facts("https://git.example.cn/"), host: true };
+    for _ in 0..QUERIES_PER_MINUTE {
+        h.core.browser_query(session, QueryRequest { facts: facts("https://git.example.cn/"), ..QueryRequest::default() }).unwrap();
+    }
+    assert_eq!(h.core.browser_site_matching(session, switch.clone()), Err(Refusal::RateLimited));
+    assert_eq!(h.core.browser_site_matching(session, switch.clone()), Err(Refusal::Paused));
+    assert!(site_rules(&h).is_empty());
+    h.core.browser_resume().unwrap();
+    h.core.lock_vault();
+    assert_eq!(h.core.browser_site_matching(session, switch), Err(Refusal::Locked));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_code_typed_into_a_password_field_is_never_offered_as_the_password() {
+    // 2026-10-20: a sign-in that asks for the code in a password field offered to keep the code as
+    // the login's new password.
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let entry = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
+    let id = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("GitHub", "octocat", "https://github.com/", Matching::Domain) }).unwrap();
+    let sink = Arc::new(RecordingSink::default());
+    h.core.subscribe_codes(sink.clone());
+    let frame = sink.frames().last().cloned().unwrap();
+    let shown = frame.codes.iter().find(|c| c.entry_id == entry).unwrap().clone();
+    let secret = lockra_otp::base32::decode(SECRET).unwrap();
+    let at = |ms: u64| totp(&secret, ms, Period::THIRTY, Algorithm::Sha1, Digits::SIX);
+    let ask = |username: &str, password: &str| QueryRequest {
+        facts: facts("https://github.com/sessions/two-factor"),
+        purpose: QueryPurpose::Save,
+        username: username.into(),
+        password: pw(password),
+    };
+    let advice = |q: QueryRequest| h.core.browser_query(session, q).unwrap().save.unwrap();
+    let nothing = SaveAdvice { action: SaveAction::None, item_id: None };
+    // The current code, the one before and the one after (a clock a little off, a slow typist),
+    // with the login's user name, another or none: neither an update nor a new login.
+    for code in [shown.code.clone(), at(frame.at_ms - 30_000), shown.next_code.clone().unwrap()] {
+        for username in ["octocat", "someone", ""] {
+            assert_eq!(advice(ask(username, &code)), nothing, "{username}: {code}");
+        }
+    }
+    // Two steps away it is a password like any other; and a new password still updates the login.
+    assert_eq!(advice(ask("octocat", &at(frame.at_ms + 60_000))), SaveAdvice { action: SaveAction::Update, item_id: Some(id) });
+    assert_eq!(advice(ask("octocat", &at(frame.at_ms - 60_000))), SaveAdvice { action: SaveAction::Update, item_id: Some(id) });
+    assert_eq!(advice(ask("octocat", "n3w-password")), SaveAdvice { action: SaveAction::Update, item_id: Some(id) });
+    // An HOTP account's code: the counter's, the one before and the next.
+    let bank = h.core.add_uri("otpauth://hotp/Bank:me?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&counter=1").unwrap();
+    let vault = h.core.item_add(ItemDraft { totp_entry: Some(bank), ..login("Bank", "me", "https://bank.example/", Matching::Domain) }).unwrap();
+    let at_bank = |username: &str, password: &str| QueryRequest { facts: facts("https://bank.example/otp"), ..ask(username, password) };
+    for code in ["755224", "287082", "359152"] {
+        assert_eq!(advice(at_bank("me", code)), nothing, "{code}");
+    }
+    assert_eq!(advice(at_bank("me", "969429")), SaveAdvice { action: SaveAction::Update, item_id: Some(vault) });
+    // A login of another site, with its own code, does not guard this one's.
+    assert_eq!(advice(ask("octocat", "287082")), SaveAdvice { action: SaveAction::Update, item_id: Some(id) });
+}
+
 #[tokio::test(start_paused = true)]
 async fn frames_of_other_sites_and_plain_http_pages_are_refused_unless_allowed() {
     let h = Harness::unlocked().await;
@@ -435,6 +650,63 @@ async fn deleting_counts_with_the_secrets_so_a_session_cannot_empty_the_vault() 
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_code_is_linked_in_lockra_to_a_login_offered_for_the_frame() {
+    // 2026-10-20: NDKEY's ADFS adapter asks for the one-time code in a password field
+    // (`<input type="password" name="OTP">`). The save prompt offers 「关联验证码…」: Lockra comes up
+    // on the login and the user picks the account there; the extension never sees the accounts.
+    let mut h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let adfs = h.core.item_add(login("ADFS", "me", "https://sso.example.com/", Matching::Domain)).unwrap();
+    let other = h.core.item_add(login("Example", "me", "https://example.org/", Matching::Domain)).unwrap();
+    let hidden =
+        h.core.item_add(ItemDraft { protection: Protection::NoExtension, ..login("Hidden", "me", "https://sso.example.com/", Matching::Domain) }).unwrap();
+    let page = "https://sso.example.com/adfs/ls/";
+    let link = |item_id, facts: FrameFacts| LinkCodeRequest { item_id, facts };
+    let asked = || Notice::BrowserLinkCodeRequested { item_id: adfs, browser: "chrome".into(), title: "ADFS".into() };
+    let rev = h.core.state().items_rev;
+    let _ = h.notices();
+    h.core.browser_link_code(session, link(adfs, facts(page))).unwrap();
+    assert_eq!(h.notices(), [asked()]);
+    assert_eq!(h.core.state().items_rev, rev, "nothing changes here: the user links the code in Lockra");
+    // A login linked already asks the same: the user changes its code there.
+    let entry = h.core.add_uri(&otpauth("ADFS", "me", SECRET)).unwrap();
+    h.core.item_update(adfs, ItemPatch { totp_entry: Some(Some(entry)), ..ItemPatch::default() }).unwrap();
+    let _ = h.notices();
+    h.core.browser_link_code(session, link(adfs, facts(page))).unwrap();
+    assert_eq!(h.notices(), [asked()]);
+    // A login of another site or kept from the extension, a frame of another site, no page at all:
+    // refused, and Lockra does not come up.
+    assert_eq!(h.core.browser_link_code(session, link(other, facts(page))), Err(Refusal::NoMatch));
+    assert_eq!(h.core.browser_link_code(session, link(hidden, facts(page))), Err(Refusal::NoMatch));
+    let framed = FrameFacts { frame_url: page.into(), top_url: "https://evil.example/".into(), frame_chain: Vec::new() };
+    assert_eq!(h.core.browser_link_code(session, link(adfs, framed)), Err(Refusal::CrossOrigin));
+    let nested = FrameFacts { frame_url: page.into(), top_url: page.into(), frame_chain: vec!["https://ads.example/".into()] };
+    assert_eq!(h.core.browser_link_code(session, link(adfs, nested)), Err(Refusal::CrossOrigin));
+    assert_eq!(h.core.browser_link_code(session, link(adfs, facts("about:blank"))), Err(Refusal::Invalid));
+    assert!(h.notices().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn asking_to_link_a_code_counts_as_a_query_and_waits_while_paused_or_locked() {
+    let mut h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let id = h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
+    let link = LinkCodeRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor") };
+    for _ in 0..QUERIES_PER_MINUTE {
+        h.core.browser_query(session, QueryRequest { facts: facts("https://github.com/"), ..QueryRequest::default() }).unwrap();
+    }
+    let _ = h.notices();
+    assert_eq!(h.core.browser_link_code(session, link.clone()), Err(Refusal::RateLimited));
+    assert_eq!(h.core.browser_link_code(session, link.clone()), Err(Refusal::Paused));
+    let asked = |n: &Notice| matches!(n, Notice::BrowserLinkCodeRequested { .. });
+    assert!(!h.notices().iter().any(asked), "Lockra does not come up");
+    h.core.browser_resume().unwrap();
+    h.core.lock_vault();
+    assert_eq!(h.core.browser_link_code(session, link), Err(Refusal::Locked));
+    assert!(!h.notices().iter().any(asked));
+}
+
+#[tokio::test(start_paused = true)]
 async fn the_next_step_of_a_sign_in_gets_the_password_once_and_moments_later() {
     let h = Harness::unlocked().await;
     let (_, session) = paired(&h).await;
@@ -629,16 +901,19 @@ async fn secrets_of_too_many_sites_pause_the_extension() {
 async fn a_busy_extension_does_not_keep_the_vault_open() {
     let h = Harness::unlocked().await;
     let (_, session) = paired(&h).await;
-    h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
+    let id = h.core.item_add(login("GitHub", "octocat", "https://github.com/", Matching::Domain)).unwrap();
     let minutes = u64::from(h.core.state().settings.auto_lock_minutes);
-    for _ in 0..minutes {
+    for minute in 0..minutes {
         advance(Duration::from_secs(60)).await;
         let _ = h.core.browser_query(session, QueryRequest { facts: facts("https://github.com/"), ..QueryRequest::default() });
         let _ = h.core.browser_fill(session, fill_at("https://github.com/")).await;
+        let _ = h.core.browser_link_code(session, LinkCodeRequest { item_id: id, facts: facts("https://github.com/") });
         let save = SaveRequest { facts: facts("https://new.example/"), username: "me".into(), password: pw("p"), ..SaveRequest::default() };
         let _ = h.core.browser_save(session, save);
         let rule = SiteRuleRequest { kind: Some(SiteRuleKind::NeverSave), facts: facts("https://other.example/") };
         let _ = h.core.browser_site_rule(session, rule);
+        let switch = SiteMatchingRequest { facts: facts("https://git.other.example/"), host: minute % 2 == 0 };
+        let _ = h.core.browser_site_matching(session, switch);
     }
     advance(Duration::from_secs(1)).await;
     assert_eq!(h.core.state().phase, Phase::Locked, "locked after the idle time, the requests notwithstanding");

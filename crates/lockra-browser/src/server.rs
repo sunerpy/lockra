@@ -316,7 +316,10 @@ impl Conn {
             Op::Generate(generate) => core.browser_generate(session, generate).map(Answer::Generated),
             Op::CopyGenerated(copy) => core.browser_copy_generated(session, copy).map(|()| Answer::Done {}),
             Op::SiteRule(rule) => core.browser_site_rule(session, rule).map(|()| Answer::Done {}),
+            Op::SiteMatching(matching) => core.browser_site_matching(session, matching).map(|()| Answer::Done {}),
             Op::Search(search) => core.browser_search(session, search).map(|items| Answer::Found { items }),
+            // Lockra comes up with the code picker; the answer does not wait for the pick.
+            Op::LinkCode(link) => core.browser_link_code(session, link).map(|()| Answer::Done {}),
             // These may wait for the user in Lockra: they answer when done.
             Op::Fill(fill) => {
                 let (core, internal, generation) = (self.core.clone(), self.internal.clone(), self.generation);

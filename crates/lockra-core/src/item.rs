@@ -123,6 +123,12 @@ pub enum SiteRuleKind {
     NeverFill,
     /// These domains share their sign-ins.
     Equivalent,
+    /// Pages of this domain and its subdomains match by their full host: a login saved for
+    /// another host of the site is not offered there, whatever this device's default. One domain.
+    MatchHost,
+    /// Pages of this domain and its subdomains match by the site (the registrable domain), whatever
+    /// this device's default. One domain.
+    MatchDomain,
 }
 
 impl SiteRuleKind {
@@ -131,6 +137,17 @@ impl SiteRuleKind {
             Self::NeverSave => "never_save",
             Self::NeverFill => "never_fill",
             Self::Equivalent => "equivalent",
+            Self::MatchHost => "match_host",
+            Self::MatchDomain => "match_domain",
+        }
+    }
+
+    /// The kind that says the opposite of this one about a domain: a domain matches one way.
+    pub(crate) fn opposite(self) -> Option<Self> {
+        match self {
+            Self::MatchHost => Some(Self::MatchDomain),
+            Self::MatchDomain => Some(Self::MatchHost),
+            Self::NeverSave | Self::NeverFill | Self::Equivalent => None,
         }
     }
 }
@@ -699,8 +716,9 @@ impl VaultItem {
     }
 }
 
-/// A rule about sites: never save there, never fill there, or domains that share their sign-ins.
-/// Merged as a whole, the later version winning.
+/// A rule about sites: never save there, never fill there, domains that share their sign-ins, or
+/// how far a login saved there reaches (the full host or the site). Merged as a whole, the later
+/// version winning.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SiteRule {
     /// Stable id; for a rule about one domain, [`SiteRule::single_id`].

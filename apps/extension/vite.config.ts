@@ -11,6 +11,7 @@ import { resolve } from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { readBuildId } from "./scripts/build-id.mjs";
 import { readFrameLook } from "./scripts/frame-look.mjs";
 
 const root = import.meta.dirname;
@@ -28,6 +29,7 @@ export default defineConfig(({ mode }) => {
   const define = {
     LOCKRA_TARGET: JSON.stringify(target),
     LOCKRA_FRAME_LOOK: JSON.stringify(readFrameLook()),
+    LOCKRA_BUILD: JSON.stringify(readBuildId(root)),
   };
   if (mode === "background" || mode === "content") {
     return {

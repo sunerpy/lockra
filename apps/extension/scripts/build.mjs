@@ -15,6 +15,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "vite";
+import { readBuildId } from "./build-id.mjs";
 import { writeZip } from "./zip.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -46,6 +47,12 @@ async function bundle(target) {
   writeFileSync(
     join(out, "manifest.json"),
     manifest(read(join(root, "manifest", `${target}.json`))),
+  );
+  // The build the scripts were made from (vite.config.ts's LOCKRA_BUILD): an extension running
+  // another one reloads itself once Lockra puts this copy in its folder (background/update.ts).
+  writeFileSync(
+    join(out, "lockra-build.json"),
+    `${JSON.stringify({ build: readBuildId(root) })}\n`,
   );
   return out;
 }

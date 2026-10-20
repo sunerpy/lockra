@@ -8,6 +8,7 @@ import type { BrowserFeatures, Feature, Holder } from "../popup/browser-features
 import type { PageClient } from "../popup/client";
 import { usePage } from "../popup/usePage";
 import { useText } from "../shared/text";
+import { StaleNote, staleBackground } from "../shared/StaleNote";
 import { UpdateNote } from "../shared/UpdateNote";
 
 export const SOURCE_URL = "https://firlab.app/lockra/";
@@ -104,7 +105,9 @@ export function Options({ client, locale }: { client: PageClient; locale: string
               </Button>
             ) : null}
           </StatusRow>
-          {state?.update ? (
+          {staleBackground(state) ? (
+            <StaleNote onReload={client.reload} className="mt-2" />
+          ) : state?.update ? (
             <UpdateNote state={state} target={client.target} className="mt-2" />
           ) : null}
         </Section>

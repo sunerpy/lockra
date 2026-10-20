@@ -67,6 +67,7 @@ import {
   type ScoreView,
   type SecretChange,
   type Settings,
+  type SiteRuleKind,
   type SiteRuleView,
   type StorageConfig,
   type StorageView,
@@ -228,6 +229,11 @@ export const MOCK_SYNC_KEY =
   "LKS1-MFRG-GZDF-MZTW-Q2LK-NNWG-23TP-OBYX-E43U-OR3W-C6DZ-PI2D-AMBR-GQ2D-ARQA";
 const FREE_ATTEMPTS = 3;
 const EXPORT_PER_CODE = 10;
+/** The site rules of a single domain's matching, each with the other way it replaces. */
+const OTHER_MATCHING: Partial<Record<SiteRuleKind, SiteRuleKind>> = {
+  match_host: "match_domain",
+  match_domain: "match_host",
+};
 
 /** A stand-in for zxcvbn: the common passwords score 0, then length and variety count. */
 function mockScore(password: string): ScoreView {
@@ -1769,16 +1775,22 @@ export class MockBackend implements Backend {
       case "site_rule_add": {
         this.requirePasswords();
         const domains = command.domains.map((d) => d.trim().toLowerCase()).filter((d) => d !== "");
-        if (domains.length === 0 || (command.kind === "equivalent" && domains.length < 2))
+        const other = OTHER_MATCHING[command.kind];
+        if (
+          domains.length === 0 ||
+          (command.kind === "equivalent" && domains.length < 2) ||
+          (other !== undefined && domains.length !== 1)
+        )
           throw new LockraError("item_invalid");
-        const same = this.siteRules.find(
-          (r) =>
-            r.kind === command.kind &&
-            domains.length === 1 &&
-            r.domains.length === 1 &&
-            r.domains[0] === domains[0],
-        );
-        if (!same) this.siteRules.push({ id: nextId(), kind: command.kind, domains });
+        const single = (r: SiteRuleView, kind: string) =>
+          r.kind === kind &&
+          domains.length === 1 &&
+          r.domains.length === 1 &&
+          r.domains[0] === domains[0];
+        // A domain is matched one way: by its full host or by its registrable domain.
+        if (other !== undefined) this.siteRules = this.siteRules.filter((r) => !single(r, other));
+        if (!this.siteRules.some((r) => single(r, command.kind)))
+          this.siteRules.push({ id: nextId(), kind: command.kind, domains });
         this.itemsChanged();
         return null;
       }
@@ -2687,6 +2699,13 @@ export class MockBackend implements Backend {
       title: view.title,
     });
     return id;
+  }
+
+  /** Test hook: an extension's save prompt took a one-time code, and the user asks there to link
+   *  one to login `itemId` (「关联验证码…」): the window comes up on it with its code picker open. */
+  simulateLinkCodeRequest(itemId: string, browser: string): void {
+    const { title } = this.item(itemId).view;
+    this.notice({ type: "browser_link_code_requested", item_id: itemId, browser, title });
   }
 
   /** The logins or the site rules changed: the list is to be asked for again. */

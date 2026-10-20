@@ -525,6 +525,18 @@ fn a_site_rule_about_one_domain_has_the_same_id_everywhere() {
 }
 
 #[test]
+fn site_rule_kinds_keep_their_names_and_the_matching_ones_say_the_opposite() {
+    let kinds = [SiteRuleKind::NeverSave, SiteRuleKind::NeverFill, SiteRuleKind::Equivalent, SiteRuleKind::MatchHost, SiteRuleKind::MatchDomain];
+    assert_eq!(serde_json::to_string(&kinds).unwrap(), r#"["never_save","never_fill","equivalent","match_host","match_domain"]"#);
+    for kind in kinds {
+        assert_eq!(serde_json::to_value(kind).unwrap(), kind.name(), "a single rule's id hashes the name it is written with");
+    }
+    assert_eq!(SiteRuleKind::MatchHost.opposite(), Some(SiteRuleKind::MatchDomain));
+    assert_eq!(SiteRuleKind::MatchDomain.opposite(), Some(SiteRuleKind::MatchHost));
+    assert!([SiteRuleKind::NeverSave, SiteRuleKind::NeverFill, SiteRuleKind::Equivalent].iter().all(|kind| kind.opposite().is_none()));
+}
+
+#[test]
 fn write_ids_are_random_and_the_local_parts_say_when_they_are_empty() {
     assert_ne!(random_write_id(), random_write_id());
     assert!(ItemListView::default().is_empty());

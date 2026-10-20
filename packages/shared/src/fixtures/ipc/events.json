@@ -42,7 +42,8 @@
           "confirm_fill": false,
           "cross_origin_frames": "never",
           "on_page_load": false,
-          "match_port": false
+          "match_port": false,
+          "match_host": false
         },
         "activity": []
       },
@@ -172,6 +173,15 @@
       "id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000029",
       "browser": "firefox",
       "title": "Bank"
+    }
+  },
+  {
+    "type": "notice",
+    "notice": {
+      "type": "browser_link_code_requested",
+      "item_id": "0f3f1a1e-8d4b-4c8e-9f7a-000000000014",
+      "browser": "chrome",
+      "title": "ADFS"
     }
   },
   {

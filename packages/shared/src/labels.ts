@@ -122,6 +122,11 @@ export function noticeText(t: TFunction, notice: Notice, name?: string): string 
         browser: browserName(notice.browser),
         title: notice.title,
       });
+    case "browser_link_code_requested":
+      return t("notice.browserLinkCodeRequested", {
+        browser: browserName(notice.browser),
+        title: notice.title,
+      });
     case "browser_paused":
       return t("notice.browserPaused", {
         name:

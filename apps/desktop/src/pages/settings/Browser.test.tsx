@@ -7,7 +7,7 @@ import {
   type MockOptions,
   sampleEntries,
 } from "@lockra/shared/mock";
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import { ready, renderApp } from "../../test/render";
 
 function paired(over: Partial<PairedView> = {}): PairedView {
@@ -333,6 +333,31 @@ describe("Settings › 浏览器", () => {
     expect(screen.queryByTestId("verify-dialog")).not.toBeInTheDocument();
   });
 
+  it("matches the full host once asked, right after the port, both ways without proof", async () => {
+    const backend = core({ settings: { run_in_background: true } });
+    await backend.browserEnable(["chrome"]);
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const host = await pane.findByRole("switch", { name: "按完整域名匹配" });
+    const names = pane.getAllByRole("switch").map((s) => s.getAttribute("aria-label"));
+    expect(names.indexOf("按完整域名匹配")).toBe(names.indexOf("匹配端口") + 1);
+    expect(host).not.toBeChecked();
+    expect(pane.getByText(/在 git.example.com 也会列出 wiki.example.com 的/)).toBeInTheDocument();
+    await user.click(host);
+    expect(backend.calls.at(-1)).toEqual({
+      command: "browser_set_policy",
+      policy: expect.objectContaining({ match_host: true, match_port: false }),
+    });
+    expect(await pane.findByRole("switch", { name: "按完整域名匹配" })).toBeChecked();
+    await user.click(host);
+    expect(backend.calls.at(-1)).toEqual({
+      command: "browser_set_policy",
+      policy: expect.objectContaining({ match_host: false }),
+    });
+    expect(screen.queryByTestId("verify-dialog")).not.toBeInTheDocument();
+  });
+
   it("turns filling as pages load on after its risks and the proof", async () => {
     const backend = core({ settings: { run_in_background: true } });
     await backend.browserEnable(["chrome"]);
@@ -388,6 +413,79 @@ describe("Settings › 浏览器", () => {
     await user.click(never.getByRole("button", { name: "移除「bank.example.cn」" }));
     expect(backend.calls.some((c) => c.command === "site_rule_remove")).toBe(true);
     expect(await never.findByText("没有网站")).toBeInTheDocument();
+  });
+
+  it("lists the sites matched their own way, each with its level, and removes one", async () => {
+    const backend = core({ settings: { run_in_background: true } });
+    await backend.browserEnable(["chrome"]);
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "match_host",
+      domains: ["git.example.com"],
+    });
+    await backend.dispatch({
+      command: "site_rule_add",
+      kind: "match_domain",
+      domains: ["wiki.example.com"],
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const matching = within(await pane.findByTestId("sites-matching"));
+    expect(matching.getByText("匹配方式")).toBeInTheDocument();
+    expect(matching.getByText(/不跟随上面的默认设置/)).toBeInTheDocument();
+    expect(matching.getAllByTestId("site-rule").map((row) => row.textContent)).toEqual([
+      "git.example.com完整域名",
+      "wiki.example.com根域名",
+    ]);
+    // The two lists keep to their own kinds.
+    expect(within(pane.getByTestId("sites-never_fill")).getByText("没有网站")).toBeInTheDocument();
+    expect(within(pane.getByTestId("sites-never_save")).getByText("没有网站")).toBeInTheDocument();
+    const [git] = (await backend.getState()).site_rules;
+    await user.click(matching.getByRole("button", { name: "移除「git.example.com」" }));
+    expect(backend.calls).toContainEqual({ command: "site_rule_remove", id: git?.id });
+    await waitFor(() => expect(matching.queryByText("git.example.com")).not.toBeInTheDocument());
+    expect(matching.getAllByTestId("site-rule").map((row) => row.textContent)).toEqual([
+      "wiki.example.com根域名",
+    ]);
+  });
+
+  it("adds a site matched by its full host unless the user picks its domain", async () => {
+    const backend = core({ settings: { run_in_background: true } });
+    await backend.browserEnable(["chrome"]);
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const matching = within(await pane.findByTestId("sites-matching"));
+    expect(matching.getByText("没有网站")).toBeInTheDocument();
+    await user.click(matching.getByRole("button", { name: "添加网站…" }));
+    let add = within(await screen.findByRole("dialog", { name: "添加到「匹配方式」" }));
+    expect(add.getByRole("radio", { name: "完整域名" })).toHaveAttribute("aria-checked", "true");
+    expect(add.getByText("它的子域也按这个方式匹配。")).toBeInTheDocument();
+    await user.type(add.getByLabelText("网站"), "git.example.com");
+    await user.click(add.getByRole("button", { name: "添加" }));
+    expect(backend.calls).toContainEqual({
+      command: "site_rule_add",
+      kind: "match_host",
+      domains: ["git.example.com"],
+    });
+    expect(await matching.findByText("完整域名")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "添加到「匹配方式」" })).not.toBeInTheDocument();
+    // The same site by its domain: the other way goes.
+    await user.click(matching.getByRole("button", { name: "添加网站…" }));
+    add = within(await screen.findByRole("dialog", { name: "添加到「匹配方式」" }));
+    await user.type(add.getByLabelText("网站"), "git.example.com");
+    await user.click(add.getByRole("radio", { name: "根域名" }));
+    await user.click(add.getByRole("button", { name: "添加" }));
+    expect(backend.calls).toContainEqual({
+      command: "site_rule_add",
+      kind: "match_domain",
+      domains: ["git.example.com"],
+    });
+    expect(await matching.findByText("根域名")).toBeInTheDocument();
+    expect(matching.getAllByTestId("site-rule").map((row) => row.textContent)).toEqual([
+      "git.example.com根域名",
+    ]);
   });
 
   it("shows the recent activity, and clears it", async () => {
