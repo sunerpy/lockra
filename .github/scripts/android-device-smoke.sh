@@ -122,17 +122,21 @@ left_screen() {
   done
 }
 # The centre of the node labelled with one of the words: the text or description equal to it,
-# else containing it.
+# else containing it. Only its part above $tap_bottom counts: a node cut off there is not on the
+# screen yet (reveal scrolls it up).
 centre() {
-  python3 - "$out/ui.xml" "$@" <<'PY'
+  python3 - "$out/ui.xml" "${tap_bottom:-1000000}" "$@" <<'PY'
 import re, sys, xml.etree.ElementTree as ET
-path, *words = sys.argv[1:]
+path, bottom, *words = sys.argv[1:]
+bottom = int(bottom)
 nodes = []
 for node in ET.parse(path).getroot().iter("node"):
     m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
     if m:
         x1, y1, x2, y2 = map(int, m.groups())
-        if x2 > x1 and y2 > y1:
+        y2 = min(y2, bottom)
+        # At least 8 px of it to tap: a sliver at the edge is no target.
+        if x2 > x1 and y2 - y1 >= 8:
             nodes.append(((node.get("text") or "").strip(), (node.get("content-desc") or "").strip(), (x1 + x2) // 2, (y1 + y2) // 2))
 for exact in (True, False):
     for text, desc, x, y in nodes:
@@ -287,6 +291,11 @@ adb shell am start -W -n "$package/.MainActivity" >"$out/start.txt" 2>&1 || fail
 # an emulator running arm64 code through its ARM translation is slow.
 showing 'Create vault|创建保险库' 120
 full_bottom=$(webview_bottom) || fail "no webview on the screen"
+# A tap this close to the screen's bottom edge goes to the system's navigation handle, never to the
+# app (CI, 2026-10-18 and 2026-10-20: a button the edge cut off was tapped at y 634 of 640, and the
+# launcher took it): reveal() takes only what stands above this line, 48 dp up.
+density=$(adb shell wm density | sed -n 's/.*: *\([0-9]*\).*/\1/p' | tail -1)
+tap_bottom=$((full_bottom - 48 * ${density:-160} / 160))
 
 # A vault: the password typed twice, then the codes screen (Argon2id runs here: give it time).
 type_into "$password" 'Master password' '主密码'
