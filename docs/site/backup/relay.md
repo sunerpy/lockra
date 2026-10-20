@@ -124,7 +124,9 @@ they share one access token.
 
 ### Registering new sync spaces by code
 
-<StatusTag status="building" /> To let only the sync spaces you approve onto your relay, without
+<StatusTag status="available" /> Available from version 0.15.0.
+
+To let only the sync spaces you approve onto your relay, without
 copying files or restarting it for each one, set `LOCKRA_RELAY_REGISTRATION=code` and restart the
 relay once. From then on a new sync space needs a registration code, which you make on the server:
 

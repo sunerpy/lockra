@@ -100,7 +100,9 @@ export LOCKRA_RELAY_ALLOWED_SPACES="$space=$access"
 
 ### 用注册码登记新的同步空间
 
-<StatusTag status="building" /> 只想让你同意的同步空间使用中继，又不想每次都复制文件、重启中继时，请设置 `LOCKRA_RELAY_REGISTRATION=code` 并重启一次中继。此后新的同步空间都需要注册码，注册码在服务器上生成：
+<StatusTag status="available" /> 自 0.15.0 版起提供。
+
+只想让你同意的同步空间使用中继，又不想每次都复制文件、重启中继时，请设置 `LOCKRA_RELAY_REGISTRATION=code` 并重启一次中继。此后新的同步空间都需要注册码，注册码在服务器上生成：
 
 ```sh
 sudo lockra-relay new-code --data /var/lib/lockra-relay --note "Anna 的手机"

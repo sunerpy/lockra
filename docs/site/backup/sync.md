@@ -266,7 +266,7 @@ none of them.
 2. Check **This device's name**, enter the master password, and choose **Start syncing**.
 3. Save the recovery key **Settings › Sync** reminds you of, as for any storage.
 
-<StatusTag status="building" /> When the relay serves registered sync spaces only
+<StatusTag status="available" /> From version 0.15.0, when the relay serves registered sync spaces only
 ([Registering new sync spaces by code](/backup/relay#registering-new-sync-spaces-by-code)), step 1
 also needs the code the relay's administrator gave you, in **Registration code (optional)** under
 the relay's address. Without it, the sync fails with "This relay serves registered sync spaces
