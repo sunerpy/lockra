@@ -301,11 +301,19 @@ adb shell am start -W -n "$package/.MainActivity" >"$out/start.txt" 2>&1 || fail
 # an emulator running arm64 code through its ARM translation is slow.
 showing 'Create vault|创建保险库' 120
 full_bottom=$(webview_bottom) || fail "no webview on the screen"
-# A tap this close to the screen's bottom edge goes to the system's navigation handle, never to the
-# app (CI, 2026-10-18 and 2026-10-20: a button the edge cut off was tapped at y 634 of 640, and the
-# launcher took it): reveal() takes only what stands above this line, 48 dp up.
-density=$(adb shell wm density | sed -n 's/.*: *\([0-9]*\).*/\1/p' | tail -1)
-tap_bottom=$((full_bottom - 48 * ${density:-160} / 160))
+# A tap on the navigation bar at the screen's bottom edge goes to the system's gesture handle, never
+# to the app (CI, 2026-10-18 and 2026-10-20: a button the edge cut off was tapped at y 634 and 638
+# of 640, and the launcher took it): reveal() takes only what stands above the bar. Its top is the
+# device's own navigationBars inset where `dumpsys window` lists one, else 24 dp up (the gesture
+# bar's height; the last button of a page, at 588–627 of 640, has to stay tappable).
+tap_bottom=$(adb shell dumpsys window 2>/dev/null | tr -d '\r' |
+  sed -n 's/.*type=navigationBars frame=\[[0-9]*,\([0-9]*\)\]\[[0-9]*,\([0-9]*\)\].*/\1 \2/p' |
+  awk -v full="$full_bottom" '$2 == full && $1 > full / 2 && (top == "" || $1 < top) { top = $1 } END { print top }')
+if [ -z "$tap_bottom" ]; then
+  density=$(adb shell wm density | sed -n 's/.*: *\([0-9]*\).*/\1/p' | tail -1)
+  tap_bottom=$((full_bottom - 24 * ${density:-160} / 160))
+fi
+echo "android-device-smoke: taps stay above y $tap_bottom of $full_bottom"
 
 # A vault: the password typed twice, then the codes screen (Argon2id runs here: give it time).
 type_into "$password" 'Master password' '主密码'
