@@ -84,7 +84,9 @@ this applies there.
 
 ### When the extension needs a reload
 
-<StatusTag status="building" /> The browser may go on running the extension's older background
+<StatusTag status="available" /> Available from version 0.16.0.
+
+The browser may go on running the extension's older background
 after its folder changed, while the popup, the options page and the menus read the new files as
 they open: some of their buttons would then do nothing. The popup and the options page say so and
 offer **Reload the extension**, and the menu by a field shows "Lockra's extension needs a reload"
@@ -158,10 +160,10 @@ Shortcuts**).
 With [site access](#site-access), Lockra's menu opens at a sign-in field when you click into it: the
 site's logins, chosen with the arrow keys and Enter, or a click; Esc closes it. Lockra's mark at the
 end of the field opens it again. Where the browser may list the passwords it keeps under the
-field, Lockra's menu opens above the field instead, or under it when there is no room above
+field, Lockra's menu opens above the field instead
 ([The browser's own password manager](#the-browser-s-own-password-manager)). While the browser's
 list is open, the arrow keys and Esc go to it: Esc closes it, and the arrow keys then move in
-Lockra's menu. <StatusTag status="building" /> With no room above, the menu opens beside the field,
+Lockra's menu. <StatusTag status="available" /> From version 0.16.0, with no room above, the menu opens beside the field,
 and under it only when there is no room beside it either ([Beside the field](#beside-the-field)).
 
 <StatusTag status="available" /> From version 0.13.1, when a sign-in page puts the cursor in its
@@ -244,7 +246,9 @@ logins that have a linked code: choose one, and its code goes in.
 
 ### A code field that hides the code
 
-<StatusTag status="building" /> Some single sign-on pages ask for the code in a step of its own, in
+<StatusTag status="available" /> Available from version 0.16.0.
+
+Some single sign-on pages ask for the code in a step of its own, in
 a field that hides what you type, as a password field does. Lockra takes such a field for a code
 field when the page marks it for one-time codes, or when its name says so (`OTP` or
 `dynamicPassword`, for example, or 动态口令 on a Chinese page) and it is the only field to type in
@@ -278,14 +282,18 @@ already.
 
 ### Checking the password before saving
 
-<StatusTag status="building" /> The password in **Save to Lockra?** can be changed before you save
+<StatusTag status="available" /> Available from version 0.16.0.
+
+The password in **Save to Lockra?** can be changed before you save
 it, as the title, the user name and the group can: what a page sends as a password is not always
 yours. **Update the password in Lockra?** shows the new password too, hidden until you choose
 **Show password**, and it can be changed there as well. **Save** and **Update** need a password.
 
 ### A code sent as a password
 
-<StatusTag status="building" /> Some sign-in steps take the code in a field Lockra cannot tell from
+<StatusTag status="available" /> Available from version 0.16.0.
+
+Some sign-in steps take the code in a field Lockra cannot tell from
 a password field. When what a form sent looks like a one-time code (six to eight digits), the
 prompt says "This looks like a one-time code, not a password." and offers **It is a code**, which
 saves nothing. When the login Lockra filled for the site in that tab in the last five minutes, or
@@ -331,10 +339,11 @@ popup) has, under **The browser's own features**:
 - **Also turn off address and payment autofill** (Chrome and Edge) stops the browser suggesting
   addresses and cards in forms. Lockra fills neither, so leave it off if you want the browser to.
 - **Keep clear of the browser's own password list**, on by default: Lockra's menu opens above the
-  field and the browser's list under it; with no room above, the menu opens under the field. In
+  field and the browser's list under it. In
   Firefox, once Lockra has taken over its passwords, Firefox lists none and the menu opens under the
   field. Turn it off once the browser keeps no passwords, to have the menu under the field.
-  <StatusTag status="building" /> With no room above, the menu opens beside the field first
+  <StatusTag status="available" /> From version 0.16.0, with no room above, the menu opens beside
+  the field first, and under it only when there is no room beside it either
   ([Beside the field](#beside-the-field)).
 - **Open Lockra's menu when a field is clicked**, on by default: off, the menu opens only from
   Lockra's mark at the end of the field.
@@ -345,7 +354,9 @@ alone.
 
 ### Beside the field
 
-<StatusTag status="building" /> With **Keep clear of the browser's own password list** on, Lockra's
+<StatusTag status="available" /> Available from version 0.16.0.
+
+With **Keep clear of the browser's own password list** on, Lockra's
 menu opens beside the field when there is no room for it above: on the left of the field, or, when
 the left has no room either, on the right, past the browser's list; its top is level with the
 field's as far as the window allows. Only with no room on either side does it open under the
@@ -382,7 +393,9 @@ on or off asks for nothing: it only narrows what the extension gets.
 
 ### Matching the full host
 
-<StatusTag status="building" /> **Settings › Browser › Autofill** also has **Match the full host**,
+<StatusTag status="available" /> Available from version 0.16.0.
+
+**Settings › Browser › Autofill** also has **Match the full host**,
 off by default. Off, a login whose address uses the **Domain** rule is offered on every host of its
 site: one saved for `git.example.com` shows on `wiki.example.com` and on `example.com` too. On, the
 **Domain** rule matches as **Host** does, on the host and port of the saved address only, and the
@@ -433,7 +446,7 @@ extension offers no save or update prompt, and **Never fill**, where it fills no
 site…** adds one; a site covers its subdomains. The lists are kept in the vault and sync to your
 other devices.
 
-<StatusTag status="building" /> Under the two lists, a third card, **Matching**, holds the sites
+<StatusTag status="available" /> From version 0.16.0, under the two lists, a third card, **Matching**, holds the sites
 that match their own way, by **Full host** or by **Domain**
 ([Matching the full host](#matching-the-full-host)).
 
@@ -485,7 +498,8 @@ window otherwise.
   menu for you: a click counts only when the menu has been visible, uncovered and still for at least
   300 milliseconds.
 - **No say in the rules.** The extension cannot unlock Lockra, and cannot let itself do more:
-  only **Settings › Browser** in Lockra can. <StatusTag status="building" /> The one exception is
+  only **Settings › Browser** in Lockra can. <StatusTag status="available" /> From version 0.16.0, the one
+  exception is
   the popup's **Match the full host** switch: it picks the full host or the domain for the page's
   site without proof, since matching by the domain is Lockra's default and never gives the
   extension more logins than the default does, and no page can work the popup.

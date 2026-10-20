@@ -88,8 +88,10 @@ made-up site; a sharper version plays on the [website](https://firlab.app/lockra
   passwords, and can turn off the browser's own offer to save them, so that only Lockra asks.
   From 0.12.0, a menu of several logins can be searched, a login can be deleted from the menu or
   the popup after a question, the popup fills or copies a login's code where it did not come by
-  itself, and matching can count the port too. Lockra decides every fill, and can keep running in
-  the tray for it. Chrome, Edge and Brave load
+  itself, and matching can count the port too. From 0.16.0, matching can go by the full host (as
+  the default, for single sites, or from the popup), a code field that masks the code as a password
+  field does gets the code too, and a code sent as a password can be linked to its login instead of
+  saved. Lockra decides every fill, and can keep running in the tray for it. Chrome, Edge and Brave load
   it unpacked from the folder Lockra keeps it in, and Lockra updates it there with itself (from
   0.11.1); the Edge Add-ons and Firefox Add-ons listings, which Firefox needs,
   are not live yet ([extension guide](https://firlab.app/lockra/passwords/browser)).
