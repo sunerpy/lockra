@@ -323,6 +323,8 @@ fn state(phase: Phase) -> UiState {
             vec![
                 SiteRuleView { id: id(30), kind: "never_save".into(), domains: vec!["bank.example".into()] },
                 SiteRuleView { id: id(31), kind: "equivalent".into(), domains: vec!["example.com".into(), "example.co.uk".into()] },
+                SiteRuleView { id: id(32), kind: "match_host".into(), domains: vec!["example.cn".into()] },
+                SiteRuleView { id: id(33), kind: "match_domain".into(), domains: vec!["git.example.cn".into()] },
             ]
         } else {
             Vec::new()
@@ -371,6 +373,7 @@ fn notices() -> Vec<Notice> {
         Notice::ItemSaved { item_id: id(20), title: "GitHub".into(), updated: true },
         Notice::BrowserPairRequested { id: id(40), browser: "chrome".into(), code: "123456".into() },
         Notice::BrowserConfirmRequested { id: id(41), browser: "firefox".into(), title: "Bank".into() },
+        Notice::BrowserLinkCodeRequested { item_id: id(20), browser: "chrome".into(), title: "ADFS".into() },
         Notice::BrowserPaused { pairing: id(42), browser: "edge".into(), label: "Work".into() },
         Notice::BrowserUnlockRequested { browser: "chrome".into() },
         Notice::OpenPalette,
@@ -496,7 +499,7 @@ fn commands() -> Vec<Value> {
         json!({"command": "browser_activity_clear"}),
         json!({"command": "browser_set_policy", "policy": {
             "fill_otp": true, "copy_otp": false, "auto_submit": false, "confirm_fill": true, "cross_origin_frames": "ask", "on_page_load": false,
-            "match_port": true
+            "match_port": true, "match_host": true
         }, "password": "a new password"}),
     ]
 }
@@ -571,7 +574,7 @@ fn browser() -> BrowserView {
                 expires_at_ms: T0 + 59_000,
             },
         ],
-        policy: BrowserPolicy { confirm_fill: true, cross_origin_frames: Lenient::Known(FrameRule::Ask), ..BrowserPolicy::default() },
+        policy: BrowserPolicy { confirm_fill: true, cross_origin_frames: Lenient::Known(FrameRule::Ask), match_host: true, ..BrowserPolicy::default() },
         activity: vec![
             ActivityView {
                 at_ms: T0 - 1_000,
@@ -974,6 +977,7 @@ async fn dispatch_answers_and_leaks_nothing() {
         json!({"command": "item_update", "id": item_id, "patch": {"favorite": true, "urls": [{"url": "https://github.com/", "matching": "host"}]}}),
         json!({"command": "item_copy", "id": item_id, "part": {"type": "username"}}),
         json!({"command": "site_rule_add", "kind": "never_save", "domains": ["bank.example"]}),
+        json!({"command": "site_rule_add", "kind": "match_host", "domains": ["example.cn"]}),
         json!({"command": "password_score", "password": LOGIN_PASSWORD}),
     ] {
         ok(run(command).await, &mut answers);

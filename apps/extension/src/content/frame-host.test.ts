@@ -22,13 +22,13 @@ function declared(frame: FrameHost, property: string): string | undefined {
   )?.[1];
 }
 
-/** A field 36 px high whose top is `top` px down the window. */
-function field(top: number): HTMLInputElement {
+/** A field 36 px high whose top is `top` px down the window (and `left` px from its left edge). */
+function field(top: number, left = 100, width = 360): HTMLInputElement {
   const el = document.createElement("input");
   document.body.append(el);
   el.getBoundingClientRect = () => {
-    const rect = { x: 100, y: top, left: 100, top, width: 360, height: 36 };
-    return { ...rect, right: 460, bottom: top + 36, toJSON: () => rect };
+    const rect = { x: left, y: top, left, top, width, height: 36 };
+    return { ...rect, right: left + width, bottom: top + 36, toJSON: () => rect };
   };
   return el;
 }
@@ -53,7 +53,7 @@ describe("FrameHost", () => {
     low.remove();
   });
 
-  it("opens a menu above its field where the browser lists its own passwords under it, under the field when there is no room above", () => {
+  it("opens a menu above its field where the browser lists its own passwords under it, beside the field when there is no room above", () => {
     // 2026-10-16, the user: Chrome's list of the passwords it keeps opens under the field (above
     // only when there is no room under it), right where Lockra's menu opened.
     const menu = host("menu");
@@ -62,11 +62,30 @@ describe("FrameHost", () => {
     menu.resize(200);
     expect(declared(menu, "top")).toBe("94px");
     menu.remove();
-    const high = host("menu");
-    high.show({ anchor: field(120), side: "above" });
-    high.resize(200);
-    expect(declared(high, "top")).toBe("162px");
-    high.remove();
+    // 2026-10-20, a code field near the top of NDKEY's ADFS page: under it, Lockra's menu and
+    // Chrome's list lay one on the other. Beside the field instead, its left side first.
+    const left = host("menu");
+    left.show({ anchor: field(120, 600, 170), side: "above" });
+    left.resize(300);
+    expect([declared(left, "left"), declared(left, "top")]).toEqual(["254px", "120px"]);
+    left.remove();
+    // Its right side clears the browser's list too, which is as wide as the field or wider.
+    const right = host("menu");
+    right.show({ anchor: field(120), side: "above" });
+    right.resize(200);
+    expect([declared(right, "left"), declared(right, "top")]).toEqual(["466px", "120px"]);
+    right.remove();
+    // A tall menu stays in the window; with no room on either side, under the field.
+    const tall = host("menu");
+    tall.show({ anchor: field(500, 600, 170), side: "above" });
+    tall.resize(600);
+    expect([declared(tall, "left"), declared(tall, "top")]).toEqual(["254px", "160px"]);
+    tall.remove();
+    const wide = host("menu");
+    wide.show({ anchor: field(120, 100, 900), side: "above" });
+    wide.resize(200);
+    expect([declared(wide, "left"), declared(wide, "top")]).toEqual(["100px", "162px"]);
+    wide.remove();
   });
 
   it("lifts the frame from the page: the shadow the frame would cut off, around the host", () => {

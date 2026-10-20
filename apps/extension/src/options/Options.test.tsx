@@ -23,6 +23,7 @@ function state(change: Partial<PopupState> = {}): PopupState {
     unlockAsked: false,
     pairedAt: Date.UTC(2026, 9, 12, 12),
     update: null,
+    build: LOCKRA_BUILD,
     ...change,
   };
 }
@@ -39,6 +40,7 @@ async function setup(initial: PopupState, extra: Partial<PageClient> = {}) {
     removeAccess: vi.fn(async () => true),
     openOptions: vi.fn(),
     close: vi.fn(),
+    reload: vi.fn(),
     copyText: vi.fn(async () => undefined),
     shortcuts: async () => ({ fill: "Ctrl+Shift+L", popup: "" }),
     browserFeatures: async () => ({ passwords: "browser", forms: "browser" }),
@@ -75,6 +77,13 @@ describe("the options page", () => {
     expect(screen.getByTestId("popup-update")).toHaveTextContent(
       "这个扩展是 0.10.1，比 Lockra 0.10.2 旧",
     );
+  });
+
+  it("asks for a reload in the connection when the background is of another build", async () => {
+    const { client } = await setup(state({ build: undefined }));
+    expect(screen.getByTestId("popup-stale")).toHaveTextContent("扩展的后台还是旧版本");
+    fireEvent.click(screen.getByRole("button", { name: "重新加载扩展" }));
+    expect(client.reload).toHaveBeenCalledTimes(1);
   });
 
   it("shows the pairing and unpairs it", async () => {

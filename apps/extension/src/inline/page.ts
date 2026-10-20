@@ -27,6 +27,8 @@ export interface InlineOptions {
   token: string;
   connect(): InlinePort;
   t: ExtensionT;
+  /** Reload the extension (`runtime.reload`): the background is of another build. */
+  reload?: () => void;
   /** The browser's observers (the tests give theirs; jsdom has none). */
   IntersectionObserver?: typeof IntersectionObserver | undefined;
   ResizeObserver?: typeof ResizeObserver | undefined;
@@ -64,8 +66,9 @@ export class InlinePage {
     const port = this.options.connect();
     this.port = port;
     port.onMessage((message) => {
-      if (message.kind === "view") this.render(message.view);
-      else this.clear();
+      if (message.kind !== "view") this.clear();
+      else if (message.build === LOCKRA_BUILD) this.render(message.view);
+      else this.stale();
     });
     port.onDisconnect(() => {
       this.port = null;
@@ -238,6 +241,42 @@ export class InlinePage {
     const body =
       view.view === "save" || view.view === "update" ? this.prompt(view) : this.menu(view);
     this.root.replaceChildren(body);
+    this.afterRender();
+  }
+
+  /** The background is of another build (an older one the browser still runs, its files having
+   *  changed under it): what it would show may not be what this page draws, and what this page's
+   *  buttons ask it may be nothing it knows. A reload of the extension instead. */
+  private stale(): void {
+    const t = (key: ExtensionKey) => this.t(key);
+    this.view = null;
+    this.searching = null;
+    const reload = this.button(
+      t("inline.staleReload"),
+      "primary",
+      () => this.options.reload?.(),
+      "refresh",
+    );
+    this.root.replaceChildren(
+      this.el(
+        "div",
+        "overflow-hidden rounded-10 border border-border bg-surface-solid",
+        this.el(
+          "div",
+          "flex h-[34px] items-center gap-2 px-3",
+          logo(this.options.doc, 18),
+          this.el("span", "min-w-0 flex-1 text-[12px] font-semibold text-fg", "Lockra"),
+          this.iconButton("x", t("inline.close"), () => this.act({ type: "close" })),
+        ),
+        this.el("div", "h-px bg-border"),
+        this.el(
+          "div",
+          "p-1",
+          this.message("refresh", t("inline.staleTitle"), t("inline.staleBody")),
+          this.el("div", "flex px-2.5 pb-2.5 pl-9", reload),
+        ),
+      ),
+    );
     this.afterRender();
   }
 
@@ -595,31 +634,38 @@ export class InlinePage {
       ),
       this.iconButton("x", t("inline.close"), () => this.act({ type: "close" })),
     );
+    // The password as the form sent it, masked, and the user's to correct: what a page sends as a
+    // password is not always one.
+    const passwordInput = this.input(view.password);
+    passwordInput.type = this.revealed ? "text" : "password";
+    passwordInput.className = "mono";
+    const reveal = this.iconButton(
+      this.revealed ? "eyeOff" : "eye",
+      t(this.revealed ? "save.hide" : "save.show"),
+      () => {
+        // In place: drawn again, the fields would lose what the user changed.
+        this.revealed = !this.revealed;
+        passwordInput.type = this.revealed ? "text" : "password";
+        reveal.replaceChildren(icon(this.options.doc, this.revealed ? "eyeOff" : "eye", 14));
+        const label = t(this.revealed ? "save.hide" : "save.show");
+        reveal.setAttribute("aria-label", label);
+        reveal.title = label;
+      },
+    );
+    const password = this.field(t("save.password"), passwordInput, reveal);
     let body: HTMLElement;
     let primary: HTMLButtonElement;
     let dismiss: string;
     if (view.view === "save") {
       const titleInput = this.input(view.title);
       const usernameInput = this.input(view.username);
-      const passwordInput = this.input(view.password);
-      passwordInput.type = this.revealed ? "text" : "password";
-      passwordInput.readOnly = true;
-      passwordInput.className = "mono";
       const groupInput = this.input("", t("save.groupPlaceholder"));
-      const reveal = this.iconButton(
-        this.revealed ? "eyeOff" : "eye",
-        t(this.revealed ? "save.hide" : "save.show"),
-        () => {
-          this.revealed = !this.revealed;
-          this.render(view);
-        },
-      );
       body = this.el(
         "div",
         "flex flex-col gap-2.5",
         this.field(t("save.fieldTitle"), titleInput),
         this.field(t("save.username"), usernameInput),
-        this.field(t("save.password"), passwordInput, reveal),
+        password,
         this.field(t("save.group"), groupInput),
       );
       primary = this.button(t("save.save"), "primary", (event) =>
@@ -628,6 +674,7 @@ export class InlinePage {
             type: "save",
             title: titleInput.value,
             username: usernameInput.value,
+            password: passwordInput.value,
             group: groupInput.value,
           },
           event,
@@ -650,12 +697,51 @@ export class InlinePage {
           ),
         ),
         this.el("p", "text-[12.5px] leading-normal text-fg-muted", t("update.body")),
+        password,
       );
       primary = this.button(t("update.update"), "primary", (event) =>
-        this.act({ type: "update" }, event),
+        this.act({ type: "update", password: passwordInput.value }, event),
       );
       dismiss = t("update.dismiss");
     }
+    // Nothing to save without a password.
+    const sync = () => {
+      primary.disabled = passwordInput.value === "";
+    };
+    passwordInput.addEventListener("input", sync);
+    sync();
+    // A one-time code sent as a password: nothing to save; Lockra can link a code to the site's
+    // login instead, picked in Lockra.
+    const code = view.code
+      ? this.el(
+          "div",
+          "flex flex-col gap-2 rounded-6 bg-warning-soft px-3 py-2 text-[12px] leading-snug text-fg",
+          this.el(
+            "div",
+            "flex items-start gap-2",
+            this.el("span", "mt-0.5 text-warning", icon(this.options.doc, "info", 14)),
+            this.el(
+              "span",
+              "min-w-0 flex-1",
+              t("save.codeHint"),
+              view.link ? ` ${this.t("save.linkHint", { title: view.link.title })}` : null,
+            ),
+          ),
+          this.el(
+            "div",
+            "flex justify-end gap-2",
+            this.button(t("save.isCode"), "ghost", (event) => this.act({ type: "code" }, event)),
+            view.link
+              ? this.button(
+                  t("save.linkCode"),
+                  "outline",
+                  (event) => this.act({ type: "link_code" }, event),
+                  "key",
+                )
+              : null,
+          ),
+        )
+      : null;
     const actions = this.el(
       "div",
       "flex items-center gap-2",
@@ -669,6 +755,7 @@ export class InlinePage {
       "flex flex-col gap-3.5 overflow-hidden rounded-14 border border-border bg-surface-solid p-4",
       title,
       body,
+      code,
       actions,
     );
   }

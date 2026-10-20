@@ -526,6 +526,28 @@ describe("what the background sends", () => {
     agent.stop();
   });
 
+  it("puts a code the user asked for into a password field alone in its form, never one the page names a password", async () => {
+    // A code step Lockra cannot tell from a password step: the user knows, and asks.
+    document.body.innerHTML = `
+      <form><input id="pin" type="password" name="pin2"><button>OK</button></form>
+      <form><input id="named" type="password" autocomplete="current-password"></form>`;
+    const { agent, deliver } = setup();
+    await agent.start();
+    input("pin").focus();
+    expect(await deliver({ kind: "fill.otp", code: "246810" })).toEqual({ code: false });
+    expect(input("pin").value).toBe("");
+    expect(await deliver({ kind: "fill.otp", code: "246810", focused: true })).toEqual({
+      code: true,
+    });
+    expect(input("pin").value).toBe("246810");
+    input("named").focus();
+    expect(await deliver({ kind: "fill.otp", code: "135790", focused: true })).toEqual({
+      code: false,
+    });
+    expect(input("named").value).toBe("");
+    agent.stop();
+  });
+
   it("shows a prompt at the top right, and a confirmation under the focused field", async () => {
     document.body.innerHTML = LOGIN;
     const { agent, deliver } = setup({}, null);

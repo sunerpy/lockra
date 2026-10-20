@@ -109,8 +109,10 @@ function DetailCard({ item }: { item: ItemView }) {
   const name = itemName(item);
   const linked =
     item.totp_entry === null ? undefined : state.entries.find((e) => e.id === item.totp_entry);
-  // The code picker of the login's form, here without the form: a pick links at once.
-  const [pickingCode, setPickingCode] = useState(false);
+  // The code picker of the login's form, here without the form: a pick links at once. The shell
+  // holds it, so an extension that asks to link a code to this login opens it too (Shell.tsx).
+  const pickingCode = shell.codePicker === item.id && !item.read_only;
+  const setPickingCode = (open: boolean) => shell.setCodePicker(open ? item.id : null);
   const linkCode = (entry: string | null) =>
     void dispatch({ command: "item_update", id: item.id, patch: { totp_entry: entry } });
   const code = linked === undefined ? undefined : codes.get(linked.id);

@@ -23,6 +23,9 @@ export interface Submission {
   /** What the app advised: save a new login or update `item`'s password. */
   action: "save" | "update";
   item: ItemSummary | null;
+  /** What was sent looks like a one-time code, and this login of the site has none linked: the
+   *  prompt offers to link one in Lockra. */
+  link?: ItemSummary | null;
   /** The site the app named. */
   site: string;
 }

@@ -45,6 +45,10 @@ export interface ShellState {
   /** The login the passwords page shows in its detail pane (a new one is selected once saved). */
   selectedItem: string | null;
   selectItem: (id: string | null) => void;
+  /** The login whose code picker the detail pane has open: opened there, or by an extension that
+   *  asks to link a code (`browser_link_code_requested`). Another page or login closes it. */
+  codePicker: string | null;
+  setCodePicker: (id: string | null) => void;
 }
 
 const ShellContext = createContext<ShellState | undefined>(undefined);
@@ -61,8 +65,17 @@ export function ShellStateProvider({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [updateOpen, setUpdateOpenState] = useState(false);
   const [searchFocus, setSearchFocus] = useState(0);
-  const [selectedItem, selectItem] = useState<string | null>(null);
-  const navigate = useCallback((next: PageId) => setPage(next), []);
+  const [selectedItem, setSelectedItem] = useState<string | null>(null);
+  const [codePicker, setCodePicker] = useState<string | null>(null);
+  // A code picker goes with the pane it opened in: another page or another login closes it.
+  const navigate = useCallback((next: PageId) => {
+    setPage(next);
+    setCodePicker(null);
+  }, []);
+  const selectItem = useCallback((id: string | null) => {
+    setSelectedItem(id);
+    setCodePicker(null);
+  }, []);
   const open = useCallback((next: Overlay) => {
     setPaletteOpen(false);
     setOverlay(next);
@@ -92,6 +105,8 @@ export function ShellStateProvider({
       focusSearch,
       selectedItem,
       selectItem,
+      codePicker,
+      setCodePicker,
     }),
     [
       page,
@@ -105,6 +120,8 @@ export function ShellStateProvider({
       searchFocus,
       focusSearch,
       selectedItem,
+      selectItem,
+      codePicker,
     ],
   );
   return <ShellContext.Provider value={value}>{children}</ShellContext.Provider>;

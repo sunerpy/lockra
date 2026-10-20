@@ -259,8 +259,11 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   minute and secrets of 20 sites in ten minutes; past that its pairing is paused until the user
   resumes it in Lockra (the window says so).
 - **The policy** is in the vault, so editing `settings.json` cannot turn a risky option on; any
-  change that lets the extensions do more asks for the proof. `browser_integration` in
-  `settings.json` only says whether Lockra listens.
+  change that lets the extensions do more asks for the proof. The popup's matching switch
+  (`site_matching`) asks none: it adds or removes a `match_host` or `match_domain` rule about the
+  page's own site only, which at its widest offers what the default policy does, and only the
+  browser's own interface reaches it. `browser_integration` in `settings.json` only says whether
+  Lockra listens.
 - **The extension's side** (`apps/extension`). Its static key is a WebCrypto X25519 key made with
   a private half that cannot be exported, kept in IndexedDB; the pairing (its id and the app's public
   key) and how its menu opens (as a field gets the focus, above the field) are all `storage.local`

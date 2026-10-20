@@ -178,6 +178,78 @@ describe("Passwords", () => {
     expect(detail().queryByTestId("detail-no-code")).not.toBeInTheDocument();
   });
 
+  it("opens a login's code picker from any page when an extension asks to link a code", async () => {
+    // 2026-10-20: the extension's save prompt took a one-time code (NDKEY's ADFS asks for it in a
+    // password field) and offers 「关联验证码…」. The account is picked here, never in the browser.
+    const entries = sampleEntries();
+    const items = sampleItems(entries);
+    const id = (title: string) => items.find((i) => i.view.title === title)?.view.id ?? "";
+    const { user, backend } = renderPasswords({ entries, items });
+    await ready();
+    expect(screen.getByTestId("page-codes")).toBeInTheDocument();
+    act(() => backend.simulateLinkCodeRequest(id("Figma"), "chrome"));
+    expect(await screen.findByText("Chrome 请求为「Figma」关联验证码")).toBeInTheDocument();
+    const picker = await screen.findByRole("dialog", { name: "关联验证码" });
+    expect(screen.getByTestId("page-passwords")).toBeInTheDocument();
+    expect(row("Figma")).toHaveAttribute("aria-selected", "true");
+    expect(detail().getByRole("heading", { level: 2, name: "Figma" })).toBeInTheDocument();
+    await user.click(within(picker).getAllByTestId("item-form-code-option")[0] as HTMLElement);
+    expect(lastCall(backend, "item_update")).toMatchObject({
+      id: id("Figma"),
+      patch: { totp_entry: expect.any(String) },
+    });
+    expect(await detail().findByTestId("detail-code")).toBeInTheDocument();
+    expect(screen.queryByTestId("item-form-code-picker")).not.toBeInTheDocument();
+    // A login linked already opens it the same way: the user changes its code there, or not.
+    const updates = () => backend.calls.filter((c) => c.command === "item_update").length;
+    const before = updates();
+    act(() => backend.simulateLinkCodeRequest(id("GitHub"), "chrome"));
+    const again = await screen.findByRole("dialog", { name: "关联验证码" });
+    expect(detail().getByRole("heading", { level: 2, name: "GitHub" })).toBeInTheDocument();
+    await user.click(within(again).getByRole("button", { name: "取消" }));
+    expect(screen.queryByTestId("item-form-code-picker")).not.toBeInTheDocument();
+    expect(updates()).toBe(before);
+    // Once: the login shown again later opens no picker by itself.
+    await user.click(row("Figma"));
+    await user.click(row("GitHub"));
+    expect(detail().getByRole("heading", { level: 2, name: "GitHub" })).toBeInTheDocument();
+    expect(screen.queryByTestId("item-form-code-picker")).not.toBeInTheDocument();
+  });
+
+  it("opens no code picker over a dialog the user has open, but over another login's picker", async () => {
+    const entries = sampleEntries();
+    const items = sampleItems(entries);
+    const id = (title: string) => items.find((i) => i.view.title === title)?.view.id ?? "";
+    const { user, backend } = renderPasswords({ entries, items });
+    await ready();
+    await user.keyboard("{Control>}n{/Control}");
+    const adding = await screen.findByRole("dialog", { name: "手动添加账号" });
+    act(() => backend.simulateLinkCodeRequest(id("Figma"), "chrome"));
+    // The toast says what was asked; the dialog stays as it is.
+    expect(await screen.findByText("Chrome 请求为「Figma」关联验证码")).toBeInTheDocument();
+    expect(screen.queryByTestId("item-form-code-picker")).toBeNull();
+    expect(screen.queryByTestId("page-passwords")).toBeNull();
+    expect(adding).toBeInTheDocument();
+    // A code picker open on another login gives way: the request is what the user just did.
+    await user.keyboard("{Escape}");
+    await openPage(user);
+    await user.click(row("Figma"));
+    await user.click(detail().getByTestId("detail-code-link"));
+    await screen.findByTestId("item-form-code-picker");
+    act(() => backend.simulateLinkCodeRequest(id("GitHub"), "chrome"));
+    expect(await screen.findByText("Chrome 请求为「GitHub」关联验证码")).toBeInTheDocument();
+    expect(await detail().findByRole("heading", { level: 2, name: "GitHub" })).toBeInTheDocument();
+    expect(await screen.findAllByTestId("item-form-code-picker")).toHaveLength(1);
+    // It goes with its pane: another page closes it, and coming back opens none.
+    await user.keyboard("{Control>}k{/Control}");
+    await screen.findByRole("dialog", { name: "命令菜单" });
+    await user.keyboard("备份{Enter}");
+    expect(await screen.findByTestId("page-backup")).toBeInTheDocument();
+    await openPage(user);
+    expect(detail().getByRole("heading", { level: 2, name: "GitHub" })).toBeInTheDocument();
+    expect(screen.queryByTestId("item-form-code-picker")).not.toBeInTheDocument();
+  });
+
   it("shows the notes and hidden fields on request and hides them after two minutes", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

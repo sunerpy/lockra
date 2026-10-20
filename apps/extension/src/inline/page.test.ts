@@ -25,18 +25,24 @@ function setup(
       disconnect = listener;
     },
   }));
+  const reload = vi.fn();
   const page = new InlinePage({
     doc: document,
     token,
     connect,
     t: extensionTranslator("zh-CN"),
+    reload,
     ...observers,
   });
   page.start();
   return {
     posted,
     connect,
-    show: (view: InlineView) => receive({ kind: "view", view }),
+    reload,
+    show: (view: InlineView) => receive({ kind: "view", view, build: LOCKRA_BUILD }),
+    /** A view from a background of another build, or one too old to tell its build. */
+    showFrom: (build: string | undefined, view: InlineView) =>
+      receive(build === undefined ? { kind: "view", view } : { kind: "view", view, build }),
     close: () => receive({ kind: "close" }),
     disconnect: () => disconnect(),
     root: () => document.getElementById("root") as HTMLElement,
@@ -181,7 +187,13 @@ describe("the inline frame", () => {
     if (user) user.value = "octo";
     click(button("保存"));
     expect(posted.at(-1)).toMatchObject({
-      action: { type: "save", title: "GitHub", username: "octo", group: "Work" },
+      action: {
+        type: "save",
+        title: "GitHub",
+        username: "octo",
+        password: "hunter2",
+        group: "Work",
+      },
     });
     click(button("不保存"));
     expect(posted.at(-1)).toMatchObject({ action: { type: "dismiss" } });
@@ -189,15 +201,128 @@ describe("the inline frame", () => {
     expect(posted.at(-1)).toMatchObject({ action: { type: "never" } });
   });
 
-  it("prompts to update a changed password", () => {
+  it("lets the password be corrected before it is saved, and saves none empty", () => {
+    // 2026-10-20, the user: what a form sent is not always the password; the prompt is editable.
     const { posted, show, root } = setup();
-    show({ view: "update", site: "github.com", item: GITHUB });
+    show({
+      view: "save",
+      site: "github.com",
+      title: "github.com",
+      username: "octocat",
+      password: "hunter2",
+    });
+    const password = Array.from(root().querySelectorAll("input"))[2];
+    expect(password?.readOnly).toBe(false);
+    if (password) {
+      password.value = "correct horse";
+      password.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    click(button("保存"));
+    expect(posted.at(-1)).toMatchObject({ action: { type: "save", password: "correct horse" } });
+    if (password) {
+      password.value = "";
+      password.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    expect(button("保存")?.disabled).toBe(true);
+  });
+
+  it("prompts to update a changed password, the new one shown masked and editable", () => {
+    const { posted, show, root } = setup();
+    show({ view: "update", site: "github.com", item: GITHUB, password: "new-secret" });
     expect(root().textContent).toContain("更新 Lockra 中的密码？");
     expect(root().textContent).toContain("octocat");
+    const password = root().querySelector("input");
+    expect([password?.type, password?.value]).toEqual(["password", "new-secret"]);
+    click(button("显示密码"));
+    expect(root().querySelector("input")?.type).toBe("text");
     click(button("更新"));
-    expect(posted.at(-1)).toMatchObject({ action: { type: "update" } });
+    expect(posted.at(-1)).toMatchObject({ action: { type: "update", password: "new-secret" } });
+    const shown = root().querySelector("input");
+    if (shown) {
+      shown.value = "newer-secret";
+      shown.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    click(button("更新"));
+    expect(posted.at(-1)).toMatchObject({ action: { type: "update", password: "newer-secret" } });
     click(button("不更新"));
     expect(posted.at(-1)).toMatchObject({ action: { type: "dismiss" } });
+  });
+
+  it("says when what was sent looks like a one-time code, and takes it for one", () => {
+    // 2026-10-20, the user: a code typed into a field the page masks as a password came back as
+    // a password to save.
+    for (const view of [
+      {
+        view: "save",
+        site: "example.com",
+        title: "example.com",
+        username: "me",
+        password: "123456",
+        code: true,
+      },
+      { view: "update", site: "example.com", item: GITHUB, password: "654321", code: true },
+    ] as InlineView[]) {
+      const { posted, show, root } = setup();
+      show(view);
+      expect(root().textContent).toContain("这看起来是验证码，不是密码");
+      click(button("这是验证码"));
+      expect(posted.at(-1)).toMatchObject({ action: { type: "code" } });
+    }
+    const { show, root } = setup();
+    show({
+      view: "save",
+      site: "example.com",
+      title: "example.com",
+      username: "me",
+      password: "hunter2",
+    });
+    expect(root().textContent).not.toContain("验证码");
+  });
+
+  it("offers to link a code to the site's login that has none, picked in Lockra", () => {
+    const { posted, show, root } = setup();
+    show({
+      view: "save",
+      site: "example.com",
+      title: "example.com",
+      username: "me",
+      password: "123456",
+      code: true,
+      link: { title: "ADFS", username: "me", downgrade: false },
+    });
+    expect(root().textContent).toContain(
+      "在 Lockra 里给「ADFS」关联验证码后，这一步不再提示保存，扩展弹窗中的「填入验证码」可以把验证码填进这个输入框。",
+    );
+    click(button("关联验证码…"));
+    expect(posted.at(-1)).toMatchObject({ action: { type: "link_code" } });
+    // Without a login to link: the code alone.
+    const other = setup();
+    other.show({
+      view: "update",
+      site: "example.com",
+      item: GITHUB,
+      password: "654321",
+      code: true,
+    });
+    expect(button("关联验证码…")).toBeUndefined();
+  });
+
+  it("asks for a reload instead of a view when the background is of another build", () => {
+    // 2026-10-20, the user's Chrome: the pages read the new files of Lockra's folder while the
+    // browser still ran a background two versions older, which let the delete button and the code
+    // button do nothing.
+    const list: InlineView = { view: "list", site: "github.com", items: [GITHUB], active: 0 };
+    for (const build of [undefined, "an-older-build"]) {
+      const { showFrom, posted, reload, root } = setup();
+      showFrom(build, list);
+      expect(root().textContent).toContain("Lockra 扩展需要重新加载");
+      expect(root().textContent).not.toContain("octocat");
+      click(button("重新加载扩展"));
+      expect(reload).toHaveBeenCalledTimes(1);
+      // Its close button still closes the frame.
+      click(button("关闭"));
+      expect(posted.at(-1)).toMatchObject({ kind: "action", action: { type: "close" } });
+    }
   });
 
   it("empties itself when closed or disconnected", () => {

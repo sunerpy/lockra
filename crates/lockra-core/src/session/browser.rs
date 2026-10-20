@@ -5,21 +5,21 @@
 
 use std::time::Duration;
 
-use lockra_autofill::{GeneratorError, OsRandom, PasswordRules, RandomSource, WebUrl, generate};
+use lockra_autofill::{DomainScope, GeneratorError, OsRandom, PasswordRules, RandomSource, WebUrl, generate};
 use tokio::sync::oneshot;
 use tokio::time::{Instant, timeout_at};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use super::items::{copy_part_text, remember_generated};
-use super::{Core, PhaseState, Session, State, current_code, touch_items};
+use super::{Core, PhaseState, Session, State, codes_near, current_code, touch_items};
 use crate::browser::BrowserPolicy;
 use crate::browser::{
     Activity, ActivityEvent, BrowserView, CONFIRM_TTL, ClientInfo, ConfirmAction, ConfirmReason, ConfirmView, CopyGeneratedRequest, CopyRequest, DeleteRequest,
-    FillAnswer, FillField, FillRequest, FrameRule, GenerateAnswer, GenerateRequest, ItemSummary, MAX_FRAME_CHAIN, MAX_PENDING_PAIRS, OtpAnswer, OtpRequest,
-    PAIR_TTL, PairOutcome, PairedExtension, PairedView, PendingConfirm, PendingPair, QueryAnswer, QueryPurpose, QueryRequest, Refusal, SEARCH_MAX, SaveAction,
-    SaveAdvice, SaveRequest, SearchRequest, SessionId, SessionState, SiteRuleRequest, StaticKey, StatusAnswer, Trigger, UNLOCK_REQUEST_EVERY, UpdateRequest,
-    choose, cross_origin, listed, matches, offered, page, site_of,
+    FillAnswer, FillField, FillRequest, FrameRule, GenerateAnswer, GenerateRequest, ItemSummary, LinkCodeRequest, MAX_FRAME_CHAIN, MAX_PENDING_PAIRS,
+    OtpAnswer, OtpRequest, PAIR_TTL, PairOutcome, PairedExtension, PairedView, PendingConfirm, PendingPair, QueryAnswer, QueryPurpose, QueryRequest, Refusal,
+    SEARCH_MAX, SaveAction, SaveAdvice, SaveRequest, SearchRequest, SessionId, SessionState, SiteMatchingRequest, SiteRuleRequest, StaticKey, StatusAnswer,
+    Trigger, UNLOCK_REQUEST_EVERY, UpdateRequest, choose, cross_origin, domain_scope, listed, matches, offered, page, site_of,
 };
 use crate::error::{CoreResult, ErrorCode};
 use crate::item::{Matching, Protection, Purpose, SiteRuleKind, Tri, VaultItem};
@@ -403,15 +403,17 @@ impl Core {
     pub fn browser_query(&self, session: SessionId, request: QueryRequest) -> Result<QueryAnswer, Refusal> {
         let frame = Frame::of(&request.facts)?;
         let now = Instant::now();
+        let now_ms = self.now_ms();
         let mut guard = self.lock();
         let st = &mut *guard;
         let (vault, _) = active(st, session, false)?;
+        let policy = policy(vault);
         let never_fill = listed(&vault.data, SiteRuleKind::NeverFill, &frame.frame) || listed(&vault.data, SiteRuleKind::NeverFill, &frame.top);
         let never_save = listed(&vault.data, SiteRuleKind::NeverSave, &frame.frame) || listed(&vault.data, SiteRuleKind::NeverSave, &frame.top);
-        let (level, found) = matches(&vault.data, &frame.frame, policy(vault).match_port);
+        let (level, found) = matches(&vault.data, &frame.frame, &policy);
         let summaries: Vec<ItemSummary> =
             found.iter().filter_map(|(id, downgrade)| vault.data.items.iter().find(|i| i.id == *id).map(|i| summary(i, *downgrade, true))).collect();
-        let save = (request.purpose == QueryPurpose::Save).then(|| advice(&vault.data, &found, never_save, &request.username, &request.password));
+        let save = (request.purpose == QueryPurpose::Save).then(|| advice(&vault.data, &found, never_save, &request.username, &request.password, now_ms));
         let answer = QueryAnswer {
             site: site_of(&frame.frame),
             level: if never_fill { None } else { level },
@@ -419,7 +421,8 @@ impl Core {
             never_fill,
             never_save,
             cross_origin: frame.cross_origin(),
-            policy: policy(vault),
+            host_matching: domain_scope(&vault.data, &policy, &frame.frame) == DomainScope::Host,
+            policy,
             save,
         };
         if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.query(now)) {
@@ -473,7 +476,7 @@ impl Core {
                 if frame.cross_origin() {
                     return Err(Refusal::CrossOrigin);
                 }
-                let (_, found) = matches(&vault.data, &frame.frame, policy(vault).match_port);
+                let (_, found) = matches(&vault.data, &frame.frame, &policy(vault));
                 if !found.iter().any(|(id, _)| *id == request.item_id) {
                     return Err(Refusal::NoMatch);
                 }
@@ -614,7 +617,7 @@ impl Core {
         if frame.cross_origin() {
             return Err(Refusal::CrossOrigin);
         }
-        let (_, found) = matches(data, &frame.frame, policy(vault).match_port);
+        let (_, found) = matches(data, &frame.frame, &policy(vault));
         if !found.iter().any(|(id, _)| *id == request.item_id) {
             return Err(Refusal::NoMatch);
         }
@@ -687,7 +690,7 @@ impl Core {
             if listed(&vault.data, SiteRuleKind::NeverSave, &frame.frame) {
                 return Err(Refusal::NeverSave);
             }
-            let (_, found) = matches(&vault.data, &frame.frame, policy(vault).match_port);
+            let (_, found) = matches(&vault.data, &frame.frame, &policy(vault));
             if !found.iter().any(|(id, _)| *id == request.item_id) {
                 return Err(Refusal::NoMatch);
             }
@@ -700,6 +703,35 @@ impl Core {
         self.update_item(request.item_id, ItemPatch { password: SecretChange::Set { value: request.password }, ..ItemPatch::default() }, true)
             .map_err(|_| Refusal::Invalid)?;
         self.saved(session, &site, request.item_id, title, true);
+        Ok(())
+    }
+
+    /// Bring Lockra up on a login offered for the frame with its code picker open (the save
+    /// prompt's 「关联验证码…」): the user picks the account to link in Lockra, so the extension never
+    /// sees the accounts, and nothing changes here. Only in the page itself or a frame of its own
+    /// site; it counts as a query.
+    pub fn browser_link_code(&self, session: SessionId, request: LinkCodeRequest) -> Result<(), Refusal> {
+        let frame = Frame::of(&request.facts)?;
+        let site = site_of(&frame.frame);
+        let notice = {
+            let mut guard = self.lock();
+            let st = &mut *guard;
+            let (vault, state) = active(st, session, false)?;
+            if frame.cross_origin() {
+                return Err(Refusal::CrossOrigin);
+            }
+            let (_, found) = matches(&vault.data, &frame.frame, &policy(vault));
+            if !found.iter().any(|(id, _)| *id == request.item_id) {
+                return Err(Refusal::NoMatch);
+            }
+            let title = vault.data.items.iter().find(|i| i.id == request.item_id).map(|i| i.title.clone()).unwrap_or_default();
+            let notice = Notice::BrowserLinkCodeRequested { item_id: request.item_id, browser: state.client.browser.clone(), title };
+            if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.query(Instant::now())) {
+                return Err(self.pause(st, session, &site));
+            }
+            notice
+        };
+        self.notice(notice);
         Ok(())
     }
 
@@ -801,6 +833,25 @@ impl Core {
         self.add_site_rule(kind, &[site_of(&frame.frame)], true).map_err(|_| Refusal::Invalid)
     }
 
+    /// The popup's switch for the frame's site: its pages match by the full host (`host`) or by the
+    /// site (`Core::set_site_matching`). Only in the page itself or a frame of its own site; it
+    /// counts as a query, and the change syncs as one made in Lockra.
+    pub fn browser_site_matching(&self, session: SessionId, request: SiteMatchingRequest) -> Result<(), Refusal> {
+        let frame = Frame::of(&request.facts)?;
+        {
+            let mut guard = self.lock();
+            let st = &mut *guard;
+            active(st, session, false)?;
+            if frame.cross_origin() {
+                return Err(Refusal::CrossOrigin);
+            }
+            if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.query(Instant::now())) {
+                return Err(self.pause(st, session, &site_of(&frame.frame)));
+            }
+        }
+        self.set_site_matching(&frame.frame, request.host).map_err(|_| Refusal::Invalid)
+    }
+
     /// The popup's search over every login the extensions may see, at most [`SEARCH_MAX`]; those
     /// that match the tab's page say so (the others can only be copied).
     pub fn browser_search(&self, session: SessionId, request: SearchRequest) -> Result<Vec<ItemSummary>, Refusal> {
@@ -809,8 +860,8 @@ impl Core {
         let mut guard = self.lock();
         let st = &mut *guard;
         let (vault, _) = active(st, session, false)?;
-        let ports = policy(vault).match_port;
-        let matching: Vec<(Uuid, bool)> = top.as_ref().map(|top| matches(&vault.data, top, ports).1).unwrap_or_default();
+        let policy = policy(vault);
+        let matching: Vec<(Uuid, bool)> = top.as_ref().map(|top| matches(&vault.data, top, &policy).1).unwrap_or_default();
         let found: Vec<ItemSummary> = if text.is_empty() {
             Vec::new()
         } else {
@@ -979,7 +1030,7 @@ impl Core {
         if cross && policy.frames() == FrameRule::Never {
             return Err(Refusal::CrossOrigin);
         }
-        let (_, found) = matches(data, &frame.frame, policy.match_port);
+        let (_, found) = matches(data, &frame.frame, &policy);
         let next_step = request.trigger == Trigger::NextStep;
         let (item_id, downgrade) = match request.item_id {
             Some(id) => found.iter().copied().find(|(found, _)| *found == id).ok_or(Refusal::NoMatch)?,
@@ -1209,7 +1260,7 @@ fn paired(session: &Session, pairing: Uuid) -> Option<&PairedExtension> {
     session.data.local.as_ref()?.browser.paired.iter().find(|p| p.id == pairing)
 }
 
-fn policy(session: &Session) -> BrowserPolicy {
+pub(super) fn policy(session: &Session) -> BrowserPolicy {
     session.data.local.as_ref().map(|l| l.browser.policy.clone()).unwrap_or_default()
 }
 
@@ -1231,14 +1282,20 @@ fn page_load_allowed(policy: &BrowserPolicy, item: &VaultItem, frame: &Frame, ma
 }
 
 /// What a submitted form calls for: nothing when the login is saved already (or the site is on
-/// the never-save list), an update for a login of the same user name, otherwise a new login.
-fn advice(data: &crate::entry::VaultData, found: &[(Uuid, bool)], never_save: bool, username: &str, password: &str) -> SaveAdvice {
+/// the never-save list, or the password is a one-time code), an update for a login of the same
+/// user name, otherwise a new login. A code is the one a login of `found` links shows at `now_ms`,
+/// a step before or a step after: a sign-in's second step that asks for it in a password field.
+fn advice(data: &crate::entry::VaultData, found: &[(Uuid, bool)], never_save: bool, username: &str, password: &str, now_ms: u64) -> SaveAdvice {
     let none = SaveAdvice { action: SaveAction::None, item_id: None };
     if never_save || password.is_empty() {
         return none;
     }
     let username = username.trim();
     let items = found.iter().filter_map(|(id, _)| data.items.iter().find(|i| i.id == *id)).collect::<Vec<_>>();
+    let a_code = items.iter().filter_map(|i| i.totp_entry.and_then(|e| data.get(e))).any(|entry| codes_near(entry, now_ms).iter().any(|code| code == password));
+    if a_code {
+        return none;
+    }
     let saved_password = |item: &VaultItem| item.field_of(Purpose::Password).is_some_and(|f| f.value.as_str() == password);
     if username.is_empty() {
         if items.iter().any(|i| saved_password(i)) {

@@ -687,7 +687,16 @@ export const PURPOSES = ["username", "email", "password", "custom"] as const;
 export const purposeSchema = z.enum(PURPOSES);
 export type Purpose = z.infer<typeof purposeSchema>;
 
-export const SITE_RULE_KINDS = ["never_save", "never_fill", "equivalent"] as const;
+/** What a site rule says of its domains. `match_host` and `match_domain` hold one domain each:
+ *  it and its subdomains match by the full host or by the registrable domain, whatever the policy
+ *  says, and adding one drops the other for that domain. */
+export const SITE_RULE_KINDS = [
+  "never_save",
+  "never_fill",
+  "equivalent",
+  "match_host",
+  "match_domain",
+] as const;
 export const siteRuleKindSchema = z.enum(SITE_RULE_KINDS);
 export type SiteRuleKind = z.infer<typeof siteRuleKindSchema>;
 
@@ -794,6 +803,9 @@ export const browserPolicySchema = z.object({
   on_page_load: z.boolean(),
   /** The port counts too: each port of an address has its own logins. */
   match_port: z.boolean(),
+  /** A login's Domain rule compares the full host (and port), not the registrable domain; the
+   *  `match_host` and `match_domain` site rules decide for their own domains. */
+  match_host: z.boolean(),
 });
 export type BrowserPolicy = z.infer<typeof browserPolicySchema>;
 
@@ -1035,6 +1047,14 @@ export const noticeSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("browser_confirm_requested"),
     id: idSchema,
+    browser: z.string(),
+    title: z.string(),
+  }),
+  /** An extension asks to link a code to a login (its save prompt took a one-time code): the
+   *  passwords page, the login selected and its code picker open; the pick is an `item_update`. */
+  z.object({
+    type: z.literal("browser_link_code_requested"),
+    item_id: idSchema,
     browser: z.string(),
     title: z.string(),
   }),

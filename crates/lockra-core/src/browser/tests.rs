@@ -1,3 +1,4 @@
+use lockra_sync::Hlc;
 use tokio::time::Instant;
 
 use super::*;
@@ -25,6 +26,8 @@ fn the_policy_reads_leniently_and_tells_a_riskier_one() {
     assert!(!careful.riskier(&BrowserPolicy { copy_otp: true, ..careful.clone() }), "copying the code is no more than the user gets anyway");
     let ports = BrowserPolicy { match_port: true, ..base.clone() };
     assert!(!base.riskier(&ports) && !ports.riskier(&base), "the port narrows the matches, and without it they are the default's");
+    let host = BrowserPolicy { match_host: true, ..base.clone() };
+    assert!(!base.riskier(&host) && !host.riskier(&base), "the host narrows the matches, and the site is the default's");
 }
 
 #[test]
@@ -93,11 +96,63 @@ fn matches_offer_the_likeliest_login_first() {
     let recent = login("c recent", false, Some(9), Protection::Fill);
     let pinned = login("z pinned", true, None, Protection::Confirm);
     let never = login("a never", false, None, Protection::NoExtension);
-    let (level, found) = matches(&data, &url("https://www.example.com/"), false);
+    let (level, found) = matches(&data, &url("https://www.example.com/"), &BrowserPolicy::default());
     assert_eq!(level, Some(MatchLevel::Domain));
     assert_eq!(found.iter().map(|(id, _)| *id).collect::<Vec<_>>(), [pinned, recent, old]);
     assert!(!found.iter().any(|(id, _)| *id == never));
-    assert_eq!(matches(&data, &url("https://example.org/"), false), (None, Vec::new()));
+    assert_eq!(matches(&data, &url("https://example.org/"), &BrowserPolicy::default()), (None, Vec::new()));
+}
+
+fn rule(kind: SiteRuleKind, domain: &str, stamp: u64) -> SiteRule {
+    SiteRule {
+        id: SiteRule::single_id(kind, domain),
+        kind: Lenient::Known(kind),
+        domains: vec![domain.into()],
+        stamp: Hlc::at(stamp),
+        extra: Default::default(),
+    }
+}
+
+#[test]
+fn the_domain_rule_reaches_as_far_as_the_closest_site_rule_or_the_policy_says() {
+    let mut data = VaultData::new();
+    let site = BrowserPolicy::default();
+    let ports = BrowserPolicy { match_port: true, ..site.clone() };
+    let host = BrowserPolicy { match_host: true, ..site.clone() };
+    let page = url("https://git.example.cn/users/sign_in");
+    // No rule: the policy's default, with the port as it says; the host has its port anyway.
+    assert_eq!(domain_scope(&data, &site, &page), DomainScope::Site);
+    assert_eq!(domain_scope(&data, &ports, &page), DomainScope::SitePort);
+    assert_eq!(domain_scope(&data, &host, &page), DomainScope::Host);
+    assert_eq!(domain_scope(&data, &BrowserPolicy { match_port: true, ..host.clone() }, &page), DomainScope::Host);
+    // A rule about a domain covers it and its subdomains, however written, and nothing else.
+    data.site_rules.push(rule(SiteRuleKind::MatchHost, "example.cn", 1));
+    data.site_rules.push(rule(SiteRuleKind::MatchHost, "例え.jp", 1));
+    assert_eq!(domain_scope(&data, &site, &page), DomainScope::Host);
+    assert_eq!(domain_scope(&data, &ports, &url("https://example.cn/")), DomainScope::Host);
+    assert_eq!(domain_scope(&data, &site, &url("https://www.xn--r8jz45g.jp/")), DomainScope::Host);
+    assert_eq!(domain_scope(&data, &site, &url("https://notexample.cn/")), DomainScope::Site);
+    assert_eq!(domain_scope(&data, &ports, &url("https://example.com/")), DomainScope::SitePort, "another site");
+    // The rule of the longest domain wins, whatever their age: one host of the site by the domain.
+    data.site_rules.push(rule(SiteRuleKind::MatchDomain, "git.example.cn", 0));
+    assert_eq!(domain_scope(&data, &site, &page), DomainScope::Site);
+    assert_eq!(domain_scope(&data, &ports, &page), DomainScope::SitePort);
+    assert_eq!(domain_scope(&data, &site, &url("https://wiki.example.cn/")), DomainScope::Host);
+    assert_eq!(domain_scope(&data, &site, &url("https://a.git.example.cn/")), DomainScope::Site);
+    // A domain under both kinds, as two devices may leave it until they sync: the later rule.
+    data.site_rules.push(rule(SiteRuleKind::MatchHost, "git.example.cn", 2));
+    assert_eq!(domain_scope(&data, &site, &page), DomainScope::Host);
+    data.site_rules.retain(|r| r.stamp != Hlc::at(2));
+    data.site_rules.push(rule(SiteRuleKind::MatchHost, "git.example.cn", 0));
+    assert_eq!(domain_scope(&data, &site, &page), DomainScope::Host, "the same stamp: the full host");
+    // The other kinds, and a kind of a later version, say nothing of it.
+    let mut later = rule(SiteRuleKind::MatchHost, "example.com", 9);
+    later.kind = Lenient::Unknown("match_path".into());
+    data.site_rules.push(later);
+    data.site_rules.push(rule(SiteRuleKind::NeverFill, "example.com", 9));
+    data.site_rules.push(SiteRule { domains: vec!["example.com".into(), "example.net".into()], ..rule(SiteRuleKind::Equivalent, "example.com", 9) });
+    assert_eq!(domain_scope(&data, &site, &url("https://www.example.com/")), DomainScope::Site);
+    assert_eq!(domain_scope(&data, &host, &url("https://www.example.com/")), DomainScope::Host);
 }
 
 #[test]

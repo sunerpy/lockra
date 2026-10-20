@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Dynamic password · login.test</title>
+  </head>
+  <body>
+    <!-- NDKEY's ADFS adapter: the code field is a password field named OTP. -->
+    <form method="get" id="loginForm" action="/welcome.html">
+      <input id="authMethod" type="hidden" name="AuthMethod" value="DKEYMFAadapter" />
+      <label for="challengeQuestionInput" class="block">Dynamic Password：</label>
+      <input
+        id="dynamicPassword"
+        name="OTP"
+        type="password"
+        value=""
+        class="text"
+        placeholder="Please input password" />
+      <div id="submissionArea" class="submitMargin">
+        <input id="submitButton" type="submit" name="submit" value="Submit" />
+      </div>
+    </form>
+  </body>
+</html>

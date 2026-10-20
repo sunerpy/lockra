@@ -15,6 +15,7 @@ import {
   type LampTone,
   Logo,
   Menu,
+  Toggle,
   cx,
 } from "@lockra/ui";
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
@@ -23,6 +24,7 @@ import type { PopupState, Screen } from "../shared/messages";
 import { Avatar } from "../shared/Avatar";
 import { refusalText } from "../shared/refusal";
 import { useText } from "../shared/text";
+import { StaleNote, staleBackground } from "../shared/StaleNote";
 import { UpdateNote } from "../shared/UpdateNote";
 import type { PageClient } from "./client";
 import { type Page, usePage } from "./usePage";
@@ -80,7 +82,9 @@ export function Popup({ client, now = Date.now }: { client: PageClient; now?: ()
           onClick={() => client.openOptions()}
         />
       </header>
-      {state?.update ? (
+      {staleBackground(state) ? (
+        <StaleNote onReload={client.reload} className="mx-4 mb-1" />
+      ) : state?.update ? (
         <UpdateNote state={state} target={client.target} className="mx-4 mb-1" />
       ) : null}
       <main className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-2 pb-3">
@@ -499,6 +503,7 @@ function Ready({ page, state, client }: { page: Page; state: PopupState; client:
       ) : (
         <SiteMatches
           state={state}
+          onMatching={(host) => send({ kind: "site_matching", host })}
           active={active}
           results={results}
           onFill={fill}
@@ -555,8 +560,9 @@ interface RowsProps {
 function SiteMatches({
   state,
   onOpen,
+  onMatching,
   ...rows
-}: RowsProps & { state: PopupState; onOpen: () => void }) {
+}: RowsProps & { state: PopupState; onOpen: () => void; onMatching: (host: boolean) => void }) {
   const t = useText();
   const site = state.site;
   if (!site)
@@ -576,10 +582,31 @@ function SiteMatches({
       </span>
     </div>
   );
+  // The site's logins compared with the page's full host, or with every subdomain of the site.
+  const matching = site.host ? (
+    <div
+      className="flex items-center gap-2.5 rounded-6 bg-inset px-2.5 py-1.5"
+      data-testid="popup-matching">
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] font-medium">{t("popup.matchHost")}</p>
+        <p className="truncate text-[11px] text-fg-subtle">
+          {site.hostMatching
+            ? t("popup.matchHostOn", { host: site.host })
+            : t("popup.matchHostOff", { site: site.site })}
+        </p>
+      </div>
+      <Toggle
+        checked={site.hostMatching === true}
+        onChange={onMatching}
+        ariaLabel={t("popup.matchHost")}
+      />
+    </div>
+  ) : null;
   if (site.neverFill || site.items.length === 0) {
     return (
       <div className="flex flex-1 flex-col gap-3">
         {header}
+        {site.neverFill ? null : matching}
         {site.neverFill ? (
           <p className="text-[12px] text-fg-muted">{t("popup.neverFill")}</p>
         ) : (
@@ -601,6 +628,7 @@ function SiteMatches({
   return (
     <div className="flex flex-col gap-2">
       {header}
+      {matching}
       {site.crossOrigin && state.policy?.cross_origin_frames !== "ask" ? (
         <p className="text-[12px] text-fg-muted">{t("popup.crossOrigin")}</p>
       ) : null}

@@ -20,6 +20,7 @@ export function defaultBrowserPolicy(): BrowserPolicy {
     cross_origin_frames: "never",
     on_page_load: false,
     match_port: false,
+    match_host: false,
   };
 }
 

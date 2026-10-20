@@ -7,6 +7,8 @@ declare global {
   const LOCKRA_TARGET: "chromium" | "firefox";
   /** The inline frame's shadow and corners per scheme, from tokens.css (scripts/frame-look.mjs). */
   const LOCKRA_FRAME_LOOK: FrameLook;
+  /** This build of the extension (scripts/build-id.mjs): the background's and the pages' match. */
+  const LOCKRA_BUILD: string;
   /** Firefox's WebExtension namespace. */
   var browser: BrowserApi | undefined;
   /** Chromium's (Firefox has it too, with callbacks in MV2 and promises in MV3). */

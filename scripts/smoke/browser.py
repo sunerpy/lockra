@@ -507,6 +507,25 @@ class Smoke:
         self.is_code(value)
         print("smoke: the next pages' code fields got the login's code, whole and digit by digit")
 
+    def otp_masked(self):
+        """NDKEY's ADFS adapter (the user's report, 2026-10-20): the code field is a password field
+        named OTP. Right after its login filled, the code still goes in by itself, and what the form
+        sends is no password to save: the next page shows no prompt."""
+        self.room_to_fill()
+        self.web.go(self.url("login.test", "otp-masked.html"))
+        value = until("the code filled into the masked field", lambda: (lambda v: v if v and len(v) == 6 else None)(self.web.values("#dynamicPassword")[0]), 30)
+        self.is_code(value)
+        self.web.click(self.web.wait("#submitButton"))
+        until("the page after the code", lambda: "welcome.html" in self.web.call("GET", self.web.s("/url")), 15)
+        until("the page after the code to load", lambda: self.web.run("return document.readyState") == "complete", 15)
+        # The one bounded look for what must not come: a prompt opens as the next page starts.
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            if self.web.menu_open():
+                sys.exit("smoke: the code sent from the masked field came back as a password to save")
+            time.sleep(0.2)
+        print("smoke: the code went into a field the page masks as a password, and nothing asked to save it")
+
     def switch_to_authenticator(self):
         """Google's way to its code (otp-switch.html): a prompt on the phone, 「Try another way」,
         the authenticator; its code field comes last, in the same page."""
@@ -643,6 +662,7 @@ class Smoke:
 
     def many_fields(self):
         """Two thousand fields: the menu still comes within the content script's budget."""
+        self.room_to_fill()
         self.web.go(self.url("login.test", "many.html"))
         start = time.monotonic()
         self.open_menu("#username")
@@ -760,6 +780,7 @@ class Smoke:
             self.autofocus()
             self.fill_from_menu()
             self.otp_follows()
+            self.otp_masked()
             self.otp_after_switch()
             self.otp_menu()
             self.shortcut_two_steps()

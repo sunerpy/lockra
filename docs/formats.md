@@ -170,11 +170,19 @@ history.
   user did not mean). Keys a later Lockra adds to a login, a field, a URL or `autofill` are kept as
   well.
 
-`site_rules` holds `{id, kind, domains, stamp}`: `kind` is `never_save`, `never_fill` or
-`equivalent` (domains that share their sign-ins); one of a later kind says nothing. A rule merges
-whole, the later version winning. A rule about one domain has the id made from SHA-256 of the kind,
-a zero byte and the domain in lower case (its first 16 bytes as a version 8 UUID), so that two
-devices adding the same rule end up with one.
+`site_rules` holds `{id, kind, domains, stamp}`: `kind` is `never_save`, `never_fill`,
+`equivalent` (domains that share their sign-ins), `match_host` or `match_domain`; one of a later
+kind says nothing. A rule merges whole, the later version winning. A rule about one domain has the
+id made from SHA-256 of the kind, a zero byte and the domain in lower case (its first 16 bytes as a
+version 8 UUID), so that two devices adding the same rule end up with one.
+
+`match_host` and `match_domain` hold one domain each (a host name, without scheme, path or port):
+pages of that domain and its subdomains match by their full host, or by the site, whatever the
+policy's `match_host` says (§10). Adding one takes the other kind's rule about the same host away
+in the same change, tombstoned so that the removal syncs: a domain matches one way. Of the rules
+whose domain is the page's host or a parent of it, the longest domain's decides; one domain under
+both kinds, which two devices may leave until they sync, goes by the later stamp (the full host
+when they tie). A Lockra without these kinds keeps them as written and applies neither.
 
 Duplicates: the same secret and parameters is **the same account** (an import skips it); the same
 issuer and account with a different secret is a **conflict** (both are kept by default, or the
@@ -526,23 +534,38 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   ends the connection.
 - **Requests** are `{"req": <n>, "op": "<op>", …}`; their answers repeat the number:
   `{"req", "ok": true, "result"}` or `{"req", "ok": false, "error": "<refusal>"}`. The ops are
-  `status`, `query` (the logins of the best match for a frame, without secrets; with
+  `status`, `query` (the logins of the best match for a frame, without secrets, and
+  `host_matching`: the frame matches by its full host, as the policy or the closest `match_host` or
+  `match_domain` rule says, the popup's switch; absent from an older Lockra: false; with
   `"purpose": "save"` and the submitted user name and password, whether to offer saving or
-  updating), `fill` (one login's secrets; `trigger` says what asked: `shortcut`, `popup`,
-  `inline_menu`, `page_load`, or `next_step`, the page asking for the password within two minutes
-  of a fill the user asked for, once), `otp` (the code of a login filled on this site in the
-  last five minutes, for a later step; `submit` in the answer says whether to send its form, absent
-  before 0.10: not sent; with `trigger` `popup`, `inline_menu` or `shortcut`, from 0.12, the code
-  of a login the user chose that is offered for the frame, in the page or a frame of its own site,
-  without a fill before), `copy` (a part on the clipboard, written by the app),
+  updating, never for a password that is the code of an account linked to a login offered there:
+  the current one, the one before or the one after), `fill` (one login's secrets; `trigger` says
+  what asked: `shortcut`, `popup`, `inline_menu`, `page_load`, or `next_step`, the page asking for
+  the password within two minutes of a fill the user asked for, once), `otp` (the code of a login
+  filled on this site in the last five minutes, for a later step; `submit` in the answer says
+  whether to send its form, absent before 0.10: not sent; with `trigger` `popup`, `inline_menu` or
+  `shortcut`, from 0.12, the code of a login the user chose that is offered for the frame, in the
+  page or a frame of its own site, without a fill before), `copy` (a part on the clipboard, written
+  by the app),
   `save`, `update`, `generate` (a password to the page's `passwordrules`, `minlength` and
   `maxlength` or the bundled rules, saved at once as a new login when asked), `copy_generated`
   (from 0.10.1: the sign-up menu's `password` on the clipboard, written by the app as a login's
   is, and only a password of the generator's history made for the frame's site, else
-  `not_found`), `site_rule` (never save or never fill the frame's site), `search` and `delete`
-  (from 0.12: a login offered for the frame, which the user agreed to delete in the menu or the
-  popup; never in a frame of another site or on a never-fill site, counted with the fills; the
-  deletion syncs as one made in Lockra). Each names
+  `not_found`), `site_rule` (never save or never fill the frame's site), `site_matching` (the
+  popup's switch, `host`: the frame's site and its subdomains match by the full host, or by the
+  site; Lockra removes the `match_host` and `match_domain` rules about the site and about the
+  domains of the frame's host within it, then adds one of the asked kind about the site where what
+  is left, a rule about a parent of the site or the policy's default, says otherwise; only in the
+  page or a frame of its own site, counted as a query, the change synced as one made in Lockra),
+  `search`, `delete` (from 0.12: a login offered for the frame, which the user agreed to delete in
+  the menu or the popup; never in a frame of another site or on a never-fill site, counted with the
+  fills; the deletion syncs as one made in Lockra) and `link_code` (`item_id`: a login offered for
+  the frame, with a linked code or not, for the save prompt that took a one-time code; only in the
+  page or a frame of its own site, counted as a query, and answered at once, before the user picks
+  the code in Lockra: the app tells its interface `browser_link_code_requested` (the login's id and
+  title, the browser), comes up as for a pairing or a confirmation, and shows the login on the
+  passwords page with its code picker open, never over an open dialog, where only the notice
+  shows). Each names
   its frame with `frame_url`,
   `top_url` and `frame_chain` (the ancestors, nearest first), which the extension's background
   script takes from the browser, never from the page. A request this version cannot read gets
@@ -556,12 +579,15 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   ends). As the vault locks, every session ends and the connection hears `{"op": "state",
 "state": "locked"}`.
 - **The policy** (`local.browser.policy`, never in `settings.json`): `fill_otp` and `copy_otp`
-  (on), `auto_submit`, `confirm_fill`, `on_page_load`, `match_port` (off) and `cross_origin_frames`
-  (`never` or `ask`; a value of a later version reads as `never`). `match_port` makes the domain
-  rule compare the port as well (the scheme's default port is none). A change that lets the
-  extensions do more asks for the master password or the biometric check; `match_port` never does. `settings.json`'s `browser_integration`
-  only says whether the shell listens and keeps the browsers' manifests; only the shell changes
-  it.
+  (on), `auto_submit`, `confirm_fill`, `on_page_load`, `match_port`, `match_host` (off) and
+  `cross_origin_frames` (`never` or `ask`; a value of a later version reads as `never`).
+  `match_port` makes the domain rule compare the port as well (the scheme's default port is none).
+  `match_host` makes it ask for the page's host and port, as the host rule does and at the host
+  rule's level, the equivalent domains counting for nothing; a `match_host` or `match_domain` site
+  rule about the page's host or a parent of it decides instead (§2). A change that lets the
+  extensions do more asks for the master password or the biometric check; `match_port` and
+  `match_host` never do. `settings.json`'s `browser_integration` only says whether the shell
+  listens and keeps the browsers' manifests; only the shell changes it.
 
 - **The host's own.** The host answers by itself only what needs no app, on `hello` envelopes:
   `{"op": "state", "state": "not_running"}` when a frame finds no app to go to (its socket cannot
@@ -609,7 +635,22 @@ Mozilla}\NativeMessagingHosts\dev.lockra.browser` (Brave reads Chrome's). Writte
   (`extension.old` meanwhile, removed after). The app rewrites the folder when the digest differs
   from its own copy's; the extension reads only `version`, from its own package, and reloads itself
   when it differs from the manifest it runs (`update.reload_tried` in its `storage.local` keeps it to
-  one try per version).
+  one try per version). An extension of a later build (below) also reads the copy's
+  `lockra-build.json`, `{"build": "<id>"}`, and reloads itself when the copy says another build than
+  its own, its one try then kept per version and build; it reads both files as it starts, as a page
+  of its own opens, and each time Lockra answers it again (a new version, or Lockra back after it was
+  gone: Lockra puts its copy in the folder before it listens).
+- **The extension's build.** Its background, content script and pages are built from one tree and
+  carry one build id (`apps/extension/scripts/build-id.mjs`): the first 12 hex digits of the
+  SHA-256 over `lockra <version>` and a zero byte, then each source file it is built from (its own,
+  tests left out, and those of the workspace packages it bundles), in the script's fixed order, as
+  its path from `apps/extension`, a zero byte, its content and a zero byte. The background's views
+  for an inline frame (`{"kind": "view", "view", "build"}`) and its state for the popup and the
+  options page (`build`) carry its id. A frame or page that gets another id, or none (a background
+  from before the id), runs beside an older background the browser still has after the folder
+  changed under it: the frame shows the reload in place of the view, the popup and the options page
+  a note, each with `runtime.reload()`, unless the background says it waits to take the folder's
+  copy (`update: "waiting"`, once the pages close). The id never leaves the browser.
 
 `crates/lockra-browser/tests/vectors/` holds every message as these types write it
 (`protocol.json`) and both handshakes with fixed keys, their hashes, the code and channel messages

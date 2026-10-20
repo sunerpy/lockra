@@ -23,8 +23,8 @@ import {
   findOtp,
   formOf,
   isFillable,
-  isPassword,
   scanField,
+  takesAskedCode,
 } from "./fields";
 import { type FillResult, fillForm, fillOtp, submitForm } from "./fill";
 import { FrameHost } from "./frame-host";
@@ -511,14 +511,14 @@ export class ContentAgent {
 
   /** The code into the page's code field, the focused one first. Asked for by the user
    *  (`asked`), it goes into the focused field where Lockra can tell no code field, though never
-   *  into a password field. Whether it went in. */
+   *  into a sign-in's password field (`takesAskedCode`). Whether it went in. */
   private fillCode(code: string, submit: boolean, asked: boolean): boolean {
     const view = this.options.view;
     const active = deepActive(this.options.doc);
     const field = active instanceof HTMLInputElement && isFillable(active) ? active : null;
     const focused = field ? scanField(field, view) : null;
     let fields = focused?.kind === "otp" ? focused.otp : findOtp(this.options.doc, view);
-    if (!fields && asked && field && !isPassword(field)) fields = [field];
+    if (!fields && asked && field && takesAskedCode(field, view)) fields = [field];
     const first = fields?.[0];
     const filled = fields !== null && first !== undefined && fillOtp(fields, code);
     if (filled && submit) void submitForm(formOf(first), view);

@@ -121,6 +121,17 @@ describe("labels", () => {
         code: "123456",
       }),
     ).toBe("Chrome 请求连接，代码 123 456");
+    const link = {
+      type: "browser_link_code_requested",
+      item_id: "i",
+      browser: "chrome",
+      title: "ADFS",
+    } as const;
+    expect([noticeText(zh, link), noticeText(en, link), noticeIsToast(link)]).toEqual([
+      "Chrome 请求为「ADFS」关联验证码",
+      "Chrome asks to link a code to “ADFS”",
+      true,
+    ]);
     expect(
       noticeText(en, { type: "browser_paused", pairing: "p", browser: "edge", label: "" }),
     ).toBe("“Edge” asked too often and is paused");

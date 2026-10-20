@@ -839,6 +839,17 @@ pub enum Notice {
         /// The login's title.
         title: String,
     },
+    /// An extension asks to link a code to a login (its save prompt took a one-time code a page
+    /// asks for in a password field): the window comes up on the login with its code picker open,
+    /// and the user picks the account there. The extension never sees the accounts.
+    BrowserLinkCodeRequested {
+        /// The login (`item_update` links the account picked).
+        item_id: Uuid,
+        /// The browser.
+        browser: String,
+        /// The login's title.
+        title: String,
+    },
     /// An extension asked too often and gets nothing until the user resumes it.
     BrowserPaused {
         /// The pairing.

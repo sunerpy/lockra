@@ -10,7 +10,7 @@ use std::fmt;
 use std::time::Duration;
 
 use data_encoding::BASE64;
-use lockra_autofill::{EquivalentDomains, MatchLevel, SavedUrl, WebUrl};
+use lockra_autofill::{DomainScope, EquivalentDomains, MatchLevel, SavedUrl, WebUrl};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tokio::sync::oneshot;
 use tokio::time::Instant;
@@ -18,7 +18,7 @@ use uuid::Uuid;
 use zeroize::Zeroizing;
 
 use crate::entry::VaultData;
-use crate::item::{ItemKind, Matching, Protection, SiteRuleKind, Tri, VaultItem};
+use crate::item::{ItemKind, Matching, Protection, SiteRule, SiteRuleKind, Tri, VaultItem};
 use crate::lenient::Lenient;
 use crate::logins::CopyPart;
 
@@ -177,6 +177,12 @@ pub struct BrowserPolicy {
     /// page has one) is not offered there, so each port of an address has its own logins.
     #[serde(default)]
     pub match_port: bool,
+    /// Pages match by their full host: the domain rule asks for the page's host and port, as the
+    /// host rule does, so a login saved for one host of a site (`git.example.com`) is not offered
+    /// on another (`wiki.example.com`, `example.com`). The `match_host` and `match_domain` site
+    /// rules choose otherwise for a domain and its subdomains.
+    #[serde(default)]
+    pub match_host: bool,
 }
 
 fn yes() -> bool {
@@ -193,6 +199,7 @@ impl Default for BrowserPolicy {
             cross_origin_frames: Lenient::Known(FrameRule::Never),
             on_page_load: false,
             match_port: false,
+            match_host: false,
         }
     }
 }
@@ -205,6 +212,16 @@ impl BrowserPolicy {
     /// The frame rule; one of a later version counts as `never`.
     pub fn frames(&self) -> FrameRule {
         self.cross_origin_frames.or(FrameRule::Never)
+    }
+
+    /// How far the domain rule reaches where pages match by the full host (`host`) or by the
+    /// site: the port counts as [`Self::match_port`] says, and always for the host.
+    pub(crate) fn scope(&self, host: bool) -> DomainScope {
+        match (host, self.match_port) {
+            (true, _) => DomainScope::Host,
+            (false, true) => DomainScope::SitePort,
+            (false, false) => DomainScope::Site,
+        }
     }
 
     /// Whether `next` lets the extensions do something this policy does not: such a change asks
@@ -601,6 +618,9 @@ pub struct QueryAnswer {
     pub never_save: bool,
     /// The form is in a frame of another site.
     pub cross_origin: bool,
+    /// The frame matches by its full host, as the policy or a site rule about its host or a
+    /// parent of it says: the popup's switch for the site.
+    pub host_matching: bool,
     /// What the extension may do (the policy).
     pub policy: BrowserPolicy,
     /// For a save query: what to offer.
@@ -669,6 +689,18 @@ pub struct OtpRequest {
 /// A request to delete a login, which the user agreed to in the extension's menu or popup.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeleteRequest {
+    /// The login: one offered for the frame.
+    pub item_id: Uuid,
+    /// Where the extension offered it.
+    #[serde(flatten)]
+    pub facts: FrameFacts,
+}
+
+/// A request to link a code to a login: the save prompt took a one-time code a page asks for in a
+/// password field, and the user chose 「关联验证码…」 there. Lockra comes up on the login with its
+/// code picker open, and the user picks the account in Lockra: the extension never sees them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LinkCodeRequest {
     /// The login: one offered for the frame.
     pub item_id: Uuid,
     /// Where the extension offered it.
@@ -789,6 +821,16 @@ pub struct SiteRuleRequest {
     /// Where.
     #[serde(flatten)]
     pub facts: FrameFacts,
+}
+
+/// The popup's switch for the frame's site: its pages match by the full host or by the site.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SiteMatchingRequest {
+    /// Where.
+    #[serde(flatten)]
+    pub facts: FrameFacts,
+    /// By the full host; false: by the site (the registrable domain).
+    pub host: bool,
 }
 
 /// A search of the popup.
@@ -1042,11 +1084,44 @@ pub(crate) fn equivalents(data: &VaultData) -> EquivalentDomains {
 /// parent of it.
 pub(crate) fn listed(data: &VaultData, kind: SiteRuleKind, page: &WebUrl) -> bool {
     let host = page.host();
-    data.site_rules.iter().filter(|r| r.kind == Lenient::Known(kind)).flat_map(|r| r.domains.iter()).any(|domain| {
-        let Some(listed) = WebUrl::parse_saved(domain) else { return false };
-        let listed = listed.host();
-        host == listed || host.strip_suffix(listed).is_some_and(|rest| rest.ends_with('.'))
-    })
+    data.site_rules.iter().filter(|r| r.kind == Lenient::Known(kind)).flat_map(|r| r.domains.iter()).any(|domain| covering(domain, host).is_some())
+}
+
+/// The host a site rule's domain names, normalized as a page's is (`例え.jp` and
+/// `xn--r8jz45g.jp` are one); none for text that names no host.
+pub(crate) fn rule_host(domain: &str) -> Option<String> {
+    WebUrl::parse_saved(domain).map(|url| url.host().to_owned())
+}
+
+/// The length of the host a site rule's `domain` names, when that is `host` or a parent of it:
+/// the longer, the closer the rule.
+pub(crate) fn covering(domain: &str, host: &str) -> Option<usize> {
+    let listed = rule_host(domain)?;
+    (host == listed || host.strip_suffix(listed.as_str()).is_some_and(|rest| rest.ends_with('.'))).then_some(listed.len())
+}
+
+/// What the `match_host` and `match_domain` rules among `rules` say of `page`: by the full host
+/// (`true`) or by the site, as the rule of the longest domain that is the page's host or a parent
+/// of it says; of one domain under both kinds, which two devices may leave until they sync, the
+/// later rule (the full host when they were made at once). None when no such rule covers the page.
+pub(crate) fn host_rule<'a>(rules: impl IntoIterator<Item = &'a SiteRule>, page: &WebUrl) -> Option<bool> {
+    let host = page.host();
+    rules
+        .into_iter()
+        .filter_map(|rule| match rule.kind {
+            Lenient::Known(SiteRuleKind::MatchHost) => Some((rule, true)),
+            Lenient::Known(SiteRuleKind::MatchDomain) => Some((rule, false)),
+            _ => None,
+        })
+        .flat_map(|(rule, by_host)| rule.domains.iter().filter_map(move |domain| covering(domain, host).map(|length| (length, rule.stamp, by_host))))
+        .max()
+        .map(|(_, _, by_host)| by_host)
+}
+
+/// How far the domain rule reaches on `page`: as the closest `match_host` or `match_domain` rule
+/// says ([`host_rule`]), else as the policy's default; the port as the policy says.
+pub(crate) fn domain_scope(data: &VaultData, policy: &BrowserPolicy, page: &WebUrl) -> DomainScope {
+    policy.scope(host_rule(&data.site_rules, page).unwrap_or(policy.match_host))
 }
 
 /// The frame is in a page of another site: the frame, or one of its ancestors, is not of the
@@ -1056,11 +1131,12 @@ pub(crate) fn cross_origin(frame: &WebUrl, top: &WebUrl, chain: &[WebUrl]) -> bo
 }
 
 /// The best matches for `page` among the offered logins, the likeliest first: favourites, then the
-/// most recently used, then by title. `ports`: the policy's [`BrowserPolicy::match_port`].
-pub(crate) fn matches(data: &VaultData, page: &WebUrl, ports: bool) -> (Option<MatchLevel>, Vec<(Uuid, bool)>) {
+/// most recently used, then by title. The domain rule reaches as far as [`domain_scope`] says.
+pub(crate) fn matches(data: &VaultData, page: &WebUrl, policy: &BrowserPolicy) -> (Option<MatchLevel>, Vec<(Uuid, bool)>) {
     let equivalents = equivalents(data);
+    let scope = domain_scope(data, policy, page);
     let items = data.items.iter().filter(|i| offered(i)).map(|i| (i.id, i.urls.iter().map(|u| SavedUrl { url: &u.url, matching: rule(u.rule()) })));
-    let Some(best) = lockra_autofill::best_matches(page, items, &equivalents, ports) else { return (None, Vec::new()) };
+    let Some(best) = lockra_autofill::best_matches(page, items, &equivalents, scope) else { return (None, Vec::new()) };
     let mut found: Vec<(Uuid, bool)> = best.items.iter().map(|m| (m.item, m.downgrade)).collect();
     found.sort_by_cached_key(|(id, _)| {
         let item = data.items.iter().find(|i| i.id == *id);

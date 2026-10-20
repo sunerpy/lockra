@@ -160,6 +160,24 @@ function ShellLayout() {
       endQuick(false);
     }
   }, [setPaletteOpen, endQuick]);
+  // An extension's save prompt took a one-time code and the user chose 「关联验证码…」 there: the
+  // shell has brought the window up, and the passwords page shows the login with its code picker
+  // open (one open on another login gives way), never over a dialog (the window then shows what
+  // is open; the toast says what was asked).
+  const { navigate, selectItem, setCodePicker } = shell;
+  useEffect(
+    () =>
+      backend.on((event) => {
+        if (event.type !== "notice" || event.notice.type !== "browser_link_code_requested") return;
+        const login = event.notice.item_id;
+        if (blocked.current) return;
+        closePalette();
+        navigate("passwords");
+        selectItem(login);
+        setCodePicker(login);
+      }),
+    [backend, closePalette, navigate, selectItem, setCodePicker],
+  );
   const commands = useCommands(onCopy);
 
   const groups: SidebarGroup[] = [

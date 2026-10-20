@@ -3186,6 +3186,21 @@ fn current_code(entry: &Entry, now_ms: u64) -> String {
     code_view(entry, now_ms).code
 }
 
+/// The codes an entry shows about `now_ms`, to tell a code from a password: a TOTP account's of the
+/// time step before, the current one and the one after (a clock a little off, a slow typist), an
+/// HOTP account's of the counter before, its own and the next.
+fn codes_near(entry: &Entry, now_ms: u64) -> Vec<String> {
+    let counter = match entry.kind {
+        OtpKind::Totp { period } => totp_window(now_ms, period).counter,
+        OtpKind::Hotp { counter } => counter,
+    };
+    [counter.checked_sub(1), Some(counter), counter.checked_add(1)]
+        .into_iter()
+        .flatten()
+        .map(|c| hotp(&entry.secret, c, entry.algorithm, entry.digits))
+        .collect()
+}
+
 /// A change to sync: a run follows after the debounce.
 /// A storage that tells of changes: a folder of this computer, or a relay.
 fn watched(storage: &StorageConfig) -> bool {

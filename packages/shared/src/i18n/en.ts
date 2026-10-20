@@ -1143,6 +1143,9 @@ export const en: Messages = {
         matchPort: "Match the port",
         matchPortHelp:
           "The port must match too: logins for different ports of one address are filled apart. A URL saved without a port matches the default port only.",
+        matchHost: "Match the full host",
+        matchHostHelp:
+          "Off: the logins of every subdomain of a site are offered (on git.example.com, wiki.example.com's too). On: only those saved for the same host name. Single sites can differ: set them under Matching below, or switch the current site from the extension's popup.",
         frames: "Sign-in forms in frames of other sites",
         framesHelp:
           "When the sign-in form is in a frame of another site: never fill it, or ask in Lockra first.",
@@ -1174,12 +1177,21 @@ export const en: Messages = {
         title: "Site lists",
         never_save: "Never offer to save",
         never_fill: "Never fill",
+        matching: "Matching",
+        matchingHelp:
+          "These sites and their subdomains match this way, whatever the default above says.",
+        level: { match_host: "Full host", match_domain: "Domain" },
         empty: "No sites",
         add: "Add a site…",
         remove: "Remove {site}",
-        addTitle: { never_save: "Add to “Never offer to save”", never_fill: "Add to “Never fill”" },
+        addTitle: {
+          never_save: "Add to “Never offer to save”",
+          never_fill: "Add to “Never fill”",
+          matching: "Add to “Matching”",
+        },
         field: "Site",
         hint: "Matched by registrable domain, its subdomains included.",
+        matchingHint: "Its subdomains match this way too.",
         confirm: "Add",
       },
       activity: {
@@ -1648,6 +1660,7 @@ export const en: Messages = {
     itemUpdated: "Changed the password of “{title}” from the browser",
     browserPairRequested: "{browser} asks to connect, code {code}",
     browserConfirmRequested: "{browser} asks to fill “{title}”",
+    browserLinkCodeRequested: "{browser} asks to link a code to “{title}”",
     browserPaused: "“{name}” asked too often and is paused",
     browserUnlockRequested: "{browser} asks Lockra to unlock",
     openPalette: "Quick search opened",

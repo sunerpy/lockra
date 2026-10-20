@@ -13,6 +13,9 @@ import type { UpdateNote } from "../shared/messages";
 
 /** The file Lockra writes last into its copy of the extension (lockra-desktop `MARKER`). */
 export const FOLDER_MARKER = "lockra-folder.json";
+/** The build every copy of the extension carries (scripts/build.mjs): a copy of the same version
+ *  built from other sources is another one too. */
+export const BUILD_FILE = "lockra-build.json";
 /** The folder's version a reload was last tried for (storage.local). */
 export const RELOAD_TRIED = "update.reload_tried";
 
@@ -26,41 +29,55 @@ export interface SelfUpdateDeps {
   api: Pick<BrowserApi, "runtime" | "storage">;
   /** The version that runs: the manifest as the browser loaded it. */
   loaded: string;
+  /** The build that runs (LOCKRA_BUILD); without it, versions alone are compared. */
+  build?: string;
   fetch: FetchFile;
 }
 
 export class SelfUpdate {
   /** The version in Lockra's folder: null without the file, undefined until read. */
   private folder: string | null | undefined;
+  /** The build of the folder's copy: null when it says none (a copy older than this check). */
+  private folderBuild: string | null = null;
   private tried: string | null = null;
 
   constructor(private readonly deps: SelfUpdateDeps) {}
 
   /** Read the file again: Lockra may have put a new copy there meanwhile. */
   async refresh(): Promise<void> {
-    const [folder, stored] = await Promise.all([
+    const [folder, build, stored] = await Promise.all([
       this.readMarker(),
+      this.deps.build === undefined ? null : this.readBuild(),
       this.deps.api.storage.local.get(RELOAD_TRIED).catch(() => ({})),
     ]);
     const tried = (stored as Record<string, unknown>)[RELOAD_TRIED];
     this.folder = folder;
+    this.folderBuild = folder === null ? null : build;
     this.tried = typeof tried === "string" ? tried : null;
   }
 
-  /** Another version waits in the folder and has not been tried. */
-  get waiting(): boolean {
-    return (
-      typeof this.folder === "string" &&
-      this.folder !== this.deps.loaded &&
-      this.folder !== this.tried
-    );
+  /** The copy a reload is tried for, once: its version, and its build when it says one. */
+  private get copy(): string | null {
+    if (typeof this.folder !== "string") return null;
+    return this.folderBuild === null ? this.folder : `${this.folder}+${this.folderBuild}`;
   }
 
-  /** Reload when a version waits and nothing is open (`busy`): whether it does. */
+  /** Another version, or another build of this one, waits in the folder and has not been tried. */
+  get waiting(): boolean {
+    const copy = this.copy;
+    if (copy === null) return false;
+    const other =
+      this.folder !== this.deps.loaded ||
+      (this.folderBuild !== null && this.folderBuild !== this.deps.build);
+    return other && copy !== this.tried;
+  }
+
+  /** Reload when a copy waits and nothing is open (`busy`): whether it does. */
   async reloadIfIdle(busy: boolean): Promise<boolean> {
-    if (busy || !this.waiting || typeof this.folder !== "string") return false;
-    this.tried = this.folder;
-    await this.deps.api.storage.local.set({ [RELOAD_TRIED]: this.folder });
+    const copy = this.copy;
+    if (busy || !this.waiting || copy === null) return false;
+    this.tried = copy;
+    await this.deps.api.storage.local.set({ [RELOAD_TRIED]: copy });
     this.deps.api.runtime.reload();
     return true;
   }
@@ -73,6 +90,21 @@ export class SelfUpdate {
     if (this.waiting) return "waiting";
     if (!olderThan(this.deps.loaded, app)) return null;
     return this.folder === null ? "manual" : "folder";
+  }
+
+  private async readBuild(): Promise<string | null> {
+    try {
+      const response = await this.deps.fetch(this.deps.api.runtime.getURL(BUILD_FILE), {
+        cache: "no-store",
+      });
+      if (!response.ok) return null;
+      const file: unknown = await response.json();
+      const build =
+        typeof file === "object" && file !== null && "build" in file ? file.build : null;
+      return typeof build === "string" && build !== "" ? build : null;
+    } catch {
+      return null;
+    }
   }
 
   private async readMarker(): Promise<string | null> {

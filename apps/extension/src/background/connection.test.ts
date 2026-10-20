@@ -227,6 +227,7 @@ describe("a session", () => {
           on_page_load: false,
           // Not in this answer (an older Lockra's): off.
           match_port: false,
+          match_host: false,
         },
         items: 3,
         paused: false,

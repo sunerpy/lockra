@@ -1,5 +1,5 @@
 import { FakeBrowser } from "../test/fake-browser";
-import { FOLDER_MARKER, RELOAD_TRIED, SelfUpdate } from "./update";
+import { BUILD_FILE, FOLDER_MARKER, RELOAD_TRIED, SelfUpdate } from "./update";
 
 /** A fetch of the extension's own files: Lockra's marker with `marker`, or no such file. */
 function files(marker: unknown) {
@@ -26,7 +26,53 @@ function setUp(marker: unknown, loaded = "0.10.1") {
   return { api, update, urls, reloads: () => reloads };
 }
 
+/** Lockra's marker and the copy's build file, each by its name. */
+function folderFiles(marker: unknown, build: unknown) {
+  const fetch = async (url: string) => {
+    const body = url.endsWith(`/${BUILD_FILE}`) ? build : marker;
+    if (body === undefined) throw new TypeError("Failed to fetch");
+    return { ok: true, json: async () => body };
+  };
+  return fetch;
+}
+
 describe("SelfUpdate", () => {
+  it("reloads for another build of the version that runs, once per build", async () => {
+    // 2026-10-20: copies of one version built from other sources (a build to test) left the
+    // older background running, its pages new.
+    const api = new FakeBrowser();
+    let reloads = 0;
+    api.runtime.reload = () => {
+      reloads += 1;
+    };
+    const start = (build: unknown, running = "abc123") =>
+      new SelfUpdate({
+        api,
+        loaded: "0.10.1",
+        build: running,
+        fetch: folderFiles({ version: "0.10.1" }, build),
+      });
+    const update = start({ build: "def456" });
+    await update.refresh();
+    expect(update.note("0.10.1")).toBe("waiting");
+    expect(await update.reloadIfIdle(false)).toBe(true);
+    expect(reloads).toBe(1);
+    expect(await api.storage.local.get(RELOAD_TRIED)).toEqual({ [RELOAD_TRIED]: "0.10.1+def456" });
+    // Started again on the same build: nothing more; the build that runs: nothing to do.
+    const again = start({ build: "def456" });
+    await again.refresh();
+    expect(await again.reloadIfIdle(false)).toBe(false);
+    const same = start({ build: "def456" }, "def456");
+    await same.refresh();
+    expect(same.note("0.10.1")).toBeNull();
+    expect(await same.reloadIfIdle(false)).toBe(false);
+    // A copy without the file (older than this check) is compared by its version alone.
+    const older = start(undefined);
+    await older.refresh();
+    expect(await older.reloadIfIdle(false)).toBe(false);
+    expect(reloads).toBe(1);
+  });
+
   it("reloads once nothing is open when Lockra's folder holds another version", async () => {
     const { api, update, urls, reloads } = setUp({ version: "0.10.2", digest: "sha256:x" });
     await update.refresh();

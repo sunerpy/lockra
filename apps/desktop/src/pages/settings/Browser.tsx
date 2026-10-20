@@ -5,6 +5,7 @@ import {
   type BrowserStatus,
   type ExtensionFolder,
   type PairedView,
+  type SiteRuleKind,
   type SiteRuleView,
   browserName,
   browserRows,
@@ -17,12 +18,14 @@ import {
   riskierPolicy,
 } from "@lockra/shared";
 import {
+  Badge,
   Banner,
   Button,
   Card,
   Dialog,
   Icon,
   IconButton,
+  type IconName,
   Input,
   Lamp,
   type LampTone,
@@ -35,13 +38,14 @@ import {
   TileRow,
   Toggle,
   type VerifyAction,
+  cx,
   useBackend,
   useClock,
   useLocale,
   useT,
   useUiState,
 } from "@lockra/ui";
-import { type SubmitEvent, useEffect, useId, useState } from "react";
+import { type ReactNode, type SubmitEvent, useEffect, useId, useState } from "react";
 import { useDispatch, useGuarded, useSubmit } from "../../app/dispatch";
 import { useUpdateSettings } from "../../app/settings";
 import { useVerify } from "../../features/items/verify";
@@ -469,8 +473,14 @@ function PausedBanner({ paired }: { paired: PairedView }) {
   );
 }
 
-type PolicySwitch = "fill_otp" | "copy_otp" | "auto_submit" | "confirm_fill" | "match_port";
-type SwitchWords = "fillOtp" | "copyOtp" | "autoSubmit" | "confirmFill" | "matchPort";
+type PolicySwitch =
+  | "fill_otp"
+  | "copy_otp"
+  | "auto_submit"
+  | "confirm_fill"
+  | "match_port"
+  | "match_host";
+type SwitchWords = "fillOtp" | "copyOtp" | "autoSubmit" | "confirmFill" | "matchPort" | "matchHost";
 type PolicyWords =
   | SwitchWords
   | `${SwitchWords}Help`
@@ -479,9 +489,10 @@ type PolicyWords =
   | "onPageLoad"
   | "onPageLoadHelp";
 
-/** The seven choices of what the paired extensions may do. A change that lets them do more asks for
+/** The eight choices of what the paired extensions may do. A change that lets them do more asks for
  *  proof first (the core would refuse it without); filling as pages load shows its risks before
- *  that. Matching the port only narrows what they get, either way without proof. */
+ *  that. Matching the port or the full host only narrows what they get, either way without
+ *  proof. */
 function Policy({ policy }: { policy: BrowserPolicy }) {
   const t = useT();
   const { backend } = useBackend();
@@ -515,6 +526,7 @@ function Policy({ policy }: { policy: BrowserPolicy }) {
         {row("auto_submit", "autoSubmit")}
         {row("confirm_fill", "confirmFill")}
         {row("match_port", "matchPort")}
+        {row("match_host", "matchHost")}
         <StatusRow label={p("frames")} help={p("framesHelp")}>
           <Segmented
             size="sm"
@@ -602,72 +614,98 @@ function PageLoadRisks({
 }
 
 type ListKind = "never_save" | "never_fill";
+/** How a site and its subdomains match whatever the policy says: by the full host or by the
+ *  registrable domain. The core keeps one of the two for a domain. */
+type MatchKind = Extract<SiteRuleKind, "match_host" | "match_domain">;
+const MATCH_KINDS: readonly MatchKind[] = ["match_host", "match_domain"];
+/** A card of the site lists: one of the two lists, or the sites matched their own way. */
+type SiteCard = ListKind | "matching";
 
+/** The two lists side by side, and under them, across both columns, the sites matched their own
+ *  way, each with its level. */
 function SiteLists({ rules }: { rules: readonly SiteRuleView[] }) {
   const t = useT();
   const dispatch = useDispatch();
-  const [adding, setAdding] = useState<ListKind | null>(null);
-  const list = (kind: ListKind, icon: "bellOff" | "ban") => {
-    const own = rules.filter((r) => r.kind === kind);
+  const [adding, setAdding] = useState<SiteCard | null>(null);
+  const row = (rule: SiteRuleView, level?: MatchKind) => {
+    const site = rule.domains.join(", ");
     return (
-      <Card padding="sm" data-testid={`sites-${kind}`} className="flex min-w-0 flex-col gap-1">
-        <div className="flex items-center gap-2 px-1 pb-1 text-[13px] font-medium text-fg">
+      <div
+        key={rule.id}
+        className="flex h-9 min-w-0 items-center gap-2 px-1"
+        data-testid="site-rule">
+        <span className="min-w-0 flex-1 truncate text-[13px] text-fg" title={site}>
+          {site}
+        </span>
+        {level !== undefined && (
+          <Badge className="shrink-0">{t(`settings.browser.sites.level.${level}`)}</Badge>
+        )}
+        <IconButton
+          icon="x"
+          size={24}
+          label={t("settings.browser.sites.remove", { site })}
+          onClick={() => void dispatch({ command: "site_rule_remove", id: rule.id })}
+        />
+      </div>
+    );
+  };
+  const card = (kind: SiteCard, icon: IconName, rows: ReactNode[]) => (
+    <Card
+      padding="sm"
+      data-testid={`sites-${kind}`}
+      className={cx("flex min-w-0 flex-col gap-1", kind === "matching" && "col-span-2")}>
+      <div className="px-1 pb-1">
+        <div className="flex items-center gap-2 text-[13px] font-medium text-fg">
           <Icon name={icon} size={14} className="text-fg-muted" />
           {t(`settings.browser.sites.${kind}`)}
         </div>
-        {own.length === 0 && (
-          <p className="px-1 py-2 text-[12px] text-fg-subtle">
-            {t("settings.browser.sites.empty")}
+        {kind === "matching" && (
+          <p className="mt-0.5 text-[12px] leading-4 text-fg-muted">
+            {t("settings.browser.sites.matchingHelp")}
           </p>
         )}
-        {own.map((rule) => {
-          const site = rule.domains.join(", ");
-          return (
-            <div key={rule.id} className="flex h-9 min-w-0 items-center gap-2 px-1">
-              <span className="min-w-0 flex-1 truncate text-[13px] text-fg" title={site}>
-                {site}
-              </span>
-              <IconButton
-                icon="x"
-                size={24}
-                label={t("settings.browser.sites.remove", { site })}
-                onClick={() => void dispatch({ command: "site_rule_remove", id: rule.id })}
-              />
-            </div>
-          );
-        })}
-        <Button
-          variant="text"
-          size="sm"
-          className="self-start px-1"
-          onClick={() => setAdding(kind)}>
-          {t("settings.browser.sites.add")}
-        </Button>
-      </Card>
-    );
-  };
+      </div>
+      {rows.length === 0 && (
+        <p className="px-1 py-2 text-[12px] text-fg-subtle">{t("settings.browser.sites.empty")}</p>
+      )}
+      {rows}
+      <Button variant="text" size="sm" className="self-start px-1" onClick={() => setAdding(kind)}>
+        {t("settings.browser.sites.add")}
+      </Button>
+    </Card>
+  );
+  const listed = (kind: ListKind) => rules.filter((r) => r.kind === kind).map((r) => row(r));
+  const matched = rules.flatMap((rule) => {
+    const level = MATCH_KINDS.find((kind) => kind === rule.kind);
+    return level === undefined ? [] : [row(rule, level)];
+  });
   return (
     <SettingsSection title={t("settings.browser.sites.title")}>
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3.5">
-        {list("never_save", "bellOff")}
-        {list("never_fill", "ban")}
+        {card("never_save", "bellOff", listed("never_save"))}
+        {card("never_fill", "ban", listed("never_fill"))}
+        {card("matching", "globe", matched)}
       </div>
-      {adding !== null && <AddSite kind={adding} onClose={() => setAdding(null)} />}
+      {adding !== null && <AddSite card={adding} onClose={() => setAdding(null)} />}
     </SettingsSection>
   );
 }
 
-/** Board 16 e: a site for one of the two lists; the core cleans it to its domain. */
-function AddSite({ kind, onClose }: { kind: ListKind; onClose: () => void }) {
+/** Board 16 e: a site for one of the two lists; for the matching card, with how it matches (its
+ *  full host unless the user picks its domain). The core cleans it to its domain. */
+function AddSite({ card, onClose }: { card: SiteCard; onClose: () => void }) {
   const t = useT();
   const { backend } = useBackend();
   const submit = useSubmit();
   const formId = useId();
   const [site, setSite] = useState("");
+  const [level, setLevel] = useState<MatchKind>("match_host");
+  const matching = card === "matching";
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     const domain = site.trim();
     if (domain === "") return;
+    const kind = matching ? level : card;
     const done = await submit.run(() =>
       backend.dispatch({ command: "site_rule_add", kind, domains: [domain] }),
     );
@@ -676,7 +714,7 @@ function AddSite({ kind, onClose }: { kind: ListKind; onClose: () => void }) {
   return (
     <Dialog
       open
-      title={t(`settings.browser.sites.addTitle.${kind}`)}
+      title={t(`settings.browser.sites.addTitle.${card}`)}
       onClose={onClose}
       actions={
         <>
@@ -693,18 +731,34 @@ function AddSite({ kind, onClose }: { kind: ListKind; onClose: () => void }) {
           </Button>
         </>
       }>
-      <form id={formId} onSubmit={(e) => void onSubmit(e)}>
+      <form id={formId} onSubmit={(e) => void onSubmit(e)} className="flex flex-col gap-3">
         <Input
           label={t("settings.browser.sites.field")}
           value={site}
           onChange={(e) => setSite(e.target.value)}
-          placeholder="bank.example.cn"
-          help={t("settings.browser.sites.hint")}
+          placeholder={matching ? "git.example.com" : "bank.example.cn"}
+          help={t(matching ? "settings.browser.sites.matchingHint" : "settings.browser.sites.hint")}
           error={submit.error === undefined ? undefined : errorText(t, submit.error)}
           autoComplete="off"
           spellCheck={false}
           data-autofocus
         />
+        {matching && (
+          <div>
+            <div className="mb-1 text-[12px] text-fg-muted">
+              {t("settings.browser.sites.matching")}
+            </div>
+            <Segmented
+              label={t("settings.browser.sites.matching")}
+              value={level}
+              onChange={setLevel}
+              options={MATCH_KINDS.map((kind) => ({
+                value: kind,
+                label: t(`settings.browser.sites.level.${kind}`),
+              }))}
+            />
+          </div>
+        )}
       </form>
     </Dialog>
   );

@@ -204,6 +204,8 @@ describe("requests", () => {
       site_rule: request(11, { op: "site_rule", kind: "never_save", ...facts }),
       search: request(12, { op: "search", text: "exam", top_url: "https://www.example.com/" }),
       delete: request(16, { op: "delete", item_id: item, ...facts }),
+      site_matching: request(17, { op: "site_matching", ...facts, host: true }),
+      link_code: request(18, { op: "link_code", item_id: item, ...facts }),
     };
     expect(Object.keys(built).toSorted()).toEqual(Object.keys(f.requests).toSorted());
     for (const [name, raw] of Object.entries(f.requests))
