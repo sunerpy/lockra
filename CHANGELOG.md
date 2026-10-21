@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/sunerpy/lockra/compare/v0.16.0...v0.16.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **deps:** 将 rustls-webpki 更新到 0.103.16，修复 RUSTSEC-2026-0382 ([#196](https://github.com/sunerpy/lockra/issues/196)) ([f5983c1](https://github.com/sunerpy/lockra/commit/f5983c10b2a33697b36040e890869cef51998a4c))
+
 ## [0.16.0](https://github.com/sunerpy/lockra/compare/v0.15.0...v0.16.0) (2026-10-20)
 
 
