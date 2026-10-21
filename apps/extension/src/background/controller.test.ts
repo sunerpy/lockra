@@ -1590,6 +1590,16 @@ describe("its own update", () => {
     context.connection.refreshHello();
   }
 
+  /** Until the extension reloaded itself once. A request still under way as the last page closes
+   *  (the reopened session's first ones) puts the reload off for a retry (UPDATE_RETRY_MS, the
+   *  test after next), which only the manual clock brings: CI on 2026-10-20 closed the popup then. */
+  async function reloadedOnce(context: Context) {
+    await vi.waitFor(() => {
+      context.clock.advance(5_000);
+      expect(context.browser.reloads).toBe(1);
+    });
+  }
+
   it("reloads itself as it starts when Lockra's folder holds another version", async () => {
     const { browser } = await setup({ folder: "0.10.1" });
     await vi.waitFor(() => expect(browser.reloads).toBe(1));
@@ -1604,7 +1614,7 @@ describe("its own update", () => {
     await vi.waitFor(() => expect(states().at(-1)?.update).toBe("waiting"));
     expect(context.browser.reloads).toBe(0);
     port.disconnect();
-    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+    await reloadedOnce(context);
   });
 
   it("finds a copy Lockra put there as a page opens, and reloads once it closes", async () => {
@@ -1614,7 +1624,7 @@ describe("its own update", () => {
     await vi.waitFor(() => expect(states().at(-1)?.update).toBe("waiting"));
     expect(context.browser.reloads).toBe(0);
     port.disconnect();
-    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+    await reloadedOnce(context);
   });
 
   it("reads the folder again as Lockra comes back, of the same version or not", async () => {
@@ -1627,7 +1637,7 @@ describe("its own update", () => {
     context.app.running = true;
     context.connection.ensure();
     await vi.waitFor(() => expect(context.connection.view.app?.version).toBe("0.10.0"));
-    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+    await reloadedOnce(context);
   });
 
   it("waits for the menu by a field to close, not for one whose page went", async () => {
@@ -1654,7 +1664,7 @@ describe("its own update", () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(context.browser.reloads).toBe(0);
     menu.disconnect();
-    await vi.waitFor(() => expect(context.browser.reloads).toBe(1));
+    await reloadedOnce(context);
   });
 
   it("waits for a request under way, then tries again", async () => {

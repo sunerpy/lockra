@@ -122,23 +122,37 @@ left_screen() {
   done
 }
 # The centre of the node labelled with one of the words: the text or description equal to it,
-# else containing it.
+# else containing it. Only its part above $tap_bottom counts: a node cut off there is not on the
+# screen yet. 2 when the node meant is there but not on the screen (reveal scrolls it up): a node
+# that only contains the word never stands in for one equal to it (CI, 2026-10-21: 「Start syncing」
+# at the bottom edge, and the page's title 「Start syncing from this device」 above it).
 centre() {
-  python3 - "$out/ui.xml" "$@" <<'PY'
+  python3 - "$out/ui.xml" "${tap_bottom:-1000000}" "$@" <<'PY'
 import re, sys, xml.etree.ElementTree as ET
-path, *words = sys.argv[1:]
-nodes = []
+path, bottom, *words = sys.argv[1:]
+bottom = int(bottom)
+exact, partial = [], []
 for node in ET.parse(path).getroot().iter("node"):
+    text, desc = (node.get("text") or "").strip(), (node.get("content-desc") or "").strip()
+    equal = any(w in (text, desc) for w in words)
+    if not equal and not any(w in text or w in desc for w in words):
+        continue
+    spot = None
     m = re.fullmatch(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node.get("bounds", ""))
     if m:
         x1, y1, x2, y2 = map(int, m.groups())
-        if x2 > x1 and y2 > y1:
-            nodes.append(((node.get("text") or "").strip(), (node.get("content-desc") or "").strip(), (x1 + x2) // 2, (y1 + y2) // 2))
-for exact in (True, False):
-    for text, desc, x, y in nodes:
-        if any((w in (text, desc)) if exact else (w in text or w in desc) for w in words):
-            print(x, y)
+        y2 = min(y2, bottom)
+        # At least 8 px of it to tap: a sliver at the edge is no target.
+        if x2 > x1 and y2 - y1 >= 8:
+            spot = ((x1 + x2) // 2, (y1 + y2) // 2)
+    (exact if equal else partial).append(spot)
+for group in (exact, partial):
+    if group:
+        spot = next((s for s in group if s), None)
+        if spot:
+            print(*spot)
             sys.exit(0)
+        sys.exit(2)
 sys.exit(1)
 PY
 }
@@ -287,6 +301,19 @@ adb shell am start -W -n "$package/.MainActivity" >"$out/start.txt" 2>&1 || fail
 # an emulator running arm64 code through its ARM translation is slow.
 showing 'Create vault|创建保险库' 120
 full_bottom=$(webview_bottom) || fail "no webview on the screen"
+# A tap on the navigation bar at the screen's bottom edge goes to the system's gesture handle, never
+# to the app (CI, 2026-10-18 and 2026-10-20: a button the edge cut off was tapped at y 634 and 638
+# of 640, and the launcher took it): reveal() takes only what stands above the bar. Its top is the
+# device's own navigationBars inset where `dumpsys window` lists one, else 24 dp up (the gesture
+# bar's height; the last button of a page, at 588–627 of 640, has to stay tappable).
+tap_bottom=$(adb shell dumpsys window 2>/dev/null | tr -d '\r' |
+  sed -n 's/.*type=navigationBars frame=\[[0-9]*,\([0-9]*\)\]\[[0-9]*,\([0-9]*\)\].*/\1 \2/p' |
+  awk -v full="$full_bottom" '$2 == full && $1 > full / 2 && (top == "" || $1 < top) { top = $1 } END { print top }')
+if [ -z "$tap_bottom" ]; then
+  density=$(adb shell wm density | sed -n 's/.*: *\([0-9]*\).*/\1/p' | tail -1)
+  tap_bottom=$((full_bottom - 24 * ${density:-160} / 160))
+fi
+echo "android-device-smoke: taps stay above y $tap_bottom of $full_bottom"
 
 # A vault: the password typed twice, then the codes screen (Argon2id runs here: give it time).
 type_into "$password" 'Master password' '主密码'
