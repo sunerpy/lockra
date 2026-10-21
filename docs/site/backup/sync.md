@@ -288,8 +288,9 @@ While the vault is unlocked, a device keeps one request waiting at the relay, wh
 another device writes: the change arrives about a second later. Besides, a device syncs at the
 intervals of any storage ([When devices sync](#when-devices-sync)).
 
-**Change storage settings** also moves a space onto a relay. Unlike other storage, the relay need
-not hold the space yet: this device writes it there on its next sync. Then change the storage
+**Change storage settings** also moves a space onto a relay, without the question other storage
+asks ([Moving the space to other storage](#moving-the-space-to-other-storage)): this device writes
+it there on its next sync. Then change the storage
 settings on the other devices the same way.
 
 What the relay can see:
@@ -383,11 +384,12 @@ storage. A device that is still in use appears again on its next sync. **Rename*
 ## Changing the storage settings or turning sync off
 
 **Change storage settings** takes a new access key, password or address, and the master password.
-The space must already be at the new place: move its folder first.
+Where the new place holds the space already (its folder moved, say), Lockra takes it; where it
+holds nothing of it yet, Lockra offers to move the space there (below).
 
 ### Moving the space to other storage
 
-<StatusTag status="building" />
+<StatusTag status="available" /> Available from version 0.16.2.
 
 When the new place holds nothing of the space yet, for example on a move from a Lockra relay to
 Jianguoyun, **Change storage settings** asks whether to move the space there. After **Move it**:
