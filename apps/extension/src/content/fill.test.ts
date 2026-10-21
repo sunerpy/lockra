@@ -35,6 +35,27 @@ describe("setting a value", () => {
 });
 
 describe("filling a sign-in form", () => {
+  it("fills a formless sign-in from either field, its masked code with the code", () => {
+    // NWCD's SSO: each field in a box of its own, no <form>, the MFA code masked as a password.
+    const field = (id: string, type: string, placeholder: string) =>
+      `<div class="form-field"><div class="input-wrapper"><input id="${id}" ${type} placeholder="${placeholder}"></div></div>`;
+    for (const from of ["username", "password"]) {
+      document.body.innerHTML = `<div class="login-form">${field("username", "", "用户名 / 邮箱 / 员工编号")}${field(
+        "password",
+        'type="password"',
+        "密码",
+      )}${field("mfa", 'type="password"', "MFA 令牌")}<button>登录</button></div>`;
+      const result = fillForm(scanField(input(from), view), { ...VALUES, otp: "123456" }, view);
+      expect([from, input("username").value, input("password").value, input("mfa").value]).toEqual([
+        from,
+        "alice",
+        "s3cret",
+        "123456",
+      ]);
+      expect(result).toEqual({ filled: 3, password: true, code: true });
+    }
+  });
+
   it("fills the user name and the password of the form, nothing hidden and nothing elsewhere", () => {
     document.body.innerHTML = `
       <form id="login">
