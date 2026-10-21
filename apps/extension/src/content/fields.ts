@@ -126,11 +126,11 @@ function namesCode(text: string): boolean {
   );
 }
 
-/** A password-type field that takes a one-time code: some second steps mask the code as they would
- *  a password (NDKEY's ADFS adapter: `type="password" name="OTP"`). The page's token says so, or
- *  the field's own names do in so many words while it is the only field of its form to type in:
- *  a sign-in's password field, beside its user name or named a password by the page, never reads
- *  as one. */
+/** A password-type field that takes a one-time code: some pages mask the code as they would a
+ *  password (NDKEY's ADFS adapter: `type="password" name="OTP"`; NWCD's SSO: "MFA 令牌" after the
+ *  password). The page's token says so, or the field's own names do in so many words while it is
+ *  the only field of its form to type in, or comes after the sign-in's password: a sign-in's
+ *  password field, beside its user name or named a password by the page, never reads as one. */
 function maskedCode(input: HTMLInputElement, view: View): boolean {
   const token = autocomplete(input);
   if (token === "one-time-code") return true;
@@ -142,7 +142,20 @@ function maskedCode(input: HTMLInputElement, view: View): boolean {
     input.getAttribute("placeholder"),
   ];
   if (!own.some((text) => text && namesCode(text))) return false;
-  return standsAlone(input, view);
+  return standsAlone(input, view) || afterPassword(input, view);
+}
+
+/** Another visible password field of its form comes before it: the sign-in's password. */
+function afterPassword(input: HTMLInputElement, view: View): boolean {
+  return Array.from(formOf(input).querySelectorAll("input")).some(
+    (other) =>
+      other !== input &&
+      isFillable(other) &&
+      isPassword(other) &&
+      view.visible(other) &&
+      other.form === input.form &&
+      before(other, input),
+  );
 }
 
 /** The only field of its form to type in: every other input of the form is the field itself, one
@@ -262,18 +275,30 @@ function depthBelow(el: Element, ancestor: Element): number {
 }
 
 /** The form a field belongs to: its <form>, else the smallest box around it that holds a password
- *  field (a formless sign-in), else the page. */
+ *  field (a formless sign-in), else the page. A password field's own box may hold it alone, each
+ *  field in a box of its own (NWCD's SSO): its sign-in is then the first box around that holds
+ *  other fields too, where one of them names a user name before it. */
 export function formOf(field: HTMLInputElement): HTMLElement {
   if (field.form) return field.form;
   const doc = field.ownerDocument;
+  let smallest: HTMLElement | null = null;
   for (let node = field.parentElement; node && node !== doc.body; node = node.parentElement) {
     // A password field of its own, not one inside a form further down.
     const formless = Array.from(
       node.querySelectorAll<HTMLInputElement>('input[type="password" i]'),
     ).some((p) => !p.form);
-    if (formless) return node;
+    if (!formless) continue;
+    if (!isPassword(field)) return node;
+    smallest ??= node;
+    const others = Array.from(node.querySelectorAll("input")).filter(
+      (input) => input !== field && !input.form && isFillable(input),
+    );
+    if (others.length === 0) continue;
+    return node === smallest || others.some((input) => userLike(input) && before(input, field))
+      ? node
+      : smallest;
   }
-  return doc.body;
+  return smallest ?? doc.body;
 }
 
 /** The fillable inputs of `root` that belong to the same form as `field` (none: formless ones). */
@@ -365,8 +390,9 @@ export function scanField(field: HTMLInputElement, view: View): FormScan {
   const group = otpGroup(field, view);
   if (group) return { ...base, kind: "otp", otp: group };
   if (looksOtp(field, view)) return { ...base, kind: "otp", otp: [field] };
+  // A code masked as a password is not one (NWCD's SSO: the MFA code after the password).
   const passwords = inputsOf(root, field).filter(
-    (input) => isPassword(input) && view.visible(input),
+    (input) => isPassword(input) && view.visible(input) && !looksOtp(input, view),
   );
   const username = usernameOf(root, field, passwords, view);
   const hiddenUsername = hiddenUsernameOf(root, view);

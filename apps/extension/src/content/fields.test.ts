@@ -260,6 +260,41 @@ describe("one-time codes", () => {
     }
   });
 
+  it("are a password-type field that names a code beside the sign-in's password", () => {
+    // NWCD's SSO (the user's report, 2026-10-21): user name, password and the MFA code on one page,
+    // with no <form>, the code masked as the password is.
+    page(`
+      <div class="login-form">
+        <div class="form-field"><div class="input-wrapper">
+          <input id="username" placeholder="用户名 / 邮箱 / 员工编号"></div></div>
+        <div class="form-field"><div class="input-wrapper">
+          <input id="password" type="password" placeholder="密码"></div></div>
+        <div class="form-field"><div class="input-wrapper">
+          <input id="mfa" type="password" placeholder="MFA 令牌"></div></div>
+        <button>登录</button>
+      </div>`);
+    for (const id of ["username", "password"]) {
+      const scan = scanField(input(id), view);
+      expect([id, scan.kind, scan.username?.id, scan.passwords.map((p) => p.id)]).toEqual([
+        id,
+        "login",
+        "username",
+        ["password"],
+      ]);
+    }
+    const code = scanField(input("mfa"), view);
+    expect(code.kind).toBe("otp");
+    expect(code.otp.map((i) => i.id)).toEqual(["mfa"]);
+    expect(findOtp(document, view)?.map((i) => i.id)).toEqual(["mfa"]);
+    expect(findLoginForms(document, view).map((f) => f.passwords.map((p) => p.id))).toEqual([
+      ["password"],
+    ]);
+    // Two password fields that name no code stay a new password and its confirmation.
+    page(`<div><input id="u" name="email"><input type="password" id="a" name="password">
+      <input type="password" id="b" name="confirm"></div>`);
+    expect(scanField(input("a"), view).kind).toBe("signup");
+  });
+
   it("are not a sign-in's own password field, whatever its name says", () => {
     // Beside a user name it is the password of the form.
     page(`<form><input id="user" name="username"><input type="password" id="p" name="otp"></form>`);
