@@ -277,6 +277,7 @@
     },
     {
       "command": "sync_set_storage",
+      "move_here": true,
       "reason": "change the storage settings",
       "storage": {
         "kind": "folder"

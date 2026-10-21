@@ -4,6 +4,7 @@ import {
   MOCK_STORAGE_SECRET,
   MOCK_SYNC_FOLDER,
   MOCK_OLD_INVITE,
+  MOCK_SPACE_INVITE,
   MOCK_SYNC_KEY,
   MockBackend,
   fakeCode,
@@ -595,6 +596,51 @@ describe("MockBackend", () => {
     expect((await off.getState()).update.status).toEqual({ state: "idle" });
   });
 
+  it("backs up automatically before a space moves to a place that holds nothing of it", async () => {
+    const backend = new MockBackend({ entries: sampleEntries(), now: () => Date.UTC(2026, 9, 2) });
+    const { notices } = recorder(backend);
+    const webdav = (url: string): StorageConfig => ({
+      kind: "webdav",
+      url,
+      prefix: "",
+      username: "me",
+      password: MOCK_STORAGE_SECRET,
+    });
+    await backend.dispatch({
+      command: "sync_create",
+      storage: webdav("https://dav.example.com/dav/"),
+      password: MOCK_PASSWORD,
+      device_name: "Laptop",
+    });
+    await backend.pickBackupDir();
+    const settings = (await backend.getState()).settings;
+    await backend.dispatch({
+      command: "settings_set",
+      settings: { ...settings, auto_backup: { ...settings.auto_backup, enabled: true } },
+    });
+    const move = (url: string) =>
+      backend.dispatch({
+        command: "sync_set_storage",
+        storage: webdav(url),
+        password: MOCK_PASSWORD,
+        move_here: true,
+      });
+    // Where the space is, nothing moves and nothing is backed up.
+    await move("https://dav.example.com/dav");
+    expect(notices().filter((n) => n.type === "backup_written")).toHaveLength(0);
+    await move("https://dav.jianguoyun.com/dav/");
+    expect(notices().filter((n) => n.type === "backup_written")).toEqual([
+      {
+        type: "backup_written",
+        file_name: "lockra-auto-20261001-081500.lockrabackup",
+        automatic: true,
+      },
+    ]);
+    expect((await backend.getState()).sync.space?.storage).toMatchObject({
+      url: "https://dav.jianguoyun.com/dav/",
+    });
+  });
+
   it("sets up sync on storage of the user's own and shows the space only while unlocked", async () => {
     const backend = new MockBackend({ entries: sampleEntries(), now: () => Date.UTC(2026, 9, 2) });
     const s3 = (secret: string, endpoint = "https://s3.example.com"): StorageConfig => ({
@@ -657,16 +703,41 @@ describe("MockBackend", () => {
       username: "me",
       password: MOCK_STORAGE_SECRET,
     };
+    // Another place holds nothing of the space: refused until the user confirms the move.
+    expect(
+      await errorCode(
+        backend.dispatch({ command: "sync_set_storage", storage: webdav, password: MOCK_PASSWORD }),
+      ),
+    ).toBe("sync_space_not_found");
+    expect((await backend.getState()).sync.space?.storage.kind).toBe("s3");
     await backend.dispatch({
       command: "sync_set_storage",
       storage: webdav,
       password: MOCK_PASSWORD,
+      move_here: true,
     });
     expect((await backend.getState()).sync.space?.storage).toEqual({
       kind: "webdav",
       url: "https://dav.example.com/dav/",
       prefix: "lockra",
       username: "me",
+    });
+    // The same place written another way, or the place it moved from: no move.
+    await backend.dispatch({
+      command: "sync_set_storage",
+      storage: { ...webdav, url: "https://dav.example.com/dav" },
+      password: MOCK_PASSWORD,
+    });
+    await backend.dispatch({
+      command: "sync_set_storage",
+      storage: s3(MOCK_STORAGE_SECRET, "http://127.0.0.1:9000"),
+      password: MOCK_PASSWORD,
+    });
+    expect((await backend.getState()).sync.space?.storage.kind).toBe("s3");
+    await backend.dispatch({
+      command: "sync_set_storage",
+      storage: webdav,
+      password: MOCK_PASSWORD,
     });
 
     await backend.dispatch({ command: "vault_lock" });
@@ -740,6 +811,22 @@ describe("MockBackend", () => {
     expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
       "sync_already_on",
     );
+    // An invitation from a device of the space this vault is in brings its storage settings.
+    await unlocked.dispatch({
+      command: "sync_set_storage",
+      storage: { kind: "relay", url: "https://relay.example.com" },
+      password: MOCK_PASSWORD,
+    });
+    const own: JoinSource = { type: "invite", text: MOCK_SPACE_INVITE };
+    expect(await errorCode(join(unlocked, own, "a wrong password"))).toBe("wrong_password");
+    expect((await unlocked.getState()).sync.space?.storage.kind).toBe("relay");
+    await join(unlocked, own);
+    expect((await unlocked.getState()).sync.space?.storage).toEqual({
+      kind: "webdav",
+      url: "https://dav.example.com/dav/",
+      prefix: "lockra",
+      username: "me@example.com",
+    });
     await unlocked.dispatch({ command: "vault_lock" });
     expect(await errorCode(join(unlocked, { type: "invite", text: "lockra-invite:1:abc" }))).toBe(
       "locked",

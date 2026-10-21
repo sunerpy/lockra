@@ -1474,6 +1474,8 @@ export const uiCommandSchema = z.discriminatedUnion("command", [
     storage: storageConfigSchema,
     password: password.optional(),
     reason: z.string().optional(),
+    /** The user confirmed moving the space to a place that holds nothing of it yet. */
+    move_here: z.boolean().optional(),
   }),
   z.object({ command: z.literal("sync_rename_device"), name: z.string() }),
   z.object({ command: z.literal("sync_remove_device"), tag: z.string() }),

@@ -136,13 +136,38 @@ async fn an_invitation_joins_an_unlocked_vault_under_its_own_master_password() {
     desktop.core.sync_now().unwrap();
     settle().await;
     assert_eq!(issuers(&desktop), ["Bank", "GitHub"]);
-    assert_eq!(code_err(laptop.core.sync_join(invited(), Some(pw("another password")), "Laptop".into(), None, None).await), ErrorCode::SyncAlreadyOn);
+    // Scanned again, the invitation to the space the laptop is in brings its storage settings
+    // alone, the same here: nothing changes.
+    laptop.core.sync_join(invited(), Some(pw("another password")), "Laptop".into(), None, None).await.unwrap();
+    assert!(matches!(space(&laptop).storage, StorageView::S3 { .. }));
+    assert_eq!(issuers(&laptop), ["Bank", "GitHub"]);
     // The laptop's keyring in the space is under its own password: with the recovery key, that
     // password recovers the space on a device with nothing else.
     let phone = device(&transport);
     phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw("another password")), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["Bank", "GitHub"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_invitation_carries_a_webdav_address_every_lockra_reads() {
+    // Lockra up to 0.16.1 put each path right after the address, so `…/dav/` became `…/dav//…`,
+    // which Jianguoyun refuses: the invitation leaves the final `/` out, the same place.
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, _) = first_device(&transport, webdav()).await;
+    let invite = desktop.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    let handed = lockra_sync::Invite::from_text(&invite.invite).unwrap();
+    let Some(StorageConfig::Webdav { url, .. }) = handed.storage else { panic!("{:?}", handed.storage) };
+    assert_eq!(url, "https://dav.example.com/dav");
+    assert!(matches!(space(&desktop).storage, StorageView::Webdav { ref url, .. } if url == "https://dav.example.com/dav/"), "kept as typed");
+    let phone = device(&transport);
+    phone
+        .core
+        .sync_join(JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None }, Some(pw(MASTER)), "Phone".into(), None, None)
+        .await
+        .unwrap();
+    settle().await;
+    assert_eq!(issuers(&phone), ["GitHub"]);
 }
 
 #[tokio::test(start_paused = true)]
@@ -319,7 +344,7 @@ async fn setting_up_and_joining_tell_every_failure_apart() {
     assert_eq!(code_err(laptop.core.sync_disable()), ErrorCode::SyncOff);
     assert_eq!(code_err(laptop.core.sync_rename_device("x")), ErrorCode::SyncOff);
     assert_eq!(code_err(laptop.core.sync_remove_device("x").await), ErrorCode::SyncOff);
-    assert_eq!(code_err(laptop.core.sync_set_storage(s3(STORAGE_SECRET), Some(pw(MASTER)), None).await), ErrorCode::SyncOff);
+    assert_eq!(code_err(laptop.core.sync_set_storage(s3(STORAGE_SECRET), Some(pw(MASTER)), None, false).await), ErrorCode::SyncOff);
     // Locked, nothing goes.
     desktop.core.lock_vault();
     assert_eq!(code_err(desktop.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "x".into(), None, None).await), ErrorCode::Locked);
@@ -736,8 +761,8 @@ async fn the_storage_is_opened_once_for_its_settings() {
     let StorageConfig::S3 { region, bucket, prefix, access_key_id, secret_access_key, path_style, .. } = s3(STORAGE_SECRET) else { unreachable!() };
     let moved =
         StorageConfig::S3 { endpoint: "https://s3.example.com".into(), region, bucket, prefix, access_key_id, secret_access_key, path_style: !path_style };
-    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), Some(pw("wrong password")), None).await), ErrorCode::WrongPassword);
-    desktop.core.sync_set_storage(moved, Some(pw(MASTER)), None).await.unwrap();
+    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), Some(pw("wrong password")), None, false).await), ErrorCode::WrongPassword);
+    desktop.core.sync_set_storage(moved, Some(pw(MASTER)), None, false).await.unwrap();
     settle().await;
     desktop.core.sync_now().unwrap();
     settle().await;
@@ -745,7 +770,7 @@ async fn the_storage_is_opened_once_for_its_settings() {
     // Settings that point where no space is are refused.
     let elsewhere =
         StorageConfig::Webdav { url: "https://dav.example.com/other/".into(), prefix: String::new(), username: "me".into(), password: pw(STORAGE_SECRET) };
-    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, Some(pw(MASTER)), None).await), ErrorCode::SyncSpaceNotFound);
+    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, Some(pw(MASTER)), None, false).await), ErrorCode::SyncSpaceNotFound);
     // Locked and unlocked again: the same settings, the same storage.
     desktop.core.lock_vault();
     desktop.core.unlock(pw(MASTER)).await.unwrap();
@@ -829,9 +854,9 @@ async fn new_storage_settings_must_hold_this_spaces_snapshots() {
     let last = damaged.len() - 1;
     damaged[last] ^= 1;
     there.set_object(&relative, damaged);
-    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), Some(pw(MASTER)), None).await), ErrorCode::SyncDataCorrupted);
+    assert_eq!(code_err(desktop.core.sync_set_storage(moved.clone(), Some(pw(MASTER)), None, false).await), ErrorCode::SyncDataCorrupted);
     there.set_object(&relative, original.object(&snapshot).unwrap());
-    desktop.core.sync_set_storage(moved, Some(pw(MASTER)), None).await.unwrap();
+    desktop.core.sync_set_storage(moved, Some(pw(MASTER)), None, false).await.unwrap();
     settle().await;
     assert!(matches!(space(&desktop).storage, StorageView::Webdav { .. }));
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }));
@@ -891,7 +916,7 @@ async fn a_run_stops_before_writing_where_the_space_no_longer_is() {
     desktop.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
     advance(SYNC_DEBOUNCE).await;
     gate.reached.notified().await;
-    desktop.core.sync_set_storage(webdav(), Some(pw(MASTER)), None).await.unwrap();
+    desktop.core.sync_set_storage(webdav(), Some(pw(MASTER)), None, false).await.unwrap();
     let calls = gate.remote.calls().len();
     gate.release();
     settle().await;
@@ -1089,10 +1114,10 @@ async fn a_space_moves_into_the_drives_folder_that_holds_it() {
     let folder = drive_folder(&desktop, "Nextcloud");
     // The folder holds nothing of the space yet: refused.
     desktop.core.sync_choose_folder(&folder).unwrap();
-    assert_eq!(code_err(desktop.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None).await), ErrorCode::SyncSpaceNotFound);
+    assert_eq!(code_err(desktop.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None, false).await), ErrorCode::SyncSpaceNotFound);
     // The drive's client brought it down: taken.
     transport.share(&StorageConfig::Folder { path: folder.clone() }, &webdav());
-    desktop.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None).await.unwrap();
+    desktop.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None, false).await.unwrap();
     settle().await;
     assert_eq!(space(&desktop).storage, StorageView::Folder { path: folder.display().to_string() });
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
@@ -1147,12 +1172,12 @@ async fn the_folder_is_watched_only_while_its_space_is_open_here() {
     assert_eq!(transport.watching(&folder), 1, "watched again once unlocked");
     // Moved to a storage of its own: that one tells nothing, the folder is no longer watched.
     transport.share(&webdav(), &folder);
-    windows.core.sync_set_storage(webdav(), Some(pw(MASTER)), None).await.unwrap();
+    windows.core.sync_set_storage(webdav(), Some(pw(MASTER)), None, false).await.unwrap();
     settle().await;
     assert_eq!(transport.watching(&folder), 0);
     // Back into the folder, then sync turned off here.
     windows.core.sync_choose_folder(parent.path()).unwrap();
-    windows.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None).await.unwrap();
+    windows.core.sync_set_storage(chosen_folder(), Some(pw(MASTER)), None, false).await.unwrap();
     settle().await;
     assert_eq!(transport.watching(&folder), 1);
     windows.core.sync_disable().unwrap();
@@ -1262,7 +1287,7 @@ async fn a_relays_registration_code_reaches_the_relay_alone() {
     settle().await;
     assert_eq!(transport.relay_code(&relay()), Some(None), "the phone asks without a code");
     // The storage settings again, with another code: the next requests carry it.
-    desktop.core.sync_set_storage(coded("IJKL-MNOP"), Some(pw(MASTER)), None).await.unwrap();
+    desktop.core.sync_set_storage(coded("IJKL-MNOP"), Some(pw(MASTER)), None, false).await.unwrap();
     assert_eq!(transport.relay_code(&relay()), Some(Some("IJKL-MNOP".into())));
     assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://relay.example.com".into() });
 }
@@ -1310,9 +1335,9 @@ async fn the_storage_settings_move_on_after_the_biometric_check_too() {
     let transport = Arc::new(FakeTransport::default());
     let (desktop, _) = first_device(&transport, webdav()).await;
     // Without a password, only the biometric check that unlocks this vault proves presence.
-    assert_eq!(code_err(desktop.core.sync_set_storage(webdav(), None, None).await), ErrorCode::BiometricUnavailable);
+    assert_eq!(code_err(desktop.core.sync_set_storage(webdav(), None, None, false).await), ErrorCode::BiometricUnavailable);
     desktop.core.enable_device_biometric(None).await.unwrap();
-    desktop.core.sync_set_storage(webdav(), None, Some("change the storage".into())).await.unwrap();
+    desktop.core.sync_set_storage(webdav(), None, Some("change the storage".into()), false).await.unwrap();
     assert_eq!(desktop.biometrics.reasons().last().map(String::as_str), Some("change the storage"));
 }
 
@@ -1365,9 +1390,9 @@ async fn a_space_moves_to_a_relay_that_keeps_nothing_of_it_yet() {
     // Another, empty WebDAV place is still refused: it may be a typo.
     let elsewhere =
         StorageConfig::Webdav { url: "https://dav.example.com/other/".into(), prefix: String::new(), username: "me".into(), password: pw(STORAGE_SECRET) };
-    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, Some(pw(MASTER)), None).await), ErrorCode::SyncSpaceNotFound);
+    assert_eq!(code_err(desktop.core.sync_set_storage(elsewhere, Some(pw(MASTER)), None, false).await), ErrorCode::SyncSpaceNotFound);
     // A relay keeps the space under its own id: taken, and the next run writes the space there.
-    desktop.core.sync_set_storage(relay(), Some(pw(MASTER)), None).await.unwrap();
+    desktop.core.sync_set_storage(relay(), Some(pw(MASTER)), None, false).await.unwrap();
     settle().await;
     assert_eq!(space(&desktop).storage, StorageView::Relay { url: "https://relay.example.com".into() });
     assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
@@ -1377,4 +1402,84 @@ async fn a_space_moves_to_a_relay_that_keeps_nothing_of_it_yet() {
     phone.core.sync_join(manual(relay(), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
     settle().await;
     assert_eq!(issuers(&phone), ["GitHub"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_invitation_to_the_space_a_device_is_in_brings_its_new_storage_settings() {
+    // The desktop moved the space from the relay to WebDAV; the phone, still syncing on the relay,
+    // scans the desktop's invitation: no turning sync off, nothing typed.
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, relay()).await;
+    let phone = device(&transport);
+    phone.core.sync_join(manual(relay(), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
+    settle().await;
+    desktop.core.sync_set_storage(webdav(), Some(pw(MASTER)), None, true).await.unwrap();
+    settle().await;
+    let invite = desktop.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    let invited = || JoinSource::Invite { text: pw(&invite.invite), code: None, storage: None };
+    assert_eq!(code_err(phone.core.sync_join(invited(), Some(pw("wrong password")), "Phone".into(), None, None).await), ErrorCode::WrongPassword);
+    assert!(matches!(space(&phone).storage, StorageView::Relay { .. }));
+    phone.core.sync_join(invited(), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
+    settle().await;
+    assert!(matches!(space(&phone).storage, StorageView::Webdav { .. }), "{:?}", space(&phone).storage);
+    assert!(matches!(space(&phone).status, SyncStatus::Synced { .. }), "{:?}", space(&phone).status);
+    assert_eq!(transport.store(&webdav()).paths().len(), 2, "both devices write there now");
+    assert_eq!(device_names(&phone).len(), 2);
+    // An invitation to another space is still refused while this one is on.
+    let other = device(&transport);
+    other.core.create_vault(pw(MASTER)).await.unwrap();
+    other.core.sync_create(s3(STORAGE_SECRET), pw(MASTER), "Other".into()).await.unwrap();
+    let foreign = other.core.sync_invite(Some(pw(MASTER)), None).await.unwrap();
+    let elsewhere = JoinSource::Invite { text: pw(&foreign.invite), code: None, storage: None };
+    assert_eq!(code_err(phone.core.sync_join(elsewhere, Some(pw(MASTER)), "Phone".into(), None, None).await), ErrorCode::SyncAlreadyOn);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_space_moves_to_an_empty_place_the_user_confirms_after_the_automatic_backup() {
+    let transport = Arc::new(FakeTransport::default());
+    let (desktop, sync_key) = first_device(&transport, s3(STORAGE_SECRET)).await;
+    let phone = device(&transport);
+    phone.core.sync_join(manual(s3(STORAGE_SECRET), &sync_key), Some(pw(MASTER)), "Phone".into(), None, None).await.unwrap();
+    settle().await;
+    let old_place = transport.store(&s3(STORAGE_SECRET));
+    let new_place = transport.store(&webdav());
+    let on_s3 = |h: &Harness| matches!(space(h).storage, StorageView::S3 { .. });
+
+    // Not confirmed: refused, nothing written there.
+    assert_eq!(code_err(desktop.core.sync_set_storage(webdav(), Some(pw(MASTER)), None, false).await), ErrorCode::SyncSpaceNotFound);
+    // Confirmed, presence is still proved.
+    assert_eq!(code_err(desktop.core.sync_set_storage(webdav(), Some(pw("wrong password")), None, true).await), ErrorCode::WrongPassword);
+    // The automatic backup comes first: a folder gone stops the move.
+    let folder = desktop.dir.path().join("backups");
+    std::fs::create_dir(&folder).unwrap();
+    desktop.core.set_auto_backup_dir(&folder).unwrap();
+    let mut settings = desktop.core.state().settings;
+    settings.auto_backup.enabled = true;
+    desktop.core.set_settings(settings).unwrap();
+    std::fs::remove_dir(&folder).unwrap();
+    assert_eq!(code_err(desktop.core.sync_set_storage(webdav(), Some(pw(MASTER)), None, true).await), ErrorCode::BackupDirUnavailable);
+    settle().await;
+    assert!(on_s3(&desktop));
+    assert!(new_place.paths().is_empty(), "{:?}", new_place.paths());
+
+    // With the folder back: backed up, moved, and this device's run writes the space there.
+    std::fs::create_dir(&folder).unwrap();
+    desktop.core.sync_set_storage(webdav(), Some(pw(MASTER)), None, true).await.unwrap();
+    assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 1, "the backup before the move");
+    settle().await;
+    assert!(matches!(space(&desktop).storage, StorageView::Webdav { .. }));
+    assert!(matches!(space(&desktop).status, SyncStatus::Synced { .. }), "{:?}", space(&desktop).status);
+    assert_eq!(new_place.paths().len(), 1, "this device's snapshot: {:?}", new_place.paths());
+    assert_eq!(old_place.paths().len(), 2, "the old place keeps what it had");
+
+    // The phone, still at the old place, follows with its own settings: the space is there now.
+    phone.core.add_uri(&otpauth("Mail", "me", "GEZDGNBV")).unwrap();
+    settle().await;
+    phone.core.sync_set_storage(webdav(), Some(pw(MASTER)), None, false).await.unwrap();
+    settle().await;
+    assert_eq!(new_place.paths().len(), 2);
+    desktop.core.sync_now().unwrap();
+    settle().await;
+    assert_eq!(issuers(&desktop), ["GitHub", "Mail"]);
+    assert_eq!(issuers(&phone), ["GitHub", "Mail"]);
 }

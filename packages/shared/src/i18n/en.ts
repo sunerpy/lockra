@@ -232,6 +232,9 @@ export const en: Messages = {
       fromScan: "Scan",
       scan: "Scan to join",
       scanPrompt: "Point the camera at the invitation on the other device",
+      storageScan: "Scan an invitation",
+      storageScanHint:
+        "The sync space moved to other storage? On a device that moved, open Settings › Sync › Invite another device and scan the QR code it shows: this phone takes the same storage settings, nothing to type.",
       scanHint:
         "Show the QR code on the other device (Settings › Sync › Invite another device), enter this phone's master password, then scan it.",
       needsStorage:
@@ -1426,7 +1429,13 @@ export const en: Messages = {
     storageEdit: "Change storage settings",
     storageReason: "change the sync storage settings",
     storageEditBody:
-      "A new access key, password or address. The sync space must already be at the new place, except on a Lockra relay: this device writes the space there on its next sync.",
+      "A new access key, password or address, or another storage to move the sync space to.",
+    move: {
+      title: "Move the sync space here?",
+      body: "{place} holds nothing of this sync space yet. Once it is moved, this device writes the space there at once, and the space at the old storage stays as it is. The other devices sync with this one again once their storage settings name the same storage.",
+      backup: "An automatic backup is made first.",
+      confirm: "Move it",
+    },
     device: {
       label: "This device",
       rename: "Rename",

@@ -443,7 +443,12 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   to the other. A password no device uses any more opens nothing the storage holds; a copy of the
   storage taken earlier still opens with it, since the data key never changes (see Residual
   risks). New storage settings are taken only where a snapshot of this space opens under its data
-  key. A run that started under the old settings writes nothing more there once they changed,
+  key, or at a place that holds nothing of the space yet once the user confirmed moving it there
+  (it may be a typo; a relay takes it without asking, keeping each space under its own id). A move
+  runs the automatic backup first where it is on and stops if that fails; the old place keeps what
+  it held. An invitation to the space a device is already in brings its storage settings the same
+  way, after the same proof of presence, and only where one of the space's snapshots opens under
+  the data key this device already holds. A run that started under the old settings writes nothing more there once they changed,
   except a write already on its way, which may still land at the old place: the space at the new
   place stays whole, and what lands at the old place is ciphertext like everything it held.
 

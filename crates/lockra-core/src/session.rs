@@ -1858,19 +1858,25 @@ impl Core {
             JoinSource::Manual { storage, sync_key } => (self.resolve_storage(storage)?, SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?, None),
         };
         storage.validate().map_err(config_error)?;
-        let (existing, number) = {
+        let (existing, number, same_space) = {
             let st = self.lock();
             match &st.phase {
                 PhaseState::Locked => return Err(ErrorCode::Locked.into()),
                 PhaseState::NoVault => {
                     check_password(password.as_deref().map_or("", |p| p.as_str()))?;
-                    (None, 0)
+                    (None, 0, None)
                 }
                 PhaseState::Unlocked(session) => {
-                    if session.data.sync().is_some() {
-                        return Err(ErrorCode::SyncAlreadyOn.into());
-                    }
-                    (Some(session.sealed.clone()), session.data.device())
+                    // Already in this very space: the invitation (or the settings typed in) brings
+                    // where it is now, as Change storage settings would. Another space is refused.
+                    let same_space = match session.data.sync() {
+                        Some(sync) if sync.space_id == sync_key.space_id() => {
+                            Some((sync.keys().map_err(|e| sync_error(&e))?, sync.access().map_err(|e| sync_error(&e))?))
+                        }
+                        Some(_) => return Err(ErrorCode::SyncAlreadyOn.into()),
+                        None => None,
+                    };
+                    (Some(session.sealed.clone()), session.data.device(), same_space)
                 }
             }
         };
@@ -1878,6 +1884,9 @@ impl Core {
             (Some(sealed), Some(checked)) => blocking(move || Ok(sealed.verify_password(checked.as_bytes())?)).await?,
             (Some(_), None) => self.confirm_presence(None, reason).await?,
             (None, _) => {}
+        }
+        if let Some((keys, access)) = same_space {
+            return self.take_storage(storage, keys, &access, number, false).await;
         }
         let remote = self.open_storage(&storage, &SpaceAccess::of(&sync_key))?;
         let space_id = sync_key.space_id();
@@ -2000,7 +2009,9 @@ impl Core {
         let cost = self.shared.config.kdf;
         blocking(move || {
             let sync_key = SyncKey::from_text(&sync_key).map_err(|e| sync_error(&e))?;
-            // A folder of this computer is of no use elsewhere: the keys go alone.
+            // A folder of this computer is of no use elsewhere: the keys go alone. A WebDAV address
+            // goes as every Lockra reads it.
+            let storage = storage.without_final_slash();
             let includes_storage = !storage.is_folder();
             let relay = storage.is_relay();
             let invite = Invite { storage: includes_storage.then_some(storage), sync_key, keys: Some(keys) };
@@ -2169,8 +2180,17 @@ impl Core {
 
     /// Move the space's storage settings on (a new address or new credentials), once the user
     /// proved to be at this device (the master password, or without it the biometric check that
-    /// unlocks this vault); the space must be found there.
-    pub async fn sync_set_storage(&self, storage: StorageConfig, password: Option<Zeroizing<String>>, reason: Option<String>) -> CoreResult<()> {
+    /// unlocks this vault). The space must be found there, unless `move_here`: the user confirmed
+    /// moving it to a place that holds nothing of it yet (a relay needs no confirmation). A move
+    /// runs the automatic backup first where it is on, and stops if that fails; this device's next
+    /// run writes the space at the new place, and the old place keeps what it held.
+    pub async fn sync_set_storage(
+        &self,
+        storage: StorageConfig,
+        password: Option<Zeroizing<String>>,
+        reason: Option<String>,
+        move_here: bool,
+    ) -> CoreResult<()> {
         let storage = self.resolve_storage(storage)?;
         storage.validate().map_err(config_error)?;
         let (keys, access, device) = {
@@ -2179,15 +2199,28 @@ impl Core {
             let sync = session.data.sync().ok_or(ErrorCode::SyncOff)?;
             (sync.keys().map_err(|e| sync_error(&e))?, sync.access().map_err(|e| sync_error(&e))?, session.data.device())
         };
-        let space_id = keys.space_id();
         self.confirm_presence(password, reason).await?;
-        let remote = self.open_storage(&storage, &access)?;
+        self.take_storage(storage, keys, &access, device, move_here).await
+    }
+
+    /// Take `storage` for this device's space, presence already proved: where the space is (one of
+    /// its snapshots opens under its data key), or, `move_here` or on a relay, where nothing of it
+    /// is yet (after the automatic backup, where it is on).
+    async fn take_storage(&self, storage: StorageConfig, keys: SpaceKeys, access: &SpaceAccess, device: u64, move_here: bool) -> CoreResult<()> {
+        let space_id = keys.space_id();
+        let remote = self.open_storage(&storage, access)?;
         // This space, not just objects at its place: one of its snapshots opens under its data key.
-        // A relay keeps each space under its own id, which no typo can reach: one that keeps
-        // nothing of the space yet takes it, this device's next run writing it there.
+        // A place that keeps nothing of the space yet takes it once the user confirmed the move (it
+        // may be a typo), or at once on a relay, which keeps each space under its own id that no
+        // typo can reach; this device's next run writes the space there.
         match find_space(&*remote, storage.prefix(), &keys, device).await {
             Ok(()) => {}
-            Err(SyncError::NoSpace) if storage.is_relay() => {}
+            Err(SyncError::NoSpace) if storage.is_relay() || move_here => {
+                let backup = self.lock().settings.auto_backup.enabled;
+                if backup {
+                    self.run_auto_backup()?;
+                }
+            }
             Err(error) => return Err(sync_error(&error)),
         }
         {

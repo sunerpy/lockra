@@ -373,7 +373,8 @@ impl FakeTransport {
     fn address(config: &StorageConfig) -> (String, bool) {
         match config {
             StorageConfig::S3 { endpoint, bucket, .. } => (format!("s3:{endpoint}/{bucket}"), true),
-            StorageConfig::Webdav { url, .. } => (format!("dav:{url}"), false),
+            // The same place with or without a final `/`, as lockra-remote opens it.
+            StorageConfig::Webdav { url, .. } => (format!("dav:{}", url.trim().trim_end_matches('/')), false),
             StorageConfig::Folder { path } => (format!("folder:{}", path.display()), false),
             StorageConfig::Relay { url, .. } => (format!("relay:{url}"), true),
         }

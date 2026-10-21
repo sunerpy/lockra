@@ -460,8 +460,9 @@ fn commands() -> Vec<Value> {
         json!({"command": "sync_invite_copy", "text": "lockra-invite:2:TEtTSU5WVDI"}),
         json!({"command": "sync_key_acknowledge"}),
         json!({"command": "sync_key_reveal", "password": "a new password"}),
-        // A cloud drive's folder, as the interface names it: "the folder chosen", no path.
-        json!({"command": "sync_set_storage", "storage": {"kind": "folder"}, "reason": "change the storage settings"}),
+        // A cloud drive's folder, as the interface names it: "the folder chosen", no path; a move
+        // the user confirmed, to a place that holds nothing of the space yet.
+        json!({"command": "sync_set_storage", "storage": {"kind": "folder"}, "reason": "change the storage settings", "move_here": true}),
         json!({"command": "sync_rename_device", "name": "Work desktop"}),
         json!({"command": "sync_remove_device", "tag": PHONE_TAG}),
         json!({"command": "sync_now"}),

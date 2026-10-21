@@ -133,6 +133,17 @@ impl StorageConfig {
         Url::parse(address.trim()).ok().and_then(|u| u.host_str().map(str::to_owned))
     }
 
+    /// The same settings, a WebDAV address without its final `/` (the same place): Lockra up to
+    /// 0.16.1 puts each path right after the address, so `…/dav/` makes `…/dav//…`, which
+    /// Jianguoyun refuses. Invitations carry this form.
+    #[must_use]
+    pub fn without_final_slash(self) -> Self {
+        match self {
+            Self::Webdav { url, prefix, username, password } => Self::Webdav { url: url.trim().trim_end_matches('/').to_owned(), prefix, username, password },
+            other => other,
+        }
+    }
+
     /// A folder on this computer.
     pub fn is_folder(&self) -> bool {
         matches!(self, Self::Folder { .. })
@@ -204,6 +215,15 @@ mod tests {
 
     fn webdav(url: &str) -> StorageConfig {
         StorageConfig::Webdav { url: url.into(), prefix: String::new(), username: "me".into(), password: Zeroizing::new("app password".into()) }
+    }
+
+    #[test]
+    fn a_webdav_address_loses_its_final_slash_and_nothing_else_changes() {
+        let StorageConfig::Webdav { url, .. } = webdav(" https://dav.jianguoyun.com/dav// ").without_final_slash() else { unreachable!() };
+        assert_eq!(url, "https://dav.jianguoyun.com/dav");
+        let StorageConfig::Webdav { url, .. } = webdav("https://dav.example.com").without_final_slash() else { unreachable!() };
+        assert_eq!(url, "https://dav.example.com");
+        assert_eq!(format!("{:?}", s3("https://s3.example.com/").without_final_slash()), format!("{:?}", s3("https://s3.example.com/")));
     }
 
     #[test]

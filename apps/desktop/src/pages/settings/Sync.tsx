@@ -1,8 +1,11 @@
 import {
+  type StorageConfig,
   type SyncSpaceView,
   emptyStorageForm,
   errorText,
+  formSummary,
   formatBytes,
+  isLockraError,
   relativeTime,
   storageComplete,
   storageConfig,
@@ -378,19 +381,48 @@ function SyncOn({ space }: { space: SyncSpaceView }) {
 function StorageRow({ space }: { space: SyncSpaceView }) {
   const t = useT();
   const { backend } = useBackend();
+  const { settings } = useUiState();
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState(() => storageFormFrom(space.storage));
   const [password, setPassword] = useState("");
+  // Settings that point where the space is not yet, kept with the password while the move is asked.
+  const [moving, setMoving] = useState<StorageConfig | null>(null);
   const submit = useSubmit();
   const ready = storageComplete(form) && password !== "";
+  const save = async (storage: StorageConfig, move: boolean) => {
+    let ask = false;
+    const done = await submit.run(async () => {
+      try {
+        return await backend.dispatch({
+          command: "sync_set_storage",
+          storage,
+          password,
+          ...(move ? { move_here: true } : {}),
+        });
+      } catch (failure) {
+        // A place that holds nothing of the space yet: the user is asked to move it there (a
+        // relay takes it without asking).
+        ask = !move && isLockraError(failure) && failure.code === "sync_space_not_found";
+        if (ask) return undefined;
+        throw failure;
+      }
+    });
+    if (ask) {
+      setMoving(storage);
+      return;
+    }
+    setMoving(null);
+    setPassword("");
+    if (done !== undefined) setEditing(false);
+  };
   const onSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (!ready) return;
-    const done = await submit.run(() =>
-      backend.dispatch({ command: "sync_set_storage", storage: storageConfig(form), password }),
-    );
+    await save(storageConfig(form), false);
+  };
+  const cancelMove = () => {
+    setMoving(null);
     setPassword("");
-    if (done !== undefined) setEditing(false);
   };
   return (
     <>
@@ -444,6 +476,33 @@ function StorageRow({ space }: { space: SyncSpaceView }) {
             </Button>
           </div>
         </form>
+      )}
+      {moving !== null && (
+        <Dialog
+          open
+          title={t("sync.move.title")}
+          onClose={cancelMove}
+          actions={
+            <>
+              <Button variant="ghost" onClick={cancelMove}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                loading={submit.busy}
+                onClick={() => void save(moving, true)}
+                data-autofocus>
+                {t("sync.move.confirm")}
+              </Button>
+            </>
+          }>
+          <p>
+            {t("sync.move.body", {
+              place: `${t(`sync.storage.${moving.kind}`)} · ${formSummary(form)}`,
+            })}
+          </p>
+          {settings.auto_backup.enabled && <p className="mt-2">{t("sync.move.backup")}</p>}
+        </Dialog>
       )}
     </>
   );

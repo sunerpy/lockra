@@ -224,6 +224,9 @@ const OLD_INVITE = "mock-old-invite";
 export const MOCK_OLD_INVITE = `lockra-invite:1:${btoa(OLD_INVITE)}`;
 /** The one-time code of the mock's sealed invitation. */
 export const MOCK_INVITE_CODE = "7K2QM-XW4FD";
+/** An invitation from another device of the space the mock's vault is in (as `sync_invite` makes
+ *  them): scanned in that space, it brings the space's storage settings. */
+export const MOCK_SPACE_INVITE = `lockra-invite:1:${btoa("mock-invite:0")}`;
 /** The sync key of the mock's spaces. */
 export const MOCK_SYNC_KEY =
   "LKS1-MFRG-GZDF-MZTW-Q2LK-NNWG-23TP-OBYX-E43U-OR3W-C6DZ-PI2D-AMBR-GQ2D-ARQA";
@@ -773,6 +776,33 @@ function invitedRelay(text: string): string | undefined {
   return inside.slice(RELAY_INVITE.length).split("\n")[0];
 }
 
+/** An address or folder without the spaces and slashes around it. */
+function trimSlashes(text: string): string {
+  return text.trim().replace(/^\/+|\/+$/g, "");
+}
+
+/** The storage a mock invitation carries: its relay, else the mock's WebDAV. */
+function invitedStorage(text: string): StorageConfig {
+  const relay = invitedRelay(text);
+  if (relay !== undefined) return { kind: "relay", url: relay };
+  return {
+    kind: "webdav",
+    url: "https://dav.example.com/dav/",
+    prefix: "lockra",
+    username: "me@example.com",
+    password: MOCK_STORAGE_SECRET,
+  };
+}
+
+/** Where a storage keeps a space, whatever its credentials. */
+function placeOf(view: StorageView): string {
+  if (view.kind === "folder") return `folder:${view.path}`;
+  if (view.kind === "relay") return `relay:${trimSlashes(view.url)}`;
+  if (view.kind === "s3")
+    return `s3:${trimSlashes(view.endpoint)}:${view.bucket.trim()}:${trimSlashes(view.prefix)}`;
+  return `webdav:${trimSlashes(view.url)}:${trimSlashes(view.prefix)}`;
+}
+
 function storageView(storage: StorageConfig, chosen: string | null): StorageView {
   if (storage.kind === "folder") return { kind: "folder", path: chosen ?? "" };
   if (storage.kind === "relay") return { kind: "relay", url: storage.url.trim() };
@@ -835,6 +865,8 @@ export class MockBackend implements Backend {
   /** What the sync folder dialog chooses, and what it chose last. */
   private folderPick: string | null;
   private chosenFolder: string | null = null;
+  /** Where the space lived before its storage settings moved on: it is still there. */
+  private formerPlaces: StorageView[] = [];
   private readonly now: () => number;
   private release: MockRelease | null;
   private updateFailure: MockOptions["updateFailure"];
@@ -1610,20 +1642,10 @@ export class MockBackend implements Backend {
         return null;
       case "secret_view_closed":
         return null;
-      case "backup_auto_now": {
+      case "backup_auto_now":
         this.requireUnlocked();
-        if (this.state.settings.auto_backup.dir === null)
-          throw new LockraError("backup_dir_missing");
-        const name = "lockra-auto-20261001-081500.lockrabackup";
-        this.state.backup = {
-          last_backup_ms: this.now(),
-          last_auto_file: name,
-          last_auto_error: null,
-        };
-        this.notice({ type: "backup_written", file_name: name, automatic: true });
-        this.publish();
+        this.autoBackup();
         return null;
-      }
       case "restore_commit":
         return this.restore(command.password, command.mode);
       case "restore_cancel":
@@ -1695,7 +1717,20 @@ export class MockBackend implements Backend {
         const space = this.requireSpace();
         this.confirmPresence(command.password, command.reason);
         checkStorage(command.storage, this.chosenFolder);
-        this.setSpace({ ...space, storage: storageView(command.storage, this.chosenFolder) });
+        const storage = storageView(command.storage, this.chosenFolder);
+        // The space is where it lives and where it lived before; another place holds nothing of
+        // it yet and takes it once the user confirmed the move (a relay at once), after the
+        // automatic backup where it is on.
+        const there = [space.storage, ...this.formerPlaces].some(
+          (view) => placeOf(view) === placeOf(storage),
+        );
+        if (!there) {
+          if (storage.kind !== "relay" && command.move_here !== true)
+            throw new LockraError("sync_space_not_found");
+          if (this.state.settings.auto_backup.enabled) this.autoBackup();
+        }
+        this.formerPlaces.push(space.storage);
+        this.setSpace({ ...space, storage });
         return null;
       }
       case "sync_rename_device": {
@@ -1905,6 +1940,8 @@ export class MockBackend implements Backend {
   }
 
   private setSpace(space: SyncSpaceView | null): void {
+    // Another space, or none: the places of the one before are none of its own.
+    if (space === null || this.space === null) this.formerPlaces = [];
     this.space = space;
     this.state.sync = { space };
     this.publish();
@@ -2002,26 +2039,14 @@ export class MockBackend implements Backend {
       throw new LockraError("sync_key_invalid");
     if (this.state.phase === "locked") throw new LockraError("locked");
     if (this.state.phase === "unlocked" && this.space !== null)
-      throw new LockraError("sync_already_on");
+      return this.syncJoinOwn(source, text, password, reason);
     // A new vault needs its own password; an unlocked one may prove presence by the fingerprint
     // that unlocks it, its keyring then sealed at the next unlock with the master password.
     if (this.state.phase === "no_vault") this.checkLength(password ?? "");
     else this.confirmPresence(password, reason);
     this.joinedUnsealed = this.state.phase === "unlocked" && password === undefined;
-    const relay = source.type === "invite" ? invitedRelay(text) : undefined;
     const storage: StorageConfig =
-      source.type === "manual"
-        ? source.storage
-        : (source.storage ??
-          (relay !== undefined
-            ? { kind: "relay", url: relay }
-            : {
-                kind: "webdav",
-                url: "https://dav.example.com/dav/",
-                prefix: "lockra",
-                username: "me@example.com",
-                password: MOCK_STORAGE_SECRET,
-              }));
+      source.type === "manual" ? source.storage : (source.storage ?? invitedStorage(text));
     checkStorage(storage, this.chosenFolder);
     // An invitation hands the space over. A recovery opens it with a master password of its
     // devices (the mock's): a vault of its own whose password is another asks for theirs first,
@@ -2054,6 +2079,27 @@ export class MockBackend implements Backend {
       this.enterUnlocked(entries.map((e) => e.view));
     }
     this.newSpace(storage, deviceName, others);
+    return null;
+  }
+
+  /** A join while this vault is in a space: an invitation that space's devices make brings its
+   *  storage settings, as Change storage settings would (the space must be there); any other is
+   *  another space's, refused. */
+  private syncJoinOwn(
+    source: JoinSource,
+    text: string,
+    password: string | undefined,
+    reason: string | undefined,
+  ): null {
+    const space = this.requireSpace();
+    const inside = held(text);
+    const own = source.type === "invite" && /^(mock-invite|mock-relay-invite)/.test(inside);
+    if (!own) throw new LockraError("sync_already_on");
+    this.confirmPresence(password, reason);
+    const storage = source.storage ?? invitedStorage(text);
+    checkStorage(storage, this.chosenFolder);
+    this.formerPlaces.push(space.storage);
+    this.setSpace({ ...space, storage: storageView(storage, this.chosenFolder) });
     return null;
   }
 
@@ -3078,6 +3124,15 @@ export class MockBackend implements Backend {
   private publish(): void {
     const state = structuredClone(this.state);
     for (const listener of this.listeners) listener({ type: "state", state });
+  }
+
+  /** The automatic backup, into its folder. */
+  private autoBackup(): void {
+    if (this.state.settings.auto_backup.dir === null) throw new LockraError("backup_dir_missing");
+    const name = "lockra-auto-20261001-081500.lockrabackup";
+    this.state.backup = { last_backup_ms: this.now(), last_auto_file: name, last_auto_error: null };
+    this.notice({ type: "backup_written", file_name: name, automatic: true });
+    this.publish();
   }
 
   private notice(notice: Notice): void {
