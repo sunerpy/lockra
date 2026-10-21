@@ -225,6 +225,9 @@ export const zhCN = {
       fromScan: "扫码",
       scan: "扫码加入",
       scanPrompt: "将相机对准另一台设备上的邀请码",
+      storageScan: "扫描邀请码",
+      storageScanHint:
+        "同步空间换了存储？在已经换好的设备上打开「设置 › 同步 › 邀请其他设备」，扫描它显示的二维码，这部手机就改用同样的存储设置，不用手动填写。",
       scanHint:
         "在另一台设备的「设置 › 同步 › 邀请其他设备」中显示二维码，输入这部手机的主密码后扫描它。",
       needsStorage:
@@ -1375,8 +1378,13 @@ export const zhCN = {
     storageRow: "存储",
     storageEdit: "修改存储设置",
     storageReason: "修改同步的存储设置",
-    storageEditBody:
-      "更换访问密钥、密码或地址。同步空间必须已经在新的位置；换到 Lockra 中继时不必，这台设备下次同步就会把空间写过去。",
+    storageEditBody: "更换访问密钥、密码或地址，或者把同步空间搬到另一个存储。",
+    move: {
+      title: "把同步空间搬到这里？",
+      body: "{place} 里还没有这个同步空间。搬过去后，这台设备会马上把同步空间写到那里，原来存储里的同步空间保持不变。其他设备在「修改存储设置」里改成同样的存储后，才会继续和这台设备同步。",
+      backup: "搬之前会先自动备份一次。",
+      confirm: "搬过去",
+    },
     device: {
       label: "这台设备",
       rename: "重命名",

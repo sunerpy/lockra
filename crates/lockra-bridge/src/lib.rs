@@ -288,6 +288,9 @@ pub enum UiCommand {
         /// The biometric prompt's words, without a password.
         #[serde(default)]
         reason: Option<String>,
+        /// The user confirmed moving the space to a place that holds nothing of it yet.
+        #[serde(default)]
+        move_here: bool,
     },
     /// Rename this device in its space.
     SyncRenameDevice {
@@ -670,7 +673,7 @@ pub async fn dispatch(core: &Core, command: UiCommand) -> Result<Value, CoreErro
         UiCommand::SyncInviteCopy { text } => unit(core.sync_invite_copy(&text))?,
         UiCommand::SyncKeyAcknowledge => unit(core.sync_key_acknowledge())?,
         UiCommand::SyncKeyReveal { password, reason } => json!(core.sync_key_reveal(password, reason).await?),
-        UiCommand::SyncSetStorage { storage, password, reason } => unit(core.sync_set_storage(storage, password, reason).await)?,
+        UiCommand::SyncSetStorage { storage, password, reason, move_here } => unit(core.sync_set_storage(storage, password, reason, move_here).await)?,
         UiCommand::SyncRenameDevice { name } => unit(core.sync_rename_device(&name))?,
         UiCommand::SyncRemoveDevice { tag } => unit(core.sync_remove_device(&tag).await)?,
         UiCommand::SyncNow => unit(core.sync_now())?,

@@ -5,6 +5,7 @@ import {
   storageConfig,
   storageFormFrom,
   storageSummary,
+  formSummary,
 } from "./storage-form";
 
 describe("the sync storage form", () => {
@@ -83,6 +84,33 @@ describe("the sync storage form", () => {
     expect(
       storageFormFrom({ kind: "relay", url: "https://relay.example.com" }).registrationCode,
     ).toBe("");
+  });
+
+  it("sums up where a form points as a space's place is summed up", () => {
+    const form = emptyStorageForm();
+    expect(
+      formSummary({
+        ...form,
+        kind: "webdav",
+        url: " https://dav.jianguoyun.com/dav/ ",
+        prefix: "/我的坚果云/Lockra/",
+      }),
+    ).toBe("dav.jianguoyun.com / 我的坚果云/Lockra");
+    expect(
+      formSummary({
+        ...form,
+        kind: "s3",
+        endpoint: "https://s3.example.com",
+        bucket: "vault",
+        prefix: "phone",
+      }),
+    ).toBe("s3.example.com / vault / phone");
+    expect(formSummary({ ...form, kind: "relay", url: "https://relay.example.com/" })).toBe(
+      "relay.example.com",
+    );
+    expect(formSummary({ ...form, kind: "folder", folder: "D:\\坚果云\\Lockra" })).toBe(
+      "D:\\坚果云\\Lockra",
+    );
   });
 
   it("sums a relay up as its host, and a folder as its path", () => {

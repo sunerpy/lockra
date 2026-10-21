@@ -84,7 +84,10 @@ impl Storage {
                 (Operator::new(builder).map_err(map)?, true)
             }
             StorageConfig::Webdav { url, username, password, .. } => {
-                let builder = opendal::services::Webdav::default().endpoint(url.trim()).username(username.trim()).password(password);
+                // OpenDAL puts the paths, which start with `/`, right after the address: one
+                // ending in `/` (Jianguoyun's own, Nextcloud's) would make every path `//…`.
+                let endpoint = url.trim().trim_end_matches('/');
+                let builder = opendal::services::Webdav::default().endpoint(endpoint).username(username.trim()).password(password);
                 (Operator::new(builder).map_err(map)?, false)
             }
             StorageConfig::Folder { .. } | StorageConfig::Relay { .. } => return Err(SyncError::Storage("not reached through OpenDAL".into())),
@@ -380,6 +383,67 @@ mod tests {
         // whole body first, then calls it a temporary error).
         let answer = storage.get("phone/x.lks").await;
         assert_eq!(answer.map(|found| found.map(|(bytes, _)| bytes.len())), Err(SyncError::Corrupted));
+    }
+
+    /// A WebDAV server with nothing in it yet: PROPFIND finds nothing, MKCOL and PUT take what they
+    /// are given. It records each request's method and target.
+    async fn recording_dav_server() -> (u16, Arc<std::sync::Mutex<Vec<String>>>) {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let record = Arc::clone(&seen);
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let record = Arc::clone(&record);
+                tokio::spawn(async move {
+                    // The head, then the body it announces.
+                    let mut request = Vec::new();
+                    let mut chunk = [0u8; 4096];
+                    let head_end = loop {
+                        match socket.read(&mut chunk).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(read) => request.extend_from_slice(&chunk[..read]),
+                        }
+                        if let Some(at) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                            break at + 4;
+                        }
+                    };
+                    let head = String::from_utf8_lossy(&request[..head_end]).into_owned();
+                    let length = head
+                        .lines()
+                        .find_map(|line| line.to_ascii_lowercase().strip_prefix("content-length:").and_then(|v| v.trim().parse::<usize>().ok()))
+                        .unwrap_or(0);
+                    while request.len() < head_end + length {
+                        match socket.read(&mut chunk).await {
+                            Ok(0) | Err(_) => break,
+                            Ok(read) => request.extend_from_slice(&chunk[..read]),
+                        }
+                    }
+                    let line = head.lines().next().unwrap_or_default();
+                    let target = line.rsplit_once(' ').map_or(line, |(start, _)| start);
+                    record.lock().unwrap().push(target.to_owned());
+                    let status = if line.starts_with("PROPFIND") { "404 Not Found" } else { "201 Created" };
+                    let _ = socket.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await;
+                });
+            }
+        });
+        (port, seen)
+    }
+
+    #[tokio::test]
+    async fn a_webdav_address_ending_in_a_slash_is_not_doubled() {
+        // Jianguoyun's own address ends in `/`, and a path with `//` fails there as if the server
+        // could not be reached.
+        let (port, seen) = recording_dav_server().await;
+        let storage = Storage::open(&webdav(&format!("http://127.0.0.1:{port}/dav/"))).unwrap();
+        assert!(storage.list("lockra-sync-v1/space/devices/").await.unwrap().is_empty());
+        storage.put("lockra-sync-v1/space/devices/a.lks", b"x".to_vec(), PutCondition::Always).await.unwrap();
+        let seen = seen.lock().unwrap().clone();
+        assert!(seen.iter().any(|r| r == "PROPFIND /dav/lockra-sync-v1/space/devices/"), "{seen:?}");
+        assert!(seen.iter().any(|r| r == "MKCOL /dav/lockra-sync-v1/"), "{seen:?}");
+        assert!(seen.iter().any(|r| r == "PUT /dav/lockra-sync-v1/space/devices/a.lks"), "{seen:?}");
+        assert!(seen.iter().all(|r| !r.contains("//")), "{seen:?}");
     }
 
     #[tokio::test]

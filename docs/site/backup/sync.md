@@ -385,6 +385,26 @@ storage. A device that is still in use appears again on its next sync. **Rename*
 **Change storage settings** takes a new access key, password or address, and the master password.
 The space must already be at the new place: move its folder first.
 
+### Moving the space to other storage
+
+<StatusTag status="building" />
+
+When the new place holds nothing of the space yet, for example on a move from a Lockra relay to
+Jianguoyun, **Change storage settings** asks whether to move the space there. After **Move it**:
+
+1. With [automatic backups](/backup/#automatic-backups) on, Lockra makes one first; if it fails,
+   nothing moves.
+2. This device writes the space to the new place at once. The space and its recovery key stay the
+   same, and the space at the old storage stays as it is.
+3. On the other devices, change the storage settings to the same storage: they find the space at
+   the new place and go on syncing, without joining again. On a phone, **Change storage settings**
+   also offers **Scan an invitation**: scan the QR code a device that moved shows under **Invite
+   another device**, and the phone takes its storage settings, with sync left on and nothing to
+   type.
+
+Until they do, they sync at the old storage and get none of this device's later changes. A move
+to a Lockra relay asks nothing.
+
 **Turn off sync on this device** stops sync here. The accounts stay on the device; the space and
 the other devices go on. You can join again later with an invitation or the recovery key.
 

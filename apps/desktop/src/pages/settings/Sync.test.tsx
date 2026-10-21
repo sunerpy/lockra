@@ -351,6 +351,46 @@ describe("Settings › Sync", () => {
     }
   });
 
+  it("moves the space to storage that holds nothing of it yet once the move is confirmed", async () => {
+    const backend = new MockBackend({
+      entries: sampleEntries(),
+      sync: mockSyncSpace(),
+      settings: {
+        locale: "zh-cn",
+        auto_backup: { enabled: true, dir: "/home/user/OneDrive/Lockra", keep: 10 },
+      },
+    });
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openSync(user);
+    await user.click(pane.getByTestId("sync-storage-edit"));
+    const storage = within(pane.getByTestId("sync-storage-form"));
+    await user.type(storage.getByLabelText("访问密钥"), MOCK_STORAGE_SECRET);
+    await user.clear(storage.getByLabelText("存储桶"));
+    await user.type(storage.getByLabelText("存储桶"), "other-bucket");
+    await user.type(storage.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(storage.getByRole("button", { name: "保存" }));
+    let move = await screen.findByRole("dialog", { name: "把同步空间搬到这里？" });
+    expect(move).toHaveTextContent(
+      "S3 兼容 · s3.eu-central-1.amazonaws.com / other-bucket / lockra 里还没有这个同步空间",
+    );
+    expect(move).toHaveTextContent("搬之前会先自动备份一次。");
+    // Not moved: the space stays where it is, and the password is typed again.
+    await user.click(within(move).getByRole("button", { name: "取消" }));
+    expect(pane.getByTestId("sync-storage")).toHaveTextContent("my-lockra");
+    expect(storage.getByLabelText("主密码")).toHaveValue("");
+    await user.type(storage.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(storage.getByRole("button", { name: "保存" }));
+    move = await screen.findByRole("dialog", { name: "把同步空间搬到这里？" });
+    await user.click(within(move).getByRole("button", { name: "搬过去" }));
+    expect(await pane.findByTestId("sync-storage")).toHaveTextContent("other-bucket");
+    expect(pane.queryByTestId("sync-storage-form")).not.toBeInTheDocument();
+    const moves = backend.calls.flatMap((c) =>
+      c.command === "sync_set_storage" ? [c.move_here ?? false] : [],
+    );
+    expect(moves).toEqual([false, false, true]);
+  });
+
   it("a rolled back device is named, and the space is not shown while locked", async () => {
     const space = mockSyncSpace();
     const phone = space.devices[1]?.tag ?? "";

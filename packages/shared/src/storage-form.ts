@@ -153,6 +153,34 @@ export function storageSummary(view: StorageView): string {
   );
 }
 
+/** Where a form points, in the line `storageSummary` gives a space's place. */
+export function formSummary(form: StorageForm): string {
+  const config = storageConfig(form);
+  switch (config.kind) {
+    case "folder":
+      return storageSummary({ kind: "folder", path: form.folder });
+    case "relay":
+      return storageSummary({ kind: "relay", url: config.url });
+    case "s3":
+      return storageSummary({
+        kind: "s3",
+        endpoint: config.endpoint,
+        region: config.region,
+        bucket: config.bucket,
+        prefix: config.prefix,
+        access_key_id: config.access_key_id,
+        path_style: config.path_style,
+      });
+    case "webdav":
+      return storageSummary({
+        kind: "webdav",
+        url: config.url,
+        prefix: config.prefix,
+        username: config.username,
+      });
+  }
+}
+
 /** A sealed invitation (`lockra-invite:2:…`): it opens with the one-time code shown beside it. */
 export function isSealedInvite(text: string): boolean {
   return text.trim().startsWith("lockra-invite:2:");

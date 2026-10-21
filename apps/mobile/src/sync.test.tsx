@@ -7,6 +7,7 @@ import {
   MockBackend,
   mockSyncSpace,
   sampleEntries,
+  MOCK_SPACE_INVITE,
 } from "@lockra/shared/mock";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import { depthOf } from "./app/nav";
@@ -357,6 +358,15 @@ describe("sync on the phone", () => {
     await user.type(storage.getByLabelText("存储桶"), "other-bucket");
     await user.type(storage.getByLabelText("主密码"), MOCK_PASSWORD);
     await user.click(storage.getByRole("button", { name: "保存" }));
+    // Another bucket holds nothing of the space yet: moved there once the user confirms it.
+    let move = await screen.findByRole("dialog", { name: "把同步空间搬到这里？" });
+    expect(move).toHaveTextContent("/ other-bucket / lockra 里还没有这个同步空间");
+    await user.click(within(move).getByRole("button", { name: "取消" }));
+    expect(storage.getByLabelText("主密码")).toHaveValue("");
+    await user.type(storage.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(storage.getByRole("button", { name: "保存" }));
+    move = await screen.findByRole("dialog", { name: "把同步空间搬到这里？" });
+    await user.click(within(move).getByRole("button", { name: "搬过去" }));
     expect(await screen.findByTestId("sync-storage")).toHaveTextContent("other-bucket");
     // Removing another device asks first.
     const [, other] = screen.getAllByTestId("sync-device");
@@ -365,6 +375,28 @@ describe("sync on the phone", () => {
     const remove = within(await screen.findByRole("dialog", { name: "移除「Pixel 8」？" }));
     await user.click(remove.getByRole("button", { name: "移除" }));
     await waitFor(() => expect(screen.getAllByTestId("sync-device")).toHaveLength(1));
+  });
+
+  it("takes the storage settings from a scanned invitation to the space it is in", async () => {
+    // Another device moved the space (to Jianguoyun, say): its invitation brings the settings,
+    // nothing to turn off or type.
+    const backend = inSpace();
+    backend.setScan(MOCK_SPACE_INVITE);
+    const { user } = renderApp({ backend });
+    await ready();
+    await openSync(user);
+    await user.click(screen.getByTestId("sync-storage-edit"));
+    const page = within(await screen.findByTestId("page-sync-storage"));
+    expect(page.getByText(/扫描它显示的二维码/)).toBeInTheDocument();
+    const scan = page.getByRole("button", { name: "扫描邀请码" });
+    expect(scan).toBeDisabled();
+    await user.type(page.getByLabelText("主密码"), "wrong");
+    await user.click(scan);
+    expect(await page.findByRole("alert")).toHaveTextContent("密码错误");
+    expect(page.getByLabelText("主密码")).toHaveValue("");
+    await user.type(page.getByLabelText("主密码"), MOCK_PASSWORD);
+    await user.click(scan);
+    expect(await screen.findByTestId("sync-storage")).toHaveTextContent("dav.example.com / lockra");
   });
 
   it("shows an invitation behind the master password, and hides it again", async () => {
