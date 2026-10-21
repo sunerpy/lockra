@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.2](https://github.com/sunerpy/lockra/compare/v0.16.1...v0.16.2) (2026-10-21)
+
+
+### Features
+
+* **sync:** 支持把同步空间搬到其他存储，修复坚果云 WebDAV 连接 ([#199](https://github.com/sunerpy/lockra/issues/199)) ([bb16e7c](https://github.com/sunerpy/lockra/commit/bb16e7c8f96862c6c8ad03658f54ce0774276de9))
+
+
+### Bug Fixes
+
+* **extension:** 识别与密码同页、隐藏输入的 MFA 令牌框 ([#198](https://github.com/sunerpy/lockra/issues/198)) ([884c2a3](https://github.com/sunerpy/lockra/commit/884c2a3358a79b95f159f2b673056040bf83c3a4))
+
 ## [0.16.1](https://github.com/sunerpy/lockra/compare/v0.16.0...v0.16.1) (2026-10-21)
 
 
