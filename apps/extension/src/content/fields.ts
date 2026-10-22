@@ -429,9 +429,9 @@ export function findLoginForms(doc: Document, view: View): FormScan[] {
   return forms;
 }
 
-/** The page's one-time-code field (or boxes), the first it shows. */
-export function findOtp(doc: Document, view: View): HTMLInputElement[] | null {
-  const inputs = Array.from(doc.querySelectorAll("input")).filter((input) => view.visible(input));
+/** The one-time-code field (or boxes) the page, or one of its forms, shows first. */
+export function findOtp(root: Document | HTMLElement, view: View): HTMLInputElement[] | null {
+  const inputs = Array.from(root.querySelectorAll("input")).filter((input) => view.visible(input));
   for (const input of inputs) {
     const group = otpGroup(input, view);
     if (group) return group;
