@@ -532,7 +532,9 @@ describe("SettingsDialog", () => {
     const dialog = await openSettings(user, "通用");
     const toggle = dialog.getByRole("switch", { name: "自动更新" });
     expect(toggle).not.toBeChecked();
-    expect(dialog.getByTestId("update-auto")).toHaveTextContent("启动 10 秒后检查更新并在后台下载");
+    expect(dialog.getByTestId("update-auto")).toHaveTextContent(
+      "启动 10 秒后检查更新，运行期间每 4 小时再检查一次",
+    );
     await user.click(toggle);
     expect(backend.calls.at(-1)).toMatchObject({
       command: "settings_set",

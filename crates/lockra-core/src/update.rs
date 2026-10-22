@@ -14,7 +14,9 @@
 //! instead, the next start finds the same version again and installs it at once. A version newer
 //! than the remembered one goes through `Ready` again, so a release the user has not been shown is
 //! never installed unattended. Turning the switch on checks and downloads at once, without
-//! installing.
+//! installing. While Lockra runs (for days, in the tray) the update looks again
+//! [`AUTO_CHECK_INTERVAL`] after each run ends, and these later looks only download: the restart
+//! stays the user's. Once a package waits in `Ready`, nothing more goes online until the restart.
 //!
 //! [`Updater`]: crate::ports::Updater
 
@@ -30,6 +32,8 @@ use crate::ui::UpdateStatus;
 
 /// How long after start the automatic update runs (the window and the vault settle first).
 pub const STARTUP_CHECK_DELAY: Duration = Duration::from_secs(10);
+/// How long after a run ends the automatic update looks again while Lockra runs.
+pub const AUTO_CHECK_INTERVAL: Duration = Duration::from_secs(4 * 60 * 60);
 /// The fewest bytes between two download progress reports: each one is a whole state for the
 /// webview.
 pub const PROGRESS_MIN_STEP: u64 = 256 * 1024;
@@ -84,8 +88,12 @@ pub(crate) struct UpdateState {
     pub status: UpdateStatus,
     /// A run is in flight.
     pub busy: bool,
-    /// When the automatic update runs: [`STARTUP_CHECK_DELAY`] after start, once.
+    /// When the automatic update runs next: [`STARTUP_CHECK_DELAY`] after start, then
+    /// [`AUTO_CHECK_INTERVAL`] after each run while the switch is on.
     pub auto_at: Option<Instant>,
+    /// The next automatic run may install the version [`MARKER_FILE`] remembers: the one at start
+    /// alone, which finishes what an earlier start downloaded.
+    pub auto_installs: bool,
     /// What the last run found and left for the next one.
     pub pending: Option<Pending>,
 }
@@ -93,7 +101,24 @@ pub(crate) struct UpdateState {
 impl UpdateState {
     /// The state at start; `automatic` schedules the automatic update.
     pub fn new(automatic: bool) -> Self {
-        Self { status: UpdateStatus::Idle, busy: false, auto_at: automatic.then(|| Instant::now() + STARTUP_CHECK_DELAY), pending: None }
+        Self {
+            status: UpdateStatus::Idle,
+            busy: false,
+            auto_at: automatic.then(|| Instant::now() + STARTUP_CHECK_DELAY),
+            auto_installs: automatic,
+            pending: None,
+        }
+    }
+
+    /// After a run that left `status`: with the switch on, the automatic update looks again
+    /// [`AUTO_CHECK_INTERVAL`] from now, or sooner when it is due sooner already (the look at
+    /// start). A package waiting for the restart needs no more looks.
+    pub fn look_again(&mut self, switched_on: bool) {
+        if !switched_on || matches!(self.status, UpdateStatus::Ready { .. } | UpdateStatus::Installing { .. }) {
+            return;
+        }
+        let next = Instant::now() + AUTO_CHECK_INTERVAL;
+        self.auto_at = Some(self.auto_at.map_or(next, |at| at.min(next)));
     }
 }
 
@@ -205,6 +230,27 @@ mod tests {
         assert!(off.pending.is_none());
         let on = UpdateState::new(true);
         assert_eq!(on.auto_at, Some(Instant::now() + STARTUP_CHECK_DELAY));
+        assert!(on.auto_installs && !off.auto_installs, "only the look at start may install");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_run_schedules_the_next_look_unless_a_package_waits() {
+        let mut state = UpdateState::new(true);
+        let at_start = state.auto_at;
+        state.status = UpdateStatus::UpToDate { checked_at_ms: 0 };
+        state.look_again(true);
+        assert_eq!(state.auto_at, at_start, "the look at start, due sooner, stays");
+        state.auto_at = None;
+        state.look_again(false);
+        assert_eq!(state.auto_at, None, "the switch is off");
+        state.look_again(true);
+        assert_eq!(state.auto_at, Some(Instant::now() + AUTO_CHECK_INTERVAL));
+        for waiting in [UpdateStatus::Ready { version: "0.3.0".into() }, UpdateStatus::Installing { version: "0.3.0".into() }] {
+            state.auto_at = None;
+            state.status = waiting;
+            state.look_again(true);
+            assert_eq!(state.auto_at, None, "a package waits for the restart");
+        }
     }
 
     #[test]
