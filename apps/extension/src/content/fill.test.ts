@@ -203,6 +203,42 @@ describe("filling a sign-in form", () => {
     expect(submitted).not.toHaveBeenCalled();
   });
 
+  it("regression: a login without a code does not send a form that asks for one too", async () => {
+    // NWCD's SSO (the user's report, 2026-10-22): user name, password and the MFA code on one
+    // page; a login with no linked code was sent without it. The fill leaves the code to the user.
+    const field = (id: string, type: string, placeholder: string) =>
+      `<div class="form-field"><div class="input-wrapper"><input id="${id}" ${type} placeholder="${placeholder}"></div></div>`;
+    document.body.innerHTML = `<div class="login-form">${field("username", "", "用户名 / 邮箱 / 员工编号")}${field(
+      "password",
+      'type="password"',
+      "密码",
+    )}${field("mfa", 'type="password"', "MFA 令牌")}<button id="go">登录</button></div>`;
+    const clicked = vi.fn();
+    document.getElementById("go")?.addEventListener("click", clicked);
+    const result = fillForm(scanField(input("username"), view), { ...VALUES, submit: true }, view);
+    expect(result).toEqual({ filled: 2, password: true, code: false });
+    expect([input("username").value, input("password").value, input("mfa").value]).toEqual([
+      "alice",
+      "s3cret",
+      "",
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(clicked).not.toHaveBeenCalled();
+    // A <form> with a code field of its own, the same.
+    document.body.innerHTML = `
+      <form id="f"><input id="user" autocomplete="username"><input type="password" id="pass"><input id="code" autocomplete="one-time-code"><button>Sign in</button></form>`;
+    const form = document.getElementById("f") as HTMLFormElement;
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    fillForm(scanField(input("pass"), view), { ...VALUES, submit: true }, view);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(submitted).not.toHaveBeenCalled();
+    // The code the user typed before choosing the login: the form has all it asks for.
+    setValue(input("code"), "123456");
+    fillForm(scanField(input("pass"), view), { ...VALUES, submit: true }, view);
+    await vi.waitFor(() => expect(submitted).toHaveBeenCalledTimes(1));
+  });
+
   it("submits a form without a <form> by its submit button", async () => {
     document.body.innerHTML = `<div><input id="user" autocomplete="username"><input type="password" id="pass"><button id="go" type="button">Sign in</button><button>Help</button></div>`;
     const clicked = vi.fn();

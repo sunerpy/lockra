@@ -186,6 +186,10 @@ after filling** on:
   one page, once both are; with the code on the next page, the password page waits for your **Sign
   in**, and the code's page is submitted once the code is filled.
 
+<StatusTag status="building" /> A form that also asks for a code is not submitted for a login
+without a linked code: the code and **Sign in** are yours. Link the code to the login and Lockra
+fills it too ([Adding and editing a login](/passwords/#adding-and-editing-a-login)).
+
 Lockra submits as Enter would, with a click on the form's submit button, passing over buttons such
 as **Get code**, **Cancel** or another service's sign-in; a button the page has not enabled yet is
 waited for up to a second, and a form whose button stays disabled is not submitted.

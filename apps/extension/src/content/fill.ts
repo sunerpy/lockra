@@ -106,6 +106,11 @@ export async function submitForm(
   }
 }
 
+/** Whether `root` shows a code field (or boxes) with nothing in it yet. */
+function emptyCode(root: HTMLElement, view: View): boolean {
+  return findOtp(root, view)?.some((input) => input.value === "") ?? false;
+}
+
 /** What a fill put in: how many fields, the password, the code. */
 export interface FillResult {
   filled: number;
@@ -116,7 +121,8 @@ export interface FillResult {
 /** Fill the scanned form. Sent (when the policy says so) once the login's last part is in: the
  *  password, and its code too when it has one (the user's rule, 2026-10-16: a login with a code
  *  signs in at its code's step). A first step that asks for the user name alone is never sent:
- *  the user goes on (the AWS console's root sign-in answered 400). */
+ *  the user goes on (the AWS console's root sign-in answered 400); nor is a form whose code field
+ *  the fill left empty. */
 export function fillForm(scan: FormScan, values: FillValues, view: View): FillResult {
   let filled = 0;
   let password = false;
@@ -146,6 +152,9 @@ export function fillForm(scan: FormScan, values: FillValues, view: View): FillRe
   }
   // The login's last part: its password, or its code on a page that asks for the code alone.
   const last = password || (scan.kind === "otp" && code);
-  if (values.submit && last && (values.otp === null || code)) void submitForm(scan.root, view);
+  // Without its code the form is not sent: the login's goes in on the next page, or the form asks
+  // for one the login has none of (NWCD's SSO: the MFA code beside the password), left to the user.
+  const waits = !code && (values.otp !== null || emptyCode(scan.root, view));
+  if (values.submit && last && !waits) void submitForm(scan.root, view);
   return { filled, password, code };
 }
