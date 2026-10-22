@@ -116,6 +116,42 @@ describe("a sign-in in two steps", () => {
   it("does not take any text field for a user name", () => {
     page(`<form><input type="text" id="city" name="city"><button>Go</button></form>`);
     expect(scanField(input("city"), view).kind).toBe("none");
+    // Nor one whose label names something else.
+    page(`<form><label for="c">城市</label><input type="text" id="c"><button>Go</button></form>`);
+    expect(scanField(input("c"), view).kind).toBe("none");
+  });
+
+  it("knows a user name field by its label when the field names nothing", () => {
+    // AWS IAM Identity Center's sign-in (the user's report, 2026-10-22): no name, an empty
+    // placeholder, `autocomplete="on"`; only the <label for> says 用户名.
+    page(`
+      <form>
+        <awsui-form-field><label for="awsui-input-0">用户名</label>
+          <awsui-input id="username-input"><input id="awsui-input-0" type="text" autocomplete="on" placeholder=""></awsui-input>
+        </awsui-form-field>
+        <button type="submit">下一步</button>
+      </form>`);
+    const scan = scanField(input("awsui-input-0"), view);
+    expect([scan.kind, scan.username?.id]).toEqual(["username", "awsui-input-0"]);
+    // A label around the field, and one the field points at, say the same.
+    page(`<form><label>Username <input id="wrapped" type="text"></label></form>`);
+    expect(scanField(input("wrapped"), view).kind).toBe("username");
+    page(
+      `<form><span id="l1">Email</span><span id="l2">address</span><input id="pointed" aria-labelledby="l1 l2"></form>`,
+    );
+    expect(scanField(input("pointed"), view).kind).toBe("username");
+  });
+});
+
+describe("a code field named by its label", () => {
+  it("is a code field, and its label can say whose code it is", () => {
+    page(`<form><label for="f1">MFA code</label><input id="f1" type="text" maxlength="6"></form>`);
+    expect(findOtp(document, view)?.map((i) => i.id)).toEqual(["f1"]);
+    // A code the site sends by text message is not the authenticator's.
+    page(
+      `<form><label for="f2">短信验证码</label><input id="f2" type="text" maxlength="6"></form>`,
+    );
+    expect(findOtp(document, view)).toBeNull();
   });
 });
 
