@@ -197,6 +197,10 @@ after filling** on:
   one page, once both are; with the code on the next page, the password page waits for your **Sign
   in**, and the code's page is submitted once the code is filled.
 
+<StatusTag status="building" /> A form that also asks for a code is not submitted for a login
+without a linked code: the code and **Sign in** are yours. Link the code to the login and Lockra
+fills it too ([Adding and editing a login](/passwords/#adding-and-editing-a-login)).
+
 Lockra submits as Enter would, with a click on the form's submit button, passing over buttons such
 as **Get code**, **Cancel** or another service's sign-in; a button the page has not enabled yet is
 waited for up to a second, and a form whose button stays disabled is not submitted.
@@ -220,6 +224,13 @@ the first page: after you choose **Next**, the next page of the same site that s
 field within two minutes gets the same login's password by itself. It happens once, in the same tab
 and on the same site. A login set to **Verify first**, or a form in a frame of another site, is not
 filled this way: fill it again as usual. A fill as the page loads has no next page.
+
+### Fields named only by their label
+
+<StatusTag status="building" /> Lockra also reads the label a page shows for a field (a
+`<label>`, or the text the field points at), not only the field's own names. A user name or code
+field that names nothing itself, as on the sign-in of AWS IAM Identity Center, then opens the
+menu, and its sign-in can be saved.
 
 ### When a fill asks first
 
