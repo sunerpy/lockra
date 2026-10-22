@@ -42,7 +42,7 @@ async function setup(initial: PopupState, extra: Partial<PageClient> = {}) {
     close: vi.fn(),
     reload: vi.fn(),
     copyText: vi.fn(async () => undefined),
-    shortcuts: async () => ({ fill: "Ctrl+Shift+L", popup: "" }),
+    shortcuts: async () => ({ fill: "Ctrl+Shift+L", menu: "Alt+Shift+L", popup: "" }),
     browserFeatures: async () => ({ passwords: "browser", forms: "browser" }),
     setBrowserFeature: vi.fn(async (feature: Feature, take: boolean): Promise<BrowserFeatures> => ({
       passwords: feature === "passwords" && take ? "lockra" : "browser",
@@ -99,6 +99,8 @@ describe("the options page", () => {
   it("lists the shortcuts, a missing one as not set, and where to change them", async () => {
     await setup(state());
     expect(screen.getByLabelText("Ctrl Shift L")).toBeInTheDocument();
+    expect(screen.getByLabelText("Alt Shift L")).toBeInTheDocument();
+    expect(screen.getByText("在输入框旁打开 Lockra 菜单")).toBeInTheDocument();
     expect(screen.getByText("未设置")).toBeInTheDocument();
     expect(screen.getByText(/chrome:\/\/extensions\/shortcuts/)).toBeInTheDocument();
   });

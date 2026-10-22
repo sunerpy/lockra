@@ -274,7 +274,10 @@ export class FakeBrowser implements BrowserApi {
   }
 
   commands = {
-    getAll: async (): Promise<Command[]> => [{ name: "fill-login", shortcut: "Ctrl+Shift+L" }],
+    getAll: async (): Promise<Command[]> => [
+      { name: "fill-login", shortcut: "Ctrl+Shift+L" },
+      { name: "open-menu", shortcut: "Alt+Shift+L" },
+    ],
     onCommand: new FakeEvent<(command: string, tab?: Tab) => void>(),
   };
 

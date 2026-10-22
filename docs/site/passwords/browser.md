@@ -155,6 +155,17 @@ browser's own shortcut settings change both keys (in Chrome `chrome://extensions
 Edge `edge://extensions/shortcuts`, in Firefox the add-ons manager's **Manage Extension
 Shortcuts**).
 
+### Lockra's menu on any field
+
+<StatusTag status="building" /> On a page whose fields Lockra cannot tell, no menu opens by the
+field and `Ctrl Shift L` finds no form to fill. Click into the field and press `Alt Shift L`
+(`⌥ Shift L` on macOS): Lockra's menu opens there with the logins that match the site (by its root
+domain, or the full host where you chose so), and `Enter` fills the chosen one. A field Lockra
+cannot tell gets the user name, and the next page's password follows, as in a sign-in over several
+pages. Without a focused field, or a login for the site, the popup opens instead. `Ctrl Shift L`
+in such a field now puts the user name in as well. The browser's shortcut settings change this key
+too.
+
 ### From the menu by the field
 
 With [site access](#site-access), Lockra's menu opens at a sign-in field when you click into it: the
@@ -186,6 +197,10 @@ after filling** on:
   one page, once both are; with the code on the next page, the password page waits for your **Sign
   in**, and the code's page is submitted once the code is filled.
 
+<StatusTag status="building" /> A form that also asks for a code is not submitted for a login
+without a linked code: the code and **Sign in** are yours. Link the code to the login and Lockra
+fills it too ([Adding and editing a login](/passwords/#adding-and-editing-a-login)).
+
 Lockra submits as Enter would, with a click on the form's submit button, passing over buttons such
 as **Get code**, **Cancel** or another service's sign-in; a button the page has not enabled yet is
 waited for up to a second, and a form whose button stays disabled is not submitted.
@@ -209,6 +224,13 @@ the first page: after you choose **Next**, the next page of the same site that s
 field within two minutes gets the same login's password by itself. It happens once, in the same tab
 and on the same site. A login set to **Verify first**, or a form in a frame of another site, is not
 filled this way: fill it again as usual. A fill as the page loads has no next page.
+
+### Fields named only by their label
+
+<StatusTag status="building" /> Lockra also reads the label a page shows for a field (a
+`<label>`, or the text the field points at), not only the field's own names. A user name or code
+field that names nothing itself, as on the sign-in of AWS IAM Identity Center, then opens the
+menu, and its sign-in can be saved.
 
 ### When a fill asks first
 

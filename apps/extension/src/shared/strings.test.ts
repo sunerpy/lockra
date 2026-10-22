@@ -31,11 +31,13 @@ describe("the extension's words", () => {
         name: file.name?.message,
         description: file.description?.message,
         command: file.commandFill?.message,
+        menu: file.commandMenu?.message,
       }).toEqual({
         locale,
         name: dictionary.manifest.name,
         description: dictionary.manifest.description,
         command: dictionary.manifest.commandFill,
+        menu: dictionary.manifest.commandMenu,
       });
     }
     // The stores' limit on a description.
