@@ -163,11 +163,15 @@ describe("the pages' client", () => {
     client.close();
     expect(close).toHaveBeenCalled();
     await client.copyText("https://firlab.app/lockra/");
-    expect(await client.shortcuts()).toEqual({ fill: "Ctrl+Shift+L", popup: "" });
+    expect(await client.shortcuts()).toEqual({
+      fill: "Ctrl+Shift+L",
+      menu: "Alt+Shift+L",
+      popup: "",
+    });
     browser.commands.getAll = async () => {
       throw new Error("x");
     };
-    expect(await client.shortcuts()).toEqual({ fill: "", popup: "" });
+    expect(await client.shortcuts()).toEqual({ fill: "", menu: "", popup: "" });
     expect(client.target).toBe("chromium");
   });
 });

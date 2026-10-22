@@ -25,7 +25,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 export function Options({ client, locale }: { client: PageClient; locale: string }) {
   const t = useText();
   const { state, send } = usePage(client);
-  const [shortcuts, setShortcuts] = useState({ fill: "", popup: "" });
+  const [shortcuts, setShortcuts] = useState({ fill: "", menu: "", popup: "" });
   const [copied, setCopied] = useState(false);
   const [features, setFeatures] = useState<BrowserFeatures | null>(null);
   const [onFocus, setOnFocus] = useState(true);
@@ -115,6 +115,13 @@ export function Options({ client, locale }: { client: PageClient; locale: string
           <StatusRow label={t("options.fillShortcut")} help={t("options.fillShortcutHelp")}>
             {shortcuts.fill ? (
               <Keycaps keys={shortcuts.fill} />
+            ) : (
+              <span className="text-[12px] text-fg-subtle">{t("options.unset")}</span>
+            )}
+          </StatusRow>
+          <StatusRow label={t("options.menuShortcut")} help={t("options.menuShortcutHelp")}>
+            {shortcuts.menu ? (
+              <Keycaps keys={shortcuts.menu} />
             ) : (
               <span className="text-[12px] text-fg-subtle">{t("options.unset")}</span>
             )}

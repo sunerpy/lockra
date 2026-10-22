@@ -269,8 +269,8 @@ class Smoke:
         print(f"smoke: {self.args.browser} runs the extension")
 
     def chrome_shortcut(self):
-        """Chrome leaves the fill command without its suggested key when the extension is loaded
-        from the command line (`commands.getAll` says ""; the action's key it does assign): set it
+        """Chrome leaves the extension's commands without their suggested keys when it is loaded
+        from the command line (`commands.getAll` says ""; the action's key it does assign): set them
         the way chrome://extensions/shortcuts does."""
         self.web.go(self.extension_page("options.html"))
         commands = self.web.call(
@@ -278,22 +278,25 @@ class Smoke:
             self.web.s("/execute/async"),
             {"script": "const done = arguments[arguments.length - 1]; chrome.commands.getAll().then(done);", "args": []},
         )
-        if next(c for c in commands if c["name"] == "fill-login")["shortcut"]:
+        keys = {"fill-login": "Ctrl+Shift+L", "open-menu": "Alt+Shift+L"}
+        unset = [name for name in keys if not next(c for c in commands if c["name"] == name)["shortcut"]]
+        if not unset:
             return
         self.web.go("chrome://extensions/shortcuts")
-        answer = self.web.call(
-            "POST",
-            self.web.s("/execute/async"),
-            {
-                "script": "const done = arguments[arguments.length - 1];"
-                "chrome.developerPrivate.updateExtensionCommand({ extensionId: arguments[0], commandName: 'fill-login', keybinding: 'Ctrl+Shift+L' })"
-                ".then(() => done('ok'), (e) => done(String(e && e.message || e)));",
-                "args": [CHROME_ID],
-            },
-        )
-        if answer != "ok":
-            sys.exit(f"smoke: Chrome did not take Ctrl+Shift+L for the fill command: {answer}")
-        print("smoke: Chrome had left the fill command without a key; set to Ctrl+Shift+L")
+        for name in unset:
+            answer = self.web.call(
+                "POST",
+                self.web.s("/execute/async"),
+                {
+                    "script": "const done = arguments[arguments.length - 1];"
+                    "chrome.developerPrivate.updateExtensionCommand({ extensionId: arguments[0], commandName: arguments[1], keybinding: arguments[2] })"
+                    ".then(() => done('ok'), (e) => done(String(e && e.message || e)));",
+                    "args": [CHROME_ID, name, keys[name]],
+                },
+            )
+            if answer != "ok":
+                sys.exit(f"smoke: Chrome did not take {keys[name]} for {name}: {answer}")
+            print(f"smoke: Chrome had left {name} without a key; set to {keys[name]}")
 
     # ---- the flows ----------------------------------------------------------------------------
 
@@ -585,6 +588,25 @@ class Smoke:
             sys.exit("smoke: the password page was sent, with nothing that sends it")
         print("smoke: the shortcut filled a sign-in's first page, and its next page got the password by itself")
 
+    def menu_shortcut(self):
+        """A page Lockra has no rule for (the user's request, 2026-10-22): its field names nothing,
+        so no menu opens by itself. The menu shortcut opens Lockra's menu on it, Enter puts the
+        login's user name in, and the next page gets the password by itself."""
+        self.room_to_fill(2)
+        self.web.go(self.url("login.test", "plain.html"))
+        self.web.click(self.web.wait("#who"))
+        if self.web.menu_open():
+            sys.exit("smoke: a field that names nothing opened the menu by itself")
+        self.x_key("alt+shift+l")
+        until("the menu the shortcut opened", self.web.menu_open, 15)
+        self.settle()
+        self.shot("menu-shortcut")
+        self.web.keys(ENTER)
+        until("the login's user name in the field", lambda: self.web.values("#who") == [LOGIN_USER], 30)
+        self.web.click(self.web.wait("#go"))
+        until("the next step to fill the password by itself", lambda: self.web.values("#password") == [LOGIN_PASSWORD], 30)
+        print("smoke: the menu shortcut opened Lockra's menu on a field Lockra cannot tell; Enter put the user name in, the next page got the password")
+
     def http_page(self):
         """An HTTPS login on an HTTP page: the menu warns, and nothing goes in without consent."""
         self.web.go(self.url("login.test", "login.html", secure=False))
@@ -811,6 +833,7 @@ class Smoke:
             self.otp_after_switch()
             self.otp_menu()
             self.shortcut_two_steps()
+            self.menu_shortcut()
             self.http_page()
             self.cross_site_frame()
             self.hijack_pages()

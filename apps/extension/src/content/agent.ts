@@ -11,6 +11,7 @@ import type {
   ContentMessage,
   FillValues,
   FocusKind,
+  MenuAnswer,
   MenuSide,
   StartAnswer,
 } from "../shared/messages";
@@ -26,7 +27,7 @@ import {
   scanField,
   takesAskedCode,
 } from "./fields";
-import { type FillResult, fillForm, fillOtp, submitForm } from "./fill";
+import { type FillResult, fillChosen, fillForm, fillOtp, submitForm } from "./fill";
 import { FrameHost } from "./frame-host";
 import { formUsername } from "./shown-username";
 import { SubmitWatcher } from "./submit";
@@ -455,9 +456,9 @@ export class ContentAgent {
       }
       case "menu.open": {
         const active = deepActive(this.options.doc);
-        if (active instanceof HTMLInputElement && isFillable(active))
-          this.openMenu(message.token, active, true, sideOf(message));
-        return Promise.resolve(null);
+        const opened = active instanceof HTMLInputElement && isFillable(active);
+        if (opened) this.openMenu(message.token, active, true, sideOf(message));
+        return Promise.resolve({ opened } satisfies MenuAnswer);
       }
       case "prompt.open":
         this.openPrompt(message.token);
@@ -500,7 +501,12 @@ export class ContentAgent {
       this.anchor ?? (active instanceof HTMLInputElement && isFillable(active) ? active : null);
     const scan = field ? scanField(field, view) : findLoginForms(this.options.doc, view)[0];
     if (!scan) return { filled: 0, password: false, code: false };
-    const result = fillForm(scan, values, view);
+    // A field Lockra cannot tell, chosen by the user (the menu shortcut opened the menu on it, the
+    // fill shortcut was pressed in it): the user name goes there.
+    const result =
+      scan.kind === "none" && field
+        ? fillChosen(field, values, view)
+        : fillForm(scan, values, view);
     if (result.filled > 0) this.fills += 1;
     const now = this.options.now();
     if (result.password) this.stepUntil = 0;
