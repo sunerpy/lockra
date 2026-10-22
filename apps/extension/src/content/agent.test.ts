@@ -648,6 +648,60 @@ describe("the page's own work", () => {
     agent.stop();
   });
 
+  it("puts the user name into a field Lockra cannot tell when the user chose it, then looks for the password's step", async () => {
+    // Pages Lockra has no rule for (the user's request, 2026-10-22): a field that names nothing,
+    // with Lockra's menu opened on it by the menu shortcut.
+    document.body.innerHTML = `<form id="step"><input id="who" type="text"><button>Next</button></form>`;
+    const { agent, sent, deliver } = setup({}, null);
+    await agent.start();
+    input("who").focus();
+    expect(await deliver({ kind: "menu.open", token: "d".repeat(32) })).toEqual({ opened: true });
+    expect(hosts()).toHaveLength(1);
+    const values = {
+      username: "me@example.com",
+      password: "s3cret",
+      fields: [],
+      otp: null,
+      submit: true,
+    };
+    expect(await deliver({ kind: "fill", values })).toEqual({
+      filled: 1,
+      password: false,
+      code: false,
+    });
+    expect(input("who").value).toBe("me@example.com");
+    // The page goes on to its password: asked for once it shows.
+    document.body.innerHTML = `<form id="step"><input id="pass" type="password"><button>Sign in</button></form>`;
+    await vi.waitFor(() => expect(sent.some((m) => m.kind === "content.next_step")).toBe(true), {
+      timeout: 2_000,
+    });
+    agent.stop();
+  });
+
+  it("the fill shortcut in a field Lockra cannot tell puts the user name there; nothing without a field", async () => {
+    document.body.innerHTML = `<div><input id="who"></div>`;
+    const { agent, deliver } = setup({}, null);
+    await agent.start();
+    const values = { username: "alice", password: "s3cret", fields: [], otp: null, submit: false };
+    // No field has the focus: nothing to fill.
+    expect(await deliver({ kind: "fill", values })).toEqual({
+      filled: 0,
+      password: false,
+      code: false,
+    });
+    // The menu needs a field to open on.
+    expect(await deliver({ kind: "menu.open", token: "d".repeat(32) })).toEqual({ opened: false });
+    expect(hosts()).toHaveLength(0);
+    input("who").focus();
+    expect(await deliver({ kind: "fill", values })).toEqual({
+      filled: 1,
+      password: false,
+      code: false,
+    });
+    expect(input("who").value).toBe("alice");
+    agent.stop();
+  });
+
   it("looks for the password of a step the background says is next, and sends the code's step when told", async () => {
     document.body.innerHTML = `<form id="f"><input id="pass" type="password"><button id="go">Sign in</button></form>`;
     const next = setup({ nextStep: true });

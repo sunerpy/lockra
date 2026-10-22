@@ -80,3 +80,5 @@
 | 在输入框旁的菜单中按 `Esc`   | 关闭菜单                                          |
 
 前两个快捷键可以在浏览器自己的设置中修改：Chrome 为 `chrome://extensions/shortcuts`，Edge 为 `edge://extensions/shortcuts`，Firefox 为附加组件管理器中的「管理扩展快捷键」。
+
+<StatusTag status="building" /> `Alt Shift L`（macOS 上为 `⌥ Shift L`）在当前聚焦的输入框旁打开 Lockra 菜单，任意输入框都可以，列出与当前网站匹配的登录项；同样可以在浏览器的设置中修改（[在任意输入框打开 Lockra 菜单](/zh/passwords/browser#在任意输入框打开-lockra-菜单)）。

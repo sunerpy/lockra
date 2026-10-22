@@ -56,6 +56,11 @@ version and downloads it at once. Lockra 0.2.0's **Check for updates automatical
 so it is not carried over, and from 0.3.2 a switch turned on under 0.3.0 or 0.3.1 is off once as
 well: turn on **Automatic updates** again if you want them.
 
+<StatusTag status="building" /> While Lockra runs, it also looks again 4 hours after each check
+and downloads a newer version in the background; these later looks never install it. Once a
+version is downloaded, nothing more goes online until the restart: choose **Restart to update** in
+the title bar and Lockra restarts into the new version.
+
 ### What a check sends
 
 A check asks GitHub, where Lockra is released, for a short file that names the newest version; a

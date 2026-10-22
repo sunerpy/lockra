@@ -1612,6 +1612,8 @@ impl Core {
             let update_turned_on = settings.auto_update && !st.settings.auto_update;
             if !settings.auto_update {
                 st.update.auto_at = None;
+                // On again, the switch only downloads: what it fetched is installed by a restart.
+                st.update.auto_installs = false;
             }
             if settings.quick_access_shortcut != st.settings.quick_access_shortcut {
                 // The shell's report was about the shortcut chosen before.
@@ -1694,14 +1696,20 @@ impl Core {
     async fn run_update(&self, run: UpdateRun) {
         let outcome = self.update_steps(&run).await;
         let now = self.now_ms();
+        let installs = self.shared.ports.updater.method().is_some_and(InstallMethod::installs);
         {
             let mut st = self.lock();
             st.update.busy = false;
+            let installed = matches!(outcome, Ok(None));
             match outcome {
                 Ok(Some(status)) => st.update.status = status,
                 // Installed: the shell restarts Lockra.
                 Ok(None) => {}
                 Err(failure) => st.update.status = UpdateStatus::Failed { code: failure_code(failure), at_ms: now },
+            }
+            if !installed {
+                let switched_on = st.settings.auto_update && installs;
+                st.update.look_again(switched_on);
             }
         }
         self.changed();
@@ -2936,9 +2944,11 @@ impl Core {
     /// Everything that is due.
     fn on_timer(&self) {
         let now = Instant::now();
-        let (auto_lock, clear, backup, expired, auto_update, sync) = {
+        let (auto_lock, clear, backup, expired, (auto_update, auto_installs), sync) = {
             let mut st = self.lock();
             let auto_update = st.update.auto_at.is_some_and(|at| now >= at);
+            // Only the look at start may install, what an earlier start downloaded.
+            let auto_installs = auto_update && std::mem::take(&mut st.update.auto_installs);
             if auto_update {
                 st.update.auto_at = None;
             }
@@ -2962,7 +2972,7 @@ impl Core {
                     keep
                 });
             }
-            (auto_lock, clear, backup, expired, auto_update, sync)
+            (auto_lock, clear, backup, expired, (auto_update, auto_installs), sync)
         };
         if let Some(code) = clear
             && self.shared.ports.clipboard.clear_if(&code).unwrap_or(false)
@@ -2983,9 +2993,10 @@ impl Core {
             self.start_sync();
         }
         if auto_update {
-            // Installs at once only the version an earlier start downloaded. Skipped while the user
-            // runs one, which answers the same question.
-            let install_version = read_marker(&self.shared.config.data_dir);
+            // The look at start installs at once only the version an earlier start downloaded; the
+            // later looks only download. Skipped while the user runs one, which answers the same
+            // question and schedules the next look as it ends.
+            let install_version = if auto_installs { read_marker(&self.shared.config.data_dir) } else { None };
             let _ = self.start_update(UpdateRun::Auto { install_version });
         }
         self.push_codes();

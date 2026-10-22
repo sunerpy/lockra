@@ -953,7 +953,7 @@ export const zhCN = {
       sortHint: "收藏的账号总排在最前面。",
       autoUpdate: "自动更新",
       autoUpdateHelp:
-        "开启后，Lockra 在启动 10 秒后检查更新并在后台下载，重启时完成安装；关闭时，仅在点击「检查更新」时联网。",
+        "开启后，Lockra 在启动 10 秒后检查更新，运行期间每 4 小时再检查一次，有新版本就在后台下载；下载好后，点标题栏的「重启以更新」即可完成安装。关闭时，仅在点击「检查更新」时联网。",
       launchAtLogin: "登录时启动 Lockra",
       launchAtLoginHelp:
         "登录电脑后自动运行 Lockra，浏览器扩展和快捷搜索随时可用。开启「设置 › 浏览器」中的「关闭窗口后继续运行」时，Lockra 只在托盘中运行，不打开窗口。",
@@ -1695,6 +1695,7 @@ export const zhCN = {
       ready: "重启以更新",
     },
     badgeTitle: "查看更新",
+    badgeRestartTitle: "重启 Lockra，完成更新到 {version}",
   },
   /** The browser extension's requests that wait for the user (boards 17–19). */
   browser: {

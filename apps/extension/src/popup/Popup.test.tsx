@@ -77,7 +77,7 @@ function setup(initial: PopupState | null = state(), extra: Partial<PageClient> 
     close: vi.fn(),
     reload: vi.fn(),
     copyText: vi.fn(async () => undefined),
-    shortcuts: async () => ({ fill: "Ctrl+Shift+L", popup: "Ctrl+Shift+Y" }),
+    shortcuts: async () => ({ fill: "Ctrl+Shift+L", menu: "Alt+Shift+L", popup: "Ctrl+Shift+Y" }),
     browserFeatures: async () => ({ passwords: "browser", forms: "browser" }),
     setBrowserFeature: async () => ({ passwords: "browser", forms: "browser" }),
     openPasswordManager: null,
