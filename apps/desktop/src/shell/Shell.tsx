@@ -201,7 +201,6 @@ function ShellLayout() {
                 icon: "lock" as const,
                 count: logins?.length,
               },
-              { id: "generator", label: t("shell.nav.generator"), icon: "dice" as const },
             ]
           : []),
       ],
@@ -291,7 +290,8 @@ function ShellLayout() {
       }}>
       <Sidebar
         groups={groups}
-        activeId={page}
+        // 生成器 is part of 密码: no row of its own, so 密码 stays the current one.
+        activeId={page === "generator" ? "passwords" : page}
         onNavigate={(id) => {
           if (id === "sync") shell.open({ type: "settings", section: "sync" });
           else if (isPageId(id)) shell.navigate(id);

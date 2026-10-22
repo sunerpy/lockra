@@ -184,15 +184,17 @@ device only: it is not synced and not in backups.
 
 ### The Generator page
 
-<StatusTag status="building" /> The password generator is getting a page of its own: **Generator**
-in the sidebar, under **Passwords**. The page shows the generator, making passwords for no site,
-with **Copy** beside **Generate again**. Under it, **Generated passwords** says how many passwords
-the history holds, which ones go into it and how long they are kept. **Show the history…** lists
-them after the master password, Touch ID or Windows Hello, each with when it was made and the site
-it was made for, and hides them again after two minutes or as soon as you leave the page; **Hide**
-hides them sooner, and **Clear the history…** empties the history. **Add login › Generate a
-password…** and `Ctrl G` will open this page. **Generate…** in a login's form keeps opening the
-generator over the form, with **Use this password** and **History**.
+<StatusTag status="building" /> The password generator is getting a page of its own, a part of
+the Passwords page: **Generator**, beside **Add login** at the top of the Passwords page, will open
+it, and so will **Add login › Generate a password…**, `Ctrl G` and the command palette; **Back to
+Passwords** at its top goes back. The page shows the generator, making passwords for no site, with
+**Copy** beside **Generate again**. Under it, **Generated passwords** says how many passwords the
+history holds, which ones go into it and how long they are kept. **Show the history…** lists them
+after the master password, Touch ID or Windows Hello, each with when it was made and the site it
+was made for, and hides them again after two minutes or as soon as you leave the page; **Hide**
+hides them sooner. **Clear the history…** asks before it empties the history, on this page and in
+the generator of a login's form. **Generate…** in a login's form keeps opening the generator over
+the form, with **Use this password** and **History**.
 
 ## On the phone
 

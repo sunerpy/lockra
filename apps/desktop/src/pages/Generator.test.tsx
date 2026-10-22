@@ -26,9 +26,12 @@ function nav() {
   return within(screen.getByRole("navigation", { name: "主导航" }));
 }
 
+/** The generator page, by the 「生成器」 button in 密码's header. */
 async function openPage(user: UserEvent) {
   await ready();
-  await user.click(nav().getByRole("button", { name: "生成器" }));
+  await user.click(nav().getByRole("button", { name: /^密码/ }));
+  const passwords = within(await screen.findByTestId("page-passwords"));
+  await user.click(passwords.getByRole("button", { name: "生成器" }));
   return within(await screen.findByTestId("page-generator"));
 }
 
@@ -61,15 +64,26 @@ async function viewHistory(user: UserEvent, history: ReturnType<typeof within>) 
 }
 
 describe("Generator page", () => {
-  it("sits in the sidebar right under 密码 where password management is", async () => {
-    renderGenerator();
+  it("belongs to 密码: its button in 密码's header, 密码 current in the sidebar, a way back", async () => {
+    const { user } = renderGenerator();
     await ready();
+    // No sidebar row of its own: the sidebar keeps its rows (DESIGN.md §2).
     const vault = within(nav().getByRole("group", { name: "保险库" }));
     expect(vault.getAllByRole("button").map((b) => b.textContent)).toEqual([
       expect.stringMatching(/^验证码/),
       expect.stringMatching(/^密码/),
-      "生成器",
     ]);
+    await user.click(nav().getByRole("button", { name: /^密码/ }));
+    const passwords = within(await screen.findByTestId("page-passwords"));
+    expect(passwords.getByRole("button", { name: "生成器" })).toHaveAttribute(
+      "title",
+      "生成器 · Ctrl G",
+    );
+    const page = await openPage(user);
+    expect(nav().getByRole("button", { name: /^密码/ })).toHaveAttribute("aria-current", "page");
+    await user.click(page.getByRole("button", { name: "返回密码" }));
+    expect(await screen.findByTestId("page-passwords")).toBeInTheDocument();
+    expect(screen.queryByTestId("page-generator")).toBeNull();
   });
 
   it("is not offered without password management: no sidebar entry, Ctrl G or palette page", async () => {
@@ -89,7 +103,6 @@ describe("Generator page", () => {
     const page = await openPage(user);
     expect(page.getByRole("heading", { level: 1, name: "密码生成器" })).toBeInTheDocument();
     expect(page.getByTestId("page-subtitle")).toHaveTextContent("生成随机密码或口令");
-    expect(nav().getByRole("button", { name: "生成器" })).toHaveAttribute("aria-current", "page");
     await made(page);
     expect(lastCall(backend, "generator_generate")).not.toHaveProperty("domain");
     expect(page.queryByTestId("generator-use")).toBeNull();
@@ -262,7 +275,21 @@ describe("Generator page", () => {
     await user.click(page.getByTestId("generator-copy"));
     expect(history.getByTestId("generator-history-view")).toBeEnabled();
     await viewHistory(user, history);
+    // It asks first: cancelled, nothing goes.
     await user.click(history.getByTestId("generator-history-clear"));
+    let confirm = within(
+      await screen.findByRole("dialog", { name: "清空生成历史？这些密码不会再显示。" }),
+    );
+    await user.click(confirm.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(count(backend, "generator_history_clear")).toBe(0);
+    expect(history.getByTestId("generator-history")).toBeInTheDocument();
+    await user.click(history.getByTestId("generator-history-clear"));
+    confirm = within(
+      await screen.findByRole("dialog", { name: "清空生成历史？这些密码不会再显示。" }),
+    );
+    await user.click(confirm.getByTestId("generator-history-clear-confirm"));
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(lastCall(backend, "generator_history_clear")).toBeDefined();
     expect(history.queryByTestId("generator-history")).toBeNull();
     expect(history.getByTestId("generator-history-count")).toHaveTextContent("0 条");
@@ -326,14 +353,34 @@ describe("The login form's generator", () => {
     await user.keyboard("{Control>}n{/Control}");
     const form = within(screen.getByRole("dialog", { name: "新建登录项" }));
     await user.click(form.getByTestId("item-form-generate"));
-    const generator = within(screen.getByRole("dialog", { name: "生成密码" }));
-    await made(generator);
-    await user.click(generator.getByTestId("generator-copy-icon"));
-    await user.click(generator.getByTestId("generator-history-open"));
-    const verify = within(await screen.findByRole("dialog", { name: "验证身份" }));
-    await user.type(verify.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
-    const history = within(await screen.findByRole("dialog", { name: "生成历史" }));
+    // The generator's dialog, drawn again each time the history gives way to it.
+    const generator = () => within(screen.getByRole("dialog", { name: "生成密码" }));
+    await made(generator());
+    const open = async () => {
+      await user.click(generator().getByTestId("generator-history-open"));
+      const verify = within(await screen.findByRole("dialog", { name: "验证身份" }));
+      await user.type(verify.getByLabelText("主密码"), `${MOCK_PASSWORD}{Enter}`);
+      return within(await screen.findByRole("dialog", { name: "生成历史" }));
+    };
+    // Nothing copied yet: an empty history, nothing to clear.
+    let history = await open();
+    expect(history.getByText("还没有生成过密码")).toBeInTheDocument();
+    expect(history.getByTestId("generator-history-clear")).toBeDisabled();
+    await user.click(history.getByRole("button", { name: "完成" }));
+    await user.click(generator().getByTestId("generator-copy-icon"));
+    history = await open();
     await user.click(history.getByTestId("generator-history-clear"));
+    await screen.findByRole("dialog", { name: "清空生成历史？这些密码不会再显示。" });
+    // Esc closes the question only: the history stays.
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "清空生成历史？这些密码不会再显示。" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "生成历史" })).toBeInTheDocument();
+    expect(count(backend, "generator_history_clear")).toBe(0);
+    await user.click(history.getByTestId("generator-history-clear"));
+    const confirm = within(
+      await screen.findByRole("dialog", { name: "清空生成历史？这些密码不会再显示。" }),
+    );
+    await user.click(confirm.getByRole("button", { name: "清空" }));
     expect(lastCall(backend, "generator_history_clear")).toBeDefined();
     // Back to the generator, its link counting none.
     expect(

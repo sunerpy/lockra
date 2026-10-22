@@ -2,9 +2,10 @@
 // the passwords copied or saved with a login, and those the browser extension made on sign-up
 // forms, kept by the core on this device only. They show after the master password or the system
 // check (`generator_history_reveal`, a secret answer) and hide themselves after two minutes; while
-// they show, they are a secret view.
+// they show, they are a secret view. 「清空历史…」 asks first, as the app's other destructive actions
+// do.
 import { type GeneratedPastView, REVEAL_SECONDS, relativeTime } from "@lockra/shared";
-import { Button, type ButtonSize, useBackend, useClock, useNow, useT } from "@lockra/ui";
+import { Button, type ButtonSize, Dialog, useBackend, useClock, useNow, useT } from "@lockra/ui";
 import { useEffect, useState } from "react";
 import { useDispatch } from "../../app/dispatch";
 import { useSecretView } from "./secret-view";
@@ -17,7 +18,11 @@ export interface GeneratorHistory {
   /** Ask for the proof, then show them. */
   open: () => Promise<void>;
   hide: () => void;
-  /** Forget them all; what was shown goes too. */
+  /** 「清空历史…」 was chosen: its question is on the screen. */
+  clearing: boolean;
+  askClear: () => void;
+  cancelClear: () => void;
+  /** The answer to the question: forget them all; what was shown goes too. */
   clear: () => Promise<void>;
 }
 
@@ -27,12 +32,21 @@ export function useGeneratorHistory(): GeneratorHistory {
   const dispatch = useDispatch();
   const verify = useVerify();
   const [shown, setShown] = useState<GeneratorHistory["shown"]>(undefined);
+  const [clearing, setClearing] = useState(false);
   useSecretView(shown !== undefined);
+  // Hidden, the history takes its question with it.
+  const hide = () => {
+    setShown(undefined);
+    setClearing(false);
+  };
   // The history hides itself two minutes after it showed.
   useEffect(() => {
     if (shown === undefined) return undefined;
     const timer = setTimeout(
-      () => setShown(undefined),
+      () => {
+        setShown(undefined);
+        setClearing(false);
+      },
       Math.max(0, shown.at + REVEAL_SECONDS * 1000 - Date.now()),
     );
     return () => clearTimeout(timer);
@@ -45,10 +59,13 @@ export function useGeneratorHistory(): GeneratorHistory {
       );
       if (list !== undefined) setShown({ list, at: Date.now() });
     },
-    hide: () => setShown(undefined),
+    hide,
+    clearing,
+    askClear: () => setClearing(true),
+    cancelClear: () => setClearing(false),
     clear: async () => {
-      if ((await dispatch({ command: "generator_history_clear" })) !== undefined)
-        setShown(undefined);
+      setClearing(false);
+      if ((await dispatch({ command: "generator_history_clear" })) !== undefined) hide();
     },
   };
 }
@@ -95,7 +112,7 @@ export function GeneratorHistoryList({ list }: { list: readonly GeneratedPastVie
   );
 }
 
-/** 「清空历史…」 for the history on the screen; none to clear, it is off. */
+/** 「清空历史…」 for the history on the screen, which asks first; none to clear, it is off. */
 export function ClearHistoryButton({
   history,
   size,
@@ -108,10 +125,37 @@ export function ClearHistoryButton({
     <Button
       variant="text-danger"
       size={size}
-      onClick={() => void history.clear()}
+      onClick={history.askClear}
       disabled={history.shown === undefined || history.shown.list.length === 0}
       data-testid="generator-history-clear">
       {t("generator.history.clear")}
     </Button>
+  );
+}
+
+/** The question 「清空历史…」 asks: 取消 keeps the history, 清空 forgets it. Drawn beside the view that
+ *  asked, never inside a frosted card or dialog, whose blur would hold a fixed dialog inside it. */
+export function ClearHistoryDialog({ history }: { history: GeneratorHistory }) {
+  const t = useT();
+  return (
+    <Dialog
+      open={history.clearing}
+      title={t("generator.history.clearConfirm")}
+      onClose={history.cancelClear}
+      actions={
+        <>
+          <Button variant="ghost" onClick={history.cancelClear} data-autofocus>
+            {t("common.cancel")}
+          </Button>
+          <Button
+            variant="danger"
+            icon="trash"
+            onClick={() => void history.clear()}
+            data-testid="generator-history-clear-confirm">
+            {t("generator.history.clearSubmit")}
+          </Button>
+        </>
+      }
+    />
   );
 }

@@ -503,6 +503,7 @@ export const zhCN = {
     page: {
       title: "密码生成器",
       subtitle: "生成随机密码或口令。复制的密码会记入下方的生成历史。",
+      back: "返回密码",
     },
     mode: { label: "类型", password: "随机密码", passphrase: "口令" },
     regenerate: "重新生成",
@@ -545,6 +546,7 @@ export const zhCN = {
       empty: "还没有生成过密码",
       clear: "清空历史…",
       clearConfirm: "清空生成历史？这些密码不会再显示。",
+      clearSubmit: "清空",
       site: "用于 {site}",
     },
   },

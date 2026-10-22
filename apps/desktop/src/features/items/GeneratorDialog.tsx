@@ -5,6 +5,7 @@
 import { Button, Dialog, useT, useUiState } from "@lockra/ui";
 import {
   ClearHistoryButton,
+  ClearHistoryDialog,
   GeneratorHistoryList,
   HistoryCountdown,
   useGeneratorHistory,
@@ -32,22 +33,26 @@ export function GeneratorDialog({ onClose, onUse, domain }: GeneratorDialogProps
   };
   if (history.shown !== undefined) {
     return (
-      <Dialog
-        open
-        title={t("generator.history.title")}
-        onClose={history.hide}
-        width={520}
-        hint={<HistoryCountdown at={history.shown.at} />}
-        actions={
-          <>
-            <ClearHistoryButton history={history} />
-            <Button variant="primary" onClick={history.hide}>
-              {t("common.done")}
-            </Button>
-          </>
-        }>
-        <GeneratorHistoryList list={history.shown.list} />
-      </Dialog>
+      <>
+        <Dialog
+          open
+          title={t("generator.history.title")}
+          onClose={history.hide}
+          width={520}
+          hint={<HistoryCountdown at={history.shown.at} />}
+          actions={
+            <>
+              <ClearHistoryButton history={history} />
+              <Button variant="primary" onClick={history.hide}>
+                {t("common.done")}
+              </Button>
+            </>
+          }>
+          <GeneratorHistoryList list={history.shown.list} />
+        </Dialog>
+        {/* Over the history, as a dialog of its own. */}
+        <ClearHistoryDialog history={history} />
+      </>
     );
   }
   return (

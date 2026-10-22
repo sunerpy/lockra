@@ -516,6 +516,7 @@ export const en: Messages = {
       title: "Password generator",
       subtitle:
         "Make a random password or a passphrase. The passwords you copy go into the history below.",
+      back: "Back to Passwords",
     },
     mode: { label: "Kind", password: "Random", passphrase: "Passphrase" },
     regenerate: "Generate again",
@@ -558,6 +559,7 @@ export const en: Messages = {
       empty: "Nothing generated yet",
       clear: "Clear the history…",
       clearConfirm: "Clear the history? These passwords will not show again.",
+      clearSubmit: "Clear",
       site: "For {site}",
     },
   },
