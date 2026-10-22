@@ -28,6 +28,9 @@ Automatic updates** on, it also asks 10 seconds after each start and downloads a
 the background. Nothing from your accounts, your vault or your settings goes with these requests; GitHub sees the request and the address it came from, as for any download
 ([Updating](/guide/updates#updating)).
 
+<StatusTag status="building" /> With **Automatic updates** on, Lockra also asks again every 4 hours
+while it runs, until a downloaded version waits for the restart.
+
 With sync on (from version 0.4.0), each device writes encrypted files to the S3-compatible bucket
 or WebDAV folder you set up and reads the other devices' files from there, and contacts nothing else for it. The
 storage sees encrypted files, their sizes in steps of 4 KiB, the number of devices and when they
