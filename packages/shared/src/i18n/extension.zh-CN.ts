@@ -6,6 +6,7 @@ export const extensionZhCN = {
     name: "Lockra",
     description: "用电脑上的 Lockra 填充密码和验证码。扩展本身不保存登录项。",
     commandFill: "填充当前网站的登录项",
+    commandMenu: "在输入框旁打开 Lockra 菜单",
   },
   name: "Lockra 扩展",
   state: {
@@ -216,6 +217,8 @@ export const extensionZhCN = {
     shortcuts: "快捷键",
     fillShortcut: "填充当前网站的登录项",
     fillShortcutHelp: "连按切换到下一个账号（10 秒内）",
+    menuShortcut: "在输入框旁打开 Lockra 菜单",
+    menuShortcutHelp: "列出与当前网站匹配的登录项，Lockra 认不出的输入框也能用",
     popupShortcut: "打开 Lockra 弹窗",
     unset: "未设置",
     shortcutsChromium:

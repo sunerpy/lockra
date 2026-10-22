@@ -134,17 +134,21 @@ async function setup(options: { folder?: string } = {}) {
   const filled = { value: { filled: 2, password: true, code: false } };
   /** What it answers a code: whether it went in. */
   const codeIn = { value: { code: true } };
+  /** What it answers a frame to show at the focused field: whether a field had the focus. */
+  const menuIn = { value: { opened: true } };
   browser.content.set("1:0", (message) => {
     contentGot.push(message as BackgroundMessage);
     const m = message as BackgroundMessage;
     if (m.kind === "frame.verify") return verify;
     if (m.kind === "fill") return filled.value;
     if (m.kind === "fill.otp") return codeIn.value;
+    if (m.kind === "menu.open") return menuIn.value;
     return undefined;
   });
   return {
     filled,
     codeIn,
+    menuIn,
     app,
     browser,
     clock,
@@ -1278,6 +1282,73 @@ describe("the shortcut", () => {
     browser.probes.set(0, { focused: true, editable: true, framed: false });
     browser.commands.onCommand.emit("fill-login", browser.openTabs[0]);
     await vi.waitFor(() => expect(browser.popupOpened).toBe(1));
+  });
+});
+
+describe("the menu shortcut", () => {
+  it("opens Lockra's menu on the focused field with the site's logins, and fills the one chosen", async () => {
+    // Pages Lockra has no rule for (the user's request, 2026-10-22): the menu on any field.
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    browser.probes.set(0, { focused: true, editable: true, framed: false });
+    browser.commands.onCommand.emit("open-menu", browser.openTabs[0]);
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "menu.open")).toBe(true));
+    // Without site access the content script is put in the frame on demand.
+    expect(browser.injected.at(-1)).toEqual({
+      target: { tabId: 1, frameIds: [0] },
+      files: ["content.js"],
+    });
+    const open = contentGot.find((m) => m.kind === "menu.open") as { token: string };
+    expect(open).toMatchObject({ side: "above" });
+    const frame = inlineFrame(context, open.token);
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ view: "list" }));
+    expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 1 },
+      point: { x: 10, y: 10 },
+      trusted: true,
+    });
+    await vi.waitFor(() =>
+      expect(app.requests.at(-1)).toMatchObject({
+        op: "fill",
+        item_id: ITEM2,
+        trigger: "inline_menu",
+      }),
+    );
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+    expect(browser.popupOpened).toBe(0);
+  });
+
+  it("opens the popup instead when no field has the focus, the site has no login, or Lockra cannot answer", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    browser.probes.set(0, { focused: true, editable: false, framed: false });
+    browser.commands.onCommand.emit("open-menu", browser.openTabs[0]);
+    await vi.waitFor(() => expect(browser.popupOpened).toBe(1));
+    browser.probes.set(0, { focused: true, editable: true, framed: false });
+    app.handlers.query = () => queryAnswer([]);
+    browser.commands.onCommand.emit("open-menu", browser.openTabs[0]);
+    await vi.waitFor(() => expect(browser.popupOpened).toBe(2));
+    await app.lock();
+    await vi.waitFor(() => expect(context.connection.view.app?.state).toBe("locked"));
+    browser.commands.onCommand.emit("open-menu", browser.openTabs[0]);
+    await vi.waitFor(() => expect(browser.popupOpened).toBe(3));
+    expect(contentGot.some((m) => m.kind === "menu.open")).toBe(false);
+  });
+
+  it("opens the popup when the field lost the focus before the menu came", async () => {
+    const context = await setup();
+    const { browser, contentGot, menuIn } = context;
+    browser.probes.set(0, { focused: true, editable: true, framed: false });
+    menuIn.value = { opened: false };
+    browser.commands.onCommand.emit("open-menu", browser.openTabs[0]);
+    await vi.waitFor(() => expect(browser.popupOpened).toBe(1));
+    const open = contentGot.find((m) => m.kind === "menu.open") as { token: string };
+    // The menu's frame record is gone: its page finds nothing to show.
+    const frame = inlineFrame(context, open.token);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(lastView(frame)).toBeUndefined();
   });
 });
 

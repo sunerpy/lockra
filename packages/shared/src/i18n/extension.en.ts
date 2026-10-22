@@ -7,6 +7,7 @@ export const extensionEn: typeof extensionZhCN = {
     description:
       "Fill passwords and codes from Lockra on your computer. The extension itself keeps no logins.",
     commandFill: "Fill a login for this site",
+    commandMenu: "Open Lockra's menu at the field",
   },
   name: "Lockra extension",
   state: {
@@ -224,6 +225,8 @@ export const extensionEn: typeof extensionZhCN = {
     shortcuts: "Shortcuts",
     fillShortcut: "Fill a login for this site",
     fillShortcutHelp: "Press again within 10 seconds for the next account",
+    menuShortcut: "Open Lockra's menu at the field",
+    menuShortcutHelp: "Lists the logins that match this site, also in fields Lockra cannot tell",
     popupShortcut: "Open the Lockra popup",
     unset: "Not set",
     shortcutsChromium:
