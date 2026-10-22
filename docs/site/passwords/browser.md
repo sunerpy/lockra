@@ -157,7 +157,9 @@ Shortcuts**).
 
 ### Lockra's menu on any field
 
-<StatusTag status="building" /> On a page whose fields Lockra cannot tell, no menu opens by the
+<StatusTag status="available" /> Available from version 0.16.3.
+
+On a page whose fields Lockra cannot tell, no menu opens by the
 field and `Ctrl Shift L` finds no form to fill. Click into the field and press `Alt Shift L`
 (`⌥ Shift L` on macOS): Lockra's menu opens there with the logins that match the site (by its root
 domain, or the full host where you chose so), and `Enter` fills the chosen one. A field Lockra
@@ -197,8 +199,8 @@ after filling** on:
   one page, once both are; with the code on the next page, the password page waits for your **Sign
   in**, and the code's page is submitted once the code is filled.
 
-<StatusTag status="building" /> A form that also asks for a code is not submitted for a login
-without a linked code: the code and **Sign in** are yours. Link the code to the login and Lockra
+<StatusTag status="available" /> From version 0.16.3, a form that also asks for a code is not
+submitted for a login without a linked code: the code and **Sign in** are yours. Link the code to the login and Lockra
 fills it too ([Adding and editing a login](/passwords/#adding-and-editing-a-login)).
 
 Lockra submits as Enter would, with a click on the form's submit button, passing over buttons such
@@ -227,7 +229,9 @@ filled this way: fill it again as usual. A fill as the page loads has no next pa
 
 ### Fields named only by their label
 
-<StatusTag status="building" /> Lockra also reads the label a page shows for a field (a
+<StatusTag status="available" /> Available from version 0.16.3.
+
+Lockra also reads the label a page shows for a field (a
 `<label>`, or the text the field points at), not only the field's own names. A user name or code
 field that names nothing itself, as on the sign-in of AWS IAM Identity Center, then opens the
 menu, and its sign-in can be saved.
@@ -304,7 +308,9 @@ already.
 
 ### When the page only shows the user name
 
-<StatusTag status="building" /> Some password pages have no field for the user name and only show
+<StatusTag status="available" /> Available from version 0.16.3.
+
+Some password pages have no field for the user name and only show
 it as text, as AWS IAM Identity Center does when it remembers you. The extension then takes that
 text as the user name: **Save to Lockra?** shows it, where it can still be changed, and a login
 added with **Use a generated password** on such a page gets it too.
@@ -339,7 +345,9 @@ one of the site's logins: its current code, or the one before or after it.
 
 ### A login saved without a user name
 
-<StatusTag status="building" /> Some sign-in pages show the user name only as text, without a
+<StatusTag status="available" /> Available from version 0.16.3.
+
+Some sign-in pages show the user name only as text, without a
 user-name box (AWS IAM Identity Center's password page once it remembers you), and a login saved
 on such a page may have no user name. When a later sign-in brings the user name (typed on the page
 before, or shown on the page) and the site has a login with the same password but no user name,

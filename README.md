@@ -75,7 +75,8 @@ made-up site; a sharper version plays on the [website](https://firlab.app/lockra
 - **Passwords** (from 0.10.0): logins with a user name and an email address, a password, sites
   matched by domain, host or a pattern, notes, custom fields, tags, groups and a linked code; a
   protection level per login (fill directly, verify first, or not for the extension) and a
-  password history. A generator makes random passwords and passphrases to sites' password rules.
+  password history. A generator makes random passwords and passphrases to sites' password rules;
+  from 0.16.3 it has a page of its own beside the logins, with its history.
   Logins import from Chrome, Edge, Firefox, Safari, Bitwarden, 1Password, LastPass and KeePass
   (KDBX 4), and export to KeePass or a plain CSV file. The phone shows, copies and edits them
   ([passwords guide](https://firlab.app/lockra/passwords/)).
@@ -91,7 +92,10 @@ made-up site; a sharper version plays on the [website](https://firlab.app/lockra
   itself, and matching can count the port too. From 0.16.0, matching can go by the full host (as
   the default, for single sites, or from the popup), a code field that masks the code as a password
   field does gets the code too, and a code sent as a password can be linked to its login instead of
-  saved. Lockra decides every fill, and can keep running in the tray for it. Chrome, Edge and Brave load
+  saved. From 0.16.3, `Alt Shift L` opens Lockra's menu on any field, a password page that only
+  shows the user name gives it to the login saved there, a login saved without a user name gets it
+  at the next sign-in, and a form that also asks for a code is left to you when the login has none
+  linked. Lockra decides every fill, and can keep running in the tray for it. Chrome, Edge and Brave load
   it unpacked from the folder Lockra keeps it in, and Lockra updates it there with itself (from
   0.11.1); the Edge Add-ons and Firefox Add-ons listings, which Firefox needs,
   are not live yet ([extension guide](https://firlab.app/lockra/passwords/browser)).
@@ -116,7 +120,8 @@ made-up site; a sharper version plays on the [website](https://firlab.app/lockra
   auto-lock, and screen-capture protection while a secret is shown (Windows and macOS).
 - **Updates**: the title bar tells you when a new version is out and opens the update dialog
   (its notes, the download with its speed, the restart); with automatic updates on, Lockra
-  downloads it at start and installs it when you restart. A package is installed only when it
+  downloads it at start (and, from 0.16.3, every 4 hours while it runs) and installs it when you
+  restart. A package is installed only when it
   carries Lockra's signature, through the package Lockra was installed from (deb, rpm, AppImage,
   the Windows installer or the macOS app).
 - **Interface**: eight themes (Clear sky by default, which follows the system's light or dark

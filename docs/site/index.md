@@ -161,7 +161,7 @@ home:
             status: available
             link: /security/#secrets-on-screen
           - title: Signed updates
-            body: The title bar tells you when a new version is out, or downloads it at start if you turn on automatic updates, and Lockra installs only a package that carries its signature.
+            body: The title bar tells you when a new version is out; with automatic updates on, Lockra downloads it at start and every 4 hours while it runs, and installs only a package that carries its signature.
             status: available
             link: /guide/updates#updating
 
@@ -273,7 +273,7 @@ home:
         detail: Each device writes encrypted files to the Lockra relay, bucket or WebDAV folder you set up. None of them can read an account, a secret or a device name.
       - name: The network
         value: Updates and your sync
-        detail: Lockra asks GitHub for the newest version when you check, or at start if you turn on automatic updates; nothing from your accounts goes with it. There is no Lockra account or telemetry, and fonts and images ship with the app.
+        detail: Lockra asks GitHub for the newest version when you check, or at start and every 4 hours while it runs if you turn on automatic updates; nothing from your accounts goes with it. There is no Lockra account or telemetry, and fonts and images ship with the app.
       - name: The browser extension
         value: Lockra on this computer only
         detail: It asks Lockra on the same computer, over a connection encrypted between the two, keeps no passwords and sends nothing over the network.
