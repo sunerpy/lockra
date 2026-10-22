@@ -140,6 +140,8 @@ describe("the user name a page shows", () => {
       shownUsername(shows(`<p class="username"><button type="button">Not you?</button></p>`), view),
     ).toBe("");
     expect(shownUsername(shows(`<p class="username">al<b>i</b>ce</p>`), view)).toBe("");
+    // Nor the part a split leaves whole: the name begins in the bold.
+    expect(shownUsername(shows(`<p class="username"><b>alice</b>@example.com</p>`), view)).toBe("");
     // The parts of one text a framework writes apart (a comment between them) are one name.
     expect(shownUsername(shows(`<span class="username">@<!-- -->alice</span>`), view)).toBe(
       "@alice",

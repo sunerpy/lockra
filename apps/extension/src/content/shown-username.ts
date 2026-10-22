@@ -66,14 +66,29 @@ function inControl(el: Element, root: HTMLElement): boolean {
   return control !== null && root.contains(control);
 }
 
+/** Whether `el` holds text outside the controls, links and labels in it. */
+function textOutsideControls(el: Element): boolean {
+  const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const control = node.parentElement?.closest(NOT_SHOWN);
+    if ((node.textContent ?? "").trim() !== "" && !(control && el.contains(control))) return true;
+  }
+  return false;
+}
+
 /** The element's own text: its text nodes, with a space for each element between them (a button in
- *  it says nothing of the name). A comment counts for nothing: frameworks put one between the parts
- *  of one text (`@<!-- -->alice`). */
+ *  it says nothing of the name). An element in it that holds text of its own (not a control's)
+ *  splits the name: nothing is read then, not even the part left whole (`<b>alice</b>@example.com`).
+ *  A comment counts for nothing: frameworks put one between the parts of one text
+ *  (`@<!-- -->alice`). */
 function ownText(el: Element): string {
   let text = "";
   for (const node of Array.from(el.childNodes)) {
     if (node instanceof Text) text += node.data;
-    else if (node instanceof Element) text += " ";
+    else if (node instanceof Element) {
+      if (!node.matches(NOT_SHOWN) && textOutsideControls(node)) return "";
+      text += " ";
+    }
   }
   return text.trim();
 }
