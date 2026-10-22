@@ -188,6 +188,13 @@ describe("requests", () => {
         group: "Work",
       }),
       update: request(9, { op: "update", item_id: item, ...facts, password: "n3w" }),
+      update_username: request(19, {
+        op: "update",
+        item_id: item,
+        ...facts,
+        password: "s3cret",
+        username: "alice@example.com",
+      }),
       generate: request(10, {
         op: "generate",
         ...facts,
@@ -238,6 +245,7 @@ describe("answers and pushes", () => {
       status: statusAnswerSchema,
       query: queryAnswerSchema,
       query_save: queryAnswerSchema,
+      query_add_username: queryAnswerSchema,
       fill: fillAnswerSchema,
       otp: otpAnswerSchema,
       saved: savedSchema,
@@ -264,6 +272,8 @@ describe("answers and pushes", () => {
     expect(query.level).toBe("host");
     const save = queryAnswerSchema.parse(f.responses.query_save?.result);
     expect(save.save).toEqual({ action: "update", item_id: item });
+    const nameless = queryAnswerSchema.parse(f.responses.query_add_username?.result);
+    expect(nameless.save).toEqual({ action: "add_username", item_id: item });
     const fill = fillAnswerSchema.parse(f.responses.fill?.result);
     expect(fill.fields).toEqual([{ page_field: "pin", value: "4242" }]);
   });

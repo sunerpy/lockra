@@ -539,7 +539,9 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   `match_domain` rule says, the popup's switch; absent from an older Lockra: false; with
   `"purpose": "save"` and the submitted user name and password, whether to offer saving or
   updating, never for a password that is the code of an account linked to a login offered there:
-  the current one, the one before or the one after), `fill` (one login's secrets; `trigger` says
+  the current one, the one before or the one after; from 0.16.3, `add_username` with the login's
+  `item_id` when a user name came and a login offered there has this password but neither a user
+  name nor an email address, instead of a new login), `fill` (one login's secrets; `trigger` says
   what asked: `shortcut`, `popup`, `inline_menu`, `page_load`, or `next_step`, the page asking for
   the password within two minutes of a fill the user asked for, once), `otp` (the code of a login
   filled on this site in the last five minutes, for a later step; `submit` in the answer says
@@ -547,7 +549,10 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   `shortcut`, from 0.12, the code of a login the user chose that is offered for the frame, in the
   page or a frame of its own site, without a fill before), `copy` (a part on the clipboard, written
   by the app),
-  `save`, `update`, `generate` (a password to the page's `passwordrules`, `minlength` and
+  `save`, `update` (the new `password`; the login's own leaves it unchanged, out of its history;
+  from 0.16.3, `username` gives a login offered for the frame that has neither a user name nor an
+  email address the submitted one, and a login with either refuses it with `invalid`), `generate`
+  (a password to the page's `passwordrules`, `minlength` and
   `maxlength` or the bundled rules, saved at once as a new login when asked), `copy_generated`
   (from 0.10.1: the sign-up menu's `password` on the clipboard, written by the app as a login's
   is, and only a password of the generator's history made for the frame's site, else

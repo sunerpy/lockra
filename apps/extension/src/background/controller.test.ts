@@ -709,6 +709,57 @@ describe("saving what a form submitted", () => {
     );
   });
 
+  it("offers the user name a sign-in brought to the login saved without one", async () => {
+    // 2026-10-22, the user's AWS IAM Identity Center: its password page showed the user name as
+    // text only, so the login was saved without one; a later sign-in with the name offers it to
+    // that login instead of a second one.
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    const nameless = { ...summary(ITEM), username: "", email: "" };
+    app.handlers.query = (request) =>
+      request.purpose === "save"
+        ? queryAnswer([nameless], { save: { action: "add_username", item_id: ITEM } })
+        : queryAnswer([nameless]);
+    app.handlers.update = () => ({});
+    await browser.fromContent({
+      kind: "content.submitted",
+      username: "alice@example.com",
+      password: "s3cret",
+      signup: false,
+    });
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "prompt.open")).toBe(true));
+    const open = contentGot.find((m) => m.kind === "prompt.open") as { token: string };
+    const frame = inlineFrame(context, open.token);
+    await vi.waitFor(() =>
+      expect(lastView(frame)).toEqual({
+        view: "username",
+        site: "example.com",
+        item: { title: "GitHub", username: "", downgrade: false },
+        username: "alice@example.com",
+      }),
+    );
+    // The name as the user left it in the prompt; the password is the login's own.
+    frame.send({
+      kind: "action",
+      action: { type: "username", username: "alice" },
+      point: null,
+      trusted: true,
+    });
+    await vi.waitFor(() =>
+      expect(app.requests.at(-1)).toMatchObject({
+        op: "update",
+        item_id: ITEM,
+        password: "s3cret",
+        username: "alice",
+      }),
+    );
+    await vi.waitFor(() => expect(frame.closed).toBe(true));
+    expect(
+      ((await browser.fromContent({ kind: "content.start", top: true })) as { prompt: unknown })
+        .prompt,
+    ).toBeNull();
+  });
+
   it("says when what was sent looks like a one-time code, and saves nothing when told it is one", async () => {
     // 2026-10-20, the user: a code typed into a field the page masks as a password came back as
     // a password to save or to update.

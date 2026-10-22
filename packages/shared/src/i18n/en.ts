@@ -966,7 +966,7 @@ export const en: Messages = {
       sortHint: "Favourites always come first.",
       autoUpdate: "Automatic updates",
       autoUpdateHelp:
-        "Lockra looks for an update 10 seconds after start and downloads it in the background; it installs when Lockra restarts. Off: Lockra goes online only when you choose Check for updates.",
+        "Lockra looks for an update 10 seconds after start and every 4 hours while it runs, and downloads it in the background; choose Restart to update in the title bar to install it. Off: Lockra goes online only when you choose Check for updates.",
       launchAtLogin: "Start Lockra at login",
       launchAtLoginHelp:
         "Lockra starts when you sign in to the computer, so the browser extension and the quick search are ready. With Settings › Browser › Keep running after the window closes on, it stays in the tray and opens no window.",
@@ -1756,6 +1756,7 @@ export const en: Messages = {
       ready: "Restart to update",
     },
     badgeTitle: "View the update",
+    badgeRestartTitle: "Restart Lockra to finish updating to {version}",
   },
   /** The browser extension's requests that wait for the user (boards 17–19). */
   browser: {

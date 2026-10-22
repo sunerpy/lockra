@@ -94,7 +94,7 @@ describe("UpdateDialog", () => {
     vi.useRealTimers();
   });
 
-  it("a new version shows on the title bar and opens the dialog, which walks to the restart", async () => {
+  it("a new version shows on the title bar and opens its dialog", async () => {
     const { user, backend } = renderApp({ mock: { updateMethod: "appimage" } });
     await ready();
     expect(screen.queryByTestId("update-badge")).toBeNull();
@@ -117,12 +117,35 @@ describe("UpdateDialog", () => {
     await user.click(dialog.getByRole("button", { name: "稍后" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByTestId("update-badge")).toHaveTextContent("新版本 0.3.0");
+  });
 
-    // Downloaded by the automatic update: the restart is one click from the title bar.
+  it("an update the automatic update downloaded restarts from the title bar in one click", async () => {
+    // The user's request (2026-10-22): downloaded in the background, 「重启以更新」 finishes it.
+    const { user, backend } = renderApp({ mock: { updateMethod: "nsis" } });
+    await ready();
+    backend.setRelease({ version: "0.3.0", notes: null, date: null, size: 9 });
     act(() => backend.simulateUpdate({ state: "ready", version: "0.3.0" }));
-    expect(screen.getByTestId("update-badge")).toHaveTextContent("重启以更新");
-    await user.click(screen.getByTestId("update-badge"));
-    const readyDialog = within(screen.getByRole("dialog", { name: "新版本 0.3.0 已下载" }));
+    const badge = await screen.findByTestId("update-badge");
+    expect(badge).toHaveTextContent("重启以更新");
+    expect(badge).toHaveAttribute("title", "重启 Lockra，完成更新到 0.3.0");
+    await user.click(badge);
+    expect(backend.calls.at(-1)).toEqual({ command: "update_install" });
+    // The dialog shows the install while Lockra restarts.
+    await waitFor(() => {
+      expect(screen.getByTestId("update-dialog")).toHaveAttribute("data-state", "installing");
+    });
+    expect(screen.getByRole("dialog", { name: "正在安装 0.3.0" })).toBeInTheDocument();
+    expect(screen.queryByTestId("update-badge")).toBeNull();
+  });
+
+  it("the dialog opened on a downloaded update restarts too", async () => {
+    const { user, backend } = renderApp({ mock: { updateMethod: "appimage" } });
+    await ready();
+    backend.setRelease({ version: "0.3.0", notes: null, date: null, size: 9 });
+    act(() => backend.simulateUpdate({ state: "ready", version: "0.3.0" }));
+    // The tray's 「检查更新…」 opens the dialog on a downloaded update.
+    act(() => backend.emitNotice({ type: "open_updates" }));
+    const readyDialog = within(await screen.findByRole("dialog", { name: "新版本 0.3.0 已下载" }));
     expect(readyDialog.getByText("已下载并校验签名，重启后完成更新。")).toBeInTheDocument();
     await user.click(readyDialog.getByRole("button", { name: "重启并更新" }));
     expect(backend.calls.at(-1)).toEqual({ command: "update_install" });
@@ -130,7 +153,6 @@ describe("UpdateDialog", () => {
       expect(screen.getByTestId("update-dialog")).toHaveAttribute("data-state", "installing");
     });
     expect(screen.getByRole("button", { name: "正在安装，Lockra 即将重启…" })).toBeDisabled();
-    expect(screen.queryByTestId("update-badge")).toBeNull();
   });
 
   it("shows the download's speed and time left once it has two readings; closing keeps it going", async () => {

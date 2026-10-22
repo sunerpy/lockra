@@ -192,6 +192,8 @@ export type InlineView =
       code?: boolean;
       link?: MenuItem;
     }
+  /** The sign-in's user name, editable, for the login of its password saved without one. */
+  | { view: "username"; site: string; item: MenuItem; username: string }
   /** A request the app refused (`refusal`, worded by the frame), or one that failed on the way. */
   | { view: "notice"; site: string; refusal: string };
 
@@ -209,6 +211,7 @@ export type InlineAction =
   | { type: "copy" }
   | { type: "save"; title: string; username: string; password: string; group: string }
   | { type: "update"; password: string }
+  | { type: "username"; username: string }
   /** What the form sent was a one-time code, not a password: nothing to save. */
   | { type: "code" }
   /** It was, and Lockra links a code to the site's login (the user picks it in Lockra). */

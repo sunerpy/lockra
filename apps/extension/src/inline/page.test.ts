@@ -248,6 +248,39 @@ describe("the inline frame", () => {
     expect(posted.at(-1)).toMatchObject({ action: { type: "dismiss" } });
   });
 
+  it("offers a sign-in's user name to the login saved without one, editable, none empty", () => {
+    // 2026-10-22, the user's AWS IAM Identity Center: the login had been saved without a user
+    // name; a later sign-in brought it.
+    const { posted, show, root } = setup();
+    const nameless = { title: "AWS", username: "", downgrade: false };
+    show({ view: "username", site: "example.com", item: nameless, username: "alice@example.com" });
+    expect(root().textContent).toContain("给这个登录项补上用户名？");
+    expect(root().textContent).toContain("AWS");
+    // No password here: the login has it already.
+    const inputs = Array.from(root().querySelectorAll("input"));
+    expect(inputs.map((i) => [i.type, i.value])).toEqual([["text", "alice@example.com"]]);
+    click(button("补上"));
+    expect(posted.at(-1)).toMatchObject({
+      action: { type: "username", username: "alice@example.com" },
+    });
+    const [name] = inputs;
+    if (name) {
+      name.value = "alice";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    click(button("补上"));
+    expect(posted.at(-1)).toMatchObject({ action: { type: "username", username: "alice" } });
+    if (name) {
+      name.value = " ";
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    expect(button("补上")?.disabled).toBe(true);
+    click(button("不补"));
+    expect(posted.at(-1)).toMatchObject({ action: { type: "dismiss" } });
+    click(button("此网站不再提示"));
+    expect(posted.at(-1)).toMatchObject({ action: { type: "never" } });
+  });
+
   it("says when what was sent looks like a one-time code, and takes it for one", () => {
     // 2026-10-20, the user: a code typed into a field the page masks as a password came back as
     // a password to save.
