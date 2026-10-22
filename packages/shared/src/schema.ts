@@ -114,6 +114,13 @@ export function defaultGeneratorOptions(): GeneratorOptions {
   };
 }
 
+/** The most passwords the generator's history keeps (lockra-core `GENERATOR_HISTORY_MAX`). */
+export const GENERATOR_HISTORY_MAX = 100;
+
+/** How long the generator's history keeps a password, in days (lockra-core
+ *  `GENERATOR_HISTORY_DAYS`). */
+export const GENERATOR_HISTORY_DAYS = 90;
+
 /** The order of the password list (lockra-core `ItemSort`); favourites always come first. */
 export const ITEM_SORTS = ["name", "recent", "modified", "added"] as const;
 export const itemSortSchema = z.enum(ITEM_SORTS);

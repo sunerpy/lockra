@@ -3,11 +3,16 @@
 import type { ExportStarted } from "@lockra/shared";
 import { type ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
 
-export const PAGES = ["codes", "passwords", "import", "export", "backup"] as const;
+export const PAGES = ["codes", "passwords", "generator", "import", "export", "backup"] as const;
 export type PageId = (typeof PAGES)[number];
 
 export function isPageId(value: string): value is PageId {
   return PAGES.some((page) => page === value);
+}
+
+/** The pages of password management: offered only where the build has it. */
+export function passwordsPage(page: PageId): boolean {
+  return page === "passwords" || page === "generator";
 }
 
 export type SettingsSection = "general" | "appearance" | "security" | "sync" | "browser" | "about";
@@ -25,8 +30,7 @@ export type Overlay =
   | { type: "item_edit"; id: string }
   | { type: "item_delete"; id: string }
   | { type: "item_move"; id: string }
-  | { type: "item_reveal"; id: string }
-  | { type: "generator" };
+  | { type: "item_reveal"; id: string };
 
 export interface ShellState {
   page: PageId;

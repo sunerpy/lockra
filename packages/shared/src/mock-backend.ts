@@ -40,6 +40,7 @@ import {
   type ExportStarted,
   type ExportTarget,
   type FieldChange,
+  GENERATOR_HISTORY_MAX,
   type GeneratedPastView,
   type GeneratedView,
   type GeneratorOptions,
@@ -2785,7 +2786,7 @@ export class MockBackend implements Backend {
     this.generatedHistory = [
       { password, at_ms: this.now(), site },
       ...this.generatedHistory.filter((g) => g.password !== password),
-    ].slice(0, 100);
+    ].slice(0, GENERATOR_HISTORY_MAX);
     this.state.generator = { history_count: this.generatedHistory.length };
   }
 

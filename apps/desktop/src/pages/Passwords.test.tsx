@@ -586,11 +586,12 @@ describe("Passwords", () => {
     expect(lastCall(backend, "item_copy")).toMatchObject({ part: { type: "password" } });
   });
 
-  it("opens the generator with Ctrl G: a new password on request, copied by Rust", async () => {
+  it("goes to the generator page with Ctrl G: a new password on request, copied by Rust", async () => {
     const { user, backend } = renderPasswords();
     await ready();
     await user.keyboard("{Control>}g{/Control}");
-    const generator = within(await screen.findByRole("dialog", { name: "生成密码" }));
+    const generator = within(await screen.findByTestId("page-generator"));
+    expect(screen.queryByRole("dialog")).toBeNull();
     await vi.waitFor(() =>
       expect(generator.getByTestId("generator-password").textContent).not.toBe("—"),
     );
@@ -612,8 +613,24 @@ describe("Passwords", () => {
     expect(lastCall(backend, "settings_set")).toMatchObject({
       settings: { generator: { kind: "passphrase" } },
     });
-    await user.click(generator.getByRole("button", { name: "取消" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    // Leaving the page takes the password off the screen.
+    expect(backend.calls.some((c) => c.command === "secret_view_closed")).toBe(false);
+    await user.click(
+      within(screen.getByRole("navigation", { name: "主导航" })).getByRole("button", {
+        name: /^验证码/,
+      }),
+    );
+    expect(await screen.findByTestId("page-codes")).toBeInTheDocument();
     expect(backend.calls.at(-1)).toEqual({ command: "secret_view_closed" });
+  });
+
+  it("goes to the generator page from the add menu's 「生成密码…」 (board 04-f)", async () => {
+    const { user } = renderPasswords();
+    const page = await openPage(user);
+    await user.click(page.getByTestId("add-item-menu"));
+    await user.click(screen.getByRole("menuitem", { name: "生成密码… · Ctrl G" }));
+    expect(await screen.findByTestId("page-generator")).toBeInTheDocument();
+    expect(screen.queryByTestId("page-passwords")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

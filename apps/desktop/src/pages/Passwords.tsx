@@ -553,7 +553,7 @@ function PasswordsFacts({ count, groups }: { count: number; groups: number }) {
   return facts.join(" · ");
 }
 
-/** The page's main action (board 04-f): a new login, a generated password, an import. */
+/** The page's main action (board 04-f): a new login, the generator page, an import. */
 export function AddItemMenu() {
   const t = useT();
   const shell = useShell();
@@ -575,7 +575,7 @@ export function AddItemMenu() {
   ];
   const onSelect = (id: string) => {
     if (id === "new") shell.open({ type: "item_new" });
-    else if (id === "generate") shell.open({ type: "generator" });
+    else if (id === "generate") shell.navigate("generator");
     else shell.navigate("import");
   };
   return (

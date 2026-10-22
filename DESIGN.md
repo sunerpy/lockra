@@ -134,8 +134,9 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
   a line of facts, its main actions). There is no shortcut footer: the keys are in the buttons'
   tooltips (锁定 · Ctrl L, 设置 · Ctrl ,, 添加账号 · Ctrl N) and in the command palette.
 - Sidebar: the groups 保险库 (验证码 and, where the build offers password management, 密码 with the
-  `lock` icon, each with a count pill), 迁移 (导入, 导出) and 数据 (备份, and 同步, which opens
-  Settings › 同步), rows of about 40 px (the board draws 44; 40 keeps the foot on a 600 px window),
+  `lock` icon, each with a count pill, and under it 生成器 with `dice`), 迁移 (导入, 导出) and 数据
+  (备份, and 同步, which opens Settings › 同步), rows of about 40 px (the board draws 44; 40 keeps the
+  foot on a 600 px window),
   the current one raised on the theme's card shadow. Its foot is a status card
   (the lamp and 已解锁, the auto-lock, the sync) over three square buttons: 锁定, the theme (each
   click the next one) and 设置. The icon rail keeps the buttons, stacked, and drops the card.
@@ -162,11 +163,12 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
   While reordering it stays first; every other section moves, 未分组 among them.
 - 密码 (boards 01–05 of Penpot 「Lockra 密码管理」): the header as on 验证码 (the facts read N 个登录项
   · N 个分组 · the sync), the search pill (`min(26rem, 36vw)`, the `/` keycap; absent while there are
-  no logins) and the 「添加登录项」 pill, a menu: 新建登录项… · Ctrl N, 生成密码… · Ctrl G, then
-  从其他应用导入…. The tools: the filters (全部, 收藏, each group, 未分组; shown when there is more
-  than one), the 标签 menu button (`TagFilter`: tags with counts, several at once, a login must
-  carry all), then on the right the sort `Select` (按名称, 最近使用, 最近修改, 最近添加; favourites
-  first in each) and, in 全部 with groups, a ⋯ for 全部折叠 and 全部展开. Under them a grid
+  no logins) and the 「添加登录项」 pill, a menu: 新建登录项… · Ctrl N, 生成密码… · Ctrl G (the
+  生成器 page), then 从其他应用导入…. The tools: the filters (全部, 收藏, each group, 未分组; shown
+  when there is more than one), the 标签 menu button (`TagFilter`: tags with counts, several at
+  once, a login must carry all), then on the right the sort `Select` (按名称, 最近使用, 最近修改,
+  最近添加; favourites first in each) and, in 全部 with groups, a ⋯ for 全部折叠 and 全部展开. Under
+  them a grid
   `minmax(0, 5fr) minmax(0, 3fr)`, 14 px apart: the list in one card (`PasswordRow`, 64 px; sections
   with folding headings in 全部 only) and the detail pane (`ItemDetail`), sticky 14 px under the
   title bar, whose card scrolls on its own: the one exception to "only the page body scrolls". A
@@ -183,6 +185,14 @@ The window is frameless (`decorations: false`; macOS keeps its traffic lights th
   (`FieldRow`s, secrets as dots, the linked code with its ring from the code frames), 网站
   (`UrlRow`: the address and its matching as a `Badge`), 备注 and 自定义字段 (dots until 显示, hidden
   again after 120 s), 整理, 填充与保护 and 记录 (`KeyValueRow`s).
+- 生成器 (the sidebar, Ctrl G, 生成密码… in the add menu, the palette): the header (密码生成器 and a
+  line on what it makes), then two `Panel`s. 生成密码 holds the generator's controls as in its
+  dialog (§3), for no site, with a primary 复制 beside 重新生成 in place of the copy icon and no
+  使用此密码. 生成历史 has its count (mono, on the right), a 12 px `fg-muted` line on what goes in and
+  how long it stays (the core's 100 passwords for 90 days, this device only) and 查看历史… (off
+  while it is empty), which asks for the proof; the rows then show under the line as in the dialog,
+  the header carrying the seconds left, 隐藏 (`text-muted`) and 清空历史… (`text-danger`). They hide
+  after 120 s and as soon as the page is left. A login's form keeps the dialog.
 - The phone (board A2): a 30 px title with 已解锁 · N 个账号 and round 添加账号 and 锁定 buttons; the
   search pill; 「最近使用」; the filters, scrolling sideways, then reorder; each row a card of its
   own (its ⋯ always shown: there is no hover); a floating dock over the list, which lifts the
@@ -281,13 +291,14 @@ Boards 06–12 of Penpot 「Lockra 密码管理」.
   them, each field's reason under it, the focus on the first.
 - **显示密码** (520 px): a `Banner warn`, the password mono 26 / 600 on `inset`, its length and kinds
   in 11.5 px, the `ScoreMeter`, the Linux note, and a 14 px ring with the seconds before it hides.
-- **生成密码** (520 px): `Segmented` 随机密码 / 口令 (220 px), the result mono 22 / 600 (18 for a
-  passphrase) on `inset` with 重新生成 and 复制, the `ScoreMeter` with its bits, the rule's `info`
-  line or a `Banner danger bar` with 忽略规则, then labelled rows: 长度 (`Slider`, 4–128),
-  the four character groups as toggle chips (on: `accent-soft`, an `accent` ring and a check),
-  避免易混字符, 排除字符; for a passphrase 单词数, 分隔符, 首字母大写, 加一个数字. 生成历史 · n 条 at
-  the bottom left opens the history after the proof: mono 13 / 500 rows with the time and the site,
-  清空历史… in `text-danger`, hidden after 120 s.
+- **生成密码** (520 px, from the form's 生成…; the 生成器 page draws the same panels, §2):
+  `Segmented` 随机密码 / 口令 (220 px), the result mono 22 / 600 (18 for a passphrase) on `inset`
+  with 重新生成 and 复制, the `ScoreMeter` with its bits, the rule's `info` line or a
+  `Banner danger bar` with 忽略规则, then labelled rows: 长度 (`Slider`, 4–128), the four character
+  groups as toggle chips (on: `accent-soft`, an `accent` ring and a check), 避免易混字符, 排除字符;
+  for a passphrase 单词数, 分隔符, 首字母大写, 加一个数字. 使用此密码 is the primary button. 生成历史 ·
+  n 条 at the bottom left opens the history after the proof: mono 13 / 500 rows with the time and
+  the site, 清空历史… in `text-danger`, hidden after 120 s.
 - **验证身份** (440 px): the prompt, the system check's button above the master password, the
   action's own button.
 - **The command palette**: a login's row carries its actions (`CommandItem.actions`): Enter runs

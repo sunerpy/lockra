@@ -136,6 +136,7 @@ export const zhCN = {
     nav: {
       codes: "验证码",
       passwords: "密码",
+      generator: "生成器",
       import: "导入",
       export: "导出",
       backup: "备份",
@@ -499,6 +500,10 @@ export const zhCN = {
   },
   generator: {
     title: "生成密码",
+    page: {
+      title: "密码生成器",
+      subtitle: "生成随机密码或口令。复制的密码会记入下方的生成历史。",
+    },
     mode: { label: "类型", password: "随机密码", passphrase: "口令" },
     regenerate: "重新生成",
     copy: "复制",
@@ -533,6 +538,10 @@ export const zhCN = {
     history: {
       open: { one: "生成历史 · {n} 条", other: "生成历史 · {n} 条" },
       title: "生成历史",
+      count: { one: "{n} 条", other: "{n} 条" },
+      kept: "复制的密码、用来保存登录项的密码，以及浏览器扩展在注册页面生成的密码，都会记入生成历史。最多保留最近 {max} 个，最长 {days} 天，只保存在这台设备上，不会同步，也不会写入备份。",
+      view: "查看历史…",
+      hide: "隐藏",
       empty: "还没有生成过密码",
       clear: "清空历史…",
       clearConfirm: "清空生成历史？这些密码不会再显示。",
