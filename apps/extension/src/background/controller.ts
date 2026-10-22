@@ -482,7 +482,12 @@ export class Controller {
       username,
       password,
       frame,
-      action: advice.action === "update" && item ? "update" : "save",
+      action:
+        advice.action === "update" && item
+          ? "update"
+          : advice.action === "add_username" && item
+            ? "username"
+            : "save",
       item,
       link,
       site: outcome.value.site,
@@ -517,14 +522,21 @@ export class Controller {
             password: submission.password,
             ...code,
           }
-        : {
-            view: "save",
-            site: submission.site,
-            title: submission.site,
-            username: submission.username,
-            password: submission.password,
-            ...code,
-          };
+        : submission.action === "username" && submission.item
+          ? {
+              view: "username",
+              site: submission.site,
+              item: menuItem(submission.item),
+              username: submission.username,
+            }
+          : {
+              view: "save",
+              site: submission.site,
+              title: submission.site,
+              username: submission.username,
+              password: submission.password,
+              ...code,
+            };
     return this.frames.open({
       kind: "prompt",
       frame: top,
@@ -814,6 +826,7 @@ export class Controller {
         return this.copyGenerated(frame);
       case "save":
       case "update":
+      case "username":
       case "dismiss":
       case "never":
       case "code":
@@ -981,7 +994,7 @@ export class Controller {
     frame: InlineFrame,
     action: Extract<
       InlineAction,
-      { type: "save" | "update" | "dismiss" | "never" | "code" | "link_code" }
+      { type: "save" | "update" | "username" | "dismiss" | "never" | "code" | "link_code" }
     >,
   ): Promise<void> {
     const tabId = frame.frame.tabId;
@@ -1008,6 +1021,15 @@ export class Controller {
         item_id: submission.item.item_id,
         ...facts,
         password: action.password,
+      });
+    } else if (action.type === "username" && submission.item && action.username.trim() !== "") {
+      // The login keeps its password; the app adds the name only to a login that has none.
+      outcome = await this.connection.request({
+        op: "update",
+        item_id: submission.item.item_id,
+        ...facts,
+        password: submission.password,
+        username: action.username.trim(),
       });
     } else if (action.type === "never") {
       outcome = await this.connection.request({ op: "site_rule", kind: "never_save", ...facts });

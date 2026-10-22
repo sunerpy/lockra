@@ -53,6 +53,7 @@ const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("copy") }),
   z.object({ type: z.literal("save"), title: text, username: text, password: text, group: text }),
   z.object({ type: z.literal("update"), password: text }),
+  z.object({ type: z.literal("username"), username: text }),
   z.object({ type: z.literal("code") }),
   z.object({ type: z.literal("link_code") }),
   z.object({ type: z.literal("dismiss") }),

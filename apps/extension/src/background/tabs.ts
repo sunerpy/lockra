@@ -20,8 +20,9 @@ export interface Submission {
   password: string;
   /** The frame it was submitted in, as it was then: what a save or an update names. */
   frame: TrustedFrame;
-  /** What the app advised: save a new login or update `item`'s password. */
-  action: "save" | "update";
+  /** What the app advised: save a new login, update `item`'s password, or give `item` (saved
+   *  without a user name) the one submitted. */
+  action: "save" | "update" | "username";
   item: ItemSummary | null;
   /** What was sent looks like a one-time code, and this login of the site has none linked: the
    *  prompt offers to link one in Lockra. */

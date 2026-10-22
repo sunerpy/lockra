@@ -206,6 +206,13 @@ export const extensionEn: typeof extensionZhCN = {
     update: "Update",
     dismiss: "Not now",
   },
+  addUsername: {
+    title: "Add the user name to this login?",
+    none: "No user name",
+    body: "This login was saved without a user name, with the password you just entered. With the name added, Lockra fills it too.",
+    add: "Add",
+    dismiss: "Not now",
+  },
   options: {
     connection: "Connection",
     lockra: "Lockra",

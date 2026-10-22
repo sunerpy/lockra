@@ -382,7 +382,7 @@ async fn every_op_goes_through_to_the_core() {
     let save = SaveRequest { facts: facts("https://new.example/"), username: "me".into(), password: Zeroizing::new("pw".into()), ..SaveRequest::default() };
     let saved = extension.request(Op::Save(save)).await;
     let Some(Answer::Saved { item_id }) = saved.result else { panic!("{saved:?}") };
-    let update = UpdateRequest { item_id, facts: facts("https://new.example/"), password: Zeroizing::new("pw2".into()) };
+    let update = UpdateRequest { item_id, facts: facts("https://new.example/"), password: Zeroizing::new("pw2".into()), username: None };
     assert_eq!(extension.request(Op::Update(update)).await.result, Some(Answer::Done {}));
     let generate = GenerateRequest { facts: facts("https://signup.example/"), save: Some(GenerateSave::default()), ..GenerateRequest::default() };
     let made = extension.request(Op::Generate(generate)).await;
