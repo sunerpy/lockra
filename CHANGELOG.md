@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.16.3](https://github.com/sunerpy/lockra/compare/v0.16.2...v0.16.3) (2026-10-22)
+
+
+### Features
+
+* **desktop:** 新增生成器页，集中生成密码和查看生成历史 ([#210](https://github.com/sunerpy/lockra/issues/210)) ([d1e3dcb](https://github.com/sunerpy/lockra/commit/d1e3dcbce6dbb25ce04ced330cc69d7162450fea))
+* **extension:** 新增快捷键 Alt+Shift+L，在任意输入框打开 Lockra 菜单 ([#206](https://github.com/sunerpy/lockra/issues/206)) ([0f6650d](https://github.com/sunerpy/lockra/commit/0f6650dd6668fad165dea941e32e9675aec6084a))
+* **update:** 自动更新在运行期间每 4 小时检查一次，标题栏一键重启完成安装 ([#204](https://github.com/sunerpy/lockra/issues/204)) ([fe7d3a6](https://github.com/sunerpy/lockra/commit/fe7d3a67bbc69d8bfaeef30ea7c36fcbd70f8db3))
+
+
+### Bug Fixes
+
+* **extension:** 密码页只显示用户名文字时，用它作为保存的用户名 ([#209](https://github.com/sunerpy/lockra/issues/209)) ([464f1bb](https://github.com/sunerpy/lockra/commit/464f1bb6eecb164ef15410c6841df924d74598f9))
+* **extension:** 登录时为没有用户名的登录项补上用户名，不再重复保存 ([#208](https://github.com/sunerpy/lockra/issues/208)) ([c9442e0](https://github.com/sunerpy/lockra/commit/c9442e00c173fc5af3888a86f3e34a1361b7fe0b))
+* **extension:** 表单还要求填验证码时不自动提交 ([#203](https://github.com/sunerpy/lockra/issues/203)) ([e762ed5](https://github.com/sunerpy/lockra/commit/e762ed57c46da019b21b1f0d3a09109696910130))
+* **extension:** 读取输入框的标签来识别用户名和验证码框 ([#205](https://github.com/sunerpy/lockra/issues/205)) ([8f8afd4](https://github.com/sunerpy/lockra/commit/8f8afd426d87970228e2eea15fd4b85df802ffb1))
+
 ## [0.16.2](https://github.com/sunerpy/lockra/compare/v0.16.1...v0.16.2) (2026-10-21)
 
 
