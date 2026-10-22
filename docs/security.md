@@ -9,8 +9,9 @@ or a backup; other processes and web content reaching the app's IPC; the webview
 trusted part of the app) reading files or secrets it was not explicitly given; secrets lingering
 on the clipboard or in screenshots; an update that is not Lockra's; and, with sync on, whoever runs
 or reaches the user's sync storage. Lockra goes online for two things only: its update (below), a
-check and a download when the user asks or at start once automatic updates are on; and the sync of
-a space the user set up on storage of their own (below). There is no account, server or telemetry.
+check and a download when the user asks or, once automatic updates are on, at start and every
+4 hours while Lockra runs; and the sync of a space the user set up on storage of their own
+(below). There is no account, server or telemetry.
 The HTTP client and TLS stack reach the desktop build only through tauri-plugin-updater and
 `lockra-remote` (`deny.toml` bans them from every other crate).
 
@@ -291,8 +292,9 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
 
 - **Off the network by default.** A check runs when the user chooses **Check for updates**, and
   the package downloads when the user chooses **Update now**. With **Automatic updates** on (off
-  by default, Settings › General), Lockra checks 10 s after start and downloads a newer release
-  in the background, then shows **Restart to update**: nothing is installed until the user
+  by default, Settings › General), Lockra checks 10 s after start, and again 4 hours after each
+  check while it runs (`AUTO_CHECK_INTERVAL`), and downloads a newer release in the background,
+  then shows **Restart to update**, which restarts at once: nothing is installed until the user
   restarts for it, or until the next start finds the same version again (remembered in
   `update-ready.json` in the data directory); a newer version than the remembered one waits for
   the user again, so a release the user has not been shown is never installed unattended. 0.2.0's

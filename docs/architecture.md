@@ -101,10 +101,12 @@ The in-app update follows Voltip's design. It is a run in the background, one at
 not asked for again, a downloaded package not downloaded again), downloads with progress (the port
 verifies the signature) to `ready`, writes a pending automatic backup, then installs and lets the
 shell restart. With `Settings.auto_update` (off by default) the scheduler runs the automatic
-update once, 10 s after start: it downloads a newer release to `ready` and remembers the version
-in `update-ready.json`; the next start installs that same version at once, and turning the switch
-on checks and downloads without installing. The webview shows the status in the title bar (a note
-that opens the update dialog) and in Settings › General and › About. The port reports how this
+update 10 s after start: it downloads a newer release to `ready` and remembers the version in
+`update-ready.json`; the next start installs that same version at once, and turning the switch
+on checks and downloads without installing. While the switch is on, every run that ends without
+a package in `ready` schedules the next look `AUTO_CHECK_INTERVAL` (4 h) later; these looks only
+download. The webview shows the status in the title bar (a note that opens the update dialog, or
+on a downloaded update restarts at once) and in Settings › General and › About. The port reports how this
 copy installs (`deb`, `rpm`, `appimage`, `nsis`, `msi`, `app`), read from the bundle type the
 bundler patched into the executable; a build from the tree has none and cannot update itself
 (`docs/security.md`, "Updates").

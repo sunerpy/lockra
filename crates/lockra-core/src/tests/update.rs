@@ -9,7 +9,7 @@ use crate::fakes::FakeUpdater;
 use crate::ports::UpdateFailure;
 use crate::settings::SettingsStore;
 use crate::ui::{InstallMethod, UpdateStatus};
-use crate::{PROGRESS_MIN_STEP, STARTUP_CHECK_DELAY, UPDATE_MARKER_FILE};
+use crate::{AUTO_CHECK_INTERVAL, PROGRESS_MIN_STEP, STARTUP_CHECK_DELAY, UPDATE_MARKER_FILE};
 
 fn status(core: &Core) -> UpdateStatus {
     core.state().update.status
@@ -126,6 +126,11 @@ async fn the_phone_only_checks_and_never_on_its_own() {
     advance(STARTUP_CHECK_DELAY * 10).await;
     assert!(updater.calls().is_empty(), "{:?}", updater.calls());
     assert_eq!(status(&core), UpdateStatus::Idle);
+    // Nor does a check by hand bring later looks.
+    core.update_check().unwrap();
+    reaches(&core, ended).await;
+    advance(AUTO_CHECK_INTERVAL * 3).await;
+    assert_eq!(updater.calls(), ["check"]);
 }
 
 #[tokio::test(start_paused = true)]
@@ -418,6 +423,76 @@ async fn the_automatic_update_skips_its_turn_while_the_user_runs_one() {
     reaches(&core, ended).await;
     advance(STARTUP_CHECK_DELAY * 100).await;
     assert_eq!(updater.calls(), ["check"], "and the automatic one does not come back");
+}
+
+#[tokio::test(start_paused = true)]
+async fn while_lockra_runs_the_automatic_update_looks_again_every_few_hours() {
+    // The user's request (2026-10-22): Lockra runs for days in the tray, so a look at start only
+    // is not enough.
+    let h = harness();
+    let updater = Arc::new(FakeUpdater::installed(InstallMethod::Nsis));
+    let core = start_automatic(&h, &updater);
+    advance(STARTUP_CHECK_DELAY).await;
+    reaches(&core, ended).await;
+    assert_eq!(updater.calls(), ["check"]);
+    // Nothing newer: the next look comes AUTO_CHECK_INTERVAL after this one, not before.
+    advance(AUTO_CHECK_INTERVAL - Duration::from_secs(1)).await;
+    assert_eq!(updater.calls(), ["check"]);
+    advance(Duration::from_secs(1)).await;
+    until("the second look", || updater.calls().len() == 2).await;
+
+    // A release out since: downloaded in the background and left for the restart.
+    *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));
+    advance(AUTO_CHECK_INTERVAL).await;
+    reaches(&core, |s| *s == ready("0.2.0")).await;
+    assert_eq!(updater.calls(), ["check", "check", "check", "download"], "downloaded, not installed");
+    assert_eq!(remembered(&h), Some("0.2.0".into()));
+    // Downloaded: nothing more goes online until the restart.
+    advance(AUTO_CHECK_INTERVAL * 3).await;
+    assert_eq!(updater.calls().len(), 4);
+    assert_eq!(status(&core), ready("0.2.0"));
+    // 「重启以更新」 installs what is downloaded.
+    core.update_install().unwrap();
+    reaches(&core, installing).await;
+    assert_eq!(updater.calls(), ["check", "check", "check", "download", "install"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_later_look_never_installs_even_the_version_an_earlier_start_downloaded() {
+    // The look at start, which installs the remembered version, failed (no network); the next look
+    // finds that version and only downloads it: while Lockra runs, the restart is the user's.
+    let h = harness();
+    remember(&h, "0.2.0");
+    let updater = release_out(InstallMethod::Appimage, "0.2.0");
+    *updater.check.lock() = Err(UpdateFailure::Network);
+    let core = start_automatic(&h, &updater);
+    advance(STARTUP_CHECK_DELAY).await;
+    reaches(&core, ended).await;
+    assert!(matches!(status(&core), UpdateStatus::Failed { code: ErrorCode::UpdateNetwork, .. }));
+
+    *updater.check.lock() = Ok(Some(FakeUpdater::release("0.2.0")));
+    advance(AUTO_CHECK_INTERVAL).await;
+    reaches(&core, |s| *s == ready("0.2.0")).await;
+    assert_eq!(updater.calls(), ["check", "check", "download"]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_switch_starts_and_stops_the_later_looks() {
+    let h = harness_with(FakeUpdater::installed(InstallMethod::Rpm));
+    // Off: a check by hand is the only one.
+    h.core.update_check().unwrap();
+    reaches(&h.core, ended).await;
+    advance(AUTO_CHECK_INTERVAL * 3).await;
+    assert_eq!(h.updater.calls(), ["check"]);
+    // On: a look now, and again later.
+    h.core.set_settings(automatic(true)).unwrap();
+    until("the look the switch starts", || h.updater.calls().len() == 2).await;
+    advance(AUTO_CHECK_INTERVAL).await;
+    until("the next look", || h.updater.calls().len() == 3).await;
+    // Off again: nothing goes online on its own.
+    h.core.set_settings(automatic(false)).unwrap();
+    advance(AUTO_CHECK_INTERVAL * 3).await;
+    assert_eq!(h.updater.calls().len(), 3);
 }
 
 #[tokio::test(start_paused = true)]
