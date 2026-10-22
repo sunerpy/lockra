@@ -155,6 +155,17 @@ browser's own shortcut settings change both keys (in Chrome `chrome://extensions
 Edge `edge://extensions/shortcuts`, in Firefox the add-ons manager's **Manage Extension
 Shortcuts**).
 
+### Lockra's menu on any field
+
+<StatusTag status="building" /> On a page whose fields Lockra cannot tell, no menu opens by the
+field and `Ctrl Shift L` finds no form to fill. Click into the field and press `Alt Shift L`
+(`⌥ Shift L` on macOS): Lockra's menu opens there with the logins that match the site (by its root
+domain, or the full host where you chose so), and `Enter` fills the chosen one. A field Lockra
+cannot tell gets the user name, and the next page's password follows, as in a sign-in over several
+pages. Without a focused field, or a login for the site, the popup opens instead. `Ctrl Shift L`
+in such a field now puts the user name in as well. The browser's shortcut settings change this key
+too.
+
 ### From the menu by the field
 
 With [site access](#site-access), Lockra's menu opens at a sign-in field when you click into it: the

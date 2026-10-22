@@ -10,5 +10,9 @@
   "commandFill": {
     "message": "Fill a login for this site",
     "description": "The fill shortcut's name on the browser's shortcuts page."
+  },
+  "commandMenu": {
+    "message": "Open Lockra's menu at the field",
+    "description": "The menu shortcut's name on the browser's shortcuts page."
   }
 }

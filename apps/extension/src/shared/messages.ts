@@ -9,6 +9,8 @@ export const PORT_OPTIONS = "lockra-options";
 export const PORT_INLINE = "lockra-inline";
 /** The command of the fill shortcut (manifest `commands`). */
 export const FILL_COMMAND = "fill-login";
+/** The command of the menu shortcut: Lockra's menu on the focused field, any field. */
+export const MENU_COMMAND = "open-menu";
 
 // ---- content script → background ------------------------------------------------------------
 
@@ -101,7 +103,8 @@ export type BackgroundMessage =
    *  `focused`: the user asked for it, and a page whose code field Lockra cannot tell gets it in
    *  the field that has the focus. Answered with a `CodeAnswer`. */
   | { kind: "fill.otp"; code: string; submit?: boolean; focused?: true }
-  /** Show the inline frame `token` at the focused field (the shortcut's confirmations). */
+  /** Show the inline frame `token` at the focused field (the shortcut's confirmations, the menu
+   *  shortcut's list). Answered with a `MenuAnswer`. */
   | { kind: "menu.open"; token: string; side?: MenuSide }
   /** Show the save or update prompt `token` at the top right. */
   | { kind: "prompt.open"; token: string }
@@ -129,6 +132,11 @@ export interface FillAnswer {
 /** Whether a code went in. */
 export interface CodeAnswer {
   code: boolean;
+}
+
+/** Whether the frame opened: it needs a field with the focus. */
+export interface MenuAnswer {
+  opened: boolean;
 }
 
 // ---- the inline frame ------------------------------------------------------------------------

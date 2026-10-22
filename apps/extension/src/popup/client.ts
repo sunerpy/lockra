@@ -3,7 +3,7 @@
 // the browser's own password features and how and where the inline menu opens.
 import { type BrowserApi, TARGET } from "../browser/api";
 import { ALL_SITES } from "../background/access";
-import { FILL_COMMAND, type PopupEvent, type PopupRequest } from "../shared/messages";
+import { FILL_COMMAND, MENU_COMMAND, type PopupEvent, type PopupRequest } from "../shared/messages";
 import {
   avoidBrowserList,
   menuOnFocus,
@@ -35,7 +35,7 @@ export interface PageClient {
   /** Copy text the extension shows (the source link), never a secret. */
   copyText: (text: string) => Promise<void>;
   /** The keys of the fill shortcut and of the popup's, as the browser shows them ("" when unset). */
-  shortcuts: () => Promise<{ fill: string; popup: string }>;
+  shortcuts: () => Promise<{ fill: string; menu: string; popup: string }>;
   /** Who holds the browser's own password saving and its address and card autofill. */
   browserFeatures: () => Promise<BrowserFeatures>;
   /** Take one over for Lockra or give it back; taking asks for a permission: call it from the
@@ -94,7 +94,7 @@ export function browserClient(api: BrowserApi, portName: string, win: Window): P
     shortcuts: async () => {
       const commands = await api.commands.getAll().catch(() => []);
       const keys = (name: string) => commands.find((c) => c.name === name)?.shortcut ?? "";
-      return { fill: keys(FILL_COMMAND), popup: keys("_execute_action") };
+      return { fill: keys(FILL_COMMAND), menu: keys(MENU_COMMAND), popup: keys("_execute_action") };
     },
     browserFeatures: () => readFeatures(api),
     setBrowserFeature: (feature, take) => setFeature(api, feature, take),

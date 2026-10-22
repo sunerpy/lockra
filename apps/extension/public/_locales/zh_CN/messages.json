@@ -10,5 +10,9 @@
   "commandFill": {
     "message": "填充当前网站的登录项",
     "description": "The fill shortcut's name on the browser's shortcuts page."
+  },
+  "commandMenu": {
+    "message": "在输入框旁打开 Lockra 菜单",
+    "description": "The menu shortcut's name on the browser's shortcuts page."
   }
 }
