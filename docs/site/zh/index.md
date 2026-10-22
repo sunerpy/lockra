@@ -161,7 +161,7 @@ home:
             status: available
             link: /zh/security/#屏幕上的密钥
           - title: 经过签名校验的更新
-            body: 有新版本时，标题栏会提示；开启自动更新后，Lockra 在启动时下载新版本，并且只安装带有 Lockra 签名的安装包。
+            body: 有新版本时，标题栏会提示；开启自动更新后，Lockra 在启动时和运行期间每 4 小时下载新版本，并且只安装带有 Lockra 签名的安装包。
             status: available
             link: /zh/guide/updates#更新
 
@@ -273,7 +273,7 @@ home:
         detail: 每台设备把加密文件写入你设置的 Lockra 中继、存储桶或 WebDAV 文件夹。它们都无法读取任何账号、密钥或设备名称。
       - name: 网络
         value: 更新与你的同步
-        detail: 你检查更新时，或开启自动更新后每次启动时，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。Lockra 没有用户账户或遥测，字体和图片都随应用提供。
+        detail: 你检查更新时，或开启自动更新后在每次启动时和运行期间每 4 小时，Lockra 向 GitHub 查询最新版本，不发送账号中的任何内容。Lockra 没有用户账户或遥测，字体和图片都随应用提供。
       - name: 浏览器扩展
         value: 只连接本机的 Lockra
         detail: 它向同一台电脑上的 Lockra 请求，两者之间的连接经过加密；扩展不保存密码，也不经网络发送任何内容。

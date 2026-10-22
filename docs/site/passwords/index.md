@@ -184,10 +184,11 @@ device only: it is not synced and not in backups.
 
 ### The Generator page
 
-<StatusTag status="building" /> The password generator is getting a page of its own, a part of
-the Passwords page: **Generator**, beside **Add login** at the top of the Passwords page, will open
-it, and so will **Add login › Generate a password…**, `Ctrl G` and the command palette; **Back to
-Passwords** at its top goes back. The page shows the generator, making passwords for no site, with
+<StatusTag status="available" /> Available from version 0.16.3.
+
+The password generator has a page of its own, a part of the Passwords page: **Generator**, beside
+**Add login** at the top of the Passwords page, opens it, and so do **Add login › Generate a
+password…**, `Ctrl G` and the command palette; **Back to Passwords** at its top goes back. The page shows the generator, making passwords for no site, with
 **Copy** beside **Generate again**. Under it, **Generated passwords** says how many passwords the
 history holds, which ones go into it and how long they are kept. **Show the history…** lists them
 after the master password, Touch ID or Windows Hello, each with when it was made and the site it
