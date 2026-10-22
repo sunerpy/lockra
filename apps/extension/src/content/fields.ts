@@ -57,6 +57,25 @@ function autocomplete(input: HTMLInputElement): string {
   return (input.getAttribute("autocomplete") ?? "").toLowerCase();
 }
 
+/** The most of a label's text that names a field; longer labels are read only this far. */
+const LABEL_TEXT_MAX = 100;
+
+/** What the page shows as the field's name: its `<label>`s (by `for`, or around it) and the
+ *  elements `aria-labelledby` names. AWS IAM Identity Center's user name field has no name and an
+ *  empty placeholder: only its `<label for>` says 用户名. */
+function labelText(input: HTMLInputElement): string {
+  const doc = input.ownerDocument;
+  const named = (input.getAttribute("aria-labelledby") ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((id) => doc.getElementById(id));
+  return [...Array.from(input.labels ?? []), ...named]
+    .map((el) => el?.textContent?.trim() ?? "")
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, LABEL_TEXT_MAX);
+}
+
 function hints(input: HTMLInputElement): string {
   return [
     input.id,
@@ -64,6 +83,7 @@ function hints(input: HTMLInputElement): string {
     input.getAttribute("placeholder"),
     input.getAttribute("aria-label"),
     autocomplete(input),
+    labelText(input),
   ]
     .filter(Boolean)
     .join(" ");
@@ -140,6 +160,7 @@ function maskedCode(input: HTMLInputElement, view: View): boolean {
     input.name,
     input.getAttribute("aria-label"),
     input.getAttribute("placeholder"),
+    labelText(input),
   ];
   if (!own.some((text) => text && namesCode(text))) return false;
   return standsAlone(input, view) || afterPassword(input, view);

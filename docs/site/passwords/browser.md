@@ -214,6 +214,13 @@ field within two minutes gets the same login's password by itself. It happens on
 and on the same site. A login set to **Verify first**, or a form in a frame of another site, is not
 filled this way: fill it again as usual. A fill as the page loads has no next page.
 
+### Fields named only by their label
+
+<StatusTag status="building" /> Lockra also reads the label a page shows for a field (a
+`<label>`, or the text the field points at), not only the field's own names. A user name or code
+field that names nothing itself, as on the sign-in of AWS IAM Identity Center, then opens the
+menu, and its sign-in can be saved.
+
 ### When a fill asks first
 
 - **A login set to Verify first** waits for you in Lockra: its window comes to the front with the
