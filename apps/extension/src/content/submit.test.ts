@@ -150,6 +150,64 @@ describe("a submitted sign-in", () => {
   });
 });
 
+describe("a sign-in that shows its user name", () => {
+  // AWS IAM Identity Center's password step when it remembers the user (the user's Chrome,
+  // 2026-10-22): the user name as text above the password, no field for it, an empty hidden one
+  // outside the form.
+  const AWS = `
+    <form id="f">
+      <div class="awsui-util-container-content">
+        <p class="username awsui-util-mb-l" data-testid="test-not-you">user@example.com
+          <awsui-button id="not-you-link" class="not-you"><button type="button" class="awsui-button">不是您?</button></awsui-button>
+        </p>
+        <label for="awsui-input-2">密码</label>
+        <awsui-input><input id="awsui-input-2" type="password" autocomplete="off" class="awsui-input"></awsui-input>
+        <input type="checkbox" id="awsui-checkbox-2"> <label for="awsui-checkbox-2">显示密码</label>
+        <awsui-button id="password-submit-button"><button type="submit" id="go" class="awsui-button">登录</button></awsui-button>
+      </div>
+    </form>
+    <div id="wdc_backward_compatibility"><input id="wdc_username" type="hidden"></div>`;
+
+  it("reports the user name the page shows, the form having no field for it", () => {
+    document.body.innerHTML = AWS;
+    document.getElementById("f")?.addEventListener("submit", (event) => event.preventDefault());
+    const { watcher, submitted } = watch();
+    type(input("awsui-input-2"), "hunter2");
+    document.getElementById("go")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(submitted).toHaveBeenCalledWith({
+      username: "user@example.com",
+      password: "hunter2",
+      signup: false,
+    });
+    expect(submitted).toHaveBeenCalledTimes(1);
+    watcher.stop();
+  });
+
+  it("reports it too when the typed password goes away with the form", () => {
+    document.body.innerHTML = AWS;
+    const { watcher, submitted } = watch();
+    type(input("awsui-input-2"), "spa-pass");
+    document.getElementById("f")?.remove();
+    watcher.check();
+    expect(submitted).toHaveBeenCalledWith({
+      username: "user@example.com",
+      password: "spa-pass",
+      signup: false,
+    });
+    watcher.stop();
+  });
+
+  it("leaves the user name empty where the form has a field for it, empty", () => {
+    // The page wants it typed: the text beside it is not the user name.
+    document.body.innerHTML = `<form id="f"><p class="username">shown@example.com</p><input id="user" name="username"><input type="password" id="pass"></form>`;
+    const { watcher, submitted } = watch();
+    type(input("pass"), "pw-typed");
+    document.getElementById("f")?.dispatchEvent(new Event("submit", { bubbles: true }));
+    expect(submitted).toHaveBeenCalledWith({ username: "", password: "pw-typed", signup: false });
+    watcher.stop();
+  });
+});
+
 describe("the first step of a sign-in in two", () => {
   it("reports the user name it sent on", () => {
     document.body.innerHTML = `<form id="f"><input type="email" id="email" name="identifier"><button>Next</button></form>`;

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sign in (remembered) · login.test</title>
+  </head>
+  <body>
+    <!-- AWS IAM Identity Center when it remembers the user: the password page has no user name
+         field and shows the user name as text, beside a button to sign in as someone else. -->
+    <h1>Welcome back</h1>
+    <form id="remembered" action="/welcome.html" method="get">
+      <p class="username" data-testid="test-not-you">
+        erin@example.test
+        <button id="not-you" type="button">Not you?</button>
+      </p>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="off" />
+      <button id="submit" type="submit">Sign in</button>
+    </form>
+  </body>
+</html>

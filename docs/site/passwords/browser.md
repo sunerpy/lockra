@@ -302,6 +302,13 @@ With site access, the extension notices a form you submit:
 Nothing is offered on a site of the **Never offer to save** list, or for a login that is saved
 already.
 
+### When the page only shows the user name
+
+<StatusTag status="building" /> Some password pages have no field for the user name and only show
+it as text, as AWS IAM Identity Center does when it remembers you. The extension then takes that
+text as the user name: **Save to Lockra?** shows it, where it can still be changed, and a login
+added with **Use a generated password** on such a page gets it too.
+
 ### Checking the password before saving
 
 <StatusTag status="available" /> Available from version 0.16.0.
