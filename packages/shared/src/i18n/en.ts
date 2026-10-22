@@ -137,6 +137,7 @@ export const en: Messages = {
     nav: {
       codes: "Codes",
       passwords: "Passwords",
+      generator: "Generator",
       import: "Import",
       export: "Export",
       backup: "Backup",
@@ -511,6 +512,12 @@ export const en: Messages = {
   },
   generator: {
     title: "Generate a password",
+    page: {
+      title: "Password generator",
+      subtitle:
+        "Make a random password or a passphrase. The passwords you copy go into the history below.",
+      back: "Back to Passwords",
+    },
     mode: { label: "Kind", password: "Random", passphrase: "Passphrase" },
     regenerate: "Generate again",
     copy: "Copy",
@@ -545,9 +552,14 @@ export const en: Messages = {
     history: {
       open: { one: "History · {n}", other: "History · {n}" },
       title: "Generated passwords",
+      count: { one: "{n} password", other: "{n} passwords" },
+      kept: "A password goes into the history when you copy it or save a login with it, and so does every password the browser extension makes on a sign-up form. The history keeps the last {max}, for up to {days} days, on this device only: it is not synced and not in backups.",
+      view: "Show the history…",
+      hide: "Hide",
       empty: "Nothing generated yet",
       clear: "Clear the history…",
       clearConfirm: "Clear the history? These passwords will not show again.",
+      clearSubmit: "Clear",
       site: "For {site}",
     },
   },

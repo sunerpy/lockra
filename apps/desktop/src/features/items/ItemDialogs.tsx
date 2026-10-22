@@ -1,7 +1,7 @@
 // The dialogs of a login, opened through the shell's overlay: new, edit (with its 「删除…」), delete,
-// move to a group (board 04-g), show the password (board 08), and the generator on its own (Ctrl G,
-// the add menu). A login that
-// went away meanwhile (a sync deleted it, a restore replaced the vault) closes its dialog.
+// move to a group (board 04-g) and show the password (board 08). A login that went away meanwhile (a
+// sync deleted it, a restore replaced the vault) closes its dialog. The generator on its own is a
+// page (pages/Generator.tsx).
 import {
   type ItemView,
   REVEAL_SECONDS,
@@ -30,12 +30,11 @@ import { motionReduced } from "../../app/appearance";
 import { useSubmit } from "../../app/dispatch";
 import { useToaster } from "../../app/notices";
 import { useShell } from "../../app/shell-state";
-import { GeneratorDialog } from "./GeneratorDialog";
 import { ItemFormDialog } from "./ItemForm";
 import { useItemActions } from "./actions";
 import { useSecretView } from "./secret-view";
 
-/** The overlay's dialog, if it is one of a login's (or the generator). */
+/** The overlay's dialog, if it is one of a login's. */
 export function ItemDialogs() {
   const shell = useShell();
   const items = useItems();
@@ -76,8 +75,6 @@ export function ItemDialogs() {
       return item ? <MoveItemDialog key={item.id} item={item} onClose={close} /> : null;
     case "item_reveal":
       return item ? <RevealItemDialog key={item.id} item={item} onClose={close} /> : null;
-    case "generator":
-      return <GeneratorDialog onClose={close} />;
     default:
       return null;
   }

@@ -25,7 +25,13 @@ import { useActivityPing } from "../app/activity";
 import { useCommands } from "../app/commands";
 import { useDispatch } from "../app/dispatch";
 import { useFileDrag } from "../app/drag";
-import { type PageId, ShellStateProvider, isPageId, useShell } from "../app/shell-state";
+import {
+  type PageId,
+  ShellStateProvider,
+  isPageId,
+  passwordsPage,
+  useShell,
+} from "../app/shell-state";
 import { useShortcuts } from "../app/shortcuts";
 import { BrowserRequests } from "../features/browser/BrowserRequests";
 import { EntryDialogs } from "../features/entries/EntryDialogs";
@@ -36,6 +42,7 @@ import { UpdateBadge, UpdateDialog } from "../features/update/UpdateDialog";
 import { Backup } from "../pages/Backup";
 import { Codes } from "../pages/Codes";
 import { Export } from "../pages/Export";
+import { Generator } from "../pages/Generator";
 import { Import } from "../pages/Import";
 import { Passwords } from "../pages/Passwords";
 import { SettingsDialog } from "../pages/settings/SettingsDialog";
@@ -63,8 +70,8 @@ function ShellLayout() {
   const dragging = useFileDrag();
   const passwords = state.features.passwords;
   const logins = useItems();
-  // Without password management (a release build, for now) the page is not offered.
-  const page = shell.page === "passwords" && !passwords ? "codes" : shell.page;
+  // Without password management its pages (密码, 生成器) are not offered.
+  const page = passwordsPage(shell.page) && !passwords ? "codes" : shell.page;
   const [collapsed, setCollapsed] = useState(
     () => globalThis.localStorage?.getItem(COLLAPSE_KEY) === "1",
   );
@@ -88,8 +95,9 @@ function ShellLayout() {
       palette: () => shell.setPaletteOpen(true),
       // Ctrl N adds what the page lists: a login on the passwords page, an account elsewhere.
       add: () => shell.open(page === "passwords" ? { type: "item_new" } : { type: "add_manual" }),
+      // Ctrl G: the generator page.
       generate: () => {
-        if (passwords) shell.open({ type: "generator" });
+        if (passwords) shell.navigate("generator");
       },
       lock,
       settings: () => shell.open({ type: "settings", section: "general" }),
@@ -282,7 +290,8 @@ function ShellLayout() {
       }}>
       <Sidebar
         groups={groups}
-        activeId={page}
+        // 生成器 is part of 密码: no row of its own, so 密码 stays the current one.
+        activeId={page === "generator" ? "passwords" : page}
         onNavigate={(id) => {
           if (id === "sync") shell.open({ type: "settings", section: "sync" });
           else if (isPageId(id)) shell.navigate(id);
@@ -308,6 +317,7 @@ function ShellLayout() {
           <div className="mx-auto w-full max-w-[1040px] px-6 pt-1 pb-8">
             {page === "codes" && <Codes />}
             {page === "passwords" && <Passwords />}
+            {page === "generator" && <Generator />}
             {page === "import" && <Import dragging={dragging} />}
             {page === "export" && <Export />}
             {page === "backup" && <Backup />}

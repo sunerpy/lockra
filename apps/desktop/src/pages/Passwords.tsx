@@ -344,10 +344,13 @@ export function Passwords() {
                 onKeyDown={onSearchKey}
                 placeholder={t("passwords.search")}
                 aria-label={t("passwords.search")}
-                className="w-[min(26rem,36vw)]"
+                // Narrower than the codes' (36vw): 「生成器」 sits beside it, and a 960 px window
+                // keeps room for the title.
+                className="w-[min(26rem,30vw)]"
                 data-testid="passwords-search"
               />
             )}
+            <GeneratorButton />
             <AddItemMenu />
           </>
         }
@@ -553,7 +556,26 @@ function PasswordsFacts({ count, groups }: { count: number; groups: number }) {
   return facts.join(" · ");
 }
 
-/** The page's main action (board 04-f): a new login, a generated password, an import. */
+/** 「生成器」 beside the add menu: the generator page, a part of 密码 (Ctrl G and 「生成密码…」 go
+ *  there too). */
+function GeneratorButton() {
+  const t = useT();
+  const shell = useShell();
+  const label = t("shell.nav.generator");
+  return (
+    <button
+      type="button"
+      title={`${label} · Ctrl G`}
+      onClick={() => shell.navigate("generator")}
+      data-testid="passwords-generator"
+      className="inline-flex h-13.5 items-center gap-2 rounded-pill bg-surface px-5 text-[14px] font-medium whitespace-nowrap text-fg hairline panel transition-colors hover:bg-inset">
+      <Icon name="dice" size={18} className="text-fg-muted" />
+      {label}
+    </button>
+  );
+}
+
+/** The page's main action (board 04-f): a new login, the generator page, an import. */
 export function AddItemMenu() {
   const t = useT();
   const shell = useShell();
@@ -575,7 +597,7 @@ export function AddItemMenu() {
   ];
   const onSelect = (id: string) => {
     if (id === "new") shell.open({ type: "item_new" });
-    else if (id === "generate") shell.open({ type: "generator" });
+    else if (id === "generate") shell.navigate("generator");
     else shell.navigate("import");
   };
   return (

@@ -591,6 +591,12 @@ class Smoke:
                     self.nav(label)
                     self.page(page)
                     self.shot(f"{page}-{width}-{theme}")
+                # 生成器 is a part of 密码, with no sidebar row: its button in 密码's header.
+                self.nav("密码")
+                self.page("passwords")
+                web.click(web.wait('[data-testid="passwords-generator"]'))
+                self.page("generator")
+                self.shot(f"generator-{width}-{theme}")
         self.resize(1280, 800)
         self.settings(theme="light")
         self.focus()

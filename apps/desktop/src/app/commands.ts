@@ -16,11 +16,12 @@ import {
 import { useMemo } from "react";
 import { useItemActions } from "../features/items/actions";
 import { useDispatch, useGuarded } from "./dispatch";
-import { PAGES, type PageId, useShell } from "./shell-state";
+import { PAGES, type PageId, passwordsPage, useShell } from "./shell-state";
 
 const PAGE_ICONS = {
   codes: "key",
   passwords: "lock",
+  generator: "dice",
   import: "download",
   export: "upload",
   backup: "archive",
@@ -121,7 +122,7 @@ export function useCommands(onCopy?: (copied: Promise<boolean>) => void): Comman
       }
     }
     for (const page of PAGES) {
-      if (page === "passwords" && !passwords) continue;
+      if (passwordsPage(page) && !passwords) continue;
       items.push({
         id: `page:${page}`,
         group: pages,

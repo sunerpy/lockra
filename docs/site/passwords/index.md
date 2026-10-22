@@ -182,6 +182,20 @@ the list after the master password, Touch ID or Windows Hello, and hides it afte
 **Clear the history…** empties it. The history keeps the last 100 passwords, for 90 days, on this
 device only: it is not synced and not in backups.
 
+### The Generator page
+
+<StatusTag status="building" /> The password generator is getting a page of its own, a part of
+the Passwords page: **Generator**, beside **Add login** at the top of the Passwords page, will open
+it, and so will **Add login › Generate a password…**, `Ctrl G` and the command palette; **Back to
+Passwords** at its top goes back. The page shows the generator, making passwords for no site, with
+**Copy** beside **Generate again**. Under it, **Generated passwords** says how many passwords the
+history holds, which ones go into it and how long they are kept. **Show the history…** lists them
+after the master password, Touch ID or Windows Hello, each with when it was made and the site it
+was made for, and hides them again after two minutes or as soon as you leave the page; **Hide**
+hides them sooner. **Clear the history…** asks before it empties the history, on this page and in
+the generator of a login's form. **Generate…** in a login's form keeps opening the generator over
+the form, with **Use this password** and **History**.
+
 ## On the phone
 
 <ScreenFigure src="/screens/phones-passwords-en-light.webp" dark="/screens/phones-passwords-en-dark.webp" width="1440" height="900" alt="Two phone screens: the Passwords page with the logins in cards, and the GitHub login's page with its user name, password and code." />
