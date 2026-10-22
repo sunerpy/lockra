@@ -111,6 +111,16 @@ function emptyCode(root: HTMLElement, view: View): boolean {
   return findOtp(root, view)?.some((input) => input.value === "") ?? false;
 }
 
+/** A field Lockra cannot tell, which the user chose for the login (the menu shortcut opened
+ *  Lockra's menu on it, or the fill shortcut was pressed in it): the user name goes there. The
+ *  form is not sent: Lockra does not know it. */
+export function fillChosen(field: HTMLInputElement, values: FillValues, view: View): FillResult {
+  if (values.username === "" || !isFillable(field) || !view.visible(field))
+    return { filled: 0, password: false, code: false };
+  setValue(field, values.username);
+  return { filled: 1, password: false, code: false };
+}
+
 /** What a fill put in: how many fields, the password, the code. */
 export interface FillResult {
   filled: number;

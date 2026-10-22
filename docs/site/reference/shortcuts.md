@@ -85,3 +85,7 @@ keyboard settings instead ([Quick search from anywhere](/passwords/#quick-search
 The browser's own settings change the first two: `chrome://extensions/shortcuts` in Chrome,
 `edge://extensions/shortcuts` in Edge, and **Manage Extension Shortcuts** in Firefox's add-ons
 manager.
+
+<StatusTag status="building" /> `Alt Shift L` (`⌥ Shift L` on macOS) opens Lockra's menu on the
+focused field, any field, with the logins that match the site; the browser's settings change it
+too ([Lockra's menu on any field](/passwords/browser#lockra-s-menu-on-any-field)).

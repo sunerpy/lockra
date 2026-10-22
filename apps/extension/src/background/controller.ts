@@ -19,6 +19,8 @@ import {
   type FocusAnswer,
   type InlineAction,
   type InlineView,
+  MENU_COMMAND,
+  type MenuAnswer,
   type MenuItem,
   type MenuSide,
   PORT_INLINE,
@@ -149,6 +151,7 @@ export class Controller {
     api.runtime.onConnect.addListener((port) => this.onConnect(port));
     api.commands.onCommand.addListener((command, tab) => {
       if (command === FILL_COMMAND) void this.fillByShortcut(tab);
+      if (command === MENU_COMMAND) void this.menuByShortcut(tab);
     });
     api.permissions.onAdded.addListener(() => void this.syncAccess(true));
     api.permissions.onRemoved.addListener(() => void this.syncAccess(true));
@@ -1028,6 +1031,11 @@ export class Controller {
 
   /** The frame a fill goes to without a field asking: the probe in every frame (shortcut.ts). */
   private async pickFrame(tab: Tab): Promise<TrustedFrame | null> {
+    return (await this.pickTarget(tab))?.frame ?? null;
+  }
+
+  /** The frame `pickFrame` takes, and whether its active element is a field Lockra fills. */
+  private async pickTarget(tab: Tab): Promise<{ frame: TrustedFrame; editable: boolean } | null> {
     const tabId = tab.id;
     if (tabId === undefined || !webUrl(tab.url)) return null;
     let results;
@@ -1052,7 +1060,9 @@ export class Controller {
       },
       this.framesOf,
     );
-    return "error" in facts ? null : facts;
+    if ("error" in facts) return null;
+    const editable = results.find((r) => r.frameId === chosen.frameId)?.result?.editable === true;
+    return { frame: facts, editable };
   }
 
   /** The content script in a frame without site access (activeTab): put there on demand. */
@@ -1135,6 +1145,50 @@ export class Controller {
       allow_http: false,
     });
     if (filled.ok) await this.deliver(frame, filled.value);
+  }
+
+  /** The menu shortcut: Lockra's menu on the focused field, whatever the field, with the logins
+   *  that match the site as the menu on a field Lockra knows has them (the user's request,
+   *  2026-10-22: pages Lockra has no rule for). Without a field, a login or an answer, the popup
+   *  says what there is. */
+  private async menuByShortcut(given?: Tab): Promise<void> {
+    const tab = given?.id !== undefined ? given : await this.activeTab();
+    if (tab?.id === undefined) return;
+    this.connection.ensure();
+    const target = await this.pickTarget(tab);
+    if (!target) return;
+    const { frame } = target;
+    const answer = target.editable ? await this.query(frame) : null;
+    const offered =
+      answer !== null &&
+      !answer.never_fill &&
+      answer.items.length > 0 &&
+      (!answer.cross_origin || answer.policy.cross_origin_frames === "ask");
+    if (!offered) {
+      await this.openPopup();
+      return;
+    }
+    await this.inject(frame);
+    const opened = this.frames.open({
+      kind: "menu",
+      frame,
+      frameUrl: frame.facts.frame_url,
+      view: listView(answer.site, answer.items),
+      items: answer.items,
+      all: answer.items,
+      policy: answer.policy,
+      item: null,
+      generated: null,
+      trigger: "inline_menu",
+    });
+    const side = await this.menuSide();
+    const shown = await this.send(frame, { kind: "menu.open", token: opened.token, side }).catch(
+      () => null,
+    );
+    if (!isMenuAnswer(shown) || !shown.opened) {
+      this.frames.close(opened.token);
+      await this.openPopup();
+    }
   }
 
   // ---- the popup and the options page --------------------------------------------------------
@@ -1543,6 +1597,16 @@ export class Controller {
     const commands = await this.api.commands.getAll().catch(() => []);
     this.shortcut = commands.find((c) => c.name === FILL_COMMAND)?.shortcut ?? "";
   }
+}
+
+/** The content script's answer to `menu.open`; an older one answers nothing. */
+function isMenuAnswer(value: unknown): value is MenuAnswer {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "opened" in value &&
+    typeof value.opened === "boolean"
+  );
 }
 
 function isSnapshot(value: unknown): value is { url: string; site: SiteView } {
