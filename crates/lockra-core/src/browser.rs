@@ -592,6 +592,9 @@ pub enum SaveAction {
     Save,
     /// Offer to change the password of the login with this user name.
     Update,
+    /// Offer the submitted user name to the login of this password saved without one (a
+    /// password page that showed the user name as text only): not a second login.
+    AddUsername,
 }
 
 /// The answer to a save query.
@@ -759,7 +762,8 @@ pub struct SaveRequest {
     pub group: Option<String>,
 }
 
-/// A request to change a login's password to what a form submitted.
+/// A request to change a login's password to what a form submitted, and to give a login saved
+/// without a user name the one the form brought ([`SaveAction::AddUsername`]).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UpdateRequest {
     /// The login.
@@ -767,8 +771,12 @@ pub struct UpdateRequest {
     /// Where it was submitted.
     #[serde(flatten)]
     pub facts: FrameFacts,
-    /// The new password.
+    /// The new password; the login's own leaves it as it is.
     pub password: Zeroizing<String>,
+    /// The user name for a login that has none (neither a user name nor an email address); never
+    /// a replacement of one. Absent or empty: the user name is not touched.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
 }
 
 /// A new login saved with a generated password, in the same step.

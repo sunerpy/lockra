@@ -239,7 +239,11 @@ export class InlinePage {
     }
     this.searching = null;
     const body =
-      view.view === "save" || view.view === "update" ? this.prompt(view) : this.menu(view);
+      view.view === "save" || view.view === "update"
+        ? this.prompt(view)
+        : view.view === "username"
+          ? this.usernamePrompt(view)
+          : this.menu(view);
     this.root.replaceChildren(body);
     this.afterRender();
   }
@@ -280,7 +284,7 @@ export class InlinePage {
     this.afterRender();
   }
 
-  private hint(view: Exclude<InlineView, { view: "save" } | { view: "update" }>): string {
+  private hint(view: Exclude<InlineView, { view: "save" | "update" | "username" }>): string {
     const site = "site" in view ? view.site : "";
     return view.view === "list"
       ? view.code
@@ -292,7 +296,7 @@ export class InlinePage {
   }
 
   /** The menu's frame: a header, the content, a footer of keys. */
-  private menu(view: Exclude<InlineView, { view: "save" } | { view: "update" }>): HTMLElement {
+  private menu(view: Exclude<InlineView, { view: "save" | "update" | "username" }>): HTMLElement {
     const t = (key: ExtensionKey, params?: Params) => this.t(key, params);
     const hint = this.el(
       "span",
@@ -618,6 +622,63 @@ export class InlinePage {
     input.autocomplete = "off";
     input.spellcheck = false;
     return input;
+  }
+
+  /** The prompt for a login saved without a user name: the name the sign-in brought, editable;
+   *  the login keeps its password. */
+  private usernamePrompt(view: Extract<InlineView, { view: "username" }>): HTMLElement {
+    const t = (key: ExtensionKey) => this.t(key);
+    const usernameInput = this.input(view.username);
+    const add = this.button(t("addUsername.add"), "primary", (event) =>
+      this.act({ type: "username", username: usernameInput.value }, event),
+    );
+    const sync = () => {
+      add.disabled = usernameInput.value.trim() === "";
+    };
+    usernameInput.addEventListener("input", sync);
+    sync();
+    return this.el(
+      "div",
+      "flex flex-col gap-3.5 overflow-hidden rounded-14 border border-border bg-surface-solid p-4",
+      this.el(
+        "div",
+        "flex items-center gap-2.5",
+        logo(this.options.doc, 20),
+        this.el(
+          "span",
+          "min-w-0 flex-1 truncate text-[14px] font-semibold text-fg",
+          t("addUsername.title"),
+        ),
+        this.iconButton("x", t("inline.close"), () => this.act({ type: "close" })),
+      ),
+      this.el(
+        "div",
+        "flex flex-col gap-2.5",
+        this.el(
+          "div",
+          "flex h-[52px] items-center gap-3 rounded-6 bg-inset px-3 hairline",
+          this.avatar(view.item),
+          this.el(
+            "span",
+            "min-w-0 flex-1",
+            this.el("span", "block truncate text-[13px] font-semibold text-fg", view.item.title),
+            this.el("span", "block truncate text-[12px] text-fg-muted", t("addUsername.none")),
+          ),
+        ),
+        this.el("p", "text-[12.5px] leading-normal text-fg-muted", t("addUsername.body")),
+        this.field(t("save.username"), usernameInput),
+      ),
+      this.el(
+        "div",
+        "flex items-center gap-2",
+        this.button(t("save.never"), "text-muted", (event) => this.act({ type: "never" }, event)),
+        this.el("span", "flex-1"),
+        this.button(t("addUsername.dismiss"), "ghost", (event) =>
+          this.act({ type: "dismiss" }, event),
+        ),
+        add,
+      ),
+    );
   }
 
   /** The save or update prompt at the top right. */

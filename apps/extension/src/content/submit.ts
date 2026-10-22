@@ -3,7 +3,10 @@
 // (the field removed by a page that never submits, or the page itself unloading). The values go to
 // the background, which keeps them in memory for five minutes and asks the app whether to offer
 // saving or updating; the first step of a sign-in in two reports its user name the same way.
+// Without a user name field, a form gives the one the page keeps hidden or shows as text (a sign-in
+// that remembers the user: shown-username.ts).
 import { type View, formOf, isFillable, isPassword, scanField } from "./fields";
+import { formUsername } from "./shown-username";
 
 export interface Reports {
   submitted(submission: { username: string; password: string; signup: boolean }): void;
@@ -82,7 +85,7 @@ export class SubmitWatcher {
     if (password === "") return;
     const typed: Typed = {
       root: scan.root,
-      username: scan.username?.value ?? scan.hiddenUsername?.value ?? "",
+      username: formUsername(scan, this.view),
       password,
       signup: scan.kind === "signup",
     };
@@ -128,7 +131,7 @@ export class SubmitWatcher {
         .map((p) => p.value)
         .find((value) => value !== "") ?? "";
     if (password === "") return;
-    this.emit(scan.username?.value ?? scan.hiddenUsername?.value ?? "", password, signup);
+    this.emit(formUsername(scan, this.view), password, signup);
   }
 
   private emit(username: string, password: string, signup: boolean): void {

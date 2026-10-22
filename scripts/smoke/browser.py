@@ -13,7 +13,8 @@ by itself as the fill's next step; the policy's limits (an
 HTTP page for an HTTPS login, a frame of another site); the pages that try to hijack a click (made
 transparent under the menu, covered by an element and by a popover opened after it, a frame of the
 menu's page of their own); two thousand fields; a sign-up form's generated password; the save and
-the update prompts changing the app's logins; and locking the app locking the extension.
+the update prompts changing the app's logins, the save prompt taking the user name a password page
+shows as text; and locking the app locking the extension.
 Every wait is a condition with a deadline. The fixed pauses: the inline menu's own rule (a key or a
 click counts only once the menu has kept still for 300 ms, content/clickjack.ts), and one bounded
 look for an effect that must not come (a click on the page's own frame of the menu).
@@ -40,6 +41,9 @@ PAY_USER = "carol"
 PAY_PASSWORD = "Pay-Frame-Secret-3"
 NEW_USER = "bob"
 NEW_PASSWORD = "Fresh-Login-Secret-9"
+# The user name remembered.html shows as text, with no field for it, and the password typed there.
+SHOWN_USER = "erin@example.test"
+SHOWN_PASSWORD = "Remembered-Login-Secret-5"
 CHROME_ID = "egbpficliljjnpkjbigonldakfllebco"
 # The id of the extension in the folder the app keeps for the browsers (manifest/unpacked.json's key).
 FOLDER_ID = "flgfdomeabdfbebfjonaocddjcamgblk"
@@ -755,6 +759,29 @@ class Smoke:
         until("the updated password in Lockra", lambda: self.reveal(alice) == changed, 30)
         print("smoke: the update prompt changed the login's password in Lockra")
 
+    def shown_username(self):
+        """A password page with no user name field that shows the user name as text, as AWS IAM
+        Identity Center's does when it remembers the user (remembered.html): after a password typed
+        there by hand, the save prompt saves the login in Lockra with the name the page showed."""
+        before = len(self.items())
+        self.web.go(self.url("login.test", "remembered.html"))
+        # The site has logins: the password field's menu comes, and goes with Esc.
+        self.open_menu("#password")
+        self.web.keys(ESCAPE)
+        until("the menu to go", lambda: not self.web.menu_open(), 10)
+        self.web.type(self.web.find("#password"), SHOWN_PASSWORD)
+        self.web.click(self.web.find("#submit"))
+        self.web.wait("#welcome")
+        self.answer_prompt("save")
+        saved = until(
+            "the login saved with the user name the page showed",
+            lambda: next((i for i in self.items() if i["username"] == SHOWN_USER), None),
+            30,
+        )
+        if len(self.items()) != before + 1 or self.reveal(saved) != SHOWN_PASSWORD:
+            sys.exit(f"smoke: the saved login: {saved}")
+        print("smoke: a password page that only showed the user name: the save prompt saved the login with it")
+
     def lock_follows(self):
         """Locking the app locks the extension."""
         self.app.invoke({"command": "vault_lock"})
@@ -813,6 +840,7 @@ class Smoke:
             self.many_fields()
             self.signup()
             self.save_prompt()
+            self.shown_username()
             # Last of the fills: a fill of another site would leave the code steps without the
             # login they follow, and the steps before fill ten times in their first minute.
             self.menu_search()

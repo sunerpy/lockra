@@ -29,6 +29,7 @@ import {
 } from "./fields";
 import { type FillResult, fillChosen, fillForm, fillOtp, submitForm } from "./fill";
 import { FrameHost } from "./frame-host";
+import { formUsername } from "./shown-username";
 import { SubmitWatcher } from "./submit";
 
 export interface Runtime {
@@ -319,7 +320,9 @@ export class ContentAgent {
         rules: scan.rules,
         minlength: scan.minlength,
         maxlength: scan.maxlength,
-        username: scan.username?.value ?? "",
+        // The generated login is saved with it at once: a form with no user name field gives the
+        // one the page kept hidden or shows.
+        username: formUsername(scan, this.options.view),
       },
     };
   }

@@ -199,6 +199,13 @@ export const extensionZhCN = {
     update: "更新",
     dismiss: "不更新",
   },
+  addUsername: {
+    title: "给这个登录项补上用户名？",
+    none: "没有用户名",
+    body: "这个登录项保存时没有用户名，密码和你刚才输入的相同。补上后，Lockra 可以连用户名一起填入。",
+    add: "补上",
+    dismiss: "不补",
+  },
   options: {
     connection: "连接",
     lockra: "Lockra",
