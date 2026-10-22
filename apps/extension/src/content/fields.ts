@@ -128,7 +128,7 @@ const CODE_PAIRS: readonly (readonly [string, readonly string[]])[] = [
 const CODE_TEXT = /动态密码|动态口令|动态码|一次性密码|令牌|验证码|身份验证器/;
 
 /** The words of a name: `dynamicPassword` → dynamic, password; `one_time-code` → one, time, code. */
-function words(text: string): string[] {
+export function words(text: string): string[] {
   return text
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .toLowerCase()

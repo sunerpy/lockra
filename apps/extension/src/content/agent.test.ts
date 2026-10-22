@@ -323,6 +323,27 @@ describe("the inline menu", () => {
     agent.stop();
   });
 
+  it("gives the generator the user name a set-password form keeps hidden or shows, the form having no field for it", async () => {
+    // The generated login is saved with it at once.
+    const passwords = `<input type="password" id="pw" autocomplete="new-password"><input type="password" id="again" autocomplete="new-password">`;
+    for (const [inside, username] of [
+      [`<p class="username">user@example.com</p>`, "user@example.com"],
+      [`<input autocomplete="username" value="kept@example.com" hidden>`, "kept@example.com"],
+    ] as const) {
+      document.body.innerHTML = `<form>${inside}${passwords}</form>`;
+      const { agent, sent } = setup();
+      await agent.start();
+      input("pw").focus();
+      await vi.waitFor(() => expect(hosts()).toHaveLength(1));
+      expect(sent.at(-1)).toEqual({
+        kind: "content.focus",
+        form: "signup",
+        signup: { rules: null, minlength: null, maxlength: null, username },
+      });
+      agent.stop();
+    }
+  });
+
   it("moves with the arrows, fills with Enter once in the list, closes with Escape", async () => {
     document.body.innerHTML = LOGIN;
     const { agent, sent } = setup();
@@ -593,6 +614,24 @@ describe("the page's own work", () => {
     input("email").value = "bob@example.com";
     document.getElementById("g")?.dispatchEvent(new Event("submit", { bubbles: true }));
     expect(sent.at(-1)).toEqual({ kind: "content.username", username: "bob@example.com" });
+    agent.stop();
+  });
+
+  it("reports the user name a password page shows, the form having no field for it", async () => {
+    // A sign-in that remembers the user (AWS IAM Identity Center, 2026-10-22).
+    document.body.innerHTML = `<form id="f"><p class="username">user@example.com <button type="button">Not you?</button></p><label for="pass">Password</label><input type="password" id="pass"><button type="submit">Sign in</button></form>`;
+    const { agent, sent } = setup();
+    await agent.start();
+    const pass = input("pass");
+    pass.value = "hunter2";
+    pass.dispatchEvent(new InputEvent("input", { bubbles: true }));
+    document.getElementById("f")?.dispatchEvent(new Event("submit", { bubbles: true }));
+    expect(sent.at(-1)).toEqual({
+      kind: "content.submitted",
+      username: "user@example.com",
+      password: "hunter2",
+      signup: false,
+    });
     agent.stop();
   });
 
