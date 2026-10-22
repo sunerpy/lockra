@@ -273,7 +273,7 @@ async fn by_the_full_host_each_host_of_a_site_has_its_own_logins() {
     assert_eq!(h.core.browser_fill(session, fill_at(page)).await.unwrap().item_id, git);
     let code = OtpRequest { item_id: git, facts: facts("https://wiki.example.cn/"), trigger: Some(Trigger::Popup) };
     assert_eq!(h.core.browser_otp(session, code), Err(Refusal::NoMatch));
-    let update = UpdateRequest { item_id: wiki, facts: facts(page), password: pw("n3w") };
+    let update = UpdateRequest { item_id: wiki, facts: facts(page), password: pw("n3w"), ..UpdateRequest::default() };
     assert_eq!(h.core.browser_update(session, update), Err(Refusal::NoMatch));
     assert_eq!(h.core.browser_delete(session, DeleteRequest { item_id: wiki, facts: facts(page) }).await, Err(Refusal::NoMatch));
     let found = h.core.browser_search(session, SearchRequest { text: "example.cn".into(), top_url: page.into() }).unwrap();
@@ -944,13 +944,13 @@ async fn a_submitted_form_is_offered_for_saving_or_updating_and_saved_from_the_p
     assert_eq!((update.action, update.item_id), (SaveAction::Update, Some(id)));
     assert_eq!(advice(&h, ask("bob", "other")).action, SaveAction::Save);
     // The change of password keeps the old one in the history.
-    let request = UpdateRequest { item_id: id, facts: facts("https://login.example.com/"), password: pw("n3w") };
+    let request = UpdateRequest { item_id: id, facts: facts("https://login.example.com/"), password: pw("n3w"), ..UpdateRequest::default() };
     h.core.browser_update(session, request).unwrap();
     let revealed = h.core.item_reveal(id, RevealParts { password: true, history: true, ..RevealParts::default() }, None, None).await.unwrap();
     assert_eq!(revealed.password.as_deref(), Some("n3w"));
     assert!(revealed.history.unwrap().iter().any(|p| p.value == "s3cret"));
     // Only a login that matches the page is updated from it.
-    let elsewhere = UpdateRequest { item_id: id, facts: facts("https://example.org/"), password: pw("x") };
+    let elsewhere = UpdateRequest { item_id: id, facts: facts("https://example.org/"), password: pw("x"), ..UpdateRequest::default() };
     assert_eq!(h.core.browser_update(session, elsewhere), Err(Refusal::NoMatch));
     // "Not on this site".
     let rule = SiteRuleRequest { kind: Some(SiteRuleKind::NeverSave), facts: facts("https://www.example.com/") };
@@ -961,6 +961,49 @@ async fn a_submitted_form_is_offered_for_saving_or_updating_and_saved_from_the_p
     let equivalent = SiteRuleRequest { kind: Some(SiteRuleKind::Equivalent), facts: facts("https://example.com/") };
     assert_eq!(h.core.browser_site_rule(session, equivalent), Err(Refusal::Invalid), "only the two lists");
     assert_eq!(h.core.state().site_rules.iter().map(|r| r.domains.clone()).collect::<Vec<_>>(), [vec!["example.com".to_owned()]]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_login_saved_without_a_user_name_takes_the_one_a_later_sign_in_brings() {
+    // 2026-10-22, the user's AWS IAM Identity Center: its password page showed the user name as
+    // text only, so the login was saved without one, and a later sign-in with the name in hand
+    // was "saved already". Now that sign-in offers the name to the login, not a second login, and
+    // the extension can add a user name to a login, never replace one.
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let page = "https://login.example.com/sign-in";
+    let ask =
+        |username: &str, password: &str| QueryRequest { facts: facts(page), purpose: QueryPurpose::Save, username: username.into(), password: pw(password) };
+    let advice = |q: QueryRequest| h.core.browser_query(session, q).unwrap().save.unwrap();
+    let nameless = h.core.browser_save(session, SaveRequest { facts: facts(page), password: pw("s3cret"), ..SaveRequest::default() }).unwrap();
+    assert_eq!(advice(ask("", "s3cret")).action, SaveAction::None, "saved already");
+    assert_eq!(advice(ask("alice@example.com", "s3cret")), SaveAdvice { action: SaveAction::AddUsername, item_id: Some(nameless) });
+    assert_eq!(advice(ask("alice@example.com", "other")).action, SaveAction::Save, "another password: another login");
+    // Adding it leaves the password as it is (nothing in its history) and the login then counts
+    // as saved.
+    let add = UpdateRequest { item_id: nameless, facts: facts(page), password: pw("s3cret"), username: Some("alice@example.com".into()) };
+    h.core.browser_update(session, add.clone()).unwrap();
+    let item = h.core.items_list().unwrap().into_iter().find(|i| i.id == nameless).unwrap();
+    assert_eq!(item.username, "alice@example.com");
+    let revealed = h.core.item_reveal(nameless, RevealParts { password: true, history: true, ..RevealParts::default() }, None, None).await.unwrap();
+    assert_eq!(revealed.password.as_deref(), Some("s3cret"));
+    assert!(revealed.history.unwrap_or_default().is_empty(), "the password did not change");
+    assert_eq!(advice(ask("alice@example.com", "s3cret")).action, SaveAction::None);
+    // A user name is added, never replaced: not to a login that has one, nor by an email address
+    // standing for it.
+    let replace = UpdateRequest { username: Some("mallory".into()), ..add.clone() };
+    assert_eq!(h.core.browser_update(session, replace), Err(Refusal::Invalid));
+    let mailed = h.core.browser_save(session, SaveRequest { facts: facts(page), password: pw("mail-pw"), ..SaveRequest::default() }).unwrap();
+    h.core.item_update(mailed, ItemPatch { email: Some("bob@example.com".into()), ..ItemPatch::default() }).unwrap();
+    assert_eq!(advice(ask("bob@example.com", "mail-pw")).action, SaveAction::None, "the email address names it");
+    assert_eq!(advice(ask("carol", "mail-pw")).action, SaveAction::Save, "a login with an address has a name");
+    let rename = UpdateRequest { item_id: mailed, facts: facts(page), password: pw("mail-pw"), username: Some("carol".into()) };
+    assert_eq!(h.core.browser_update(session, rename), Err(Refusal::Invalid));
+    // An empty user name in the request is no name at all: the password changes as before.
+    let plain = UpdateRequest { item_id: mailed, facts: facts(page), password: pw("n3w"), username: Some(String::new()) };
+    h.core.browser_update(session, plain).unwrap();
+    let revealed = h.core.item_reveal(mailed, RevealParts { password: true, ..RevealParts::default() }, None, None).await.unwrap();
+    assert_eq!(revealed.password.as_deref(), Some("n3w"));
 }
 
 #[tokio::test(start_paused = true)]

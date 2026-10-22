@@ -320,6 +320,18 @@
       "password": "n3w",
       "req": 9,
       "top_url": "https://www.example.com/"
+    },
+    "update_username": {
+      "frame_chain": [
+        "https://www.example.com/frame"
+      ],
+      "frame_url": "https://accounts.example.com/login",
+      "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+      "op": "update",
+      "password": "s3cret",
+      "req": 19,
+      "top_url": "https://www.example.com/",
+      "username": "alice@example.com"
     }
   },
   "responses": {
@@ -417,6 +429,46 @@
           "on_page_load": false
         },
         "save": null,
+        "site": "example.com"
+      }
+    },
+    "query_add_username": {
+      "ok": true,
+      "req": 3,
+      "result": {
+        "cross_origin": false,
+        "host_matching": false,
+        "items": [
+          {
+            "downgrade": false,
+            "email": "alice@example.com",
+            "favorite": false,
+            "has_password": true,
+            "has_totp": true,
+            "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001",
+            "matches": true,
+            "protection": "fill",
+            "title": "Example",
+            "username": "alice"
+          }
+        ],
+        "level": "host",
+        "never_fill": false,
+        "never_save": false,
+        "policy": {
+          "auto_submit": false,
+          "confirm_fill": false,
+          "copy_otp": true,
+          "cross_origin_frames": "never",
+          "fill_otp": true,
+          "match_host": false,
+          "match_port": false,
+          "on_page_load": false
+        },
+        "save": {
+          "action": "add_username",
+          "item_id": "5c0fe1a2-0b3c-4d5e-8f60-000000000001"
+        },
         "site": "example.com"
       }
     },

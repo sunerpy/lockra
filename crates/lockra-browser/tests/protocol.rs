@@ -106,7 +106,19 @@ fn requests() -> Vec<(&'static str, Request)> {
                 }),
             ),
         ),
-        ("update", r(9, Op::Update(UpdateRequest { item_id: id(1), facts: facts(), password: Zeroizing::new("n3w".into()) }))),
+        ("update", r(9, Op::Update(UpdateRequest { item_id: id(1), facts: facts(), password: Zeroizing::new("n3w".into()), username: None }))),
+        (
+            "update_username",
+            r(
+                19,
+                Op::Update(UpdateRequest {
+                    item_id: id(1),
+                    facts: facts(),
+                    password: Zeroizing::new("s3cret".into()),
+                    username: Some("alice@example.com".into()),
+                }),
+            ),
+        ),
         (
             "generate",
             r(
@@ -211,6 +223,17 @@ fn protocol_messages() {
                 host_matching: false,
                 policy: BrowserPolicy::default(),
                 save: Some(SaveAdvice { action: SaveAction::Update, item_id: Some(id(1)) }),
+            })),
+            "query_add_username": ok(3, Answer::Query(QueryAnswer {
+                site: "example.com".into(),
+                level: Some(lockra_autofill_level()),
+                items: vec![summary()],
+                never_fill: false,
+                never_save: false,
+                cross_origin: false,
+                host_matching: false,
+                policy: BrowserPolicy::default(),
+                save: Some(SaveAdvice { action: SaveAction::AddUsername, item_id: Some(id(1)) }),
             })),
             "fill": ok(4, Answer::Fill(FillAnswer {
                 item_id: id(1),

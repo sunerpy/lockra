@@ -140,7 +140,14 @@ export const opSchema = z.discriminatedUnion("op", [
     password: z.string(),
     group: nullableString,
   }),
-  z.object({ op: z.literal("update"), item_id: id, ...facts, password: z.string() }),
+  /** A changed password, or (`username`) the user name for a login saved without one. */
+  z.object({
+    op: z.literal("update"),
+    item_id: id,
+    ...facts,
+    password: z.string(),
+    username: z.string().optional(),
+  }),
   z.object({
     op: z.literal("generate"),
     ...facts,
@@ -248,7 +255,14 @@ export const queryAnswerSchema = z.object({
    *  older Lockra sends none. */
   host_matching: z.boolean().default(false),
   policy: policySchema,
-  save: z.object({ action: z.enum(["none", "save", "update"]), item_id: id.nullable() }).nullable(),
+  /** What to offer: `add_username`, the sign-in's user name for the login of this password saved
+   *  without one. */
+  save: z
+    .object({
+      action: z.enum(["none", "save", "update", "add_username"]),
+      item_id: id.nullable(),
+    })
+    .nullable(),
 });
 export type QueryAnswer = z.infer<typeof queryAnswerSchema>;
 

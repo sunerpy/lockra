@@ -330,6 +330,16 @@ and Lockra only shows a notice that the browser asked.
 Lockra offers no save or update at all when what the form sent is the code of an account linked to
 one of the site's logins: its current code, or the one before or after it.
 
+### A login saved without a user name
+
+<StatusTag status="building" /> Some sign-in pages show the user name only as text, without a
+user-name box (AWS IAM Identity Center's password page once it remembers you), and a login saved
+on such a page may have no user name. When a later sign-in brings the user name (typed on the page
+before, or shown on the page) and the site has a login with the same password but no user name,
+the top right of the page shows **Add the user name to this login?** instead of offering a second
+login. The name can be changed first; **Add** adds only the user name and leaves the password as
+it is. The extension cannot change the user name of a login that has one, or an email address.
+
 ## Site access
 
 Without access to the sites you visit, the extension runs in a page only when you use it: the

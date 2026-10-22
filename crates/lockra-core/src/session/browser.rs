@@ -683,7 +683,7 @@ impl Core {
     pub fn browser_update(&self, session: SessionId, request: UpdateRequest) -> Result<(), Refusal> {
         let frame = Frame::of(&request.facts)?;
         let site = site_of(&frame.frame);
-        let title = {
+        let (title, patch) = {
             let mut guard = self.lock();
             let st = &mut *guard;
             let (vault, _) = active(st, session, false)?;
@@ -694,14 +694,22 @@ impl Core {
             if !found.iter().any(|(id, _)| *id == request.item_id) {
                 return Err(Refusal::NoMatch);
             }
-            let title = vault.data.items.iter().find(|i| i.id == request.item_id).map(|i| i.title.clone()).unwrap_or_default();
+            let Some(item) = vault.data.items.iter().find(|i| i.id == request.item_id) else { return Err(Refusal::NoMatch) };
+            // A user name only for a login that has none: the page never renames one.
+            let username = request.username.as_deref().map(str::trim).filter(|name| !name.is_empty()).map(str::to_owned);
+            if username.is_some() && !nameless(item) {
+                return Err(Refusal::Invalid);
+            }
+            // The login's own password stays as it is, out of its history.
+            let same = item.field_of(Purpose::Password).is_some_and(|f| f.value.as_str() == request.password.as_str());
+            let password = if same { SecretChange::Keep } else { SecretChange::Set { value: request.password } };
+            let title = item.title.clone();
             if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.query(Instant::now())) {
                 return Err(self.pause(st, session, &site));
             }
-            title
+            (title, ItemPatch { username, password, ..ItemPatch::default() })
         };
-        self.update_item(request.item_id, ItemPatch { password: SecretChange::Set { value: request.password }, ..ItemPatch::default() }, true)
-            .map_err(|_| Refusal::Invalid)?;
+        self.update_item(request.item_id, patch, true).map_err(|_| Refusal::Invalid)?;
         self.saved(session, &site, request.item_id, title, true);
         Ok(())
     }
@@ -1283,8 +1291,9 @@ fn page_load_allowed(policy: &BrowserPolicy, item: &VaultItem, frame: &Frame, ma
 
 /// What a submitted form calls for: nothing when the login is saved already (or the site is on
 /// the never-save list, or the password is a one-time code), an update for a login of the same
-/// user name, otherwise a new login. A code is the one a login of `found` links shows at `now_ms`,
-/// a step before or a step after: a sign-in's second step that asks for it in a password field.
+/// user name, the user name for a login of this password saved without one, otherwise a new
+/// login. A code is the one a login of `found` links shows at `now_ms`, a step before or a step
+/// after: a sign-in's second step that asks for it in a password field.
 fn advice(data: &crate::entry::VaultData, found: &[(Uuid, bool)], never_save: bool, username: &str, password: &str, now_ms: u64) -> SaveAdvice {
     let none = SaveAdvice { action: SaveAction::None, item_id: None };
     if never_save || password.is_empty() {
@@ -1310,8 +1319,19 @@ fn advice(data: &crate::entry::VaultData, found: &[(Uuid, bool)], never_save: bo
     match same_user {
         Some(item) if saved_password(item) => none,
         Some(item) => SaveAdvice { action: SaveAction::Update, item_id: Some(item.id) },
-        None => SaveAdvice { action: SaveAction::Save, item_id: None },
+        // The user name a password page showed as text only (AWS IAM Identity Center, 2026-10-22):
+        // the login it saved is the one this name belongs to.
+        None => match items.iter().find(|i| nameless(i) && saved_password(i)) {
+            Some(item) => SaveAdvice { action: SaveAction::AddUsername, item_id: Some(item.id) },
+            None => SaveAdvice { action: SaveAction::Save, item_id: None },
+        },
     }
+}
+
+/// A login without a user name and without an email address standing for one.
+fn nameless(item: &VaultItem) -> bool {
+    let empty = |purpose| item.field_of(purpose).is_none_or(|f| f.value.trim().is_empty());
+    empty(Purpose::Username) && empty(Purpose::Email)
 }
 
 fn summary(item: &VaultItem, downgrade: bool, matches: bool) -> ItemSummary {
