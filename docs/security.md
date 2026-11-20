@@ -284,10 +284,14 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   goes with it, to open the menu below the field rather than above. The content
   script runs in its isolated world, listens to no `window` message and reports
   no address; the menu and the save prompt are extension frames in a closed shadow root in the top
-  layer, shown nothing without the token the background handed out (where the browser lists the frame, it must also sit under the page's; Chromium's webNavigation leaves the extension's own frames out, so there the token alone binds it), and a click in them counts only
+  layer (inside the page's modal dialog while it is open: outside it the page is inert, and a click
+  on the frame would reach the dialog under it), shown nothing without the token the background handed out (where the browser lists the frame, it must also sit under the page's; Chromium's webNavigation leaves the extension's own frames out, so there the token alone binds it), and a click in them counts only
   when the frame has shown unmoved for 300 ms, is on top at the click, has no see-through, filtered,
   clipped or blended ancestor, was not touched by the page, and (Chromium) its IntersectionObserver
-  v2 saw it visible.
+  v2 saw it visible. A click too soon does nothing, leaves the frame as it was and starts its 300 ms
+  again (in a quick run of clicks none counts); any other refusal closes it. One action of a frame runs at a time, and a frame closed by the click it acted on stays
+  half a second where it was, see-through and empty, so that a double click's second click does not
+  reach the page.
 
 ## Updates
 

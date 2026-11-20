@@ -94,6 +94,23 @@ function hosts(): HTMLElement[] {
 
 const LOGIN = `<form id="f"><input id="user" autocomplete="username"><input type="password" id="pass"><button>Sign in</button></form><input id="search" type="search">`;
 
+/** A dialog the page opened modal (jsdom has no `showModal` and no `:modal`); `modal: false`
+ *  makes it a plain open one. */
+function modalDialog(html: string): HTMLDialogElement {
+  const dialog = document.createElement("dialog");
+  dialog.innerHTML = html;
+  dialog.setAttribute("open", "");
+  const matches = dialog.matches.bind(dialog);
+  Object.defineProperty(dialog, "matches", {
+    value: (selectors: string) =>
+      selectors === ":modal"
+        ? dialog.isConnected && dialog.open && dialog.dataset.modal !== "no"
+        : matches(selectors),
+  });
+  document.body.append(dialog);
+  return dialog;
+}
+
 beforeEach(() => {
   now = 10_000;
   topmost = null;
@@ -472,6 +489,107 @@ describe("the inline menu", () => {
     await vi.waitFor(() => expect(hosts()).toHaveLength(0));
     expect(sent.at(-1)).toEqual({ kind: "content.closed", token });
     agent.stop();
+  });
+
+  it("regression: opens in the page's modal dialog that holds the field, where a click reaches it", async () => {
+    // 2026-11-20: a sign-in in a modal dialog; the menu at the end of the page showed on top but
+    // was inert, and a click on a login pressed the dialog's button under it.
+    const dialog = modalDialog(LOGIN);
+    const { agent } = setup();
+    await agent.start();
+    input("user").focus();
+    await vi.waitFor(() => expect(agent.menuHost).not.toBeNull());
+    expect(agent.menuHost?.parentElement).toBe(dialog);
+    // Its mark too, not in the top layer: a top-layer element shown after the menu makes Chrome
+    // report the menu unseen, and refuse every click on it.
+    const mark = Array.from(dialog.children).find(
+      (el) => el !== agent.menuHost && el.getAttribute("style")?.includes("width: 20px"),
+    );
+    expect(mark).toBeDefined();
+    expect(mark?.hasAttribute("popover")).toBe(false);
+    // The page closes the dialog: the field went with it, so does the menu.
+    dialog.removeAttribute("open");
+    dialog.dispatchEvent(Object.assign(new Event("toggle"), { newState: "closed" }));
+    await vi.waitFor(() => expect(agent.menuHost).toBeNull());
+    agent.stop();
+  });
+
+  it("closes the menu of a field a modal dialog the page opens leaves inert; a prompt goes into the dialog", async () => {
+    document.body.innerHTML = LOGIN;
+    const { agent, deliver } = setup();
+    await agent.start();
+    input("user").focus();
+    await vi.waitFor(() => expect(agent.menuHost).not.toBeNull());
+    await deliver({ kind: "prompt.open", token: "p".repeat(32) });
+    const dialog = modalDialog(`<p>Welcome</p>`);
+    dialog.dispatchEvent(Object.assign(new Event("toggle"), { newState: "open" }));
+    expect(agent.menuHost).toBeNull();
+    const prompt = Array.from(dialog.children).find((el) => el.hasAttribute("popover"));
+    expect(prompt).toBeDefined();
+    agent.stop();
+  });
+
+  it("brings a prompt back to the end of the page when the page takes away its dialog", async () => {
+    // A framework that unmounts its dialog without closing it: the prompt in it went too.
+    const dialog = modalDialog(`<p>Signed in</p><input id="inside">`);
+    input("inside").focus();
+    const { agent, deliver } = setup();
+    await agent.start();
+    await deliver({ kind: "prompt.open", token: "p".repeat(32) });
+    const prompt = () =>
+      Array.from(document.querySelectorAll<HTMLElement>("[popover]")).find(
+        (el) => el.getAttribute("style")?.includes("width: 360px") ?? false,
+      );
+    expect(prompt()?.parentElement).toBe(dialog);
+    const host = prompt();
+    dialog.remove();
+    await vi.waitFor(() => expect(host?.parentElement).toBe(document.documentElement), {
+      timeout: 2_000,
+    });
+    agent.stop();
+  });
+
+  it("leaves Enter alone too soon after the menu showed: it stays, and Enter counts once it has", async () => {
+    document.body.innerHTML = LOGIN;
+    const { agent, sent } = setup();
+    await agent.start();
+    input("user").focus();
+    await vi.waitFor(() => expect(agent.menuHost).not.toBeNull());
+    topmost = agent.menuHost;
+    const key = (k: string) =>
+      input("user").dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+    key("ArrowDown");
+    key("Enter");
+    expect(sent.filter((m) => m.kind === "content.key" && m.key === "Enter")).toHaveLength(0);
+    expect(agent.menuHost).not.toBeNull();
+    now += 300;
+    key("Enter");
+    expect(sent.findLast((m) => m.kind === "content.key")).toMatchObject({
+      key: "Enter",
+      allowed: true,
+    });
+    agent.stop();
+  });
+
+  it("holds the frame a moment, see-through, when the background closes it after a click", async () => {
+    vi.useFakeTimers();
+    try {
+      document.body.innerHTML = LOGIN;
+      const { agent, deliver, sent } = setup();
+      await agent.start();
+      input("user").focus();
+      await vi.waitFor(() => expect(agent.menuHost).not.toBeNull());
+      const host = agent.menuHost as HTMLElement;
+      await deliver({ kind: "frame.close", token: "a".repeat(32), hold: true });
+      expect(agent.menuHost).toBeNull();
+      expect(sent.at(-1)).toEqual({ kind: "content.closed", token: "a".repeat(32) });
+      expect(host.isConnected).toBe(true);
+      expect(host.getAttribute("style")).toContain("opacity: 0 !important");
+      await vi.advanceTimersByTimeAsync(500);
+      expect(host.isConnected).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("resizes and closes as the background says", async () => {

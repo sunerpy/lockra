@@ -38,6 +38,10 @@ export interface InlineFrame {
   /** Opened by a code field: its fill puts the chosen login's code in, and no later step of the
    *  sign-in is waited for. */
   code?: boolean;
+  /** An action of its is under way: another waits for none (a double click's second click). */
+  busy?: boolean;
+  /** The action under way came with a click: closed by it, the frame stays a moment where it was. */
+  held?: boolean;
 }
 
 function randomToken(): string {

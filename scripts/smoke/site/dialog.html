@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sign in in a dialog · login.test</title>
+    <style>
+      dialog {
+        width: 520px;
+        height: 520px;
+        padding: 0;
+      }
+      #trap {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        background: #eef2ff;
+      }
+      form {
+        position: relative;
+        margin: 260px 40px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>A page that signs in in a modal dialog</h1>
+    <!-- The user's report, 2026-11-20: outside the page's modal dialog Lockra's menu was inert, and
+         a click on its login pressed the page's button under it. #trap lies under the whole form. -->
+    <dialog id="signin">
+      <button id="trap" type="button">Continue another way</button>
+      <form id="login" action="/welcome.html" method="get">
+        <label>User name <input id="username" name="username" autocomplete="username" /></label>
+        <label
+          >Password
+          <input id="password" name="password" type="password" autocomplete="current-password"
+        /></label>
+        <button id="submit" type="submit">Sign in</button>
+      </form>
+    </dialog>
+    <script>
+      window.trapped = 0;
+      document.getElementById("trap").addEventListener("click", () => {
+        window.trapped += 1;
+      });
+      document.getElementById("signin").showModal();
+    </script>
+  </body>
+</html>

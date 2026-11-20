@@ -158,8 +158,11 @@ async function setup(options: { folder?: string } = {}) {
     pairing,
     contentGot,
     folder,
-    refuseClicks: () => {
-      verify = { ok: false, reason: "covered" } as typeof verify;
+    refuseClicks: (reason = "covered") => {
+      verify = { ok: false, reason } as typeof verify;
+    },
+    acceptClicks: () => {
+      verify = { ok: true };
     },
   };
 }
@@ -287,11 +290,106 @@ describe("the inline menu", () => {
         submit: false,
       },
     });
-    // The fill went to the frame's document, and the menu closed.
+    // The fill went to the frame's document, and the menu closed, held a moment where it was: a
+    // double click's second click lands in it, not on the page under it.
     expect(browser.sent.find((s) => (s.message as { kind: string }).kind === "fill")).toMatchObject(
       { tabId: 1, frameId: 0, documentId: "doc-0" },
     );
-    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "frame.close")).toBe(true));
+    await vi.waitFor(() =>
+      expect(contentGot.find((m) => m.kind === "frame.close")).toEqual({
+        kind: "frame.close",
+        token: answer.token,
+        hold: true,
+      }),
+    );
+  });
+
+  it("leaves the menu as it was after a click too soon after it showed: the next click counts", async () => {
+    // The click too soon closed the menu, and the user's next click went to the page under it.
+    const context = await setup();
+    const { browser, app, contentGot, refuseClicks, acceptClicks } = context;
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    refuseClicks("too_soon");
+    const click = () =>
+      frame.send({
+        kind: "action",
+        action: { type: "choose", index: 0 },
+        point: { x: 5, y: 40 },
+        trusted: true,
+      });
+    click();
+    await vi.waitFor(() =>
+      expect(contentGot.filter((m) => m.kind === "frame.verify")).toHaveLength(1),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(contentGot.some((m) => m.kind === "frame.close")).toBe(false);
+    expect(frame.closed).toBe(false);
+    expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+    acceptClicks();
+    click();
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+  });
+
+  it("holds the frame only after a click: a key's fill closes it at once", async () => {
+    const context = await setup();
+    const { browser, contentGot } = context;
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    // Enter, or a button the keyboard pressed: no point.
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: null,
+      trusted: true,
+    });
+    await vi.waitFor(() =>
+      expect(contentGot.find((m) => m.kind === "frame.close")).toEqual({
+        kind: "frame.close",
+        token: answer.token,
+      }),
+    );
+  });
+
+  it("takes one action at a time: a second click while the first is under way does nothing more", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    let release: () => void = () => undefined;
+    const fill = app.handlers.fill;
+    if (!fill) throw new Error("no fill handler");
+    app.handlers.fill = async (request) => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return fill(request);
+    };
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    const click = () =>
+      frame.send({
+        kind: "action",
+        action: { type: "choose", index: 0 },
+        point: { x: 5, y: 40 },
+        trusted: true,
+      });
+    click();
+    await vi.waitFor(() => expect(app.requests.some((r) => r.op === "fill")).toBe(true));
+    click();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release();
+    await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(app.requests.filter((r) => r.op === "fill")).toHaveLength(1);
+    expect(contentGot.filter((m) => m.kind === "fill")).toHaveLength(1);
   });
 
   it("offers the field's mark alone when the menu is not to open on focus, and the menu from the mark", async () => {
@@ -364,6 +462,11 @@ describe("the inline menu", () => {
     });
     await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "frame.close")).toBe(true));
     expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+    // A refused click is not held: nothing of the frame stays over the page.
+    expect(contentGot.find((m) => m.kind === "frame.close")).toEqual({
+      kind: "frame.close",
+      token: answer.token,
+    });
     // A frame occluded by its own IntersectionObserver's account is refused too, whatever the page says.
     const again = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
       token: string;

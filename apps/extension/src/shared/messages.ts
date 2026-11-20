@@ -111,7 +111,9 @@ export type BackgroundMessage =
   /** Show the save or update prompt `token` at the top right. */
   | { kind: "prompt.open"; token: string }
   | { kind: "frame.resize"; token: string; height: number }
-  | { kind: "frame.close"; token: string }
+  /** `hold`: closed after a click in it Lockra acted on: it stays a moment, see-through, so that a
+   *  second click lands in it rather than on the page under it. */
+  | { kind: "frame.close"; token: string; hold?: true }
   /** May a click at `point` (the frame's coordinates) count? `visible`: the frame's own
    *  IntersectionObserver v2 (null where there is none). */
   | {

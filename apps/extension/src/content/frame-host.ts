@@ -1,6 +1,8 @@
 // The page's end of an inline frame (plan §四 「防点击劫持」): an extension-origin iframe in a closed
 // shadow root, shown with `popover="manual"` in the top layer, styled inline with !important so
 // that no page rule reaches it, and raised again when the page opens its own top-layer element.
+// It lives at the end of <html>, or inside the page's modal dialog (top-layer.ts): outside that
+// dialog the page is inert, and a click on the frame would go to the page under it.
 // The page touching the host (an attribute, its place) counts as tampering: the frame goes. A click
 // in the frame only counts after `verify` (clickjack.ts) says so.
 import {
@@ -14,6 +16,7 @@ import {
   sameRect,
 } from "./clickjack";
 import type { MenuSide } from "../shared/messages";
+import { modalOf, topModal } from "./top-layer";
 
 export const MENU_WIDTH = 340;
 export const PROMPT_WIDTH = 360;
@@ -66,6 +69,8 @@ export class FrameHost {
   private stableRect: Rect = { left: 0, top: 0, width: 0, height: 0 };
   private tampered = false;
   private shown = false;
+  /** The modal dialog it lives in, null at the end of <html>. */
+  private dialog: HTMLDialogElement | null = null;
 
   constructor(private readonly options: HostOptions) {
     const { doc } = options;
@@ -95,15 +100,28 @@ export class FrameHost {
    *  prompt). */
   show(place: Place): void {
     this.place = place;
-    this.options.doc.documentElement.append(this.host);
+    this.dialog = this.home() ?? null;
+    (this.dialog ?? this.options.doc.documentElement).append(this.host);
     this.hostObserver.observe(this.host, { attributes: true });
-    this.placeObserver.observe(this.options.doc.documentElement, { childList: true });
+    this.placeObserver.observe(this.host.parentNode ?? this.options.doc.documentElement, {
+      childList: true,
+    });
     this.openPopover();
     this.shown = true;
     this.layout();
     // Shown now: the 300 ms start here, wherever it landed.
     this.stableRect = rectOf(this.host);
     this.stableSince = this.options.now();
+  }
+
+  /** The modal dialog it must live in: the one that holds a menu's field, the one the page is
+   *  inert under for a prompt; null for none; undefined for a menu whose field a modal dialog it
+   *  is not in leaves inert. */
+  private home(): HTMLDialogElement | null | undefined {
+    const top = topModal(this.options.doc);
+    if (this.place === "corner") return top;
+    const own = modalOf(this.place.anchor);
+    return top === null || top === own ? own : undefined;
   }
 
   /** The frame's content height, as it measured itself. */
@@ -162,9 +180,17 @@ export class FrameHost {
     }
   }
 
-  /** The page opened a top-layer element of its own: back on top, and the 300 ms start over. */
-  raise(): void {
-    if (!this.shown) return;
+  /** The page opened a top-layer element of its own, or opened or closed a dialog: back on top,
+   *  in the dialog it must live in now, and the 300 ms start over. False for a menu whose field a
+   *  dialog left inert, or that went with its dialog: it cannot stay, the caller closes it. */
+  raise(): boolean {
+    if (!this.shown) return true;
+    const home = this.home();
+    if (home === undefined) return false;
+    if (home !== this.dialog) {
+      if (this.place !== "corner") return false;
+      this.move(home);
+    }
     try {
       this.host.hidePopover();
     } catch {
@@ -172,6 +198,18 @@ export class FrameHost {
     }
     this.openPopover();
     this.stableSince = this.options.now();
+    return true;
+  }
+
+  /** Into `dialog` (null: the end of <html>): its own move, which the observer must not take for
+   *  the page's. */
+  private move(dialog: HTMLDialogElement | null): void {
+    this.placeObserver.disconnect();
+    this.dialog = dialog;
+    (dialog ?? this.options.doc.documentElement).append(this.host);
+    this.placeObserver.observe(this.host.parentNode ?? this.options.doc.documentElement, {
+      childList: true,
+    });
   }
 
   /** May a click at `point` (the frame's coordinates) count? */
@@ -194,13 +232,30 @@ export class FrameHost {
       },
       this.options.measurer ?? domMeasurer,
     );
-    return clickAllowed(facts);
+    const verdict = clickAllowed(facts);
+    // Too soon: the 300 ms start again, so that in a quick run of clicks (a page that opens the
+    // menu under them) none counts until the user has stopped for 300 ms.
+    if (!verdict.ok && verdict.reason === "too_soon") this.stableSince = this.options.now();
+    return verdict;
   }
 
-  remove(): void {
+  /** Take it down. `holdMs`: after a click in it that Lockra acted on, it first stays where it
+   *  was, see-through and empty (its page clears as its port closes), so that a second click (a
+   *  double click, a click again at once) lands in it rather than on the page under it. */
+  remove(holdMs = 0): void {
     this.shown = false;
     this.hostObserver.disconnect();
     this.placeObserver.disconnect();
+    if (holdMs > 0 && this.host.isConnected && this.drawn) {
+      const { left, top, width, height } = this.drawn;
+      this.style(left, top, width, height, true);
+      setTimeout(() => this.takeDown(), holdMs);
+      return;
+    }
+    this.takeDown();
+  }
+
+  private takeDown(): void {
     try {
       this.host.hidePopover();
     } catch {
@@ -217,14 +272,19 @@ export class FrameHost {
     }
   }
 
-  private style(left: number, top: number, width: number, height: number): void {
+  /** Where it was last drawn. */
+  private drawn: Rect | null = null;
+
+  /** `faded`: see-through, as it stays a moment after a click (`remove`). */
+  private style(left: number, top: number, width: number, height: number, faded = false): void {
+    this.drawn = { left, top, width, height };
     const win = this.options.doc.defaultView;
     const dark =
       typeof win?.matchMedia === "function" &&
       win.matchMedia("(prefers-color-scheme: dark)").matches;
     const look = LOOK[dark ? "dark" : "light"];
     // No height yet: a shadow around nothing would show as a line.
-    const shadow = height > 0 ? look.shadow : "none";
+    const shadow = height > 0 && !faded ? look.shadow : "none";
     const css = [
       "all: initial",
       "position: fixed",
@@ -243,7 +303,7 @@ export class FrameHost {
       "overflow: visible",
       "background: transparent",
       "z-index: 2147483647",
-      "opacity: 1",
+      `opacity: ${faded ? 0 : 1}`,
       "visibility: visible",
       "filter: none",
       "clip-path: none",
