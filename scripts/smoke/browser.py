@@ -13,7 +13,8 @@ on a sign-in in two pages (a real X key, which no WebDriver key reaches), the pa
 by itself as the fill's next step; the policy's limits (an
 HTTP page for an HTTPS login, a frame of another site); the pages that try to hijack a click (made
 transparent under the menu, covered by an element and by a popover opened after it, a frame of the
-menu's page of their own); two thousand fields; a sign-up form's generated password; the save and
+menu's page of their own); a sign-in in the page's modal dialog, whose menu takes a real click
+rather than the dialog's button under it; two thousand fields; a sign-up form's generated password; the save and
 the update prompts changing the app's logins, the save prompt taking the user name a password page
 shows as text; and locking the app locking the extension.
 Every wait is a condition with a deadline. The fixed pauses: the inline menu's own rule (a key or a
@@ -721,6 +722,28 @@ class Smoke:
             sys.exit("smoke: the page's own menu frame filled a login")
         print("smoke: the page's own frame of the menu filled nothing")
 
+    def dialog_menu(self):
+        """A sign-in in the page's modal dialog (the user's report, 2026-11-20): outside the
+        dialog the menu was inert, and a click on its login pressed the dialog's button under it.
+        The menu lives in the dialog: a real click on the login fills it, and the button under the
+        menu is not pressed, nor by the click that may come again at once (a double click)."""
+        self.room_to_fill()
+        self.web.go(self.url("login.test", "dialog.html"))
+        self.open_menu("#username")
+        if not self.web.run("return !!document.querySelector('#signin > [popover]:popover-open')"):
+            sys.exit(f"smoke: the menu is not in the page's modal dialog: {self.web.menu_debug()}")
+        left, top = self.web.run(
+            "const r = document.querySelector('[popover]:popover-open').getBoundingClientRect();"
+            "return [Math.round(r.left), Math.round(r.top)];"
+        )
+        # The first row: under the 36 px header, 52 px high (board 33); clicked twice, as a double
+        # click would.
+        self.web.click_at(left + 120, top + 62)
+        self.web.click_at(left + 120, top + 62)
+        until("the login filled from the menu in the dialog", lambda: self.web.values("#username", "#password") == [LOGIN_USER, LOGIN_PASSWORD], 30)
+        self.absent("a click on the menu pressed the dialog's button under it", lambda: self.web.run("return window.trapped") != 0)
+        print("smoke: in the page's modal dialog, a click on the menu's login filled it and pressed nothing under it")
+
     def many_fields(self):
         """Two thousand fields: the menu still comes within the content script's budget."""
         self.room_to_fill()
@@ -873,6 +896,7 @@ class Smoke:
             self.http_page()
             self.cross_site_frame()
             self.hijack_pages()
+            self.dialog_menu()
             self.many_fields()
             self.signup()
             self.save_prompt()

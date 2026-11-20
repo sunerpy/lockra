@@ -51,6 +51,9 @@ export interface AgentOptions {
 }
 
 const OBSERVE_EVERY_MS = 500;
+/** How long a frame Lockra closed after a click in it stays, see-through, where it was: a double
+ *  click's second click (Windows waits up to 500 ms for it) lands in it, not on the page. */
+const HOLD_MS = 500;
 const OTP_FOR_MS = 5 * 60_000;
 /** How long the password of a step that gave the user name alone is waited for. */
 const STEP_FOR_MS = 2 * 60_000;
@@ -201,12 +204,15 @@ export class ContentAgent {
     on(doc, "focusout", (event) => this.onFocusOut(event));
     on(doc, "keydown", (event) => this.onKey(event));
     // The page opening a popover, a dialog or full screen over the menu: the menu goes back on top.
+    // A dialog opened or closed also changes what of the page is inert: the frames go where they
+    // take clicks (top-layer.ts).
     on(doc, "toggle", (event) => {
       if (
         event.target !== this.menu?.host &&
         event.target !== this.prompt?.host &&
+        event.target !== this.icon.host &&
         "newState" in event &&
-        event.newState === "open"
+        (event.newState === "open" || event.target instanceof HTMLDialogElement)
       )
         this.raise();
     });
@@ -366,24 +372,26 @@ export class ContentAgent {
     });
     this.prompt = host;
     host.show("corner");
+    this.watch();
   }
 
-  private closeMenu(): void {
+  /** `hold`: Lockra closed it after a click in it, which may come again (a double click). */
+  private closeMenu(hold = false): void {
     const menu = this.menu;
     if (!menu) return;
     this.menu = null;
     this.anchor = null;
     this.engaged = false;
-    menu.remove();
+    menu.remove(hold ? HOLD_MS : 0);
     this.icon.hide();
     void this.send({ kind: "content.closed", token: menu.token });
   }
 
-  private closePrompt(): void {
+  private closePrompt(hold = false): void {
     const prompt = this.prompt;
     if (!prompt) return;
     this.prompt = null;
-    prompt.remove();
+    prompt.remove(hold ? HOLD_MS : 0);
     void this.send({ kind: "content.closed", token: prompt.token });
   }
 
@@ -429,15 +437,20 @@ export class ContentAgent {
     event.preventDefault();
     event.stopImmediatePropagation();
     if (key === "ArrowDown" || key === "ArrowUp") this.engaged = true;
-    // Enter fills: the same checks as a click, at the frame's middle.
-    const allowed = key === "Enter" ? this.menu.verify(null, true, null).ok : false;
-    void this.send({ kind: "content.key", token, key, allowed });
+    // Enter fills: the same checks as a click, at the frame's middle. Too soon after the menu
+    // showed or moved, it does nothing yet, and the menu stays.
+    const verdict = key === "Enter" ? this.menu.verify(null, true, null) : null;
+    if (verdict && !verdict.ok && verdict.reason === "too_soon") return;
+    void this.send({ kind: "content.key", token, key, allowed: verdict?.ok === true });
     if (key === "Escape") this.closeMenu();
   }
 
+  /** Back on top of what the page opened, in the dialog each must live in now; a menu whose field
+   *  the page's dialogs took away or left inert goes. */
   private raise(): void {
-    this.menu?.raise();
+    if (this.menu && !this.menu.raise()) this.closeMenu();
     this.prompt?.raise();
+    this.icon.raise();
   }
 
   private layout(): void {
@@ -470,8 +483,9 @@ export class ContentAgent {
         this.hostFor(message.token)?.resize(message.height);
         return Promise.resolve(null);
       case "frame.close": {
-        if (this.menu?.token === message.token) this.closeMenu();
-        if (this.prompt?.token === message.token) this.closePrompt();
+        const hold = message.hold === true;
+        if (this.menu?.token === message.token) this.closeMenu(hold);
+        if (this.prompt?.token === message.token) this.closePrompt(hold);
         return Promise.resolve(null);
       }
       case "frame.verify": {
@@ -572,9 +586,16 @@ export class ContentAgent {
     return true;
   }
 
-  /** What the observer still has to watch for. */
+  /** What the observer still has to watch for: a prompt too, which a dialog the page opens
+   *  would leave inert where it is. */
   private get watching(): boolean {
-    return this.watcher.watching || this.otpUntil > 0 || this.stepUntil > 0 || this.menu !== null;
+    return (
+      this.watcher.watching ||
+      this.otpUntil > 0 ||
+      this.stepUntil > 0 ||
+      this.menu !== null ||
+      this.prompt !== null
+    );
   }
 
   /** Observe the page while there is something to watch, at most every 500 ms. */

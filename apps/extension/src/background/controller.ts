@@ -573,7 +573,7 @@ export class Controller {
       this.move(frame, key === "ArrowDown" ? 1 : -1);
       return null;
     }
-    if (key !== "Enter") return null;
+    if (key !== "Enter" || frame.busy) return null;
     if (!allowed || frame.visible === false) return this.close(frame);
     const action: InlineAction | null =
       view.view === "list"
@@ -583,7 +583,13 @@ export class Controller {
           : view.view === "confirm"
             ? { type: "fill" }
             : null;
-    if (action) await this.perform(frame, action);
+    if (!action) return null;
+    frame.busy = true;
+    try {
+      await this.perform(frame, action);
+    } finally {
+      frame.busy = false;
+    }
     return null;
   }
 
@@ -705,11 +711,27 @@ export class Controller {
           await this.close(frame);
           return;
         }
-        if (!(await this.verify(frame, message.point, message.trusted))) {
-          await this.close(frame);
-          return;
+        // One action at a time: a second click (a double click) while the first is under way
+        // does nothing more.
+        if (frame.busy) return;
+        frame.busy = true;
+        try {
+          const verdict = await this.verify(frame, message.point, message.trusted);
+          // Too soon after the frame showed or moved: nothing yet, and it stays, so that the
+          // user's next click lands in it rather than on the page under it.
+          if (verdict === "too_soon") return;
+          if (verdict !== "ok") {
+            await this.close(frame);
+            return;
+          }
+          // Closed by what the click did, the frame stays a moment where it was (content/agent.ts):
+          // a double click's second click lands in it.
+          frame.held = message.point !== null;
+          await this.perform(frame, message.action);
+        } finally {
+          frame.busy = false;
+          frame.held = false;
         }
-        await this.perform(frame, message.action);
       }
     }
   }
@@ -744,12 +766,14 @@ export class Controller {
     port.postMessage({ kind: "view", view: frame.view, build: LOCKRA_BUILD });
   }
 
+  /** Whether a click counts, as the content script's checks say (content/clickjack.ts):
+   *  `too_soon`, the frame had not shown unmoved for 300 ms yet. */
   private async verify(
     frame: InlineFrame,
     point: { x: number; y: number } | null,
     trusted: boolean,
-  ): Promise<boolean> {
-    if (!trusted || frame.visible === false) return false;
+  ): Promise<"ok" | "too_soon" | "refused"> {
+    if (!trusted || frame.visible === false) return "refused";
     try {
       const answer = await this.send(frame.frame, {
         kind: "frame.verify",
@@ -758,9 +782,11 @@ export class Controller {
         trusted,
         visible: frame.visible,
       });
-      return typeof answer === "object" && answer !== null && "ok" in answer && answer.ok === true;
+      if (typeof answer !== "object" || answer === null) return "refused";
+      if ("ok" in answer && answer.ok === true) return "ok";
+      return "reason" in answer && answer.reason === "too_soon" ? "too_soon" : "refused";
     } catch {
-      return false;
+      return "refused";
     }
   }
 
@@ -775,7 +801,8 @@ export class Controller {
 
   private async close(frame: InlineFrame): Promise<null> {
     this.frames.close(frame.token);
-    await this.send(frame.frame, { kind: "frame.close", token: frame.token }).catch(
+    const hold = frame.held === true ? { hold: true as const } : {};
+    await this.send(frame.frame, { kind: "frame.close", token: frame.token, ...hold }).catch(
       () => undefined,
     );
     return null;
