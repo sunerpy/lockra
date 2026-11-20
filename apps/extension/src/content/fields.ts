@@ -59,7 +59,7 @@ const STEP_TEXT_MAX = 600;
 const NOT_SAID = new Set(["script", "style", "noscript", "template", "svg", "select", "textarea"]);
 /** The step says the code was sent: by mail, by text message, again on request. */
 const SENT_TEXT =
-  /\bsent\b|\btexted\b|\be-?mailed\b|\binbox\b|text message|\bsms\b|\bresend\b|didn['’]?t (?:get|receive)|did not (?:get|receive)|已发送|已发至|发送至|发送到|已发到|发往|收件箱|短信|重新发送|重发|没收到|收不到/i;
+  /\bsent\b|\btexted\b|\be-?mailed\b|\binbox\b|text message|\bsms\b|\bresend\b|check your (?:e-?mail|mail|phone|messages|texts)|didn['’]?t (?:get|receive)|did not (?:get|receive)|已发送|已发至|发送至|发送到|已发到|发往|发送了|已向|通过邮件|通过短信|邮件中|邮箱中|短信中|查收|收件箱|短信|重新发送|重发|没收到|收不到/i;
 /** Where it went, shown in part: an address (`j***@example.com`) or a number (`138****1234`,
  *  `***-1289`). An address shown whole is who signs in. */
 const SENT_TO =

@@ -407,6 +407,14 @@ describe("a code the page says it sent", () => {
       ["chinese", "<p>验证码已发送至您的邮箱</p>"],
       ["devices", "<p>A message with a verification code has been sent to your devices.</p>"],
       ["again", "<p>Didn't receive the code? Check your spam folder.</p>"],
+      ["check", "<p>Check your email for the code.</p>"],
+      ["cn-check", "<h1>请查收邮件</h1><p>请输入邮件中的验证码</p>"],
+      ["cn-box", "<p>请查看邮箱中的验证码</p>"],
+      ["cn-sent", "<p>我们已向您的邮箱发送了一封含有验证码的邮件</p>"],
+      ["cn-by", "<p>验证码已通过邮件发送</p>"],
+      // Where it went, shown in part, and nothing more.
+      ["to-address", "<p>Enter the code for j***@example.com</p>"],
+      ["to-phone", "<p>手机 138****1234</p>"],
     ];
     for (const [step, words] of steps) {
       page(

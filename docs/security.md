@@ -272,8 +272,8 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   the popup's last list of the site's logins (no secret) in `storage.session`, emptied as Lockra
   locks. A fill the user did not ask for at that moment happens only as the next step of one they
   did, decided by the app: the code of the login filled on the same site within five minutes
-  (`otp`), once, and never into a field whose page says it sent the code (by mail, by text
-  message), and, after a fill that put the user name in alone, that login's password once on a page
+  (`otp`), once (the extension asks for none in a field whose page says the site sent its code, by
+  mail or by text message), and, after a fill that put the user name in alone, that login's password once on a page
   of the same site within two minutes (`fill` with `"trigger": "next_step"`, named, never for a
   login of the `confirm` level, never in a frame of another site or over a downgrade to `http`,
   and never after a fill as the page loads). Its one optional API permission, `privacy`, is asked
