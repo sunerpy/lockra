@@ -27,7 +27,7 @@ function rect(left: number, top: number, width: number, height: number): DOMRect
     right: left + width,
     bottom: top + height,
   };
-  return { ...r, toJSON: () => r } as DOMRect;
+  return { ...r, toJSON: () => r };
 }
 
 /** A field 36 px high at (100, 300), 200 px wide. */
