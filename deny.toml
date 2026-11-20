@@ -111,6 +111,9 @@ ignore = [
   { id = "RUSTSEC-2026-0370", reason = "zvariant via zbus 5 (robius-authentication, keyring, single-instance); remove once they move to zbus 6" },
   { id = "RUSTSEC-2026-0371", reason = "zbus_names via zbus 5 (robius-authentication, keyring, single-instance); remove once they move to zbus 6" },
   { id = "RUSTSEC-2026-0372", reason = "zvariant_derive via zbus 5 (robius-authentication, keyring, single-instance); remove once they move to zbus 6" },
+  # chrono is unmaintained with no safe upgrade; keepass (the KeePass import and export) and rxing
+  # (QR codes) keep it for their dates.
+  { id = "RUSTSEC-2026-0543", reason = "chrono via keepass and rxing (lockra-transfer); remove once both move to a maintained date crate" },
 ]
 
 [sources]
