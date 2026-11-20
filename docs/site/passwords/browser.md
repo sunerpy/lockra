@@ -189,7 +189,7 @@ list keeps the logins that hold it; the arrow keys choose, Enter fills, Esc empt
 then closes the menu. What you type there stays in Lockra's menu: the page cannot read it. A long
 list scrolls, seven logins high.
 
-<StatusTag status="building" /> A sign-in in a dialog the page opens over itself: the menu opens
+<StatusTag status="available" /> From version 0.16.4, a sign-in in a dialog the page opens over itself: the menu opens
 in the dialog, and a click on a login fills it, where before the click could press the dialog's
 button under the menu instead. A click that comes too soon after the menu opened or moved does
 nothing yet, and the menu stays: click again once it has held still for a moment. After a click that filled, the menu's place takes
@@ -270,7 +270,9 @@ access.
 
 ### Once per fill, and not for a code the site sent
 
-<StatusTag status="building" /> The code goes in by itself once per fill. A page that asks for a
+<StatusTag status="available" /> Available from version 0.16.4.
+
+The code goes in by itself once per fill. A page that asks for a
 code again, because the site refused the code or wants another one, gets the menu with the site's
 logins that have a code instead, and a code goes in only when you choose it: a sign-in that keeps
 asking is not sent again and again until the site stops it.
