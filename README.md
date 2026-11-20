@@ -95,7 +95,9 @@ made-up site; a sharper version plays on the [website](https://firlab.app/lockra
   saved. From 0.16.3, `Alt Shift L` opens Lockra's menu on any field, a password page that only
   shows the user name gives it to the login saved there, a login saved without a user name gets it
   at the next sign-in, and a form that also asks for a code is left to you when the login has none
-  linked. Lockra decides every fill, and can keep running in the tray for it. Chrome, Edge and Brave load
+  linked. From 0.16.4, the menu works in a sign-in the page shows in a dialog, a login's code goes in
+  by itself once per fill, and never into a field for a code the site sent by mail or text message.
+  Lockra decides every fill, and can keep running in the tray for it. Chrome, Edge and Brave load
   it unpacked from the folder Lockra keeps it in, and Lockra updates it there with itself (from
   0.11.1); the Edge Add-ons and Firefox Add-ons listings, which Firefox needs,
   are not live yet ([extension guide](https://firlab.app/lockra/passwords/browser)).
