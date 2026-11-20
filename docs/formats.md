@@ -544,7 +544,9 @@ id>"` on the first message of a session's handshake. `hello` carries a plain JSO
   name nor an email address, instead of a new login), `fill` (one login's secrets; `trigger` says
   what asked: `shortcut`, `popup`, `inline_menu`, `page_load`, or `next_step`, the page asking for
   the password within two minutes of a fill the user asked for, once), `otp` (the code of a login
-  filled on this site in the last five minutes, for a later step; `submit` in the answer says
+  filled on this site in the last five minutes, for a later step, and from 0.16.4 once: a second
+  request for the same fill answers `no_match`, and a code the user asked for counts as the fill's;
+  `submit` in the answer says
   whether to send its form, absent before 0.10: not sent; with `trigger` `popup`, `inline_menu` or
   `shortcut`, from 0.12, the code of a login the user chose that is offered for the frame, in the
   page or a frame of its own site, without a fill before), `copy` (a part on the clipboard, written

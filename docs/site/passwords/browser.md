@@ -270,7 +270,7 @@ logins that have a code instead, and a code goes in only when you choose it: a s
 asking is not sent again and again until the site stops it.
 
 A code field whose page says the site sent the code, by mail or by text message ("Check your
-inbox", "We just sent a code to j\*\*\*@example.com", "We texted a code to \*\*\*-1289"), gets no
+inbox", "We sent a code to j\*\*\*@example.com", "We texted a code to \*\*\*-1289"), gets no
 code by itself, and its form is not submitted: that code is in your mail or messages, not in Lockra.
 Lockra's mark at the end of the field still opens the menu, should the page ask for the login's
 code after all. A page that names the authenticator app gets the code as before.
