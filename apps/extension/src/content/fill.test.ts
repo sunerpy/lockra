@@ -148,6 +148,33 @@ describe("filling a sign-in form", () => {
     await vi.waitFor(() => expect(submitted).toHaveBeenCalledTimes(1));
   });
 
+  it("puts the login's code in no field whose code the page says it sent, nor sends that form", async () => {
+    // OpenAI asks for a code it mailed where the authenticator's would go (2026-11-20).
+    document.body.innerHTML = `
+      <div><p>We sent a code to j***@example.com.</p>
+        <form id="f"><input id="user" autocomplete="username"><input type="password" id="pass"><input id="code" autocomplete="one-time-code"><button>Sign in</button></form>
+      </div>`;
+    const form = document.getElementById("f") as HTMLFormElement;
+    const submitted = vi.fn((event: Event) => event.preventDefault());
+    form.addEventListener("submit", submitted);
+    const values = { ...VALUES, otp: "123456", submit: true };
+    expect(fillForm(scanField(input("pass"), view), values, view)).toEqual({
+      filled: 2,
+      password: true,
+      code: false,
+    });
+    expect(input("code").value).toBe("");
+    // The user chose the login in the menu on that very field: its code goes there.
+    expect(fillForm(scanField(input("code"), view), values, view)).toMatchObject({ code: false });
+    expect(input("code").value).toBe("");
+    expect(fillForm(scanField(input("code"), view), values, view, { chosen: true })).toMatchObject({
+      code: true,
+    });
+    expect(input("code").value).toBe("123456");
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    expect(submitted).toHaveBeenCalledTimes(1);
+  });
+
   it("regression: a first step with the user name alone is filled but never submitted", () => {
     // 2026-10-16, the AWS console's root sign-in: its first page asks for the e-mail alone; sent
     // by Lockra, it answered 400. Only a step that took a password is sent.

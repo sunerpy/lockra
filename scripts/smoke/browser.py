@@ -7,7 +7,8 @@ the browser integration on; the browser (chromedriver or geckodriver) loads the 
 the extension, with site access granted up front (a copy whose manifest asks for <all_urls>
 outright: the request flow and its prompt are the unit tests' and the manual matrix's). Then:
 pairing, the code compared on both sides and approved in the app; the menu on a field the page
-focused itself as it loaded (`autofocus`); filling from the inline menu with the keyboard; the linked code on the next page, in one field and in six; the extension's shortcut
+focused itself as it loaded (`autofocus`); filling from the inline menu with the keyboard; the linked code on the next page, once per fill, in one field and in six, and
+none in a field for a code the page mailed; the extension's shortcut
 on a sign-in in two pages (a real X key, which no WebDriver key reaches), the password page filled
 by itself as the fill's next step; the policy's limits (an
 HTTP page for an HTTPS login, a frame of another site); the pages that try to hijack a click (made
@@ -503,11 +504,13 @@ class Smoke:
         until("the menu to hold still", still, 15, step=0)
 
     def otp_follows(self):
-        """Right after its login filled, the site's next page gets the linked code by itself: in
-        one field, and in six of one digit each."""
+        """Right after its login filled, the site's next page gets the linked code by itself, once
+        per fill: in one field, and after another fill in six of one digit each."""
+        self.room_to_fill(3)
         self.web.go(self.url("login.test", "otp.html"))
         value = until("the code filled on the next page", lambda: (lambda v: v if v and len(v) == 6 else None)(self.web.values("#code")[0]), 30)
         self.is_code(value)
+        self.fill_from_menu()
         self.web.go(self.url("login.test", "otp-split.html"))
         digits = [f"#d{i}" for i in range(1, 7)]
         value = until("the code filled digit by digit", lambda: (lambda v: "".join(v) if all(v) else None)(self.web.values(*digits)), 30)
@@ -518,7 +521,8 @@ class Smoke:
         """NDKEY's ADFS adapter (the user's report, 2026-10-20): the code field is a password field
         named OTP. Right after its login filled, the code still goes in by itself, and what the form
         sends is no password to save: the next page shows no prompt."""
-        self.room_to_fill()
+        self.room_to_fill(2)
+        self.fill_from_menu()
         self.web.go(self.url("login.test", "otp-masked.html"))
         value = until("the code filled into the masked field", lambda: (lambda v: v if v and len(v) == 6 else None)(self.web.values("#dynamicPassword")[0]), 30)
         self.is_code(value)
@@ -533,6 +537,34 @@ class Smoke:
             time.sleep(0.2)
         print("smoke: the code went into a field the page masks as a password, and nothing asked to save it")
 
+    def absent(self, what, came):
+        """The one bounded look for what must not come: `came()` stays false for two seconds."""
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            if came():
+                sys.exit(f"smoke: {what}")
+            time.sleep(0.2)
+
+    def otp_mailed(self):
+        """OpenAI's 「Check your inbox」 (the user's report, 2026-11-20): right after a fill, the
+        site asks for a code it mailed. Nothing goes in by itself and nothing is sent; the
+        authenticator's page after it gets the login's code, and the same page again (its code
+        refused) gets none by itself."""
+        self.room_to_fill(2)
+        self.fill_from_menu()
+        self.web.go(self.url("login.test", "otp-mail.html"))
+        self.web.wait("#code")
+        self.absent("the login's code went into a field for a code the site mailed", lambda: bool(self.web.values("#code")[0]))
+        if "otp-mail" not in self.web.run("return location.pathname"):
+            sys.exit("smoke: the page that asks for a mailed code was sent")
+        self.web.go(self.url("login.test", "otp.html"))
+        value = until("the code filled on the authenticator's page", lambda: (lambda v: v if v and len(v) == 6 else None)(self.web.values("#code")[0]), 30)
+        self.is_code(value)
+        self.web.go(self.url("login.test", "otp.html"))
+        self.web.wait("#code")
+        self.absent("the code went in by itself a second time", lambda: bool(self.web.values("#code")[0]))
+        print("smoke: a page that mailed its code got none of the login's; the authenticator's page after it got the code once")
+
     def switch_to_authenticator(self):
         """Google's way to its code (otp-switch.html): a prompt on the phone, 「Try another way」,
         the authenticator; its code field comes last, in the same page."""
@@ -544,6 +576,7 @@ class Smoke:
     def otp_after_switch(self):
         """Right after a login filled: the code still goes in by itself once the user switched to
         the authenticator."""
+        self.room_to_fill(2)
         self.fill_from_menu()
         self.switch_to_authenticator()
         value = until("the code filled after the switch", lambda: (lambda v: v if v and len(v) == 6 else None)(self.web.values("#totpPin")[0]), 30)
@@ -553,6 +586,7 @@ class Smoke:
     def otp_menu(self):
         """A tab where no login was filled: the code field's menu offers the site's login that has
         a code, and Enter puts its code in."""
+        self.room_to_fill()
         first = self.web.call("GET", self.web.s("/window"))
         tab = self.web.call("POST", self.web.s("/window/new"), {"type": "tab"})["handle"]
         self.web.call("POST", self.web.s("/window"), {"handle": tab})
@@ -576,6 +610,7 @@ class Smoke:
         """The extension's shortcut on a sign-in in two pages: the user name on the first; the next
         page asks for the password and gets it by itself, the next step of the fill the user asked
         for (not sent: the login has a code, and the policy sends nothing anyway)."""
+        self.room_to_fill(2)
         self.web.go(self.url("login.test", "two-step.html"))
         self.web.click(self.web.wait("#username"))
         if self.web.menu_open():
@@ -830,6 +865,7 @@ class Smoke:
             self.fill_from_menu()
             self.otp_follows()
             self.otp_masked()
+            self.otp_mailed()
             self.otp_after_switch()
             self.otp_menu()
             self.shortcut_two_steps()

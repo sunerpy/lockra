@@ -379,6 +379,101 @@ describe("one-time codes", () => {
   });
 });
 
+describe("a code the page says it sent", () => {
+  it("is told by what its step says: where the code went, by mail or by text", () => {
+    // OpenAI's sign-in when it sees a risk (the user's report, 2026-11-20): a mailed code in a field
+    // that names nothing but a code, under 「Check your inbox」; the login's authenticator code went
+    // in, was sent and refused, again and again, until the site stopped the sign-in.
+    page(`
+      <main>
+        <section>
+          <h1>Check your inbox</h1>
+          <p>Enter the verification code we just sent to j***@example.com</p>
+          <form>
+            <input id="mailed" name="code" autocomplete="one-time-code" maxlength="6">
+            <button type="submit">Continue</button>
+          </form>
+          <button type="button">Resend email</button>
+        </section>
+      </main>`);
+    const scan = scanField(input("mailed"), view);
+    expect([scan.kind, scan.sent]).toEqual(["otp", true]);
+    // A code field all the same, but none the login's code goes in by itself.
+    expect(findOtp(document, view)?.map((i) => i.id)).toEqual(["mailed"]);
+    expect(findOtp(document, view, { sent: false })).toBeNull();
+    const steps: [string, string][] = [
+      ["texted", "<p>We texted a code to (***) ***-1289.</p>"],
+      ["masked", "<p>请输入发往 138****1234 的验证码</p>"],
+      ["chinese", "<p>验证码已发送至您的邮箱</p>"],
+      ["devices", "<p>A message with a verification code has been sent to your devices.</p>"],
+      ["again", "<p>Didn't receive the code? Check your spam folder.</p>"],
+      ["check", "<p>Check your email for the code.</p>"],
+      ["cn-check", "<h1>请查收邮件</h1><p>请输入邮件中的验证码</p>"],
+      ["cn-box", "<p>请查看邮箱中的验证码</p>"],
+      ["cn-sent", "<p>我们已向您的邮箱发送了一封含有验证码的邮件</p>"],
+      ["cn-by", "<p>验证码已通过邮件发送</p>"],
+      // Where it went, shown in part, and nothing more.
+      ["to-address", "<p>Enter the code for j***@example.com</p>"],
+      ["to-phone", "<p>手机 138****1234</p>"],
+    ];
+    for (const [step, words] of steps) {
+      page(
+        `<div><h2>Verify</h2>${words}<form><input id="${step}" autocomplete="one-time-code"></form></div>`,
+      );
+      expect([step, scanField(input(step), view).sent]).toEqual([step, true]);
+    }
+    // One box per digit, under the same words.
+    page(`
+      <div><p>We emailed you a code.</p>
+        <div class="digits">${[1, 2, 3, 4, 5, 6].map((n) => `<input id="d${n}" maxlength="1">`).join("")}</div>
+      </div>`);
+    expect(scanField(input("d2"), view)).toMatchObject({ kind: "otp", sent: true });
+    expect(findOtp(document, view, { sent: false })).toBeNull();
+  });
+
+  it("is not one where the step names the authenticator, or says nothing of a sending", () => {
+    page(`
+      <div>
+        <h1>Verify your identity</h1>
+        <p>Enter the code from your authenticator app.</p>
+        <form><input id="totp" autocomplete="one-time-code"></form>
+        <a href="#">Send a code by SMS instead</a>
+      </div>`);
+    expect(scanField(input("totp"), view)).toMatchObject({ kind: "otp", sent: false });
+    expect(findOtp(document, view, { sent: false })?.map((i) => i.id)).toEqual(["totp"]);
+    page(`
+      <div><p>请输入身份验证器中的动态码</p><input id="cn" placeholder="验证码" maxlength="6">
+        <a href="#">收不到？改用短信验证</a></div>`);
+    expect(scanField(input("cn"), view).sent).toBe(false);
+    // AWS: 「type the authentication code below」, an MFA device's.
+    page(`
+      <div><p>Your account is secured using multi-factor authentication (MFA). Type the code below.</p>
+        <input id="mfa" name="mfaCode" maxlength="6"></div>`);
+    expect(scanField(input("mfa"), view).sent).toBe(false);
+    // The address the page signs in shows whole: who signs in, not where a code went.
+    page(
+      `<div><p>alice@example.com</p><p>Enter the 6-digit code.</p><input id="plain" autocomplete="one-time-code"></div>`,
+    );
+    expect(scanField(input("plain"), view).sent).toBe(false);
+  });
+
+  it("reads the step alone: no hidden words, not the rest of a long page", () => {
+    page(`
+      <div>
+        <p hidden>We sent a new code to your phone.</p>
+        <p>Enter your two-factor code.</p>
+        <input id="totp" autocomplete="one-time-code">
+      </div>`);
+    expect(scanField(input("totp"), view).sent).toBe(false);
+    page(`
+      <div id="page">
+        <div class="card"><p>Enter your two-factor code.</p><input id="far" autocomplete="one-time-code"></div>
+        <footer>${"Help and support. ".repeat(40)} We sent you an email about your account.</footer>
+      </div>`);
+    expect(scanField(input("far"), view).sent).toBe(false);
+  });
+});
+
 describe("what can be filled", () => {
   it("is a text-like input that is enabled and writable", () => {
     page(`

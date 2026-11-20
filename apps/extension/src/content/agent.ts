@@ -311,6 +311,9 @@ export class ContentAgent {
   private focusMessage(scan: FormScan, explicit: boolean): ContentMessage {
     const form: FocusKind = scan.kind === "none" ? "login" : scan.kind;
     const asked = explicit ? { explicit: true as const } : {};
+    // A code the page says it sent (by mail, by text message): the background fills none by itself.
+    if (form === "otp" && scan.sent === true)
+      return { kind: "content.focus", form, ...asked, sent: true };
     if (form !== "signup") return { kind: "content.focus", form, ...asked };
     return {
       kind: "content.focus",
@@ -503,10 +506,11 @@ export class ContentAgent {
     if (!scan) return { filled: 0, password: false, code: false };
     // A field Lockra cannot tell, chosen by the user (the menu shortcut opened the menu on it, the
     // fill shortcut was pressed in it): the user name goes there.
+    // The menu on the field: the user chose the login there, the code goes into its code field.
     const result =
       scan.kind === "none" && field
         ? fillChosen(field, values, view)
-        : fillForm(scan, values, view);
+        : fillForm(scan, values, view, { chosen: this.anchor !== null });
     if (result.filled > 0) this.fills += 1;
     const now = this.options.now();
     if (result.password) this.stepUntil = 0;
@@ -520,13 +524,17 @@ export class ContentAgent {
 
   /** The code into the page's code field, the focused one first. Asked for by the user
    *  (`asked`), it goes into the focused field where Lockra can tell no code field, though never
-   *  into a sign-in's password field (`takesAskedCode`). Whether it went in. */
+   *  into a sign-in's password field (`takesAskedCode`); not asked for, never into a field whose
+   *  code the page says it sent. Whether it went in. */
   private fillCode(code: string, submit: boolean, asked: boolean): boolean {
     const view = this.options.view;
     const active = deepActive(this.options.doc);
     const field = active instanceof HTMLInputElement && isFillable(active) ? active : null;
     const focused = field ? scanField(field, view) : null;
-    let fields = focused?.kind === "otp" ? focused.otp : findOtp(this.options.doc, view);
+    let fields =
+      focused?.kind === "otp" && (asked || focused.sent !== true)
+        ? focused.otp
+        : findOtp(this.options.doc, view, asked ? {} : { sent: false });
     if (!fields && asked && field && takesAskedCode(field, view)) fields = [field];
     const first = fields?.[0];
     const filled = fields !== null && first !== undefined && fillOtp(fields, code);
@@ -543,7 +551,9 @@ export class ContentAgent {
       this.otpUntil = 0;
       return false;
     }
-    if (!findOtp(this.options.doc, this.options.view)) return false;
+    // One the page says it sent (by mail, by text message) is the user's: the authenticator's
+    // may come after it.
+    if (!findOtp(this.options.doc, this.options.view, { sent: false })) return false;
     this.otpUntil = 0;
     void this.send({ kind: "content.otp" });
     return true;

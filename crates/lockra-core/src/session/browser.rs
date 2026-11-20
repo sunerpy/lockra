@@ -456,9 +456,11 @@ impl Core {
         Ok(answer)
     }
 
-    /// The code of a login filled on this site in the last few minutes, for a second sign-in step;
+    /// The code of a login filled on this site in the last few minutes, for a second sign-in step,
+    /// once: a page that asks again (the code refused, or one it sent by mail) waits for the user;
     /// or, where the user asked for a login's code (the popup, the menu, the shortcut), the code of
-    /// a login offered for the frame, in the page itself or a frame of its own site.
+    /// a login offered for the frame, in the page itself or a frame of its own site, which the
+    /// fill's next step then has had.
     pub fn browser_otp(&self, session: SessionId, request: OtpRequest) -> Result<OtpAnswer, Refusal> {
         let frame = Frame::of(&request.facts)?;
         let site = site_of(&frame.frame);
@@ -492,9 +494,11 @@ impl Core {
             let code = current_code(entry, now_ms);
             let (title, copy) = (item.title.clone(), policy.copy_otp);
             let submit = choose(&item.autofill.auto_submit, policy.auto_submit);
-            if !st.browser.sessions.get_mut(&session.0).is_some_and(|s| s.secret(&site, now)) {
+            let Some(state) = st.browser.sessions.get_mut(&session.0) else { return Err(Refusal::NotPaired) };
+            if !state.secret(&site, now) {
                 return Err(self.pause(st, session, &site));
             }
+            state.code_given(request.item_id, &site);
             let clear_after = if copy { self.copy_secret(st, &code)? } else { None };
             self.record(st, session, &site, ActivityEvent::OtpFilled, Some(request.item_id), Some(title));
             (OtpAnswer { code, copied: copy, submit }, clear_after)

@@ -225,7 +225,7 @@ export class Controller {
     const isTop = top && sender.frameId === 0;
     const answer: StartAnswer = {
       features: this.access,
-      otp: this.memory.filledItem(tabId) !== null && (this.policy?.fill_otp ?? true),
+      otp: this.memory.codeDue(tabId) !== null && (this.policy?.fill_otp ?? true),
       pageLoad:
         isTop && this.policy?.on_page_load === true && this.connection.view.session === "open",
       prompt: null,
@@ -248,7 +248,9 @@ export class Controller {
     const frame = await this.frameOf(sender);
     if (!frame) return none;
     if (message.form === "otp") {
-      if (await this.fillOtp(frame)) return none;
+      // A code the page says it sent (by mail, by text message) is not the login's: none goes in
+      // by itself, and the menu opens only from the field's mark.
+      if (message.sent !== true && (await this.fillOtp(frame))) return none;
       return this.codeMenu(frame, message);
     }
     // In-page help only with a session; the popup says what is missing otherwise.
@@ -367,12 +369,14 @@ export class Controller {
   }
 
   /** The code of the login just filled in this tab, into the frame's code field: whether Lockra
-   *  gave one (a login filled on this site in the last five minutes, its code linked). */
+   *  gave one (a login filled on this site in the last five minutes, its code linked). Once: a page
+   *  that asks again (its code refused, or one it sent by mail) gets the menu, as the app answers. */
   private async fillOtp(frame: TrustedFrame): Promise<boolean> {
-    const itemId = this.memory.filledItem(frame.tabId);
+    const itemId = this.memory.codeDue(frame.tabId);
     if (!itemId) return false;
     const outcome = await this.connection.request({ op: "otp", item_id: itemId, ...frame.facts });
     if (!outcome.ok) return false;
+    this.memory.codeGiven(frame.tabId);
     await this.send(frame, {
       kind: "fill.otp",
       code: outcome.value.code,
@@ -398,7 +402,8 @@ export class Controller {
     const items = answer.items.filter((item) => item.has_totp);
     if (items.length === 0) return none;
     if (answer.cross_origin && answer.policy.cross_origin_frames !== "ask") return none;
-    if (!(await this.opensNow(message))) return { token: null, mark: true };
+    const opens = message.sent === true ? message.explicit === true : await this.opensNow(message);
+    if (!opens) return { token: null, mark: true };
     const opened = this.frames.open({
       kind: "menu",
       frame,
@@ -632,6 +637,8 @@ export class Controller {
     }).catch(() => undefined);
     this.memory.rememberFill(frame.tabId, answer.item_id);
     const put = filledParts(result);
+    // The code went in with the fill: its next step has had it.
+    if (put.code) this.memory.codeGiven(frame.tabId);
     if (put.password) this.memory.dropStep(frame.tabId);
     else if (put.filled > 0 && options.continues !== false && !options.newPassword)
       this.memory.rememberStep(frame.tabId, answer.item_id);
@@ -1442,6 +1449,8 @@ export class Controller {
     }).catch(() => undefined);
     const filled =
       typeof answer === "object" && answer !== null && "code" in answer && answer.code === true;
+    // The code the tab's fill would have brought next: its step has had it (the app says so too).
+    if (filled) this.memory.codeGiven(facts.tabId);
     result(filled ? "done" : "no_code_field");
   }
 
@@ -1644,9 +1653,11 @@ function isSnapshot(value: unknown): value is { url: string; site: SiteView } {
 }
 
 /** What a content script says a fill put in; nothing when it says something else. */
-function filledParts(answer: unknown): { filled: number; password: boolean } {
-  if (typeof answer !== "object" || answer === null) return { filled: 0, password: false };
+function filledParts(answer: unknown): { filled: number; password: boolean; code: boolean } {
+  if (typeof answer !== "object" || answer === null)
+    return { filled: 0, password: false, code: false };
   const filled = "filled" in answer && typeof answer.filled === "number" ? answer.filled : 0;
   const password = "password" in answer && answer.password === true;
-  return { filled, password };
+  const code = "code" in answer && answer.code === true;
+  return { filled, password, code };
 }

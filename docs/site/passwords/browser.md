@@ -262,6 +262,19 @@ time set in **Settings › Security › Clear clipboard**. **Fill in codes** and
 either off ([What the extension may do](#what-the-extension-may-do)). The next page needs site
 access.
 
+### Once per fill, and not for a code the site sent
+
+<StatusTag status="building" /> The code goes in by itself once per fill. A page that asks for a
+code again, because the site refused the code or wants another one, gets the menu with the site's
+logins that have a code instead, and a code goes in only when you choose it: a sign-in that keeps
+asking is not sent again and again until the site stops it.
+
+A code field whose page says the site sent the code, by mail or by text message ("Check your
+inbox", "We sent a code to j\*\*\*@example.com", "We texted a code to \*\*\*-1289"), gets no
+code by itself, and its form is not submitted: that code is in your mail or messages, not in Lockra.
+Lockra's mark at the end of the field still opens the menu, should the page ask for the login's
+code after all. A page that names the authenticator app gets the code as before.
+
 ### A code field on its own
 
 <StatusTag status="available" /> From version 0.12.0, Lockra also recognises a code field named for
