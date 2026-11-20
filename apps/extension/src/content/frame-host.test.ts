@@ -35,7 +35,9 @@ function modalDialog(): { dialog: HTMLDialogElement; inside: HTMLInputElement } 
   const matches = dialog.matches.bind(dialog);
   Object.defineProperty(dialog, "matches", {
     value: (selectors: string) =>
-      selectors === ":modal" ? dialog.open && dialog.dataset.modal !== "no" : matches(selectors),
+      selectors === ":modal"
+        ? dialog.isConnected && dialog.open && dialog.dataset.modal !== "no"
+        : matches(selectors),
   });
   const inside = document.createElement("input");
   dialog.append(inside);
@@ -120,16 +122,16 @@ describe("FrameHost", () => {
   it("lives in the page's modal dialog that holds its field: outside it, the page is inert", () => {
     // 2026-11-20: outside the dialog the menu showed on top, and a click on it pressed the
     // dialog's button under it.
-    const { dialog, inside } = modalDialog();
-    const menu = host("menu");
-    menu.show({ anchor: inside });
-    expect(menu.host.parentElement).toBe(dialog);
-    menu.remove();
     // A field outside every modal dialog: at the end of the page, as before.
     const plain = host("menu");
     plain.show({ anchor: field(300) });
     expect(plain.host.parentElement).toBe(document.documentElement);
     plain.remove();
+    const { dialog, inside } = modalDialog();
+    const menu = host("menu");
+    menu.show({ anchor: inside });
+    expect(menu.host.parentElement).toBe(dialog);
+    menu.remove();
     // A prompt has no field: the dialog the page is inert under.
     const prompt = host("prompt");
     prompt.show("corner");
@@ -168,6 +170,23 @@ describe("FrameHost", () => {
     dialog.dataset.modal = "";
     expect(outside.raise()).toBe(false);
     outside.remove();
+  });
+
+  it("starts its 300 ms again at a click too soon: a quick run of clicks gets none counted", () => {
+    // A page that opens the menu under a run of clicks: every click comes too soon, and only one
+    // after the user stopped for 300 ms counts.
+    now = 0;
+    const menu = host("menu");
+    menu.show({ anchor: field(300) });
+    for (const at of [150, 300, 450]) {
+      now = at;
+      expect(menu.verify(null, true, null)).toEqual({ ok: false, reason: "too_soon" });
+    }
+    now = 749;
+    expect(menu.verify(null, true, null)).toEqual({ ok: false, reason: "too_soon" });
+    now = 1_049;
+    expect(menu.verify(null, true, null)).toMatchObject({ ok: false, reason: "covered" });
+    menu.remove();
   });
 
   it("counts the page taking it out of the dialog as tampering, not its own move", () => {

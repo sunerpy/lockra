@@ -232,7 +232,11 @@ export class FrameHost {
       },
       this.options.measurer ?? domMeasurer,
     );
-    return clickAllowed(facts);
+    const verdict = clickAllowed(facts);
+    // Too soon: the 300 ms start again, so that in a quick run of clicks (a page that opens the
+    // menu under them) none counts until the user has stopped for 300 ms.
+    if (!verdict.ok && verdict.reason === "too_soon") this.stableSince = this.options.now();
+    return verdict;
   }
 
   /** Take it down. `holdMs`: after a click in it that Lockra acted on, it first stays where it

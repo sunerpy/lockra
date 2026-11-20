@@ -103,7 +103,9 @@ function modalDialog(html: string): HTMLDialogElement {
   const matches = dialog.matches.bind(dialog);
   Object.defineProperty(dialog, "matches", {
     value: (selectors: string) =>
-      selectors === ":modal" ? dialog.open && dialog.dataset.modal !== "no" : matches(selectors),
+      selectors === ":modal"
+        ? dialog.isConnected && dialog.open && dialog.dataset.modal !== "no"
+        : matches(selectors),
   });
   document.body.append(dialog);
   return dialog;
@@ -524,6 +526,26 @@ describe("the inline menu", () => {
     expect(agent.menuHost).toBeNull();
     const prompt = Array.from(dialog.children).find((el) => el.hasAttribute("popover"));
     expect(prompt).toBeDefined();
+    agent.stop();
+  });
+
+  it("brings a prompt back to the end of the page when the page takes away its dialog", async () => {
+    // A framework that unmounts its dialog without closing it: the prompt in it went too.
+    const dialog = modalDialog(`<p>Signed in</p><input id="inside">`);
+    input("inside").focus();
+    const { agent, deliver } = setup();
+    await agent.start();
+    await deliver({ kind: "prompt.open", token: "p".repeat(32) });
+    const prompt = () =>
+      Array.from(document.querySelectorAll<HTMLElement>("[popover]")).find(
+        (el) => el.getAttribute("style")?.includes("width: 360px") ?? false,
+      );
+    expect(prompt()?.parentElement).toBe(dialog);
+    const host = prompt();
+    dialog.remove();
+    await vi.waitFor(() => expect(host?.parentElement).toBe(document.documentElement), {
+      timeout: 2_000,
+    });
     agent.stop();
   });
 

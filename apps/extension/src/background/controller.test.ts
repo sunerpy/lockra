@@ -334,6 +334,29 @@ describe("the inline menu", () => {
     await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "fill")).toBe(true));
   });
 
+  it("holds the frame only after a click: a key's fill closes it at once", async () => {
+    const context = await setup();
+    const { browser, contentGot } = context;
+    const answer = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
+      token: string;
+    };
+    const frame = inlineFrame(context, answer.token);
+    await vi.waitFor(() => expect(lastView(frame)?.view).toBe("list"));
+    // Enter, or a button the keyboard pressed: no point.
+    frame.send({
+      kind: "action",
+      action: { type: "choose", index: 0 },
+      point: null,
+      trusted: true,
+    });
+    await vi.waitFor(() =>
+      expect(contentGot.find((m) => m.kind === "frame.close")).toEqual({
+        kind: "frame.close",
+        token: answer.token,
+      }),
+    );
+  });
+
   it("takes one action at a time: a second click while the first is under way does nothing more", async () => {
     const context = await setup();
     const { browser, app, contentGot } = context;
@@ -439,6 +462,11 @@ describe("the inline menu", () => {
     });
     await vi.waitFor(() => expect(contentGot.some((m) => m.kind === "frame.close")).toBe(true));
     expect(app.requests.some((r) => r.op === "fill")).toBe(false);
+    // A refused click is not held: nothing of the frame stays over the page.
+    expect(contentGot.find((m) => m.kind === "frame.close")).toEqual({
+      kind: "frame.close",
+      token: answer.token,
+    });
     // A frame occluded by its own IntersectionObserver's account is refused too, whatever the page says.
     const again = (await browser.fromContent({ kind: "content.focus", form: "login" })) as {
       token: string;

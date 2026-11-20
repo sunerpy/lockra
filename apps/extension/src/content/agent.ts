@@ -627,6 +627,13 @@ export class ContentAgent {
     if (this.otpUntil > 0) this.lookForOtp();
     if (this.stepUntil > 0) this.lookForStep();
     if (this.menu && this.anchor && !this.anchor.isConnected) this.closeMenu();
+    // The page took away the dialog a frame lived in, without closing it (a framework that
+    // unmounts it): a prompt goes back to the end of the page, a menu goes with its field.
+    if (
+      (this.menu && !this.menu.host.isConnected) ||
+      (this.prompt && !this.prompt.host.isConnected)
+    )
+      this.raise();
     // A dialog the page opened (`open` set) may cover the menu. Nothing else does (popovers and full
     // screen have their own events), and raising it for nothing costs it Chrome's visibility check:
     // after, IntersectionObserver v2 kept the frame unseen and every Enter or click was refused.

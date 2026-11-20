@@ -10,7 +10,9 @@ function modalDialog(): HTMLDialogElement {
   const matches = dialog.matches.bind(dialog);
   Object.defineProperty(dialog, "matches", {
     value: (selectors: string) =>
-      selectors === ":modal" ? dialog.open && dialog.dataset.modal !== "no" : matches(selectors),
+      selectors === ":modal"
+        ? dialog.isConnected && dialog.open && dialog.dataset.modal !== "no"
+        : matches(selectors),
   });
   document.body.append(dialog);
   return dialog;

@@ -192,7 +192,7 @@ list scrolls, seven logins high.
 <StatusTag status="building" /> A sign-in in a dialog the page opens over itself: the menu opens
 in the dialog, and a click on a login fills it, where before the click could press the dialog's
 button under the menu instead. A click that comes too soon after the menu opened or moved does
-nothing yet, and the menu stays for the next one. After a click that filled, the menu's place takes
+nothing yet, and the menu stays: click again once it has held still for a moment. After a click that filled, the menu's place takes
 a second click for half a second (a double click), so it does not reach the page under it.
 
 Whichever way you fill, only the visible fields of the form you are in are filled, and the custom
