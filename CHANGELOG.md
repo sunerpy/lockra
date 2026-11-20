@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.4](https://github.com/sunerpy/lockra/compare/v0.16.3...v0.16.4) (2026-11-20)
+
+
+### Bug Fixes
+
+* **deps:** 更新 tokio、zip、rusqlite、rustix 等依赖，修复新的 RustSec 通报 ([#216](https://github.com/sunerpy/lockra/issues/216)) ([f442cb5](https://github.com/sunerpy/lockra/commit/f442cb5a4e5d6524785dc92c71476d751b3fe091))
+* **extension:** 每次填充只自动填一次验证码，不填网站通过邮件或短信发来的验证码 ([#214](https://github.com/sunerpy/lockra/issues/214)) ([2381aad](https://github.com/sunerpy/lockra/commit/2381aadaad42c5e0409ef901186fd5201ac45d95))
+* **extension:** 网页对话框中点选登录项正常填充，点击不再落到下方的按钮上 ([#215](https://github.com/sunerpy/lockra/issues/215)) ([a2fdf6a](https://github.com/sunerpy/lockra/commit/a2fdf6a76e494ce39284be718b4221b455a14959))
+
 ## [0.16.3](https://github.com/sunerpy/lockra/compare/v0.16.2...v0.16.3) (2026-10-22)
 
 
