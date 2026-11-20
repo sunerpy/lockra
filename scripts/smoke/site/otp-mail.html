@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Check your inbox · login.test</title>
+  </head>
+  <body>
+    <!-- OpenAI's sign-in when it sees a risk (the user's report, 2026-11-20): a code it mailed, in a
+         field that names nothing but a code. The login's authenticator code does not go here. -->
+    <main>
+      <h1>Check your inbox</h1>
+      <p>Enter the verification code we just sent to a***@login.test</p>
+      <form id="otp" action="/welcome.html" method="get">
+        <label
+          >Code
+          <input
+            id="code"
+            name="code"
+            autocomplete="one-time-code"
+            inputmode="numeric"
+            maxlength="6"
+        /></label>
+        <button id="submit" type="submit">Continue</button>
+      </form>
+      <button id="resend" type="button">Resend email</button>
+    </main>
+  </body>
+</html>

@@ -541,6 +541,8 @@ async fn a_fill_brings_the_linked_code_and_a_second_step_gets_it_for_five_minute
     assert_eq!(h.core.browser_otp(session, otp.clone()).unwrap().code.len(), 6);
     let elsewhere = OtpRequest { item_id: id, facts: facts("https://example.org/2fa"), ..OtpRequest::default() };
     assert_eq!(h.core.browser_otp(session, elsewhere), Err(Refusal::NoMatch));
+    // Another fill, whose next step comes too late.
+    h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
     // The user is at work meanwhile (a browser request never keeps the vault open by itself).
     advance(Duration::from_secs(4 * 60)).await;
     h.core.activity();
@@ -561,6 +563,35 @@ async fn a_fill_brings_the_linked_code_and_a_second_step_gets_it_for_five_minute
     let answer = h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
     assert!(answer.submit);
     assert_eq!(h.clipboard.current().as_deref(), Some("something else"), "not copied");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_second_step_gets_the_code_of_a_fill_once() {
+    let h = Harness::unlocked().await;
+    let (_, session) = paired(&h).await;
+    let entry = h.core.add_uri(&otpauth("OpenAI", "me", SECRET)).unwrap();
+    let id = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("OpenAI", "me@example.com", "https://openai.com/", Matching::Domain) }).unwrap();
+    h.core.browser_fill(session, fill_at("https://auth.openai.com/log-in")).await.unwrap();
+    let next = OtpRequest { item_id: id, facts: facts("https://auth.openai.com/email-verification"), ..OtpRequest::default() };
+    // A request from another site takes nothing from this one.
+    let elsewhere = OtpRequest { item_id: id, facts: facts("https://example.org/2fa"), ..OtpRequest::default() };
+    assert_eq!(h.core.browser_otp(session, elsewhere), Err(Refusal::NoMatch));
+    assert_eq!(h.core.browser_otp(session, next.clone()).unwrap().code.len(), 6);
+    // The page asks again (the code refused, or it wanted the one it sent by mail): not by itself.
+    assert_eq!(h.core.browser_otp(session, next.clone()), Err(Refusal::NoMatch), "once");
+    // The user still gets it, as often as they ask.
+    let asked = OtpRequest { trigger: Some(Trigger::InlineMenu), ..next.clone() };
+    for _ in 0..2 {
+        assert_eq!(h.core.browser_otp(session, asked.clone()).unwrap().code.len(), 6);
+    }
+    // The user's code counts as the step's: the next step does not get another by itself.
+    h.core.browser_fill(session, fill_at("https://auth.openai.com/log-in")).await.unwrap();
+    let popup = OtpRequest { trigger: Some(Trigger::Popup), ..next.clone() };
+    assert_eq!(h.core.browser_otp(session, popup).unwrap().code.len(), 6);
+    assert_eq!(h.core.browser_otp(session, next.clone()), Err(Refusal::NoMatch), "the user took it");
+    // A new fill gives its next step a code again.
+    h.core.browser_fill(session, fill_at("https://auth.openai.com/log-in")).await.unwrap();
+    assert_eq!(h.core.browser_otp(session, next).unwrap().code.len(), 6);
 }
 
 #[tokio::test(start_paused = true)]
@@ -763,13 +794,17 @@ async fn the_code_of_a_second_step_is_submitted_as_the_login_or_the_policy_says(
     let entry = h.core.add_uri(&otpauth("GitHub", "octocat", SECRET)).unwrap();
     let id = h.core.item_add(ItemDraft { totp_entry: Some(entry), ..login("GitHub", "octocat", "https://github.com/", Matching::Domain) }).unwrap();
     let otp = OtpRequest { item_id: id, facts: facts("https://github.com/sessions/two-factor"), ..OtpRequest::default() };
-    h.core.browser_fill(session, fill_at("https://github.com/login")).await.unwrap();
+    // Each fill's next step gets the code once.
+    let fill = || h.core.browser_fill(session, fill_at("https://github.com/login"));
+    fill().await.unwrap();
     assert!(!h.core.browser_otp(session, otp.clone()).unwrap().submit, "the policy does not submit by default");
     riskier(&h, |p| p.auto_submit = true).await;
+    fill().await.unwrap();
     assert!(h.core.browser_otp(session, otp.clone()).unwrap().submit);
     h.core
         .item_update(id, ItemPatch { autofill: Some(AutofillChoice { auto_submit: Tri::Off, ..AutofillChoice::default() }), ..ItemPatch::default() })
         .unwrap();
+    fill().await.unwrap();
     assert!(!h.core.browser_otp(session, otp).unwrap().submit, "the login's own choice wins");
 }
 

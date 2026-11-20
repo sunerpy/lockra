@@ -179,6 +179,11 @@ fn a_session_counts_its_requests_by_the_minute_and_its_sites_by_ten() {
     assert!(sites.filled_lately(Uuid::from_u128(1), "a.example", start + OTP_FOLLOW_UP - Duration::from_secs(1)));
     assert!(!sites.filled_lately(Uuid::from_u128(1), "a.example", start + OTP_FOLLOW_UP));
     assert!(!sites.filled_lately(Uuid::from_u128(1), "b.example", start));
+    // Its code went out: the fill's next step has had it, the other site's fill stays.
+    sites.filled(Uuid::from_u128(1), "b.example", start);
+    sites.code_given(Uuid::from_u128(1), "a.example");
+    assert!(!sites.filled_lately(Uuid::from_u128(1), "a.example", start));
+    assert!(sites.filled_lately(Uuid::from_u128(1), "b.example", start));
 }
 
 #[test]

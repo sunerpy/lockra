@@ -1,7 +1,9 @@
 // Which fields a form has (plan §四): the user name and password of a sign-in, the first step of a
 // sign-in in two (a lone user name field), sign-up forms (`autocomplete="new-password"`, a
 // confirmation field, `passwordrules`), and one-time-code fields: `autocomplete="one-time-code"`,
-// then a field named like a code with a code's length or a numeric keyboard, then one box per digit.
+// then a field named like a code with a code's length or a numeric keyboard, then one box per digit;
+// and of those, the codes the page says it sent (by mail, by text message), which are not the
+// login's authenticator code.
 // Only what the page shows counts (`View`); the content script reads no address and decides nothing
 // about what to fill: that is the app's, on the browser's facts.
 
@@ -26,6 +28,8 @@ export interface FormScan {
   newPasswords: HTMLInputElement[];
   /** The one-time-code field, or its boxes. */
   otp: HTMLInputElement[];
+  /** The page says it sent that code (by mail, by text message): not the authenticator's. */
+  sent?: boolean;
   /** The page's own password rules, for the generator. */
   rules: string | null;
   minlength: number | null;
@@ -48,6 +52,22 @@ const SENT_HINT = /sms|短信|手机验证码|text.?message|邮箱|邮件|e-?mai
 const CAPTCHA_IMAGE = /captcha|kaptcha|verif|vcode|validate|checkcode|piccode|imgcode|验证码/i;
 /** A control beside the field that sends a code. */
 const SEND_CODE = /获取|发送|重新发送|重发|send|resend|get.?code/i;
+/** The most text read as what a code's step says (its heading, the line that says where the code
+ *  went): a box around the field with more is the page, not the step. */
+const STEP_TEXT_MAX = 600;
+/** Elements whose text the step does not say to the user. */
+const NOT_SAID = new Set(["script", "style", "noscript", "template", "svg", "select", "textarea"]);
+/** The step says the code was sent: by mail, by text message, again on request. */
+const SENT_TEXT =
+  /\bsent\b|\btexted\b|\be-?mailed\b|\binbox\b|text message|\bsms\b|\bresend\b|didn['’]?t (?:get|receive)|did not (?:get|receive)|已发送|已发至|发送至|发送到|已发到|发往|收件箱|短信|重新发送|重发|没收到|收不到/i;
+/** Where it went, shown in part: an address (`j***@example.com`) or a number (`138****1234`,
+ *  `***-1289`). An address shown whole is who signs in. */
+const SENT_TO =
+  /[*•●]{2,}[^\s@]*@[\w-]+(?:\.[\w-]+)+|\d{2,4}[\s-]?[*•●]{3,}|[*•●]{3,}[\s-]?\d{2,4}/;
+/** The authenticator's own words in what the step says: it asks for that code, whatever else it
+ *  offers (a text message instead, a code by mail). */
+const AUTHENTICATOR_TEXT =
+  /authenticator|\btotp\b|authenticat\w* app|verification app|code generat|身份验证器|验证器|动态口令|令牌|google.?auth|\bauthy\b/i;
 
 function typeOf(input: HTMLInputElement): string {
   return (input.getAttribute("type") ?? "").toLowerCase();
@@ -251,6 +271,61 @@ function anotherCode(input: HTMLInputElement): boolean {
   );
 }
 
+/** Whether the page says it sent the code that goes in `input` (a field, or the first of its
+ *  boxes): what its step says names a sending (by mail, by text message, a code to send again) or
+ *  where it went, and not the authenticator; nor does the field itself. Such a field takes no
+ *  login's code by itself (OpenAI's 「Check your inbox」 took the authenticator's, again and again). */
+export function sentCode(input: HTMLInputElement, view: View): boolean {
+  if (AUTHENTICATOR_HINT.test(hints(input))) return false;
+  const text = stepText(input, view);
+  return !AUTHENTICATOR_TEXT.test(text) && (SENT_TEXT.test(text) || SENT_TO.test(text));
+}
+
+/** What the step a field belongs to says: the shown text of the largest box around it with at
+ *  most STEP_TEXT_MAX characters, the body too on a page that small. */
+function stepText(input: HTMLInputElement, view: View): string {
+  const doc = input.ownerDocument;
+  const visible = new Map<Element, boolean>();
+  let text = "";
+  for (let box = input.parentElement; box && box !== doc.documentElement; box = box.parentElement) {
+    const said = shownText(box, view, visible);
+    if (said === null) break;
+    text = said;
+  }
+  return text;
+}
+
+/** The text `root` shows (scripts, pictures and lists of choices left out), or null past
+ *  STEP_TEXT_MAX characters. `visible` keeps what the view said of each element. */
+function shownText(root: Element, view: View, visible: Map<Element, boolean>): string | null {
+  const walker = root.ownerDocument.createTreeWalker(
+    root,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+    {
+      acceptNode: (node) =>
+        node instanceof Element && NOT_SAID.has(node.localName)
+          ? NodeFilter.FILTER_REJECT
+          : NodeFilter.FILTER_ACCEPT,
+    },
+  );
+  let text = "";
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (!(node instanceof Text)) continue;
+    const said = node.data.trim();
+    const parent = node.parentElement;
+    if (said === "" || !parent) continue;
+    let shown = visible.get(parent);
+    if (shown === undefined) {
+      shown = view.visible(parent);
+      visible.set(parent, shown);
+    }
+    if (!shown) continue;
+    text += ` ${said}`;
+    if (text.length > STEP_TEXT_MAX) return null;
+  }
+  return text.trim();
+}
+
 /** The box a field sits in with its neighbours: its parent, or the one above when the parent holds
  *  the field alone; never a whole form or the page. */
 function neighbourhood(input: HTMLInputElement): Element | null {
@@ -408,9 +483,8 @@ export function scanField(field: HTMLInputElement, view: View): FormScan {
     maxlength: null,
   };
   if (typeOf(field) === "search") return base;
-  const group = otpGroup(field, view);
-  if (group) return { ...base, kind: "otp", otp: group };
-  if (looksOtp(field, view)) return { ...base, kind: "otp", otp: [field] };
+  const group = otpGroup(field, view) ?? (looksOtp(field, view) ? [field] : null);
+  if (group) return { ...base, kind: "otp", otp: group, sent: sentCode(group[0] ?? field, view) };
   // A code masked as a password is not one (NWCD's SSO: the MFA code after the password).
   const passwords = inputsOf(root, field).filter(
     (input) => isPassword(input) && view.visible(input) && !looksOtp(input, view),
@@ -450,13 +524,22 @@ export function findLoginForms(doc: Document, view: View): FormScan[] {
   return forms;
 }
 
-/** The one-time-code field (or boxes) the page, or one of its forms, shows first. */
-export function findOtp(root: Document | HTMLElement, view: View): HTMLInputElement[] | null {
+/** The one-time-code field (or boxes) the page, or one of its forms, shows first; with `sent:
+ *  false`, the first whose code the page does not say it sent (the one a login's code goes in by
+ *  itself). */
+export function findOtp(
+  root: Document | HTMLElement,
+  view: View,
+  options: { sent?: false } = {},
+): HTMLInputElement[] | null {
   const inputs = Array.from(root.querySelectorAll("input")).filter((input) => view.visible(input));
+  const passed = new Set<HTMLInputElement>();
   for (const input of inputs) {
-    const group = otpGroup(input, view);
-    if (group) return group;
-    if (looksOtp(input, view)) return [input];
+    if (passed.has(input)) continue;
+    const group = otpGroup(input, view) ?? (looksOtp(input, view) ? [input] : null);
+    if (!group) continue;
+    if (options.sent !== false || !sentCode(group[0] ?? input, view)) return group;
+    for (const box of group) passed.add(box);
   }
   return null;
 }

@@ -132,8 +132,15 @@ export interface FillResult {
  *  password, and its code too when it has one (the user's rule, 2026-10-16: a login with a code
  *  signs in at its code's step). A first step that asks for the user name alone is never sent:
  *  the user goes on (the AWS console's root sign-in answered 400); nor is a form whose code field
- *  the fill left empty. */
-export function fillForm(scan: FormScan, values: FillValues, view: View): FillResult {
+ *  the fill left empty. The login's code goes into the page's first code field that is not one
+ *  the page says it sent (by mail, by text message), or, `chosen` (the user chose the login in the
+ *  menu on the scanned code field), into that field. */
+export function fillForm(
+  scan: FormScan,
+  values: FillValues,
+  view: View,
+  options: { chosen?: boolean } = {},
+): FillResult {
   let filled = 0;
   let password = false;
   let code = false;
@@ -154,7 +161,10 @@ export function fillForm(scan: FormScan, values: FillValues, view: View): FillRe
     put(named, value);
   }
   if (values.otp) {
-    const otp = findOtp(scan.root.ownerDocument, view);
+    const otp =
+      scan.kind === "otp" && (options.chosen === true || scan.sent !== true)
+        ? scan.otp
+        : findOtp(scan.root.ownerDocument, view, { sent: false });
     if (otp && fillOtp(otp, values.otp)) {
       filled += otp.length;
       code = true;

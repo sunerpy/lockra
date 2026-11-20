@@ -38,7 +38,7 @@ pub const FILLS_PER_MINUTE: usize = 10;
 pub const QUERIES_PER_MINUTE: usize = 120;
 /// The most sites one session gets secrets for in ten minutes.
 pub const SITES_PER_TEN_MINUTES: usize = 20;
-/// How long after a fill the linked code is given for the same site (a sign-in in two steps).
+/// How long after a fill the linked code is given for the same site (a sign-in in two steps), once.
 pub const OTP_FOLLOW_UP: Duration = Duration::from_secs(5 * 60);
 /// How long after a fill the user asked for its sign-in's next step may get the password, once: a
 /// first step that took the user name alone, then the page that asks for the password.
@@ -949,7 +949,7 @@ pub(crate) struct SessionState {
     pub secrets: VecDeque<Instant>,
     /// The sites it got secrets for, the last ten minutes.
     pub sites: VecDeque<(Instant, String)>,
-    /// The logins it filled, with the site and when: a second step may get their codes.
+    /// The logins it filled, with the site and when: a second step may get their codes, once.
     pub filled: Vec<(Uuid, String, Instant)>,
     /// The fills the user asked for, with the site and when: their next step may get the
     /// password, once.
@@ -990,6 +990,12 @@ impl SessionState {
     /// `item` was filled on `site` in the last [`OTP_FOLLOW_UP`].
     pub(crate) fn filled_lately(&self, item: Uuid, site: &str, now: Instant) -> bool {
         self.filled.iter().any(|(id, s, at)| *id == item && s == site && now.duration_since(*at) < OTP_FOLLOW_UP)
+    }
+
+    /// `item`'s code went out for `site`: the fill's next step has had it, and a page that asks
+    /// again (its code refused, or a code it sent by mail in the field) gets none by itself.
+    pub(crate) fn code_given(&mut self, item: Uuid, site: &str) {
+        self.filled.retain(|(id, s, _)| !(*id == item && s == site));
     }
 
     /// The user asked for `item` on `site` at `now`: its next step may come.

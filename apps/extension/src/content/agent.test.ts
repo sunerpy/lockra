@@ -649,6 +649,44 @@ describe("the page's own work", () => {
     agent.stop();
   });
 
+  it("leaves a code the page says it sent to the user, and watches for the authenticator's", async () => {
+    // OpenAI's 「Check your inbox」 after a fill (the user's report, 2026-11-20): the login's code
+    // went in, was sent and refused, again and again, until the site stopped the sign-in.
+    document.body.innerHTML = `
+      <section><h1>Check your inbox</h1><p>Enter the verification code we just sent to j***@example.com</p>
+        <form><input id="mailed" name="code" autocomplete="one-time-code"><button>Continue</button></form></section>`;
+    const { agent, sent, deliver } = setup({ otp: true }, null);
+    await agent.start();
+    // Its focus says which code it is; the background decides.
+    input("mailed").focus();
+    await vi.waitFor(() =>
+      expect(sent.find((m) => m.kind === "content.focus")).toEqual({
+        kind: "content.focus",
+        form: "otp",
+        sent: true,
+      }),
+    );
+    // A code the background sends by itself goes nowhere; one the user asks for goes in.
+    expect(await deliver({ kind: "fill.otp", code: "123456", submit: true })).toEqual({
+      code: false,
+    });
+    expect(input("mailed").value).toBe("");
+    expect(await deliver({ kind: "fill.otp", code: "123456", focused: true })).toEqual({
+      code: true,
+    });
+    expect(input("mailed").value).toBe("123456");
+    agent.stop();
+    // Not asked for as it shows: the authenticator's step may come after it on the same page.
+    document.body.innerHTML = `<div><p>We emailed you a code.</p><form><input id="mailed" name="code" autocomplete="one-time-code"></form></div>`;
+    const next = setup({ otp: true }, null);
+    await next.agent.start();
+    expect(next.sent.some((m) => m.kind === "content.otp")).toBe(false);
+    document.body.innerHTML = `<div><p>Enter the code from your authenticator app.</p><form><input id="totp" autocomplete="one-time-code"></form></div>`;
+    await vi.waitFor(() => expect(next.sent.some((m) => m.kind === "content.otp")).toBe(true), {
+      timeout: 2_000,
+    });
+  });
+
   it("watches the same page for the next step: the password after the user name, the code after the password", async () => {
     // A sign-in that changes the page without loading another (2026-10-16).
     document.body.innerHTML = `<form id="step"><input id="email" type="email" autocomplete="username"><button>Next</button></form>`;

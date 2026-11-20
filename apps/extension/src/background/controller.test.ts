@@ -933,6 +933,16 @@ describe("the code of a second step", () => {
       code: "654321",
       submit: false,
     });
+    // Once: a page that asks again (its code refused, a code it mailed) gets none by itself.
+    const asked = app.requests.filter((r) => r.op === "otp").length;
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      otp: false,
+    });
+    await browser.fromContent({ kind: "content.otp" });
+    expect(app.requests.filter((r) => r.op === "otp")).toHaveLength(asked);
+    expect(contentGot.filter((m) => m.kind === "fill.otp")).toHaveLength(1);
+    // Another fill, another code for its next step.
+    await fillFromMenu(context);
     app.handlers.otp = () => ({ code: "123456", copied: false, submit: true });
     await browser.fromContent({ kind: "content.otp" });
     await vi.waitFor(() =>
@@ -943,10 +953,50 @@ describe("the code of a second step", () => {
       }),
     );
     // Five minutes on, nothing is asked any more.
+    await fillFromMenu(context);
     context.clock.advance(5 * 60_000);
     expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
       otp: false,
     });
+  });
+
+  it("is spent once it went in with the fill", async () => {
+    const context = await setup();
+    const { browser, app, filled } = context;
+    app.handlers.otp = () => ({ code: "654321", copied: false });
+    // A page with the code field beside the password: the fill put the code in.
+    filled.value = { filled: 3, password: true, code: true };
+    await fillFromMenu(context);
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      otp: false,
+    });
+    await browser.fromContent({ kind: "content.otp" });
+    expect(app.requests.some((r) => r.op === "otp")).toBe(false);
+  });
+
+  it("is never filled by itself into a field whose code the page says it sent: the mark, and the menu from it", async () => {
+    // OpenAI's 「Check your inbox」 after the user name's fill (the user's report, 2026-11-20).
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    app.handlers.otp = () => ({ code: "654321", copied: false, submit: true });
+    await fillFromMenu(context);
+    expect(await browser.fromContent({ kind: "content.focus", form: "otp", sent: true })).toEqual({
+      token: null,
+      mark: true,
+    });
+    expect(app.requests.some((r) => r.op === "otp")).toBe(false);
+    expect(contentGot.some((m) => m.kind === "fill.otp")).toBe(false);
+    // The user clicked the mark: the site's logins that have a code, as for any code field.
+    const answer = (await browser.fromContent({
+      kind: "content.focus",
+      form: "otp",
+      sent: true,
+      explicit: true,
+    })) as { token: string | null };
+    expect(answer.token).toMatch(/^[0-9a-f]{32}$/);
+    const frame = inlineFrame(context, answer.token ?? "");
+    await vi.waitFor(() => expect(lastView(frame)).toMatchObject({ view: "list", code: true }));
+    expect(app.requests.some((r) => r.op === "otp")).toBe(false);
   });
 });
 
@@ -1170,8 +1220,18 @@ describe("a code field", () => {
     expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
       nextStep: false,
     });
-    // Filled lately: the code goes in by itself, no menu.
+    // The chosen login's code went in: the field asks again (the code refused), the menu again,
+    // no code by itself.
     app.handlers.otp = () => ({ code: "111222", copied: false });
+    const again = (await browser.fromContent({ kind: "content.focus", form: "otp" })) as {
+      token: string | null;
+    };
+    expect(again.token).toMatch(/^[0-9a-f]{32}$/);
+    expect(app.requests.some((r) => r.op === "otp")).toBe(false);
+    // A fill whose code did not go in (no code field on its page): the next step's code goes in
+    // by itself, no menu.
+    filled.value = { filled: 2, password: true, code: false };
+    await fillFromMenu(context);
     expect(await browser.fromContent({ kind: "content.focus", form: "otp" })).toEqual({
       token: null,
     });
@@ -1450,6 +1510,28 @@ describe("the popup", () => {
     await vi.waitFor(() =>
       expect(app.requests.at(-1)).toMatchObject({ op: "fill", allow_http: true }),
     );
+  });
+
+  it("puts in the code a fill's next step would have had: none comes by itself after it", async () => {
+    const context = await setup();
+    const { browser, app, contentGot } = context;
+    browser.probes.set(0, { focused: false, editable: true, framed: false });
+    app.handlers.otp = () => ({ code: "135790", copied: false, submit: false });
+    await fillFromMenu(context);
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      otp: true,
+    });
+    const { port, states, events } = popup(context);
+    port.send({ kind: "hello" });
+    await vi.waitFor(() => expect(states().at(-1)?.site?.items).toHaveLength(2));
+    port.send({ kind: "fill_code", itemId: ITEM });
+    await vi.waitFor(() =>
+      expect(events().some((e) => e.kind === "result" && e.outcome === "done")).toBe(true),
+    );
+    expect(contentGot.filter((m) => m.kind === "fill.otp")).toHaveLength(1);
+    expect(await browser.fromContent({ kind: "content.start", top: true })).toMatchObject({
+      otp: false,
+    });
   });
 
   it("fills a login's code into the page where the user asks, or says the page has no field for it", async () => {

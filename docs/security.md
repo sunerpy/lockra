@@ -237,9 +237,9 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   user set that rule to ask, and then Lockra asks; an `https` login on an `http` page only once the
   user agreed in the page; a `no_extension` login never; a `confirm` login only after the master
   password or the biometric check in Lockra (and copying its password from the popup the same); a
-  linked code for a second step only on the site just filled, for five minutes, or, where the user
-  asks for a login's code in the popup, the code of a login offered for the frame, in the page or
-  a frame of its own site. The sign-up menu's
+  linked code for a second step only on the site just filled, for five minutes, once (a page that
+  asks again gets it only from the user), or, where the user asks for a login's code in the popup
+  or the menu, the code of a login offered for the frame, in the page or a frame of its own site. The sign-up menu's
   copy (`copy_generated`) puts on the clipboard only a password of the generator's history made
   for the frame's site, with the hints and the clearing a login's password gets, so the extension
   cannot have the app write anything else there.
@@ -272,7 +272,8 @@ Password management's browser extension (since 0.10.0) is a thin client: it keep
   the popup's last list of the site's logins (no secret) in `storage.session`, emptied as Lockra
   locks. A fill the user did not ask for at that moment happens only as the next step of one they
   did, decided by the app: the code of the login filled on the same site within five minutes
-  (`otp`), and, after a fill that put the user name in alone, that login's password once on a page
+  (`otp`), once, and never into a field whose page says it sent the code (by mail, by text
+  message), and, after a fill that put the user name in alone, that login's password once on a page
   of the same site within two minutes (`fill` with `"trigger": "next_step"`, named, never for a
   login of the `confirm` level, never in a frame of another site or over a downgrade to `http`,
   and never after a fill as the page loads). Its one optional API permission, `privacy`, is asked

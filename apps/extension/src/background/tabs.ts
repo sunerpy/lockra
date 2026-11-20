@@ -1,5 +1,5 @@
 // What the background remembers per tab, in memory only and for minutes: the user name of a
-// sign-in's first step, the login just filled (for the code of a second step), a login whose step
+// sign-in's first step, the login just filled (for the code of a second step, once), a login whose step
 // took the user name alone (its password comes next), a submitted form waiting for the user's
 // answer to the save prompt, a sign-up form's generated password, and the shortcut's round of
 // accounts. The background forgets it all when the tab closes, as Lockra locks, and when it
@@ -50,6 +50,8 @@ interface Kept<T> {
 export class TabMemory {
   private readonly usernames = new Map<number, Kept<string>>();
   private readonly fills = new Map<number, Kept<string>>();
+  /** The tabs whose fill's next step has had its code. */
+  private readonly codesGiven = new Set<number>();
   private readonly steps = new Map<number, Kept<string>>();
   private readonly submissions = new Map<number, Kept<Submission>>();
   private readonly generated = new Map<number, Kept<Generated>>();
@@ -81,10 +83,22 @@ export class TabMemory {
 
   rememberFill(tabId: number, itemId: string): void {
     this.fills.set(tabId, { value: itemId, at: this.clock.now() });
+    this.codesGiven.delete(tabId);
   }
 
   filledItem(tabId: number): string | null {
     return this.fresh(this.fills, tabId);
+  }
+
+  /** The login filled in this tab whose code its next step has not had yet. */
+  codeDue(tabId: number): string | null {
+    return this.codesGiven.has(tabId) ? null : this.filledItem(tabId);
+  }
+
+  /** The code of this tab's fill went in (with the fill, by itself, or as the user asked): a page
+   *  that asks for a code again gets none by itself. */
+  codeGiven(tabId: number): void {
+    this.codesGiven.add(tabId);
   }
 
   /** A step filled `itemId`'s user name alone in this tab: its password comes next. */
@@ -150,6 +164,7 @@ export class TabMemory {
   forget(tabId: number): void {
     this.usernames.delete(tabId);
     this.fills.delete(tabId);
+    this.codesGiven.delete(tabId);
     this.steps.delete(tabId);
     this.submissions.delete(tabId);
     this.generated.delete(tabId);
@@ -159,6 +174,7 @@ export class TabMemory {
   clear(): void {
     this.usernames.clear();
     this.fills.clear();
+    this.codesGiven.clear();
     this.steps.clear();
     this.submissions.clear();
     this.generated.clear();

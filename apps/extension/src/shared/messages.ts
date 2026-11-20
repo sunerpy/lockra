@@ -20,11 +20,13 @@ export type ContentMessage =
   /** The content script started in a frame: is anything waiting for this tab? */
   | { kind: "content.start"; top: boolean }
   /** A field the user focused: offer the inline menu. `explicit`: the user clicked the field's
-   *  Lockra mark, so the menu opens whatever opens it on focus. */
+   *  Lockra mark, so the menu opens whatever opens it on focus. `sent`: a code field whose code the
+   *  page says it sent (by mail, by text message), not the authenticator's. */
   | {
       kind: "content.focus";
       form: FocusKind;
       explicit?: true;
+      sent?: true;
       /** Sign-up forms: the page's rules for the generator, and the user name typed. */
       signup?: {
         rules: string | null;
