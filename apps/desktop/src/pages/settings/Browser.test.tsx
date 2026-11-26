@@ -148,7 +148,11 @@ describe("Settings › 浏览器", () => {
     expect(folder.getByTestId("extension-folder-state")).toHaveTextContent(
       `Lockra ${MOCK_APP_VERSION} 附带的扩展`,
     );
-    expect(pane.getByTestId("extension-folder-steps")).toHaveTextContent("加载已解压的扩展程序");
+    const steps = pane.getByTestId("extension-folder-steps");
+    expect(steps).toHaveTextContent("加载已解压的扩展程序");
+    expect(steps).toHaveTextContent("在对话框里粘贴");
+    // The keys of macOS's dialog, on macOS alone.
+    expect(steps).not.toHaveTextContent("⇧⌘G");
     await user.click(folder.getByRole("button", { name: "复制路径" }));
     expect(backend.extensionCopies).toBe(1);
     expect(await folder.findByRole("button", { name: "已复制" })).toBeInTheDocument();
@@ -161,6 +165,24 @@ describe("Settings › 浏览器", () => {
     await user.click(download.getByRole("button", { name: "下载扩展安装包" }));
     expect(backend.extensionDownloads).toBe(1);
     expect(download.queryByTestId("extension-download-address")).not.toBeInTheDocument();
+  });
+
+  it("on macOS, says how to reach the folder that the browser's dialog does not show", async () => {
+    const backend = core({ platform: "macos", settings: { run_in_background: true } });
+    await backend.browserEnable(["chrome"]);
+    const { user } = renderApp({ backend });
+    await ready();
+    const pane = await openBrowser(user);
+    const steps = await pane.findByTestId("extension-folder-steps");
+    expect(steps).toHaveTextContent("加载已解压的扩展程序");
+    // The folder is under ~/Library, which macOS's dialog hides: its Go to Folder keys, or a drag
+    // from the Finder window that 打开文件夹 opens.
+    expect(steps).toHaveTextContent("不显示「资源库」文件夹");
+    expect(steps).toHaveTextContent("按 ⇧⌘G，粘贴路径");
+    expect(steps).toHaveTextContent("把访达中选中的 extension 文件夹拖进对话框");
+    // Either way the dialog has only gone to the folder: its button loads it.
+    expect(steps).toHaveTextContent("最后点「选择」");
+    expect(steps).not.toHaveTextContent("在对话框里粘贴");
   });
 
   it("shows the package's address when no browser opened it, and offers it without a folder too", async () => {

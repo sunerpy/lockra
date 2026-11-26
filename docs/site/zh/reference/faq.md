@@ -38,6 +38,10 @@ Android 版应用禁止截取导出二维码。请用另一部手机或相机拍
 
 与登录项一起保存在每台设备的一个加密文件中。详见[隐私](/zh/privacy)和[更新、卸载与数据](/zh/guide/updates#文件位置)。
 
+## 在 macOS 上，「加载已解压的扩展程序」的对话框中找不到扩展文件夹
+
+Lockra 把扩展放在 `~/Library/Application Support/Lockra/browser/extension`，macOS 的对话框不显示其中的「资源库」（`Library`）文件夹。请在「设置 › 浏览器 › 扩展文件夹」中点击「复制路径」，在对话框中按 `⌘ Shift G`，粘贴路径后按 `Return` 键；也可以在同一处点击「打开文件夹」，把访达中选中的 `extension` 文件夹拖到对话框中。最后点击「选择」（[安装扩展](/zh/passwords/browser#安装扩展)）。
+
 ## 浏览器扩展提示 Lockra 没有运行
 
 扩展需要同一台电脑上的 Lockra 正在运行。请在扩展的弹窗中选择「启动 Lockra」，并开启「设置 › 浏览器 › 关闭窗口后继续运行」，这样关闭 Lockra 的窗口后，它会留在托盘中（[后台运行](/zh/passwords/browser#后台运行)）。

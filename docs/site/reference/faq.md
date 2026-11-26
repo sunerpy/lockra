@@ -56,6 +56,14 @@ before.
 In one encrypted file on each device, with your logins. See [Privacy](/privacy) and
 [Updates, uninstalling and your data](/guide/updates#where-the-files-are).
 
+## On macOS, the Load unpacked dialog does not show the extension folder
+
+Lockra keeps the extension in `~/Library/Application Support/Lockra/browser/extension`, and the
+macOS dialog does not show the Library folder. Choose **Copy path** in **Settings › Browser ›
+Extension folder**, press `⌘ Shift G` in the dialog, paste the path and press `Return`. Or choose
+**Open folder** there and drag the `extension` folder that Finder shows into the dialog. Then
+choose **Select** ([Installing the extension](/passwords/browser#installing-the-extension)).
+
 ## The browser extension says Lockra is not running
 
 The extension needs Lockra running on the same computer. Choose **Start Lockra** in its popup, and

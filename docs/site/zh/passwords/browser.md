@@ -33,7 +33,7 @@
    | Linux   | `~/.local/share/Lockra/browser/extension`                |
 
 2. 打开浏览器的扩展页面（`chrome://extensions`、`edge://extensions` 或 `brave://extensions`），开启「开发者模式」，并保持开启：关闭后，以解压方式加载的扩展在重新载入时会被浏览器停用。
-3. 选择「加载已解压的扩展程序」，选中这个文件夹：可以在对话框中粘贴复制的路径。
+3. 选择「加载已解压的扩展程序」，选中这个文件夹：可以在对话框中粘贴复制的路径。在 macOS 上，对话框不显示路径中的「资源库」文件夹：请在对话框中按 `⌘ Shift G`，粘贴路径后按 `Return` 键；也可以在 Lockra 中点击「打开文件夹」，把访达中选中的 `extension` 文件夹拖到对话框中。最后点击「选择」。
 
 扩展的卡片上显示的 ID 是 `flgfdomeabdfbebfjonaocddjcamgblk`，与 Edge 加载项将要发布的扩展相同；Lockra 不与其他 Chromium 扩展连接。以前从发布包加载过扩展的，同样加载 Lockra 的文件夹即可：ID 相同，它会替换原来的扩展，配对保留。
 
