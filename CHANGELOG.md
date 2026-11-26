@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.5](https://github.com/sunerpy/lockra/compare/v0.16.4...v0.16.5) (2026-11-26)
+
+
+### Bug Fixes
+
+* **deps:** 更新 url 和 cookie，修复新的 RustSec 通报 ([#220](https://github.com/sunerpy/lockra/issues/220)) ([48848e6](https://github.com/sunerpy/lockra/commit/48848e6e82c9b83cc7524590c9d0237f59efc099))
+* **desktop:** macOS 上说明如何在加载扩展的对话框中找到扩展文件夹 ([#219](https://github.com/sunerpy/lockra/issues/219)) ([6de867c](https://github.com/sunerpy/lockra/commit/6de867caea65b426ed2b5dcb244c9045c28c80fe))
+
 ## [0.16.4](https://github.com/sunerpy/lockra/compare/v0.16.3...v0.16.4) (2026-11-20)
 
 
