@@ -1115,6 +1115,8 @@ export const en: Messages = {
           "Open the browser's extensions page (chrome://extensions, edge://extensions or brave://extensions) and turn on Developer mode; leave it on.",
         step2:
           "Choose Load unpacked and pick this folder; you can copy its path first and paste it into the dialog.",
+        step2Mac:
+          "Choose Load unpacked and pick this folder. The macOS dialog does not show the Library folder: copy the path first, press ⇧⌘G in the dialog, paste the path and press Return; or choose Open folder and drag the extension folder that Finder shows into the dialog. Then choose Select.",
         step3:
           "If you loaded the Lockra extension from a release package before, load this folder all the same: it takes the old one's place and stays paired.",
         download: "Download the extension package",

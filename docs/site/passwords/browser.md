@@ -48,7 +48,10 @@ its own version and keeps it in a folder of its own, which Chrome, Edge and Brav
 2. Open the browser's extensions page (`chrome://extensions`, `edge://extensions` or
    `brave://extensions`) and turn on **Developer mode**. Leave it on: without it the browser turns
    an unpacked extension off when it reloads.
-3. Choose **Load unpacked** and pick that folder: paste the copied path into the dialog.
+3. Choose **Load unpacked** and pick that folder: paste the copied path into the dialog. On macOS
+   the dialog does not show the Library folder the path goes through: press `⌘ Shift G` in it,
+   paste the path and press `Return`, or choose **Open folder** in Lockra and drag the `extension`
+   folder that Finder shows into the dialog; then choose **Select**.
 
 The extension's card shows the ID `flgfdomeabdfbebfjonaocddjcamgblk`, the same as the extension
 Edge Add-ons will publish; Lockra connects to no other Chromium extension. If you loaded the

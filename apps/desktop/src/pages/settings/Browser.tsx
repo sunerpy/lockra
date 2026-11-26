@@ -224,6 +224,8 @@ function FolderSection() {
   const t = useT();
   const { backend } = useBackend();
   const guarded = useGuarded();
+  // The folder is under ~/Library on macOS, which the browser's dialog does not show.
+  const { platform } = useUiState();
   const [folder, setFolder] = useState<ExtensionFolder | null>(null);
   const [copied, setCopied] = useState(false);
   const [notOpened, setNotOpened] = useState(false);
@@ -331,7 +333,13 @@ function FolderSection() {
         className="mt-2 list-decimal space-y-1 pl-5 text-[12px] leading-4 text-fg-muted"
         data-testid="extension-folder-steps">
         <li>{t("settings.browser.folder.step1")}</li>
-        <li>{t("settings.browser.folder.step2")}</li>
+        <li>
+          {t(
+            platform === "macos"
+              ? "settings.browser.folder.step2Mac"
+              : "settings.browser.folder.step2",
+          )}
+        </li>
         <li>{t("settings.browser.folder.step3")}</li>
       </ol>
       {packageLine}
